@@ -11,8 +11,8 @@ Provides fast and scalable computation of correlation matrices using optimized C
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr}
-  \item Report bugs at \url{https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr/issues}
+  \item \url{https://github.com/Prof-ThiagoOliveira/matrixCorr}
+  \item Report bugs at \url{https://github.com/Prof-ThiagoOliveira/matrixCorr/issues}
 }
 
 }
