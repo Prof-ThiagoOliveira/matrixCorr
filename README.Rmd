@@ -1,31 +1,41 @@
+---
+output: github_document
+---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
 
 # matrixCorr
 
 <!-- badges: start -->
-
 [![R-CMD-check](https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr/actions/workflows/R-CMD-check.yaml)
-[![Codecov test
-coverage](https://codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr/graph/badge.svg)](https://app.codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr)
+[![Codecov test coverage](https://codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr/graph/badge.svg)](https://app.codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr)
 <!-- badges: end -->
 
-`matrixCorr` provides fast and scalable computation of correlation
-matrices using optimized C++ routines. It supports rank-based and
-parametric methods, including Kendall’s tau (tau-a and tau-b), with
-planned support for Spearman and Pearson correlations.
+`matrixCorr` provides fast and scalable computation of correlation matrices 
+using optimized C++ routines. It supports rank-based and parametric methods, 
+including Kendall's tau (tau-a and tau-b), with planned support for Spearman 
+and Pearson correlations.
 
 ## Features
 
 - High-performance C++ backend using `Rcpp`
-- Support for tied data via Kendall’s tau-b
+- Support for tied data via Kendall's tau-b
 - Easy-to-use `kendall_tau()` function for matrices and data frames
 - ggplot2-based heatmap visualization
 - Designed for large-scale, high-dimensional data
 
 ## Installation
 
-``` r
+```r
 # Install from GitHub
 # install.packages("devtools")
 devtools::install_github("Prof-ThiagoOliveira/matrixCorr")
@@ -33,7 +43,7 @@ devtools::install_github("Prof-ThiagoOliveira/matrixCorr")
 
 ## Example
 
-``` r
+```r
 library(matrixCorr)
 
 # Simulated data

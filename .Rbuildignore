@@ -4,3 +4,6 @@
 ^\.Rhistory$
 ^\.RData$
 ^dev$
+^README\.Rmd$
+^\.github$
+^codecov\.yml$
