@@ -82,66 +82,32 @@
 #' @author Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
 #' @export
 kendall_tau <- function(data) {
-  #-----------------------------------------------------------------------------
-  # checks
-  #-----------------------------------------------------------------------------
-  if (!is.matrix(data) && !is.data.frame(data)) {
-    stop("Input must be a matrix or data frame.")
-  }
-
-  # Efficient and safe handling of matrix/data.frame input
-  if (is.matrix(data)) {
-    if (!is.numeric(data)) stop("Matrix must be numeric.")
-    numeric_data <- data
-  } else {
-    numeric_data <- data[, vapply(data, is.numeric, logical(1L)), drop = FALSE]
-  }
-
-  if (ncol(numeric_data) < 2) {
-    stop("At least two numeric columns are required.")
-  }
-
-  if (anyNA(numeric_data)) {
-    stop("Missing values are not allowed.")
-  }
-
-  if (any(vapply(as.data.frame(numeric_data), function(x) length(x) < 2, logical(1)))) {
-    stop("All columns must contain at least two values.")
-  }
-
-  if (ncol(numeric_data) == 0) {
-    stop("No numeric columns found in the input.")
-  }
-
-  #-----------------------------------------------------------------------------
-  # Calculation
-  #-----------------------------------------------------------------------------
+  numeric_data <- validate_corr_input(data)
   colnames_data <- colnames(numeric_data)
-  result <- kendall_matrix_cpp(as.matrix(numeric_data))
+  result <- kendall_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
-
-  # class and attribute
   attr(result, "method") <- "kendall"
-  attr(result, "description") <- "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
+  attr(result, "description") <-
+    "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
   attr(result, "package") <- "matrixCorr"
   class(result) <- c("kendall_matrix", "matrix")
-
   return(result)
 }
 
 
-##' @rdname kendall_tau
-##' @method print kendall_matrix
-##' @title Print Method for \code{kendall_matrix} Objects
-##'
-##' @description Prints a summary of the Kendall's tau correlation matrix,
-##' including description and method metadata.
-##'
-##' @param x An object of class \code{kendall_matrix}.
-##' @param ... Additional arguments passed to \code{print}.
-##'
-##' @return Invisibly returns the \code{kendall_matrix} object.
-##' @export
+#' @rdname kendall_tau
+#' @method print kendall_matrix
+#' @title Print Method for \code{kendall_matrix} Objects
+#'
+#' @description Prints a summary of the Kendall's tau correlation matrix,
+#' including description and method metadata.
+#'
+#' @param x An object of class \code{kendall_matrix}.
+#' @param ... Additional arguments passed to \code{print}.
+#'
+#' @return Invisibly returns the \code{kendall_matrix} object.
+#' @author Thiago de Paula Oliveira
+#' @export
 print.kendall_matrix <- function(x, ...) {
   cat("kendall_matrix object\n")
   desc <- attr(x, "description")

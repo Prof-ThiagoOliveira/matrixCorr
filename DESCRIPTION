@@ -17,7 +17,8 @@ Encoding: UTF-8
 LazyData: true
 LinkingTo: 
     cpp11,
-    Rcpp
+    Rcpp,
+    RcppArmadillo
 Imports:
     Rcpp,
     ggplot2 (>= 3.5.2)

@@ -8,3 +8,5 @@
 ^\.github$
 ^codecov\.yml$
 ^CRAN-SUBMISSION$
+^CONTRIBUTING\.md$
+^codemeta\.json$

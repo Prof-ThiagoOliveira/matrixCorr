@@ -17,3 +17,21 @@ kendall_matrix_cpp <- function(mat) {
     .Call(`_matrixCorr_kendall_matrix_cpp`, mat)
 }
 
+pearson_matrix_cpp <- function(X_) {
+    .Call(`_matrixCorr_pearson_matrix_cpp`, X_)
+}
+
+spearman_matrix_cpp <- function(X_) {
+    .Call(`_matrixCorr_spearman_matrix_cpp`, X_)
+}
+
+#' Input validator for correlation
+#'
+#' @param data matrix or data.frame
+#' @param check_na logical; if TRUE, scan and error on any NA/NaN
+#' @return numeric (double) matrix with colnames preserved when available
+#'
+validate_corr_input_cpp <- function(data, check_na = TRUE) {
+    .Call(`_matrixCorr_validate_corr_input_cpp`, data, check_na)
+}
+
