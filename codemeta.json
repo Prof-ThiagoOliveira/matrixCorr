@@ -1,0 +1,102 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "identifier": "matrixCorr",
+  "description": "Provides fast and scalable computation of correlation matrices using optimized C++ routines. Supports both rank-based and parametric methods, including efficient implementations of Kendall's tau (tau-a and tau-b), with extensibility for Spearman, Pearson, and other correlation metrics. Designed for high-performance statistical computing in applications such as genomics, finance, and machine learning, especially in high-dimensional settings.",
+  "name": "matrixCorr: Fast Correlation Estimation in R and C++",
+  "license": "https://spdx.org/licenses/MIT",
+  "version": "0.1.0",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "R",
+    "url": "https://r-project.org"
+  },
+  "runtimePlatform": "R version 4.4.3 (2025-02-28 ucrt)",
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Thiago de Paula",
+      "familyName": "Oliveira",
+      "email": "toliveira@abacusbio.com",
+      "@id": "https://orcid.org/0000-0002-4555-2584"
+    }
+  ],
+  "maintainer": [
+    {
+      "@type": "Person",
+      "givenName": "Thiago de Paula",
+      "familyName": "Oliveira",
+      "email": "toliveira@abacusbio.com",
+      "@id": "https://orcid.org/0000-0002-4555-2584"
+    }
+  ],
+  "softwareSuggestions": [
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "knitr",
+      "name": "knitr",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=knitr"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "rmarkdown",
+      "name": "rmarkdown",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=rmarkdown"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "testthat",
+      "name": "testthat",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=testthat"
+    }
+  ],
+  "softwareRequirements": {
+    "1": {
+      "@type": "SoftwareApplication",
+      "identifier": "Rcpp",
+      "name": "Rcpp",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=Rcpp"
+    },
+    "2": {
+      "@type": "SoftwareApplication",
+      "identifier": "ggplot2",
+      "name": "ggplot2",
+      "version": ">= 3.5.2",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=ggplot2"
+    },
+    "SystemRequirements": null
+  },
+  "fileSize": "30.064KB",
+  "codeRepository": "https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr",
+  "readme": "https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr/blob/main/README.md"
+}
