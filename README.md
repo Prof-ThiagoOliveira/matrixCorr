@@ -10,10 +10,18 @@
 coverage](https://codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr/graph/badge.svg)](https://app.codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr)
 <!-- badges: end -->
 
-`matrixCorr` provides fast and scalable computation of correlation
-matrices using optimized C++ routines. It supports rank-based and
-parametric methods, including Kendall’s tau (tau-a and tau-b), with
-planned support for Spearman and Pearson correlations.
+`matrixCorr` is a lightweight, high-performance package for computing
+correlation matrices in `R`. Numerically robust estimates for:
+
+- **Kendall’s tau** with automatic **tau-a / tau-b** selection (stable
+  tie handling using merge-sort inversion counting + Fenwick trees),
+- **Spearman’s rho** (rank + Pearson on ranks with average-tie ranking),
+- **Pearson’s r** (single-pass, variance-checked).
+
+Designed for large matrices and tie-heavy data, `matrixCorr` accepts
+matrices or data frames, returns symmetric correlation matrices with
+metadata, and includes convenient `print()` and `plot()` methods for
+quick inspection.
 
 ## Features
 
