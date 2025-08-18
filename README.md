@@ -54,7 +54,7 @@ plot(ktau)
 
 ------------------------------------------------------------------------
 
-### \*Spearman’s Rho Example\*\*
+### **Spearman’s Rho Example**
 
 ``` r
 library(matrixCorr)
