@@ -70,19 +70,37 @@ pearson_corr <- function(data) {
 #' including description and method metadata.
 #'
 #' @param x An object of class \code{pearson_corr}.
+#' @param digits Integer; number of decimal places to print in the concordance
+#' @param max_rows Optional integer; maximum number of rows to display.
+#'  If \code{NULL}, all rows are shown.
+#' @param max_cols Optional integer; maximum number of columns to display.
+#' If \code{NULL}, all columns are shown.
 #' @param ... Additional arguments passed to \code{print}.
 #'
 #' @return Invisibly returns the \code{pearson_corr} object.
 #' @author Thiago de Paula Oliveira
 #' @export
-print.pearson_corr <- function(x, ...) {
-  cat("pearson_corr object\n")
-  desc <- attr(x, "description")
-  if (!is.null(desc)) cat("Description:", desc, "\n")
-  method <- attr(x, "method")
-  if (!is.null(method)) cat("Method:", method, "\n")
-  cat("\nCorrelation matrix:\n")
-  NextMethod("print", x, ...)
+print.pearson_corr <- function(x, digits = 3, max_rows = NULL,
+                               max_cols = NULL, ...) {
+  cat("Pearson correlation matrix:\n")
+  m <- as.matrix(x)
+  attributes(m) <- attributes(m)[c("dim", "dimnames")]
+
+  # Truncation for large matrices
+  if (!is.null(max_rows) || !is.null(max_cols)) {
+    nr <- nrow(m); nc <- ncol(m)
+    r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
+    c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
+    m  <- m[seq_len(r), seq_len(c), drop = FALSE]
+    m  <- round(m, digits)
+    print(m, ...)
+    if (nr > r || nc > c) {
+      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
+    }
+  } else {
+    print(round(m, digits), ...)
+  }
+
   invisible(x)
 }
 

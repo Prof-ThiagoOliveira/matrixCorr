@@ -8,7 +8,7 @@
 \usage{
 pearson_corr(data)
 
-\method{print}{pearson_corr}(x, ...)
+\method{print}{pearson_corr}(x, digits = 3, max_rows = NULL, max_cols = NULL, ...)
 
 \method{plot}{pearson_corr}(
   x,
@@ -26,6 +26,14 @@ columns. All non-numeric columns will be excluded. Each column must have
 at least two non-missing values and contain no NAs.}
 
 \item{x}{An object of class \code{pearson_corr}.}
+
+\item{digits}{Integer; number of decimal places to print in the concordance}
+
+\item{max_rows}{Optional integer; maximum number of rows to display.
+If \code{NULL}, all rows are shown.}
+
+\item{max_cols}{Optional integer; maximum number of columns to display.
+If \code{NULL}, all columns are shown.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}

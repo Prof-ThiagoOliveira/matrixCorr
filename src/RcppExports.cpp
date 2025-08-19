@@ -94,6 +94,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// partial_correlation_cpp
+Rcpp::List partial_correlation_cpp(SEXP X_, const std::string method, const double lambda, const bool return_cov_precision);
+RcppExport SEXP _matrixCorr_partial_correlation_cpp(SEXP X_SEXP, SEXP methodSEXP, SEXP lambdaSEXP, SEXP return_cov_precisionSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
+    Rcpp::traits::input_parameter< const std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< const double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< const bool >::type return_cov_precision(return_cov_precisionSEXP);
+    rcpp_result_gen = Rcpp::wrap(partial_correlation_cpp(X_, method, lambda, return_cov_precision));
+    return rcpp_result_gen;
+END_RCPP
+}
 // pearson_matrix_cpp
 arma::mat pearson_matrix_cpp(SEXP X_);
 RcppExport SEXP _matrixCorr_pearson_matrix_cpp(SEXP X_SEXP) {
@@ -137,6 +151,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_kendall_tau_a_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_a_cpp, 3},
     {"_matrixCorr_kendall_tau_b_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_b_cpp, 3},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
+    {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 4},
     {"_matrixCorr_pearson_matrix_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_cpp, 1},
     {"_matrixCorr_spearman_matrix_cpp", (DL_FUNC) &_matrixCorr_spearman_matrix_cpp, 1},
     {"_matrixCorr_validate_corr_input_cpp", (DL_FUNC) &_matrixCorr_validate_corr_input_cpp, 2},

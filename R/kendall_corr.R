@@ -103,19 +103,43 @@ kendall_tau <- function(data) {
 #' including description and method metadata.
 #'
 #' @param x An object of class \code{kendall_matrix}.
+#' @param digits Integer; number of decimal places to print in the concordance
+#' @param max_rows Optional integer; maximum number of rows to display.
+#'  If \code{NULL}, all rows are shown.
+#' @param max_cols Optional integer; maximum number of columns to display.
+#' If \code{NULL}, all columns are shown.
 #' @param ... Additional arguments passed to \code{print}.
 #'
 #' @return Invisibly returns the \code{kendall_matrix} object.
 #' @author Thiago de Paula Oliveira
 #' @export
-print.kendall_matrix <- function(x, ...) {
-  cat("kendall_matrix object\n")
-  desc <- attr(x, "description")
-  if (!is.null(desc)) cat("Description:", desc, "\n")
+print.kendall_matrix <- function(x, digits = 3, max_rows = NULL,
+                                 max_cols = NULL, ...) {
   method <- attr(x, "method")
-  if (!is.null(method)) cat("Method:", method, "\n")
-  cat("\nCorrelation matrix:\n")
-  NextMethod("print", x, ...)
+  header <- if (!is.null(method)) {
+    sprintf("Kendall correlation (%s):", method)
+  } else {
+    "Kendall correlation:"
+  }
+  cat(header, "\n")
+
+  m <- as.matrix(x)
+  attributes(m) <- attributes(m)[c("dim", "dimnames")]
+
+  # Truncation for large matrices
+  if (!is.null(max_rows) || !is.null(max_cols)) {
+    nr <- nrow(m); nc <- ncol(m)
+    r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
+    c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
+    mm <- round(m[seq_len(r), seq_len(c), drop = FALSE], digits)
+    print(mm, ...)
+    if (nr > r || nc > c) {
+      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
+    }
+  } else {
+    print(round(m, digits), ...)
+  }
+
   invisible(x)
 }
 

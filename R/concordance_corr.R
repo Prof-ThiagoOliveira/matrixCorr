@@ -107,22 +107,29 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 #' matrix (default is 3).
 #' @export
 print.ccc <- function(x, digits = 3, ...) {
-  cat("ccc object\n")
-  desc <- attr(x, "description"); if (!is.null(desc)) cat("Description:", desc, "\n")
-  method <- attr(x, "method");     if (!is.null(method)) cat("Method:", method, "\n\n")
+  # helper to strip non-essential attributes
+  strip_attrs <- function(m) {
+    m <- as.matrix(m)
+    attributes(m) <- attributes(m)[c("dim", "dimnames")]
+    m
+  }
 
-  if (inherits(x, "ccc_ci") || (is.list(x) && all(c("est","lwr.ci","upr.ci") %in% names(x)))) {
-    cat("Estimates:\n")
-    base::print(round(unclass(x$est),    digits = digits))
-    cat("\n", sprintf("%.0f%% Confidence Intervals:", 100), "\nLower:\n", sep = "")
-    base::print(round(unclass(x$lwr.ci), digits = 2))
+  if (inherits(x, "ccc_ci") || (is.list(x) && all(c("est", "lwr.ci", "upr.ci") %in% names(x)))) {
+    cat("Concordance matrix (estimates):\n")
+    est <- strip_attrs(x$est)
+    print(round(est, digits), ...)
+
+    cat("\nConfidence intervals:\nLower:\n")
+    lwr <- strip_attrs(x$lwr.ci)
+    print(round(lwr, 2), ...)
+
     cat("\nUpper:\n")
-    base::print(round(unclass(x$upr.ci), digits = 2))
-
+    upr <- strip_attrs(x$upr.ci)
+    print(round(upr, 2), ...)
   } else if (is.matrix(x)) {
     cat("Concordance matrix:\n")
-    base::print(round(unclass(x), digits = digits))
-
+    M <- strip_attrs(x)
+    print(round(M, digits), ...)
   } else {
     stop("Invalid object format for class 'ccc'.")
   }
