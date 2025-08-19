@@ -80,9 +80,11 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
     out$est <- `dimnames<-`(out$est, list(colnames_data, colnames_data))
     out$lwr.ci <- `dimnames<-`(out$lwr.ci, list(colnames_data, colnames_data))
     out$upr.ci <- `dimnames<-`(out$upr.ci, list(colnames_data, colnames_data))
+    class(out) <- c("ccc", "ccc_ci")
   } else {
     est <- ccc_cpp(mat)
     out <- `dimnames<-`(est, list(colnames_data, colnames_data))
+    class(out) <- c("ccc", "matrix")
   }
 
   attr(out, "method") <- "Lin's concordance"
@@ -92,8 +94,6 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
     "Pairwise Lin's concordance correlation matrix"
   }
   attr(out, "package") <- "matrixCorr"
-  class(out) <- "ccc"
-
   return(out)
 }
 
