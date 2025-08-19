@@ -11,6 +11,39 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// ccc_cpp
+arma::mat ccc_cpp(const arma::mat& X);
+RcppExport SEXP _matrixCorr_ccc_cpp(SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(ccc_cpp(X));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ccc_with_ci_cpp
+List ccc_with_ci_cpp(const arma::mat& X, double conf_level);
+RcppExport SEXP _matrixCorr_ccc_with_ci_cpp(SEXP XSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(ccc_with_ci_cpp(X, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
+// openmp_threads
+int openmp_threads();
+RcppExport SEXP _matrixCorr_openmp_threads() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(openmp_threads());
+    return rcpp_result_gen;
+END_RCPP
+}
 // kendall_tau_auto_cpp
 double kendall_tau_auto_cpp(NumericVector x, NumericVector y, double scale);
 RcppExport SEXP _matrixCorr_kendall_tau_auto_cpp(SEXP xSEXP, SEXP ySEXP, SEXP scaleSEXP) {
@@ -97,6 +130,9 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
+    {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
+    {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
     {"_matrixCorr_kendall_tau_auto_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_auto_cpp, 3},
     {"_matrixCorr_kendall_tau_a_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_a_cpp, 3},
     {"_matrixCorr_kendall_tau_b_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_b_cpp, 3},

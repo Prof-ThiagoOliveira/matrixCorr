@@ -113,3 +113,5 @@ plot(pcorr)
 ## License
 
 MIT [Thiago de Paula Oliveira](https://orcid.org/0000-0002-4555-2584)
+
+See inst/LICENSE for the full MIT license text.

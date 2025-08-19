@@ -1,11 +1,11 @@
 Package: matrixCorr
 Type: Package
 Title: Fast Correlation Estimation in R and C++
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person(given = "Thiago de Paula", family = "Oliveira", 
     email = "toliveira@abacusbio.com", role = c("aut", "cre"), 
     comment = c(ORCID = "0000-0002-4555-2584"))
-Description: Provides fast and scalable computation of correlation matrices
+Description: Provides fast and extensible computation of correlation matrices
     using optimized C++ routines. Supports both rank-based and parametric
     methods, including efficient implementations of Kendall's tau (tau-a and
     tau-b), with extensibility for Spearman, Pearson, and other correlation

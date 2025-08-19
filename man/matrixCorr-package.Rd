@@ -6,7 +6,7 @@
 \alias{matrixCorr-package}
 \title{matrixCorr: Fast Correlation Estimation in R and C++}
 \description{
-Provides fast and scalable computation of correlation matrices using optimized C++ routines. Supports both rank-based and parametric methods, including efficient implementations of Kendall's tau (tau-a and tau-b), with extensibility for Spearman, Pearson, and other correlation metrics. Designed for high-performance statistical computing in applications such as genomics, finance, and machine learning, especially in high-dimensional settings.
+Provides fast and extensible computation of correlation matrices using optimized C++ routines. Supports both rank-based and parametric methods, including efficient implementations of Kendall's tau (tau-a and tau-b), with extensibility for Spearman, Pearson, and other correlation metrics. Designed for high-performance statistical computing in applications such as genomics, finance, and machine learning, especially in high-dimensional settings.
 }
 \seealso{
 Useful links:
