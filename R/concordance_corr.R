@@ -134,7 +134,6 @@ print.ccc <- function(x, digits = 3, ...) {
 #' @method plot ccc
 #' @param x An object of class \code{"ccc"} (either a matrix or a list with
 #' confidence intervals).
-#' @param digits Number of digits to display (for printing).
 #' @param title Title for the plot.
 #' @param low_color Color for low CCC values.
 #' @param high_color Color for high CCC values.
@@ -142,7 +141,6 @@ print.ccc <- function(x, digits = 3, ...) {
 #' @param value_text_size Text size for numbers in the heatmap.
 #' @param ... Additional arguments passed to underlying functions
 #' (like \code{theme} or \code{print}).
-#' @importFrom ggplot2 .data
 #' @export
 plot.ccc <- function(x,
                      title = "Lin's Concordance Correlation Heatmap",
@@ -150,28 +148,35 @@ plot.ccc <- function(x,
                      high_color = "steelblue1",
                      mid_color = "white",
                      value_text_size = 4, ...) {
-  if (!inherits(x, "ccc")) stop("x must be of class 'ccc'.")
-  if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Package 'ggplot2' is required for plotting.")
 
+  if (!inherits(x, "ccc")) stop("x must be of class 'ccc'.")
+  if (!requireNamespace("ggplot2", quietly = TRUE))
+    stop("Package 'ggplot2' is required for plotting.")
+
+  # Use estimates if CI list, otherwise the matrix itself
   mat <- if (is.list(x) && !is.null(x$est)) x$est else unclass(x)
 
   df <- as.data.frame(as.table(mat))
   names(df) <- c("Var1", "Var2", "CCC")
-  df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
 
-  ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = CCC)) +
+  # Order for a tidy heatmap and precompute labels
+  df$Var1  <- factor(df$Var1, levels = rev(unique(df$Var1)))
+  df$label <- sprintf("%.2f", df$CCC)
+
+  ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = CCC)) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", ggplot2::.data$CCC)),
+    ggplot2::geom_text(ggplot2::aes(label = label),
                        size = value_text_size, color = "black") +
-    ggplot2::scale_fill_gradient2(low = low_color, high = high_color, mid = mid_color,
-                                  midpoint = 0, limit = c(-1, 1), name = "CCC") +
+    ggplot2::scale_fill_gradient2(
+      low = low_color, high = high_color, mid = mid_color,
+      midpoint = 0, limit = c(-1, 1), name = "CCC"
+    ) +
     ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-                   panel.grid = ggplot2::element_blank(),
-                   ...) +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      panel.grid  = ggplot2::element_blank(),
+      ...
+    ) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
 }
-
-#' @export
-as.matrix.ccc <- function(x, ...) unclass(x)

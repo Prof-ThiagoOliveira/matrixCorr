@@ -33,7 +33,8 @@ Non-numeric columns will be ignored.}
 \item{x}{An object of class \code{"ccc"} (either a matrix or a list with
 confidence intervals).}
 
-\item{digits}{Number of digits to display (for printing).}
+\item{digits}{Integer; number of decimal places to print in the concordance
+matrix (default is 3).}
 
 \item{...}{Additional arguments passed to underlying functions
 (like \code{theme} or \code{print}).}
