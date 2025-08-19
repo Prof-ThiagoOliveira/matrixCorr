@@ -97,6 +97,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
   return(out)
 }
 
+#' @rdname ccc
 #' @method print ccc
 #' @param digits Integer; number of decimal places to print in the concordance
 #' matrix (default is 3).

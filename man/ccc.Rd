@@ -2,10 +2,13 @@
 % Please edit documentation in R/concordance_corr.R
 \name{ccc}
 \alias{ccc}
+\alias{print.ccc}
 \alias{plot.ccc}
 \title{Pairwise Lin's concordance correlation coefficient}
 \usage{
 ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
+
+\method{print}{ccc}(x, digits = 3, ...)
 
 \method{plot}{ccc}(
   x,
@@ -30,6 +33,11 @@ Non-numeric columns will be ignored.}
 \item{x}{An object of class \code{"ccc"} (either a matrix or a list with
 confidence intervals).}
 
+\item{digits}{Number of digits to display (for printing).}
+
+\item{...}{Additional arguments passed to underlying functions
+(like \code{theme} or \code{print}).}
+
 \item{title}{Title for the plot.}
 
 \item{low_color}{Color for low CCC values.}
@@ -39,11 +47,6 @@ confidence intervals).}
 \item{mid_color}{Color for mid CCC values (typically near 0).}
 
 \item{value_text_size}{Text size for numbers in the heatmap.}
-
-\item{...}{Additional arguments passed to underlying functions
-(like \code{theme} or \code{print}).}
-
-\item{digits}{Number of digits to display (for printing).}
 }
 \value{
 A symmetric numeric matrix with class \code{"ccc"} and attributes:
