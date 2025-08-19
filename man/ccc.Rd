@@ -18,13 +18,32 @@ ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
 )
 }
 \arguments{
-\item{data}{A numeric matrix or data frame}
+\item{data}{A numeric matrix or data frame with at least two numeric columns.
+Non-numeric columns will be ignored.}
 
 \item{ci}{Logical; if TRUE, return lower and upper confidence bounds}
 
+\item{conf_level}{Confidence level for CI, default = 0.95}
+
 \item{verbose}{Logical; if TRUE, prints how many threads are used}
 
-\item{conf.level}{Confidence level for CI, default = 0.95}
+\item{x}{An object of class \code{"ccc"} (either a matrix or a list with
+confidence intervals).}
+
+\item{title}{Title for the plot.}
+
+\item{low_color}{Color for low CCC values.}
+
+\item{high_color}{Color for high CCC values.}
+
+\item{mid_color}{Color for mid CCC values (typically near 0).}
+
+\item{value_text_size}{Text size for numbers in the heatmap.}
+
+\item{...}{Additional arguments passed to underlying functions
+(like \code{theme} or \code{print}).}
+
+\item{digits}{Number of digits to display (for printing).}
 }
 \value{
 A symmetric numeric matrix with class \code{"ccc"} and attributes:
@@ -32,18 +51,15 @@ A symmetric numeric matrix with class \code{"ccc"} and attributes:
 \item \code{method}: The method used ("Lin's concordance")
 \item \code{description}: Description string
 }
-
 If \code{ci = FALSE}, returns matrix of class \code{"ccc"}.
-If \code{ci = TRUE}, returns a list with elements: \code{est}, \code{lwr.ci}, \code{upr.ci}.
+If \code{ci = TRUE}, returns a list with elements: \code{est},
+\code{lwr.ci}, \code{upr.ci}.
 }
 \description{
 Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)
 from the numeric columns of a matrix or data frame. CCC measures both
-precision (Pearson correlation) and accuracy (closeness to the 45-degree l
-ine).
+precision (Pearson correlation) and accuracy (closeness to the 45-degree line).
 This function is backed by a high-performance \code{C++} implementation.
-
-Compute all pairwise CCCs (with optional confidence intervals)
 }
 \details{
 Lin's CCC is defined as:
@@ -86,4 +102,7 @@ between two methods of clinical measurement. The Lancet 327: 307-310.
 }
 \seealso{
 \code{\link{print.ccc}}, \code{\link{plot.ccc}}
+}
+\author{
+Thiago de Paula Oliveira
 }

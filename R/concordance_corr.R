@@ -3,8 +3,7 @@
 #' @description
 #' Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)
 #' from the numeric columns of a matrix or data frame. CCC measures both
-#' precision (Pearson correlation) and accuracy (closeness to the 45-degree l
-#' ine).
+#' precision (Pearson correlation) and accuracy (closeness to the 45-degree line).
 #' This function is backed by a high-performance \code{C++} implementation.
 #'
 #' @details
@@ -31,12 +30,18 @@
 #'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #' Non-numeric columns will be ignored.
+#' @param ci Logical; if TRUE, return lower and upper confidence bounds
+#' @param conf_level Confidence level for CI, default = 0.95
+#' @param verbose Logical; if TRUE, prints how many threads are used
 #'
 #' @return A symmetric numeric matrix with class \code{"ccc"} and attributes:
 #' \itemize{
 #'   \item \code{method}: The method used ("Lin's concordance")
 #'   \item \code{description}: Description string
 #' }
+#'  If \code{ci = FALSE}, returns matrix of class \code{"ccc"}.
+#'         If \code{ci = TRUE}, returns a list with elements: \code{est},
+#'         \code{lwr.ci}, \code{upr.ci}.
 #'
 #' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}}
 #'
@@ -50,6 +55,7 @@
 #' @importFrom graphics plot
 #' @importFrom ggplot2 ggplot aes geom_tile geom_text scale_fill_gradient2
 #' @importFrom ggplot2 theme_minimal element_text coord_fixed labs theme
+#' @author Thiago de Paula Oliveira
 #' @references
 #' Lin L (1989). A concordance correlation coefficient to evaluate
 #' reproducibility. Biometrics 45: 255-268.
@@ -59,18 +65,6 @@
 #' @references
 #' Bland J, Altman D (1986). Statistical methods for assessing agreement
 #' between two methods of clinical measurement. The Lancet 327: 307-310.
-#' @export
-#' @title Pairwise Lin's Concordance Correlation Coefficient (CCC)
-#'
-#' @description Compute all pairwise CCCs (with optional confidence intervals)
-#'
-#' @param data A numeric matrix or data frame
-#' @param ci Logical; if TRUE, return lower and upper confidence bounds
-#' @param conf.level Confidence level for CI, default = 0.95
-#' @param verbose Logical; if TRUE, prints how many threads are used
-#'
-#' @return If \code{ci = FALSE}, returns matrix of class \code{"ccc"}.
-#'         If \code{ci = TRUE}, returns a list with elements: \code{est}, \code{lwr.ci}, \code{upr.ci}.
 #' @export
 ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
   numeric_data <- validate_corr_input(data)
@@ -104,6 +98,8 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 }
 
 #' @method print ccc
+#' @param digits Integer; number of decimal places to print in the concordance
+#' matrix (default is 3).
 #' @export
 print.ccc <- function(x, digits = 3, ...) {
   cat("ccc object\n")
@@ -133,6 +129,17 @@ print.ccc <- function(x, digits = 3, ...) {
 
 #' @rdname ccc
 #' @method plot ccc
+#' @param x An object of class \code{"ccc"} (either a matrix or a list with
+#' confidence intervals).
+#' @param digits Number of digits to display (for printing).
+#' @param title Title for the plot.
+#' @param low_color Color for low CCC values.
+#' @param high_color Color for high CCC values.
+#' @param mid_color Color for mid CCC values (typically near 0).
+#' @param value_text_size Text size for numbers in the heatmap.
+#' @param ... Additional arguments passed to underlying functions
+#' (like \code{theme} or \code{print}).
+#' @importFrom ggplot2 .data
 #' @export
 plot.ccc <- function(x,
                      title = "Lin's Concordance Correlation Heatmap",
@@ -157,7 +164,7 @@ plot.ccc <- function(x,
 
   p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = CCC)) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", CCC)),
+    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", .data$CCC)),
                        size = value_text_size, color = "black") +
     ggplot2::scale_fill_gradient2(
       low = low_color, high = high_color, mid = mid_color,
