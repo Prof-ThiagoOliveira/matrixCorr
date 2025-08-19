@@ -36,6 +36,11 @@
 #' print(pc, digits = 2)
 #' plot(pc)
 #'
+#' @references
+#' Chen, Y., Wiesel, A., & Hero, A. O. III (2011).
+#' Robust Shrinkage Estimation of High-dimensional Covariance Matrices.
+#' IEEE Transactions on Signal Processing.
+#'
 #' @export
 partial_correlation <- function(data, method = c("oas","ridge","sample"),
                                 lambda = 1e-3, return_cov_precision = FALSE) {
