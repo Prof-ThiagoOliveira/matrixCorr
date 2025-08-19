@@ -71,31 +71,35 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
   mat <- as.matrix(numeric_data)
   colnames_data <- colnames(numeric_data)
 
-  if (verbose) {
-    cat("Using", openmp_threads(), "OpenMP threads\n")
-  }
+  if (verbose) cat("Using", openmp_threads(), "OpenMP threads\n")
 
   if (ci) {
-    out <- ccc_with_ci_cpp(mat, conf_level)
-    out$est <- `dimnames<-`(out$est, list(colnames_data, colnames_data))
-    out$lwr.ci <- `dimnames<-`(out$lwr.ci, list(colnames_data, colnames_data))
-    out$upr.ci <- `dimnames<-`(out$upr.ci, list(colnames_data, colnames_data))
-    class(out) <- c("ccc", "ccc_ci")
+    ccc_lin <- ccc_with_ci_cpp(mat, conf_level)
+    ccc_lin$est    <- `dimnames<-`(ccc_lin$est,
+                                   list(colnames_data, colnames_data))
+    ccc_lin$lwr.ci <- `dimnames<-`(ccc_lin$lwr.ci,
+                                   list(colnames_data, colnames_data))
+    ccc_lin$upr.ci <- `dimnames<-`(ccc_lin$upr.ci,
+                                   list(colnames_data, colnames_data))
+
+    attr(ccc_lin, "method") <- "Lin's concordance"
+    attr(ccc_lin, "description") <-
+      "Pairwise Lin's concordance with confidence intervals"
+    attr(ccc_lin, "package") <- "matrixCorr"
+    class(ccc_lin) <- c("ccc", "ccc_ci")   # list with CIs
   } else {
     est <- ccc_cpp(mat)
-    out <- `dimnames<-`(est, list(colnames_data, colnames_data))
-    class(out) <- c("ccc", "matrix")
+    ccc_lin <- `dimnames<-`(est, list(colnames_data, colnames_data))
+
+    attr(ccc_lin, "method") <- "Lin's concordance"
+    attr(ccc_lin, "description") <- "Pairwise Lin's concordance correlation matrix"
+    attr(ccc_lin, "package") <- "matrixCorr"
+    class(ccc_lin) <- c("ccc", "matrix")   # matrix printing still available
   }
 
-  attr(out, "method") <- "Lin's concordance"
-  attr(out, "description") <- if (ci) {
-    "Pairwise Lin's concordance with confidence intervals"
-  } else {
-    "Pairwise Lin's concordance correlation matrix"
-  }
-  attr(out, "package") <- "matrixCorr"
-  return(out)
+  ccc_lin
 }
+
 
 #' @rdname ccc
 #' @method print ccc
@@ -104,29 +108,27 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 #' @export
 print.ccc <- function(x, digits = 3, ...) {
   cat("ccc object\n")
-  desc <- attr(x, "description")
-  if (!is.null(desc)) cat("Description:", desc, "\n")
-  method <- attr(x, "method")
-  if (!is.null(method)) cat("Method:", method, "\n\n")
+  desc <- attr(x, "description"); if (!is.null(desc)) cat("Description:", desc, "\n")
+  method <- attr(x, "method");     if (!is.null(method)) cat("Method:", method, "\n\n")
 
-  if (is.list(x) && all(c("est", "lwr.ci", "upr.ci") %in% names(x))) {
+  if (inherits(x, "ccc_ci") || (is.list(x) && all(c("est","lwr.ci","upr.ci") %in% names(x)))) {
     cat("Estimates:\n")
-    print(round(x$est, digits = digits))
-    cat("\n95% Confidence Intervals:\nLower:\n")
-    print(round(x$lwr.ci, digits = 2))
+    base::print(round(unclass(x$est),    digits = digits))
+    cat("\n", sprintf("%.0f%% Confidence Intervals:", 100), "\nLower:\n", sep = "")
+    base::print(round(unclass(x$lwr.ci), digits = 2))
     cat("\nUpper:\n")
-    print(round(x$upr.ci, digits = 2))
+    base::print(round(unclass(x$upr.ci), digits = 2))
 
-  } else if (inherits(x, "matrix")) {
+  } else if (is.matrix(x)) {
     cat("Concordance matrix:\n")
-    print(round(x, digits))
+    base::print(round(unclass(x), digits = digits))
+
   } else {
     stop("Invalid object format for class 'ccc'.")
   }
 
   invisible(x)
 }
-
 
 #' @rdname ccc
 #' @method plot ccc
@@ -148,37 +150,28 @@ plot.ccc <- function(x,
                      high_color = "steelblue1",
                      mid_color = "white",
                      value_text_size = 4, ...) {
+  if (!inherits(x, "ccc")) stop("x must be of class 'ccc'.")
+  if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Package 'ggplot2' is required for plotting.")
 
-  if (!inherits(x, "ccc")) {
-    stop("x must be of class 'ccc'.")
-  }
-
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting.")
-  }
-
-  mat <- if (is.list(x) && !is.null(x$est)) x$est else as.matrix(x)
+  mat <- if (is.list(x) && !is.null(x$est)) x$est else unclass(x)
 
   df <- as.data.frame(as.table(mat))
-  colnames(df) <- c("Var1", "Var2", "CCC")
+  names(df) <- c("Var1", "Var2", "CCC")
   df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
 
-  p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = CCC)) +
+  ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = CCC)) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", .data$CCC)),
+    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", ggplot2::.data$CCC)),
                        size = value_text_size, color = "black") +
-    ggplot2::scale_fill_gradient2(
-      low = low_color, high = high_color, mid = mid_color,
-      midpoint = 0, limit = c(-1, 1), name = "CCC"
-    ) +
+    ggplot2::scale_fill_gradient2(low = low_color, high = high_color, mid = mid_color,
+                                  midpoint = 0, limit = c(-1, 1), name = "CCC") +
     ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(
-      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-      panel.grid = ggplot2::element_blank(),
-      ...
-    ) +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+                   panel.grid = ggplot2::element_blank(),
+                   ...) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
-
-  return(p)
 }
+
+#' @export
+as.matrix.ccc <- function(x, ...) unclass(x)
