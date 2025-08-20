@@ -2,11 +2,12 @@
 #'
 #' @description
 #' Computes all pairwise Pearson correlation coefficients for the numeric
-#' columns of a matrix or data frame using a high-performance \code{C++}
+#' columns of a matrix or data frame using a high-performance 'C++'
 #' backend.
 #'
-#' This function uses a direct Pearson formula implementation in C++ to achieve
-#' fast and scalable correlation computations, especially for large datasets.
+#' This function uses a direct Pearson formula implementation in 'C++' to
+#' achieve fast and scalable correlation computations, especially for
+#' large datasets.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Each column must have
@@ -41,7 +42,7 @@
 #' zero before taking square roots. No missing values are permitted in \eqn{X}.
 #'
 #' The implementation forms \eqn{X^\top X} via a
-#' symmetric rank-\eqn{k} update (BLAS \code{SYRK}) on the upper triangle, then
+#' symmetric rank-\eqn{k} update ('BLAS' 'SYRK') on the upper triangle, then
 #' applies the rank-1 correction \eqn{-\,n\,\mu\,\mu^\top} to obtain \eqn{S}
 #' without explicitly materialising \eqn{X - \mathbf{1}\mu}. After scaling by
 #' \eqn{1/(n-1)}, triangular normalisation by \eqn{D^{-1/2}} yields \eqn{R},
@@ -127,7 +128,7 @@ pearson_corr <- function(data) {
 #' @return Invisibly returns the \code{pearson_corr} object.
 #' @author Thiago de Paula Oliveira
 #' @export
-print.pearson_corr <- function(x, digits = 3, max_rows = NULL,
+print.pearson_corr <- function(x, digits = 4, max_rows = NULL,
                                max_cols = NULL, ...) {
   cat("Pearson correlation matrix:\n")
   m <- as.matrix(x)

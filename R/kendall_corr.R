@@ -3,9 +3,9 @@
 #' @description
 #' Computes all pairwise Kendall's tau rank correlation coefficients for the
 #' numeric columns of a matrix or data frame using a high-performance
-#' \code{C++}.
+#' 'C++'.
 #'
-#' This function uses a fast and scalable algorithm implemented in \code{C++}
+#' This function uses a fast and scalable algorithm implemented in 'C++'
 #' to compute both Kendall's tau-a (when no ties are present) and tau-b
 #' (when ties are detected), making it suitable for large datasets. Internally,
 #' it calls a highly optimized function that uses a combination of merge-sort-
@@ -43,7 +43,7 @@
 #'
 #' The function automatically selects \emph{tau-a} or \emph{tau-b} depending
 #' on the presence of ties. Performance is maximized by computing correlations
-#' in \code{C++} directly from the matrix columns.
+#' in 'C++' directly from the matrix columns.
 #'
 #' @note Missing values are not allowed. Columns with fewer than two
 #' observations are excluded.
@@ -59,7 +59,6 @@
 #' print(kt)
 #' plot(kt)
 #'
-#' \dontrun{
 #' # With a large data frame
 #' df <- data.frame(x = rnorm(1e4), y = rnorm(1e4), z = rnorm(1e4))
 #' kendall_tau(df)
@@ -73,7 +72,6 @@
 #' kt <- kendall_tau(tied_df)
 #' print(kt)
 #' plot(kt)
-#' }
 #'
 #' @seealso \code{\link{print.kendall_matrix}},
 #' \code{\link{print.kendall_matrix}}
@@ -101,7 +99,7 @@ kendall_tau <- function(data) {
 #' including description and method metadata.
 #'
 #' @param x An object of class \code{kendall_matrix}.
-#' @param digits Integer; number of decimal places to print in the concordance
+#' @param digits Integer; number of decimal places to print
 #' @param max_rows Optional integer; maximum number of rows to display.
 #'  If \code{NULL}, all rows are shown.
 #' @param max_cols Optional integer; maximum number of columns to display.
@@ -111,7 +109,7 @@ kendall_tau <- function(data) {
 #' @return Invisibly returns the \code{kendall_matrix} object.
 #' @author Thiago de Paula Oliveira
 #' @export
-print.kendall_matrix <- function(x, digits = 3, max_rows = NULL,
+print.kendall_matrix <- function(x, digits = 4, max_rows = NULL,
                                  max_cols = NULL, ...) {
   method <- attr(x, "method")
   header <- if (!is.null(method)) {

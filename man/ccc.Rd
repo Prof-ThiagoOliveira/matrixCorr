@@ -8,7 +8,7 @@
 \usage{
 ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
 
-\method{print}{ccc}(x, digits = 3, ...)
+\method{print}{ccc}(x, digits = 4, ...)
 
 \method{plot}{ccc}(
   x,
@@ -34,7 +34,7 @@ Non-numeric columns will be ignored.}
 confidence intervals).}
 
 \item{digits}{Integer; number of decimal places to print in the concordance
-matrix (default is 3).}
+matrix (default is 4).}
 
 \item{...}{Additional arguments passed to underlying functions
 (like \code{theme} or \code{print}).}
@@ -63,7 +63,7 @@ If \code{ci = TRUE}, returns a list with elements: \code{est},
 Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)
 from the numeric columns of a matrix or data frame. CCC measures both
 precision (Pearson correlation) and accuracy (closeness to the 45-degree line).
-This function is backed by a high-performance \code{C++} implementation.
+This function is backed by a high-performance 'C++' implementation.
 }
 \details{
 Lin's CCC is defined as:
@@ -88,10 +88,16 @@ scalar form of Lin's CCC.
 Missing values are not allowed; input must be clean numeric data.
 }
 \examples{
-mat <- cbind(x = rnorm(100), y = rnorm(100), z = rnorm(100))
-result <- ccc(mat)
-print(result)
-plot(result)
+# Example with multivariate normal data
+Sigma <- matrix(c(1, 0.5, 0.3,
+                  0.5, 1, 0.4,
+                  0.3, 0.4, 1), nrow = 3)
+mu <- c(0, 0, 0)
+set.seed(123)
+mat_mvn <- MASS::mvrnorm(n = 100, mu = mu, Sigma = Sigma)
+result_mvn <- ccc(mat_mvn)
+print(result_mvn)
+plot(result_mvn)
 
 }
 \references{

@@ -3,11 +3,11 @@
 #' @description
 #' Computes all pairwise Spearman's rank correlation coefficients for the
 #' numeric columns of a matrix or data frame using a high-performance
-#' \code{C++} backend.
+#' 'C++' backend.
 #'
 #' This function ranks the data and computes Pearson correlation on ranks,
 #' which is equivalent to Spearman’s rho. It supports large datasets and
-#' is optimized in C++ for performance.
+#' is optimized in 'C++' for performance.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Each column must have
@@ -56,7 +56,7 @@
 #'
 #' The implementation ranks each column to
 #' form \eqn{R}, then evaluates \eqn{R^\top R} using a symmetric rank update
-#' (BLAS \code{SYRK}) and centres it via the identity
+#' ('BLAS' 'SYRK') and centres it via the identity
 #' \deqn{
 #' (R-\mathbf{1}\mu^\top)^\top (R-\mathbf{1}\mu^\top)
 #' \;=\; R^\top R \;-\; n\,\mu\mu^\top,
@@ -70,8 +70,8 @@
 #' Ranking costs
 #' \eqn{O\!\bigl(p\,n\log n\bigr)}; forming and normalising
 #' \eqn{R^\top R} costs \eqn{O\!\bigl(n p^2\bigr)} with \eqn{O(p^2)} additional
-#' memory. OpenMP parallelism is used across columns for ranking, and a BLAS
-#' \code{SYRK} kernel is used for the matrix product when available.
+#' memory. 'OpenMP' parallelism is used across columns for ranking, and a 'BLAS'
+#' 'SYRK' kernel is used for the matrix product when available.
 #'
 #' @note Missing values are not allowed. Columns with fewer than two
 #' observations are excluded.
@@ -158,7 +158,7 @@ spearman_rho <- function(data) {
 #' including description and method metadata.
 #'
 #' @param x An object of class \code{spearman_rho}.
-#' @param digits Integer; number of decimal places to print in the concordance
+#' @param digits Integer; number of decimal places to print.
 #' @param max_rows Optional integer; maximum number of rows to display.
 #'  If \code{NULL}, all rows are shown.
 #' @param max_cols Optional integer; maximum number of columns to display.
@@ -167,7 +167,7 @@ spearman_rho <- function(data) {
 #'
 #' @return Invisibly returns the \code{spearman_rho} object.
 #' @export
-print.spearman_rho <- function(x, digits = 3, max_rows = NULL, max_cols = NULL, ...) {
+print.spearman_rho <- function(x, digits = 4, max_rows = NULL, max_cols = NULL, ...) {
   cat("Spearman correlation matrix:\n")
 
   # Strip non-essential attributes

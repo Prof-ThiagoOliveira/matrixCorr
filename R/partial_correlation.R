@@ -2,9 +2,18 @@
 #'
 #' @description
 #' Computes the Gaussian partial correlation matrix from a numeric data frame
-#' or matrix, using one of three covariance estimators: unbiased sample
-#' covariance, ridge-regularised covariance, or OAS shrinkage to a scaled
-#' identity (recommended when \eqn{p \gg n}).
+#' or matrix. The covariance matrix can be estimated using:
+#' \itemize{
+#'   \item \strong{Unbiased sample covariance}: the standard empirical
+#'   covariance estimator.
+#'   \item \strong{Ridge-regularised covariance}: adds a positive ridge
+#'   penalty to improve stability when the covariance matrix is near-singular.
+#'   \item \strong{OAS shrinkage to a scaled identity}: recommended when
+#'   \eqn{p \gg n}, as it reduces estimation error by shrinking towards a
+#'   scaled identity matrix.
+#' }
+#'
+#' The method uses a high-performance 'C++' backend.
 #'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #'   Non-numeric columns are ignored.
@@ -84,9 +93,9 @@
 #' weight chosen to minimise (approximately) the Frobenius risk under a
 #' Gaussian model, often improving mean–square accuracy in high dimension.
 #'
-#' \strong{Computational notes.} The implementation forms \eqn{S} using a BLAS
+#' \strong{Computational notes.} The implementation forms \eqn{S} using 'BLAS'
 #' \code{syrk} when available and constructs partial correlations by traversing
-#' only the upper triangle with OpenMP parallelism. Positive definiteness is
+#' only the upper triangle with 'OpenMP' parallelism. Positive definiteness is
 #' verified via a Cholesky factorisation; if it fails, a tiny diagonal jitter is
 #' increased geometrically up to a small cap, at which point the routine
 #' signals an error.

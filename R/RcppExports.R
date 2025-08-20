@@ -13,6 +13,14 @@ openmp_threads <- function() {
     .Call(`_matrixCorr_openmp_threads`)
 }
 
+ustat_dcor <- function(x, y) {
+    .Call(`_matrixCorr_ustat_dcor`, x, y)
+}
+
+ustat_dcor_matrix_cpp <- function(X) {
+    .Call(`_matrixCorr_ustat_dcor_matrix_cpp`, X)
+}
+
 kendall_tau_auto_cpp <- function(x, y, scale = 1e8) {
     .Call(`_matrixCorr_kendall_tau_auto_cpp`, x, y, scale)
 }

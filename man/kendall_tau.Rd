@@ -8,7 +8,7 @@
 \usage{
 kendall_tau(data)
 
-\method{print}{kendall_matrix}(x, digits = 3, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{kendall_matrix}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
 
 \method{plot}{kendall_matrix}(
   x,
@@ -27,7 +27,7 @@ at least two non-missing values and contain no NAs.}
 
 \item{x}{An object of class \code{kendall_matrix}.}
 
-\item{digits}{Integer; number of decimal places to print in the concordance}
+\item{digits}{Integer; number of decimal places to print}
 
 \item{max_rows}{Optional integer; maximum number of rows to display.
 If \code{NULL}, all rows are shown.}
@@ -64,9 +64,9 @@ A \code{ggplot} object representing the heatmap.
 \description{
 Computes all pairwise Kendall's tau rank correlation coefficients for the
 numeric columns of a matrix or data frame using a high-performance
-\code{C++}.
+'C++'.
 
-This function uses a fast and scalable algorithm implemented in \code{C++}
+This function uses a fast and scalable algorithm implemented in 'C++'
 to compute both Kendall's tau-a (when no ties are present) and tau-b
 (when ties are detected), making it suitable for large datasets. Internally,
 it calls a highly optimized function that uses a combination of merge-sort-
@@ -102,7 +102,7 @@ version:
 
 The function automatically selects \emph{tau-a} or \emph{tau-b} depending
 on the presence of ties. Performance is maximized by computing correlations
-in \code{C++} directly from the matrix columns.
+in 'C++' directly from the matrix columns.
 }
 \note{
 Missing values are not allowed. Columns with fewer than two
@@ -115,7 +115,6 @@ kt <- kendall_tau(mat)
 print(kt)
 plot(kt)
 
-\dontrun{
 # With a large data frame
 df <- data.frame(x = rnorm(1e4), y = rnorm(1e4), z = rnorm(1e4))
 kendall_tau(df)
@@ -129,7 +128,6 @@ tied_df <- data.frame(
 kt <- kendall_tau(tied_df)
 print(kt)
 plot(kt)
-}
 
 }
 \references{

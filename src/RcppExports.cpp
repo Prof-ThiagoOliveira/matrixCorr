@@ -44,6 +44,29 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ustat_dcor
+double ustat_dcor(const arma::vec& x, const arma::vec& y);
+RcppExport SEXP _matrixCorr_ustat_dcor(SEXP xSEXP, SEXP ySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    rcpp_result_gen = Rcpp::wrap(ustat_dcor(x, y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ustat_dcor_matrix_cpp
+arma::mat ustat_dcor_matrix_cpp(const arma::mat& X);
+RcppExport SEXP _matrixCorr_ustat_dcor_matrix_cpp(SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(ustat_dcor_matrix_cpp(X));
+    return rcpp_result_gen;
+END_RCPP
+}
 // kendall_tau_auto_cpp
 double kendall_tau_auto_cpp(NumericVector x, NumericVector y, double scale);
 RcppExport SEXP _matrixCorr_kendall_tau_auto_cpp(SEXP xSEXP, SEXP ySEXP, SEXP scaleSEXP) {
@@ -158,6 +181,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
+    {"_matrixCorr_ustat_dcor", (DL_FUNC) &_matrixCorr_ustat_dcor, 2},
+    {"_matrixCorr_ustat_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_cpp, 1},
     {"_matrixCorr_kendall_tau_auto_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_auto_cpp, 3},
     {"_matrixCorr_kendall_tau_a_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_a_cpp, 3},
     {"_matrixCorr_kendall_tau_b_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_b_cpp, 3},

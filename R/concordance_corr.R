@@ -4,7 +4,7 @@
 #' Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)
 #' from the numeric columns of a matrix or data frame. CCC measures both
 #' precision (Pearson correlation) and accuracy (closeness to the 45-degree line).
-#' This function is backed by a high-performance \code{C++} implementation.
+#' This function is backed by a high-performance 'C++' implementation.
 #'
 #' @details
 #' Lin's CCC is defined as:
@@ -46,10 +46,16 @@
 #' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}}
 #'
 #' @examples
-#' mat <- cbind(x = rnorm(100), y = rnorm(100), z = rnorm(100))
-#' result <- ccc(mat)
-#' print(result)
-#' plot(result)
+#' # Example with multivariate normal data
+#' Sigma <- matrix(c(1, 0.5, 0.3,
+#'                   0.5, 1, 0.4,
+#'                   0.3, 0.4, 1), nrow = 3)
+#' mu <- c(0, 0, 0)
+#' set.seed(123)
+#' mat_mvn <- MASS::mvrnorm(n = 100, mu = mu, Sigma = Sigma)
+#' result_mvn <- ccc(mat_mvn)
+#' print(result_mvn)
+#' plot(result_mvn)
 #'
 #' @importFrom stats var cov cor
 #' @importFrom graphics plot
@@ -104,9 +110,9 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 #' @rdname ccc
 #' @method print ccc
 #' @param digits Integer; number of decimal places to print in the concordance
-#' matrix (default is 3).
+#' matrix (default is 4).
 #' @export
-print.ccc <- function(x, digits = 3, ...) {
+print.ccc <- function(x, digits = 4, ...) {
   # helper to strip non-essential attributes
   strip_attrs <- function(m) {
     m <- as.matrix(m)

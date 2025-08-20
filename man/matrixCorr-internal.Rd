@@ -7,7 +7,7 @@
 \alias{matrixCorr-internal}
 \alias{RcppExports}
 \alias{validate_corr_input}
-\title{matrixCorr: Fast Correlation Estimation in R and C++}
+\title{matrixCorr: Collection of Correlation and Association Estimators}
 \usage{
 validate_corr_input(data)
 }
@@ -19,7 +19,7 @@ validate_corr_input(data)
 A numeric matrix (type \code{double}) with column names preserved.
 }
 \description{
-Compute correlation and other association matrices from small to very large datasets with simple, cor()-like functions and sensible defaults. Includes options for shrinkage and robustness to improve results in noisy or high-dimensional settings (p >= n), plus convenient print/plot methods for inspection. Implemented with optimised C++ backends using BLAS/OpenMP and memory-aware symmetric updates. Works with base matrices and data frames, returning standard R objects via a consistent S3 interface. Useful across genomics, agriculture, and machine-learning workflows.
+Compute correlation and other association matrices from small to very large datasets with simple, 'cor()'-like functions and sensible defaults. Includes options for shrinkage and robustness to improve results in noisy or high-dimensional settings (p >= n), plus convenient print/plot methods for inspection. Implemented with optimised C++ backends using BLAS/OpenMP and memory-aware symmetric updates. Works with base matrices and data frames, returning standard R objects via a consistent S3 interface. Useful across genomics, agriculture, and machine-learning workflows. Methods based on Ledoit and Wolf (2004) \doi{10.1016/S0047-259X(03)00096-4}; Schäfer and Strimmer (2005) \doi{10.2202/1544-6115.1175}; Lin (1989) \doi{10.2307/2532051}.
 
 Validates and normalizes input for correlation computations. Accepts either a
 numeric matrix or a data frame, filters numeric columns, checks dimensions and

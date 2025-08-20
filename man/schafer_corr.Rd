@@ -8,7 +8,7 @@
 \usage{
 schafer_corr(data)
 
-\method{print}{schafer_corr}(x, digits = 3, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{schafer_corr}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
 
 \method{plot}{schafer_corr}(
   x,
@@ -84,8 +84,8 @@ of the sample Pearson correlation \eqn{R} are shrunk towards zero, yielding
 \eqn{\mathrm{diag}(R_{\mathrm{shr}})=1}, stabilising estimates when
 \eqn{p \ge n}.
 
-This function uses a high-performance \code{C++} backend that forms
-\eqn{X^\top X} via BLAS \code{SYRK}, applies centring via a rank-1 update,
+This function uses a high-performance 'C++' backend that forms
+\eqn{X^\top X} via 'BLAS' 'SYRK', applies centring via a rank-1 update,
 converts to Pearson correlation, estimates \eqn{\hat\lambda}, and shrinks
 the off-diagonals:
 \eqn{R_{\mathrm{shr}} = (1-\hat\lambda)R + \hat\lambda I}.
@@ -124,7 +124,6 @@ Rshr <- schafer_corr(X)
 print(Rshr, digits = 2, max_rows = 6, max_cols = 6)
 plot(Rshr)
 
-\dontrun{
 ## Shrinkage typically moves the sample correlation closer to the truth
 Rraw <- stats::cor(X)
 off  <- upper.tri(Sigma, diag = FALSE)
@@ -132,7 +131,6 @@ mae_raw <- mean(abs(Rraw[off] - Sigma[off]))
 mae_shr <- mean(abs(Rshr[off] - Sigma[off]))
 print(c(MAE_raw = mae_raw, MAE_shrunk = mae_shr))
 plot(Rshr, title = "Schafer-Strimmer shrinkage correlation")
-}
 
 }
 \references{
