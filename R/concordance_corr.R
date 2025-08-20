@@ -157,8 +157,6 @@ plot.ccc <- function(x,
                      value_text_size = 4, ...) {
 
   if (!inherits(x, "ccc")) stop("x must be of class 'ccc'.")
-  if (!requireNamespace("ggplot2", quietly = TRUE))
-    stop("Package 'ggplot2' is required for plotting.")
 
   # Use estimates if CI list, otherwise the matrix itself
   mat <- if (is.list(x) && !is.null(x$est)) x$est else unclass(x)

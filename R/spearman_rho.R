@@ -224,10 +224,6 @@ plot.spearman_rho <-
     stop("x must be of class 'spearman_rho'.")
   }
 
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting.")
-  }
-
   mat <- as.matrix(x)
   df <- as.data.frame(as.table(mat))
   colnames(df) <- c("Var1", "Var2", "Rho")
