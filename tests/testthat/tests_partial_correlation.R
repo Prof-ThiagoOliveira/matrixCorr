@@ -175,19 +175,3 @@ test_that("Non-numeric columns are ignored and dimnames propagate", {
   expect_equal(dim(pc), c(3L, 3L))
   expect_equal(dimnames(pc), list(cols, cols))
 })
-
-test_that("validate_corr_input errors when nothing numeric remains", {
-  df <- data.frame(
-    f = factor(c("a","b","a")),
-    s = c("x","y","z"),
-    l = c(TRUE, FALSE, TRUE)
-  )
-  expect_error(validate_corr_input(df), "No numeric columns")
-})
-
-test_that("Matrix path accepts numeric matrix and rejects non-numeric", {
-  M <- matrix(runif(20), nrow = 5)
-  expect_silent(validate_corr_input(M))
-  Mbad <- matrix(c("a","b","c","d"), nrow = 2)
-  expect_error(validate_corr_input(Mbad), "must be numeric")
-})

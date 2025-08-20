@@ -1,4 +1,4 @@
-#' Validation and normalization for correlation
+#' @title Validation and normalization for correlation
 #'
 #' @description
 #' Validates and normalizes input for correlation computations. Accepts either a
@@ -28,6 +28,7 @@
 #' @useDynLib matrixCorr, .registration = TRUE
 #' @importFrom Rcpp evalCpp
 #' @keywords internal
+#' @name matrixCorr-internal
 validate_corr_input <- function(data) {
   validate_corr_input_cpp(data)
 }

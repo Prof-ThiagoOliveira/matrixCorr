@@ -6,16 +6,26 @@
 \alias{plot.partial_corr}
 \title{Partial correlation matrix (sample / ridge / OAS)}
 \usage{
-partial_correlation(data, method = c("oas","ridge","sample"),
-    lambda = 1e-3, return_cov_precision = FALSE)
+partial_correlation(
+  data,
+  method = c("oas", "ridge", "sample"),
+  lambda = 0.001,
+  return_cov_precision = FALSE
+)
 
-\method{print}{partial_corr}(x, digits = 3, show_method = TRUE,
-    max_rows = NULL, max_cols = NULL, ...)
+\method{print}{partial_correlation}(x, digits = 3, show_method = TRUE, max_rows = NULL, max_cols = NULL, ...)
 
-\method{plot}{partial_corr}(x, title = NULL,
-    low_color  = "indianred1", high_color = "steelblue1",
-    mid_color  = "white", value_text_size = 4,
-    mask_diag = TRUE, reorder = FALSE, ...)
+\method{plot}{partial_corr}(
+  x,
+  title = NULL,
+  low_color = "indianred1",
+  high_color = "steelblue1",
+  mid_color = "white",
+  value_text_size = 4,
+  mask_diag = TRUE,
+  reorder = FALSE,
+  ...
+)
 }
 \arguments{
 \item{data}{A numeric matrix or data frame with at least two numeric columns.

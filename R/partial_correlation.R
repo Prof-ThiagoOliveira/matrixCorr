@@ -6,10 +6,6 @@
 #' covariance, ridge-regularised covariance, or OAS shrinkage to a scaled
 #' identity (recommended when \eqn{p \gg n}).
 #'
-#' @usage
-#' partial_correlation(data, method = c("oas","ridge","sample"),
-#'     lambda = 1e-3, return_cov_precision = FALSE)
-#'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #'   Non-numeric columns are ignored.
 #' @param method Character; one of \code{"oas"}, \code{"ridge"}, \code{"sample"}.
@@ -234,9 +230,6 @@ partial_correlation <- function(data, method = c("oas","ridge","sample"),
 #' @title Print method for \code{partial_corr}
 #' @description Prints only the partial correlation matrix (no attribute spam),
 #'   with an optional one-line header stating the estimator used.
-#' @usage
-#' \method{print}{partial_corr}(x, digits = 3, show_method = TRUE,
-#'     max_rows = NULL, max_cols = NULL, ...)
 #'
 #' @param x An object of class \code{partial_corr}.
 #' @param digits Integer; number of decimal places for display (default 3).
@@ -246,7 +239,7 @@ partial_correlation <- function(data, method = c("oas","ridge","sample"),
 #'   the printed matrix is truncated with a note about omitted rows/cols.
 #' @param ... Further arguments passed to \code{print.matrix()}.
 #' @return Invisibly returns \code{x}.
-#' @method print partial_corr
+#' @method print partial_correlation
 #' @export
 print.partial_correlation <- function(
     x,
@@ -308,12 +301,6 @@ print.partial_correlation <- function(
 #' Produces a \pkg{ggplot2}-based heatmap of the partial correlation matrix
 #' stored in \code{x$pcor}. Optionally masks the diagonal and/or reorders
 #' variables via hierarchical clustering of \eqn{1 - |pcor|}.
-#'
-#' @usage
-#' \method{plot}{partial_corr}(x, title = NULL,
-#'     low_color  = "indianred1", high_color = "steelblue1",
-#'     mid_color  = "white", value_text_size = 4,
-#'     mask_diag = TRUE, reorder = FALSE, ...)
 #'
 #' @param x An object of class \code{partial_corr}.
 #' @param title Plot title. By default, constructed from the estimator in

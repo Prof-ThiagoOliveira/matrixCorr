@@ -51,6 +51,7 @@ spearman_matrix_cpp <- function(X_) {
 }
 
 #' Input validator for correlation (parallelised copying/NA checks where safe)
+#' @name matrixCorr-internal
 NULL
 
 validate_corr_input_cpp <- function(data, check_na = TRUE) {
