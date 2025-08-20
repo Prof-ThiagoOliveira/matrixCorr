@@ -17,14 +17,39 @@
 #' numeric columns of the input.
 #'
 #' @details
-#' Pearson's correlation measures the linear relationship between two variables.
-#' It is defined as:
+#' \strong{Statistical formulation.} Let \eqn{X \in \mathbb{R}^{n \times p}} be a
+#' numeric matrix with rows as observations and columns as variables, and let
+#' \eqn{\mu = \tfrac{1}{n}\mathbf{1}^\top X} be the vector of column means.
+#' Define the centred cross-product matrix
+#' \deqn{S \;=\; (X - \mathbf{1}\mu)^\top (X - \mathbf{1}\mu)
+#'       \;=\; X^\top X \;-\; n\,\mu\,\mu^\top.}
+#' The (unbiased) sample covariance is then
+#' \deqn{\widehat{\Sigma} \;=\; \tfrac{1}{n-1}\,S,}
+#' and the vector of sample standard deviations is
+#' \deqn{s_i \;=\; \sqrt{\widehat{\Sigma}_{ii}}, \qquad i=1,\ldots,p.}
+#' The Pearson correlation matrix \eqn{R} is obtained by standardising
+#' \eqn{\widehat{\Sigma}}, given by:
+#' \deqn{R \;=\; D^{-1/2}\,\widehat{\Sigma}\,D^{-1/2}, \qquad
+#'       D \;=\; \mathrm{diag}(\widehat{\Sigma}_{11},\ldots,\widehat{\Sigma}_{pp}),}
+#' equivalently, entrywise
+#' \deqn{R_{ij} \;=\; \frac{\widehat{\Sigma}_{ij}}{s_i\,s_j}, \quad i \neq j,
+#'       \qquad R_{ii} \;=\; 1.}
 #'
-#' \deqn{ r = \frac{\sum (x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum (x_i -
-#' \bar{x})^2 \sum (y_i - \bar{y})^2}} }
+#' If \eqn{s_i = 0} (zero variance),
+#' the \eqn{i}-th row and column are set to \code{NA}. Tiny negative values on
+#' the covariance diagonal caused by floating-point rounding are reduced to
+#' zero before taking square roots. No missing values are permitted in \eqn{X}.
+#'
+#' The implementation forms \eqn{X^\top X} via a
+#' symmetric rank-\eqn{k} update (BLAS \code{SYRK}) on the upper triangle, then
+#' applies the rank-1 correction \eqn{-\,n\,\mu\,\mu^\top} to obtain \eqn{S}
+#' without explicitly materialising \eqn{X - \mathbf{1}\mu}. After scaling by
+#' \eqn{1/(n-1)}, triangular normalisation by \eqn{D^{-1/2}} yields \eqn{R},
+#' which is then symmetrised. The dominant cost is \eqn{O(n p^2)} flops with
+#' \eqn{O(p^2)} memory.
 #'
 #' This implementation avoids calculating means explicitly and instead
-#' uses a numerically stable online form.
+#' uses a numerically stable form.
 #'
 #' @note Missing values are not allowed. Columns with fewer than two
 #' observations are excluded.
@@ -34,15 +59,37 @@
 #' two parents". Proceedings of the Royal Society of London, 58, 240–242.
 #'
 #' @examples
-#' mat <- cbind(a = rnorm(100), b = rnorm(100), c = rnorm(100))
-#' pr <- pearson_corr(mat)
-#' print(pr)
+#' ## MVN with AR(1) correlation
+#' set.seed(123)
+#' p <- 6; n <- 300; rho <- 0.5
+#' # true correlation
+#' Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
+#' L <- chol(Sigma)
+#' # MVN(n, 0, Sigma)
+#' X <- matrix(rnorm(n * p), n, p) %*% L
+#' colnames(X) <- paste0("V", seq_len(p))
+#'
+#' pr <- pearson_corr(X)
+#' print(pr, digits = 2)
 #' plot(pr)
 #'
-#' \dontrun{
-#' df <- data.frame(x = rnorm(1e4), y = rnorm(1e4), z = rnorm(1e4))
-#' pearson_corr(df)
-#' }
+#' ## Compare the sample estimate to the truth
+#' Rhat <- cor(X)
+#' # estimated
+#' round(Rhat[1:4, 1:4], 2)
+#' # true
+#' round(Sigma[1:4, 1:4], 2)
+#' off <- upper.tri(Sigma, diag = FALSE)
+#' # MAE on off-diagonals
+#' mean(abs(Rhat[off] - Sigma[off]))
+#'
+#' ## Larger n reduces sampling error
+#' n2 <- 2000
+#' X2 <- matrix(rnorm(n2 * p), n2, p) %*% L
+#' Rhat2 <- cor(X2)
+#' off <- upper.tri(Sigma, diag = FALSE)
+#' ## mean absolute error (MAE) of the off-diagonal correlations
+#' mean(abs(Rhat2[off] - Sigma[off]))
 #'
 #' @useDynLib matrixCorr, .registration = TRUE
 #' @importFrom Rcpp evalCpp

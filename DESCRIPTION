@@ -1,7 +1,7 @@
 Package: matrixCorr
 Type: Package
 Title: Fast Correlation Estimation in R and C++
-Version: 0.2.0
+Version: 0.3.1
 Authors@R: person(given = "Thiago de Paula", family = "Oliveira", 
     email = "toliveira@abacusbio.com", role = c("aut", "cre"), 
     comment = c(ORCID = "0000-0002-4555-2584"))
