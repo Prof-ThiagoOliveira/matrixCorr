@@ -19,7 +19,7 @@ validate_corr_input(data)
 A numeric matrix (type \code{double}) with column names preserved.
 }
 \description{
-Provides fast and extensible computation of correlation matrices using optimized C++ routines. Supports both rank-based and parametric methods, including efficient implementations of Kendall's tau (tau-a and tau-b), with extensibility for Spearman, Pearson, and other correlation metrics. Designed for high-performance statistical computing in applications such as genomics, finance, and machine learning, especially in high-dimensional settings.
+Compute correlation and other association matrices from small to very large datasets with simple, cor()-like functions and sensible defaults. Includes options for shrinkage and robustness to improve results in noisy or high-dimensional settings (p >= n), plus convenient print/plot methods for inspection. Implemented with optimised C++ backends using BLAS/OpenMP and memory-aware symmetric updates. Works with base matrices and data frames, returning standard R objects via a consistent S3 interface. Useful across genomics, agriculture, and machine-learning workflows.
 
 Validates and normalizes input for correlation computations. Accepts either a
 numeric matrix or a data frame, filters numeric columns, checks dimensions and
