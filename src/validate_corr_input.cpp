@@ -39,13 +39,7 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
    return has_na.load(std::memory_order_relaxed);
 }
 
-//' Input validator for correlation (parallelised copying/NA checks where safe)
- //'
- //' @param data matrix or data.frame
- //' @param check_na logical; if TRUE, scan and error on any NA/NaN
- //' @return numeric (double) matrix with colnames preserved when available
- //'
- // [[Rcpp::export]]
+// [[Rcpp::export]]
  Rcpp::NumericMatrix validate_corr_input_cpp(SEXP data, bool check_na = true){
     const bool is_mat = Rf_isMatrix(data);
     const bool is_df  = Rf_inherits(data, "data.frame");

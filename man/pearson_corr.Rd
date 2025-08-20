@@ -4,7 +4,7 @@
 \alias{pearson_corr}
 \alias{print.pearson_corr}
 \alias{plot.pearson_corr}
-\title{Fast pairwise Pearson correlation}
+\title{Pairwise Pearson correlation}
 \usage{
 pearson_corr(data)
 

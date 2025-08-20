@@ -1,4 +1,4 @@
-#' @title Fast Pairwise Kendall's Tau Rank Correlation
+#' @title Pairwise Kendall's Tau Rank Correlation
 #'
 #' @description
 #' Computes all pairwise Kendall's tau rank correlation coefficients for the

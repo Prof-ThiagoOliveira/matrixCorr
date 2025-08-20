@@ -1,4 +1,4 @@
-#' @title Fast pairwise Spearman's rank correlation
+#' @title Pairwise Spearman's rank correlation
 #'
 #' @description
 #' Computes all pairwise Spearman's rank correlation coefficients for the

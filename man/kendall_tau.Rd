@@ -4,7 +4,7 @@
 \alias{kendall_tau}
 \alias{print.kendall_matrix}
 \alias{plot.kendall_matrix}
-\title{Fast Pairwise Kendall's Tau Rank Correlation}
+\title{Pairwise Kendall's Tau Rank Correlation}
 \usage{
 kendall_tau(data)
 

@@ -119,6 +119,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sss_cor_cpp
+arma::mat sss_cor_cpp(SEXP X_);
+RcppExport SEXP _matrixCorr_sss_cor_cpp(SEXP X_SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
+    rcpp_result_gen = Rcpp::wrap(sss_cor_cpp(X_));
+    return rcpp_result_gen;
+END_RCPP
+}
 // spearman_matrix_cpp
 arma::mat spearman_matrix_cpp(SEXP X_);
 RcppExport SEXP _matrixCorr_spearman_matrix_cpp(SEXP X_SEXP) {
@@ -153,6 +164,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
     {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 4},
     {"_matrixCorr_pearson_matrix_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_cpp, 1},
+    {"_matrixCorr_sss_cor_cpp", (DL_FUNC) &_matrixCorr_sss_cor_cpp, 1},
     {"_matrixCorr_spearman_matrix_cpp", (DL_FUNC) &_matrixCorr_spearman_matrix_cpp, 1},
     {"_matrixCorr_validate_corr_input_cpp", (DL_FUNC) &_matrixCorr_validate_corr_input_cpp, 2},
     {NULL, NULL, 0}

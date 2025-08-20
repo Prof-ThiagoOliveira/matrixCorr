@@ -1,4 +1,4 @@
-#' @title Fast pairwise Pearson correlation
+#' @title Pairwise Pearson correlation
 #'
 #' @description
 #' Computes all pairwise Pearson correlation coefficients for the numeric

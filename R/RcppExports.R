@@ -46,12 +46,13 @@ pearson_matrix_cpp <- function(X_) {
     .Call(`_matrixCorr_pearson_matrix_cpp`, X_)
 }
 
+sss_cor_cpp <- function(X_) {
+    .Call(`_matrixCorr_sss_cor_cpp`, X_)
+}
+
 spearman_matrix_cpp <- function(X_) {
     .Call(`_matrixCorr_spearman_matrix_cpp`, X_)
 }
-
-#' Input validator for correlation (parallelised copying/NA checks where safe)
-NULL
 
 validate_corr_input_cpp <- function(data, check_na = TRUE) {
     .Call(`_matrixCorr_validate_corr_input_cpp`, data, check_na)

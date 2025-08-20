@@ -4,7 +4,7 @@
 \alias{spearman_rho}
 \alias{print.spearman_rho}
 \alias{plot.spearman_rho}
-\title{Fast pairwise Spearman's rank correlation}
+\title{Pairwise Spearman's rank correlation}
 \usage{
 spearman_rho(data)
 
