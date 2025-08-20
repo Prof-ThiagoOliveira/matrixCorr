@@ -18,10 +18,60 @@
 #' numeric columns of the input.
 #'
 #' @details
-#' Spearman's correlation assesses how well the relationship between two
-#' variables can be described using a monotonic function. It is computed by
-#' ranking the data and then applying the Pearson correlation formula to the
-#' ranks.
+#' For each column \eqn{j=1,\ldots,p}, let
+#' \eqn{R_{\cdot j} \in \{1,\ldots,n\}^n} denote the (mid-)ranks of
+#' \eqn{X_{\cdot j}}, assigning average ranks to ties. Write
+#' \eqn{\bar R_j = (n+1)/2} for the mean rank and define the centred rank
+#' vectors \eqn{\tilde R_{\cdot j} = R_{\cdot j} - \bar R_j \mathbf{1}}. The
+#' Spearman correlation between columns \eqn{i} and \eqn{j} is the Pearson
+#' correlation of their rank vectors, given by
+#' \deqn{
+#' \rho_S(i,j) \;=\;
+#' \frac{\sum_{k=1}^n \bigl(R_{ki}-\bar R_i\bigr)\bigl(R_{kj}-\bar R_j\bigr)}
+#'      {\sqrt{\sum_{k=1}^n \bigl(R_{ki}-\bar R_i\bigr)^2}\;
+#'       \sqrt{\sum_{k=1}^n \bigl(R_{kj}-\bar R_j\bigr)^2}}.
+#' }
+#' In matrix form, with \eqn{R=[R_{\cdot 1},\ldots,R_{\cdot p}]},
+#' \eqn{\mu=(n+1)\mathbf{1}_p/2} and
+#' \eqn{S_R=\bigl(R-\mathbf{1}\mu^\top\bigr)^\top
+#'            \bigl(R-\mathbf{1}\mu^\top\bigr)/(n-1)},
+#' the Spearman correlation matrix is
+#' \deqn{
+#' \widehat{\rho}_S \;=\; D^{-1/2} S_R D^{-1/2},
+#' \qquad D \;=\; \mathrm{diag}(S_R).
+#' }
+#' When there are no ties, the familiar rank-difference formula obtains
+#' \deqn{
+#' \rho_S(i,j) \;=\; 1 - \frac{6}{n(n^2-1)} \sum_{k=1}^n d_k^2,
+#' \quad d_k \;=\; R_{ki}-R_{kj},
+#' }
+#' but this expression does \emph{not} hold under ties; computing Pearson
+#' correlation on mid-ranks (as above) is the standard tie-robust approach.
+#'
+#' \eqn{\rho_S(i,j) \in [-1,1]} and the matrix
+#' \eqn{\widehat{\rho}_S} is symmetric positive semi-definite. Spearman’s
+#' correlation is invariant to any strictly monotone transformation applied
+#' separately to each variable, and to common translations and positive
+#' rescalings prior to ranking.
+#'
+#' The implementation ranks each column to
+#' form \eqn{R}, then evaluates \eqn{R^\top R} using a symmetric rank update
+#' (BLAS \code{SYRK}) and centres it via the identity
+#' \deqn{
+#' (R-\mathbf{1}\mu^\top)^\top (R-\mathbf{1}\mu^\top)
+#' \;=\; R^\top R \;-\; n\,\mu\mu^\top,
+#' }
+#' avoiding an explicit centred copy. Division by \eqn{n-1} yields the sample
+#' covariance of ranks, which is finally standardised by \eqn{D^{-1/2}} to
+#' obtain \eqn{\widehat{\rho}_S}. Columns with zero rank variance (all values
+#' equal) are returned as \code{NA} along their row/column, with the diagonal
+#' set to \code{NA}.
+#'
+#' Ranking costs
+#' \eqn{O\!\bigl(p\,n\log n\bigr)}; forming and normalising
+#' \eqn{R^\top R} costs \eqn{O\!\bigl(n p^2\bigr)} with \eqn{O(p^2)} additional
+#' memory. OpenMP parallelism is used across columns for ranking, and a BLAS
+#' \code{SYRK} kernel is used for the matrix product when available.
 #'
 #' @note Missing values are not allowed. Columns with fewer than two
 #' observations are excluded.
@@ -31,24 +81,57 @@
 #' two things. International Journal of Epidemiology, 39(5), 1137-1150.
 #'
 #' @examples
-#' mat <- cbind(a = rnorm(100), b = rnorm(100), c = rnorm(100))
-#' sp <- spearman_rho(mat)
-#' print(sp)
-#' plot(sp)
+#' ## Monotone transformation invariance (Spearman is rank-based)
+#' set.seed(123)
+#' n <- 400; p <- 6; rho <- 0.6
+#' # AR(1) correlation
+#' Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
+#' L <- chol(Sigma)
+#' X <- matrix(rnorm(n * p), n, p) %*% L
+#' colnames(X) <- paste0("V", seq_len(p))
 #'
-#' \dontrun{
-#' df <- data.frame(x = rnorm(1e4), y = rnorm(1e4), z = rnorm(1e4))
-#' spearman_rho(df)
+#' # Monotone transforms to some columns
+#' X_mono <- X
+#' # exponential
+#' X_mono[, 1] <- exp(X_mono[, 1])
+#' # softplus
+#' X_mono[, 2] <- log1p(exp(X_mono[, 2]))
+#' # odd monotone polynomial
+#' X_mono[, 3] <- X_mono[, 3]^3
 #'
-#' tied_df <- data.frame(
-#'   v1 = rep(1:5, each = 20),
-#'   v2 = rep(5:1, each = 20),
-#'   v3 = rnorm(100)
+#' sp_X <- spearman_rho(X)
+#' sp_m <- spearman_rho(X_mono)
+#'
+#' # Spearman should be (nearly) unchanged under monotone transformations
+#' round(max(abs(sp_X - sp_m)), 3)
+#' # heatmap of Spearman correlations
+#' plot(sp_X)
+#'
+#' ## Ties handled via mid-ranks
+#' tied <- cbind(
+#'   # many ties
+#'   a = rep(1:5, each = 20),
+#'   # noisy reverse order
+#'   b = rep(5:1, each = 20) + rnorm(100, sd = 0.1),
+#'   # ordinal with ties
+#'   c = as.numeric(gl(10, 10))
 #' )
-#' sp <- spearman_rho(tied_df)
-#' print(sp)
-#' plot(sp)
+#' sp_tied <- spearman_rho(tied)
+#' print(sp_tied, digits = 2)
+#'
+#' ## Bivariate normal, theoretical Spearman's rho
+#' ## For BVN with Pearson correlation r, rho_S = (6/pi) * asin(r/2).
+#' r_target <- c(-0.8, -0.4, 0, 0.4, 0.8)
+#' n2 <- 200
+#' est <- true_corr <- numeric(length(r_target))
+#' for (i in seq_along(r_target)) {
+#'   R2 <- matrix(c(1, r_target[i], r_target[i], 1), 2, 2)
+#'   Z  <- matrix(rnorm(n2 * 2), n2, 2) %*% chol(R2)
+#'   s  <- spearman_rho(Z)
+#'   est[i]  <- s[1, 2]
+#'   true_corr[i] <- (6 / pi) * asin(r_target[i] / 2)
 #' }
+#' cbind(r_target, est = round(est, 3), theory = round(true_corr, 3))
 #'
 #' @useDynLib matrixCorr, .registration = TRUE
 #' @importFrom Rcpp evalCpp
@@ -83,7 +166,6 @@ spearman_rho <- function(data) {
 #' @param ... Additional arguments passed to \code{print}.
 #'
 #' @return Invisibly returns the \code{spearman_rho} object.
-#' @author Thiago de Paula Oliveira
 #' @export
 print.spearman_rho <- function(x, digits = 3, max_rows = NULL, max_cols = NULL, ...) {
   cat("Spearman correlation matrix:\n")
@@ -132,7 +214,6 @@ print.spearman_rho <- function(x, digits = 3, max_rows = NULL, max_cols = NULL, 
 #'
 #' @return A \code{ggplot} object representing the heatmap.
 #' @import ggplot2
-#' @author Thiago de Paula Oliveira
 #' @export
 plot.spearman_rho <-
   function(x, title = "Spearman's rank correlation heatmap",

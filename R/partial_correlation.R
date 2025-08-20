@@ -6,6 +6,10 @@
 #' covariance, ridge-regularised covariance, or OAS shrinkage to a scaled
 #' identity (recommended when \eqn{p \gg n}).
 #'
+#' @usage
+#' partial_correlation(data, method = c("oas","ridge","sample"),
+#'     lambda = 1e-3, return_cov_precision = FALSE)
+#'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #'   Non-numeric columns are ignored.
 #' @param method Character; one of \code{"oas"}, \code{"ridge"}, \code{"sample"}.
@@ -230,14 +234,19 @@ partial_correlation <- function(data, method = c("oas","ridge","sample"),
 #' @title Print method for \code{partial_corr}
 #' @description Prints only the partial correlation matrix (no attribute spam),
 #'   with an optional one-line header stating the estimator used.
+#' @usage
+#' \method{print}{partial_corr}(x, digits = 3, show_method = TRUE,
+#'     max_rows = NULL, max_cols = NULL, ...)
+#'
 #' @param x An object of class \code{partial_corr}.
 #' @param digits Integer; number of decimal places for display (default 3).
 #' @param show_method Logical; print a one-line header with \code{method}
 #'   (and \code{lambda}/\code{rho} if available). Default \code{TRUE}.
 #' @param max_rows,max_cols Optional integer limits for display; if provided,
 #'   the printed matrix is truncated with a note about omitted rows/cols.
-#' @param ... Passed to \code{print}.
+#' @param ... Further arguments passed to \code{print.matrix()}.
 #' @return Invisibly returns \code{x}.
+#' @method print partial_corr
 #' @export
 print.partial_correlation <- function(
     x,
@@ -245,14 +254,16 @@ print.partial_correlation <- function(
     show_method = TRUE,
     max_rows = NULL,
     max_cols = NULL,
-    ..) {
+    ...
+) {
   stopifnot(inherits(x, "partial_corr"))
-  if (!is.matrix(x$pcor)) stop("`x$pcor` must be a matrix.")
+  M <- x$pcor
+  if (!is.matrix(M)) stop("`x$pcor` must be a matrix.")
 
   if (isTRUE(show_method)) {
-    meth <- x$method %||% NA_character_
+    meth <- if (!is.null(x$method)) as.character(x$method) else NA_character_
     hdr <- switch(
-      tolower(as.character(meth)),
+      tolower(meth),
       "oas"   = {
         rho <- if (!is.null(x$rho) && is.finite(x$rho)) sprintf(", OAS rho=%.3f", x$rho) else ""
         paste0("Partial correlation (OAS", rho, ")")
@@ -269,8 +280,7 @@ print.partial_correlation <- function(
     cat("Partial correlation matrix:\n")
   }
 
-  # Prepare matrix
-  M <- x$pcor
+  # keep only dim + dimnames attributes to print like a plain matrix
   attributes(M) <- attributes(M)[c("dim", "dimnames")]
 
   if (!is.null(max_rows) || !is.null(max_cols)) {
@@ -278,7 +288,7 @@ print.partial_correlation <- function(
     r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
     c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
     mm <- round(M[seq_len(r), seq_len(c), drop = FALSE], digits)
-    print(mm, ...)
+    print(mm, ...)  # safe: ... is a formal
     if (nr > r || nc > c) {
       cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
     }
@@ -298,6 +308,12 @@ print.partial_correlation <- function(
 #' Produces a \pkg{ggplot2}-based heatmap of the partial correlation matrix
 #' stored in \code{x$pcor}. Optionally masks the diagonal and/or reorders
 #' variables via hierarchical clustering of \eqn{1 - |pcor|}.
+#'
+#' @usage
+#' \method{plot}{partial_corr}(x, title = NULL,
+#'     low_color  = "indianred1", high_color = "steelblue1",
+#'     mid_color  = "white", value_text_size = 4,
+#'     mask_diag = TRUE, reorder = FALSE, ...)
 #'
 #' @param x An object of class \code{partial_corr}.
 #' @param title Plot title. By default, constructed from the estimator in
