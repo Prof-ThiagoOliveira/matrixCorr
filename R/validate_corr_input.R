@@ -25,8 +25,6 @@
 #' @seealso [pearson_corr()], [spearman_rho()], [kendall_tau()]
 #'
 #' @author Thiago de Paula Oliveira
-#' @useDynLib matrixCorr, .registration = TRUE
-#' @importFrom Rcpp evalCpp
 #' @keywords internal
 #' @name matrixCorr-internal
 validate_corr_input <- function(data) {

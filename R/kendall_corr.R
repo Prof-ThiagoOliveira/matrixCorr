@@ -75,8 +75,6 @@
 #' plot(kt)
 #' }
 #'
-#' @useDynLib matrixCorr, .registration = TRUE
-#' @importFrom Rcpp evalCpp
 #' @seealso \code{\link{print.kendall_matrix}},
 #' \code{\link{print.kendall_matrix}}
 #' @author Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
