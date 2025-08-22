@@ -11,6 +11,85 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// bicor_matrix_cpp
+arma::mat bicor_matrix_cpp(const arma::mat& X, const double c_const, const double maxPOutliers, const int pearson_fallback, const int n_threads);
+RcppExport SEXP _matrixCorr_bicor_matrix_cpp(SEXP XSEXP, SEXP c_constSEXP, SEXP maxPOutliersSEXP, SEXP pearson_fallbackSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const double >::type c_const(c_constSEXP);
+    Rcpp::traits::input_parameter< const double >::type maxPOutliers(maxPOutliersSEXP);
+    Rcpp::traits::input_parameter< const int >::type pearson_fallback(pearson_fallbackSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bicor_matrix_cpp(X, c_const, maxPOutliers, pearson_fallback, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bicor_vec_cpp
+double bicor_vec_cpp(const arma::vec& x, const arma::vec& y, const double c_const, const double maxPOutliers, const int pearson_fallback);
+RcppExport SEXP _matrixCorr_bicor_vec_cpp(SEXP xSEXP, SEXP ySEXP, SEXP c_constSEXP, SEXP maxPOutliersSEXP, SEXP pearson_fallbackSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const double >::type c_const(c_constSEXP);
+    Rcpp::traits::input_parameter< const double >::type maxPOutliers(maxPOutliersSEXP);
+    Rcpp::traits::input_parameter< const int >::type pearson_fallback(pearson_fallbackSEXP);
+    rcpp_result_gen = Rcpp::wrap(bicor_vec_cpp(x, y, c_const, maxPOutliers, pearson_fallback));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bicor_matrix_pairwise_cpp
+arma::mat bicor_matrix_pairwise_cpp(const arma::mat& X, const double c_const, const double maxPOutliers, const int pearson_fallback, const int min_n, const int n_threads);
+RcppExport SEXP _matrixCorr_bicor_matrix_pairwise_cpp(SEXP XSEXP, SEXP c_constSEXP, SEXP maxPOutliersSEXP, SEXP pearson_fallbackSEXP, SEXP min_nSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const double >::type c_const(c_constSEXP);
+    Rcpp::traits::input_parameter< const double >::type maxPOutliers(maxPOutliersSEXP);
+    Rcpp::traits::input_parameter< const int >::type pearson_fallback(pearson_fallbackSEXP);
+    Rcpp::traits::input_parameter< const int >::type min_n(min_nSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bicor_matrix_pairwise_cpp(X, c_const, maxPOutliers, pearson_fallback, min_n, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bicor_matrix_weighted_cpp
+arma::mat bicor_matrix_weighted_cpp(const arma::mat& X, const arma::vec& w, const double c_const, const double maxPOutliers, const int pearson_fallback, const int n_threads);
+RcppExport SEXP _matrixCorr_bicor_matrix_weighted_cpp(SEXP XSEXP, SEXP wSEXP, SEXP c_constSEXP, SEXP maxPOutliersSEXP, SEXP pearson_fallbackSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< const double >::type c_const(c_constSEXP);
+    Rcpp::traits::input_parameter< const double >::type maxPOutliers(maxPOutliersSEXP);
+    Rcpp::traits::input_parameter< const int >::type pearson_fallback(pearson_fallbackSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bicor_matrix_weighted_cpp(X, w, c_const, maxPOutliers, pearson_fallback, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bicor_matrix_weighted_pairwise_cpp
+arma::mat bicor_matrix_weighted_pairwise_cpp(const arma::mat& X, const arma::vec& w, const double c_const, const double maxPOutliers, const int pearson_fallback, const int min_n, const int n_threads);
+RcppExport SEXP _matrixCorr_bicor_matrix_weighted_pairwise_cpp(SEXP XSEXP, SEXP wSEXP, SEXP c_constSEXP, SEXP maxPOutliersSEXP, SEXP pearson_fallbackSEXP, SEXP min_nSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< const double >::type c_const(c_constSEXP);
+    Rcpp::traits::input_parameter< const double >::type maxPOutliers(maxPOutliersSEXP);
+    Rcpp::traits::input_parameter< const int >::type pearson_fallback(pearson_fallbackSEXP);
+    Rcpp::traits::input_parameter< const int >::type min_n(min_nSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bicor_matrix_weighted_pairwise_cpp(X, w, c_const, maxPOutliers, pearson_fallback, min_n, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ccc_cpp
 arma::mat ccc_cpp(const arma::mat& X);
 RcppExport SEXP _matrixCorr_ccc_cpp(SEXP XSEXP) {
@@ -178,6 +257,11 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_matrixCorr_bicor_matrix_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_cpp, 5},
+    {"_matrixCorr_bicor_vec_cpp", (DL_FUNC) &_matrixCorr_bicor_vec_cpp, 5},
+    {"_matrixCorr_bicor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_pairwise_cpp, 6},
+    {"_matrixCorr_bicor_matrix_weighted_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_cpp, 6},
+    {"_matrixCorr_bicor_matrix_weighted_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_pairwise_cpp, 7},
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},

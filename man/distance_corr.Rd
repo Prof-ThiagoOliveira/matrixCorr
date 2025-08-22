@@ -132,3 +132,6 @@ Székely, G. J., & Rizzo, M. L. (2013).
 The distance correlation t-test of independence.
 \emph{Journal of Multivariate Analysis}, 117, 193-213.
 }
+\author{
+Thiago de paula Oliveira
+}

@@ -22,16 +22,16 @@ LazyData: true
 LinkingTo: 
     cpp11,
     Rcpp,
-    RcppArmadillo
+    RcppArmadillo,
 Imports:
-    Rcpp,
-    ggplot2 (>= 3.5.2)
+    Rcpp (>= 1.1.0),
+    ggplot2 (>= 3.5.2),
+    Matrix (>= 1.7.2)
 Suggests:
     knitr,
     rmarkdown,
     testthat,
     MASS,
-    Matrix,
     viridisLite
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2

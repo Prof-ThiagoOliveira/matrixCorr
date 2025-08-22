@@ -78,6 +78,8 @@
 #' D3 <- distance_corr(X3)
 #' print(D3[1:3, 1:3], digits = 2)
 #'
+#' @author Thiago de paula Oliveira
+#'
 #' @export
 distance_corr <- function(data) {
   numeric_data <- validate_corr_input(data)
