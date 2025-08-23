@@ -2,9 +2,9 @@
 #'
 #' @description
 #' Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)
-#' across multiple methods (L ≥ 2) for repeated-measures data. Each subject
-#' must be measured by all methods across the same set of time points or
-#' replicates.
+#' across multiple methods (L \eqn{\geq} 2) for repeated-measures data.
+#' Each subject must be measured by all methods across the same set of time
+#' points or replicates.
 #'
 #' CCC measures both accuracy (how close measurements are to the line of
 #' equality) and precision (Pearson correlation). Confidence intervals are
@@ -13,7 +13,8 @@
 #'
 #' @param data A data frame containing the repeated-measures dataset.
 #' @param ry Character. Name of the numeric outcome column.
-#' @param rmet Character. Name of the method column (factor with L ≥ 2 levels).
+#' @param rmet Character. Name of the method column (factor with L
+#' \eqn{\geq} 2 levels).
 #' @param rtime Character or NULL. Name of the time/repetition column. If NULL,
 #' one time point is assumed.
 #' @param Dmat Optional numeric weight matrix (T \eqn{\times} T) for
@@ -35,7 +36,7 @@
 #
 #' @param ci Logical. If TRUE, returns confidence intervals (default FALSE).
 #' @param conf_level Confidence level for CI (default 0.95).
-#' @param n_threads Integer (≥ 1). Number of OpenMP threads to use for computation.
+#' @param n_threads Integer (\eqn{\geq} 1). Number of OpenMP threads to use for computation.
 #'   Defaults to \code{getOption("matrixCorr.threads", 1L)}.
 #' @param verbose Logical. If TRUE, prints diagnostic output (default FALSE).
 #'
@@ -49,13 +50,13 @@
 #' }
 #'
 #' @details
-#' This function computes pairwise Lin’s Concordance Correlation Coefficient
+#' This function computes pairwise Lin's Concordance Correlation Coefficient
 #' (CCC) between methods in a repeated-measures design using a
 #' U-statistics-based nonparametric estimator proposed by
 #' Carrasco et al. (2013). It is computationally efficient and robust,
 #' particularly for large-scale or balanced longitudinal designs.
 #'
-#' Lin’s CCC is defined as
+#' Lin's CCC is defined as
 #' \deqn{
 #' \rho_c = \frac{2 \cdot \mathrm{cov}(X, Y)}{\sigma_X^2 + \sigma_Y^2 +
 #' (\mu_X - \mu_Y)^2}
@@ -109,13 +110,13 @@
 #'
 #' @references
 #' Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.
-#' \emph{Biometrics}, 45: 255–268.
+#' \emph{Biometrics}, 45: 255-268.
 #'
 #' Lin L (2000). A note on the concordance correlation coefficient.
-#' \emph{Biometrics}, 56: 324–325.
+#' \emph{Biometrics}, 56: 324-325.
 #'
 #' Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
-#' a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519–539.
+#' a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519-539.
 #'
 #' @seealso \code{\link{ccc}}, \code{\link{ccc_lmm_reml}},
 #' \code{\link{plot.ccc}}, \code{\link{print.ccc}}
@@ -140,10 +141,10 @@
 #' #------------------------------------------------------------------------
 #' # Choosing delta based on distance sensitivity
 #' #------------------------------------------------------------------------
-#' # Absolute distance (L1 norm) – robust
+#' # Absolute distance (L1 norm) - robust
 #' ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 1)
 #'
-#' # Squared distance (L2 norm) – amplifies large deviations
+#' # Squared distance (L2 norm) - amplifies large deviations
 #' ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 2)
 #'
 #' # Presence/absence of disagreement (like kappa)
@@ -239,7 +240,7 @@ ccc_pairwise_u_stat <- function(data,
 #' @title Concordance Correlation via REML (Linear Mixed-Effects Model)
 #'
 #' @description
-#' Compute Lin’s Concordance Correlation Coefficient (CCC) from a linear
+#' Compute Lin's Concordance Correlation Coefficient (CCC) from a linear
 #' mixed-effects model fitted by REML. The fixed-effects part can include
 #' \code{method} and/or \code{time} factors (and optionally their interaction),
 #' while a subject-specific random intercept captures between-subject variation.
@@ -256,7 +257,7 @@ ccc_pairwise_u_stat <- function(data,
 #' (added to fixed effects).
 #' @param interaction Logical. Include \code{method:time} interaction?
 #' (default \code{TRUE}).
-#' @param max_iter Integer. Maximum iterations for variance–component updates
+#' @param max_iter Integer. Maximum iterations for variance-component updates
 #' (default \code{100}).
 #' @param tol Numeric. Convergence tolerance on parameter change
 #' (default \code{1e-6}).
@@ -307,7 +308,7 @@ ccc_pairwise_u_stat <- function(data,
 #' Solves/inversions use symmetric-PD routines with a tiny diagonal "jitter" and
 #' a pseudo-inverse fallback when needed.
 #'
-#' \strong{EM-style variance–component updates.} With current \eqn{\hat\beta},
+#' \strong{EM-style variance-component updates.} With current \eqn{\hat\beta},
 #' residuals \eqn{r_i = y_i - X_i\hat\beta} are formed. The BLUPs and
 #' conditional covariances are
 #' \deqn{ b_i \;=\; M_i^{-1}\,(U_i^\top r_i \!/\! \sigma_E^2), \qquad
@@ -342,7 +343,7 @@ ccc_pairwise_u_stat <- function(data,
 #' aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}
 #' passed to 'C++'.
 #' For exactly two methods (\eqn{nm=2}), a fast path builds \eqn{L} directly
-#' from the design’s column names, where, with interaction, the per-time
+#' from the design's column names, where, with interaction, the per-time
 #' difference at time \eqn{j} is
 #' \eqn{\beta_{\text{met2}}+\beta_{\text{met2:time}_j}} (baseline time uses
 #' \eqn{\beta_{\text{met2}}}); while without interaction, the same
@@ -481,7 +482,7 @@ ccc_lmm_reml <- function(data, ry, rind,
         max_iter = max_iter, tol = tol,
         conf_level = conf_level,
         Lr   = if (is.null(Laux$L))    NULL else unname(Laux$L),
-        Dmr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm)
+        auxDr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm)
       ),
       error = function(e) {
         stop("ccc_vc_cpp failed on this dataset (near-singular tiny data): ",
@@ -503,7 +504,7 @@ ccc_lmm_reml <- function(data, ry, rind,
         } else NA_real_, 1, 1, dimnames = list(lab, lab))
       )
       attr(out, "method")     <-
-        "Variance Components REML (LMM, cccrm-style random effects)"
+        "Variance Components REML"
       attr(out, "description")<- "Lin's CCC from random-effects LMM"
       attr(out, "package")    <- "matrixCorr"
       attr(out, "conf.level") <- conf_level
@@ -512,7 +513,7 @@ ccc_lmm_reml <- function(data, ry, rind,
     } else {
       est <- est_mat
       attr(est, "method")     <-
-        "Variance Components REML (LMM, cccrm-style random effects)"
+        "Variance Components REML"
       attr(est, "description")<- "Lin's CCC from random-effects LMM"
       attr(est, "package")    <- "matrixCorr"
       class(est) <- c("ccc", "matrix")
@@ -596,7 +597,7 @@ ccc_lmm_reml <- function(data, ry, rind,
     diag(upr_mat) <- NA_real_
     out <- list(est = est_mat, lwr.ci = lwr_mat, upr.ci = upr_mat)
     attr(out, "method")     <-
-      "Variance Components REML (LMM, cccrm-style random effects) — pairwise"
+      "Variance Components REML — pairwise"
     attr(out, "description")<-
       "Lin's CCC per method pair from random-effects LMM"
     attr(out, "package")    <- "matrixCorr"
@@ -606,7 +607,7 @@ ccc_lmm_reml <- function(data, ry, rind,
   } else {
     est <- est_mat
     attr(est, "method")     <-
-      "Variance Components REML (LMM, cccrm-style random effects) — pairwise"
+      "Variance Components REML — pairwise"
     attr(est, "description")<-
       "Lin's CCC per method pair from random-effects LMM"
     attr(est, "package")    <- "matrixCorr"
@@ -671,7 +672,7 @@ ccc_lmm_reml <- function(data, ry, rind,
 #'         (\code{diag(nt)} if \code{Dmat_global} is \code{NULL}).
 #'     }
 #'   \item \strong{General path} (\eqn{nm \ge 3}) represents
-#'     a method–time grid, where pairwise method differences are encoded
+#'     a method-time grid, where pairwise method differences are encoded
 #'     within each time level, yielding \code{L} of size
 #'     \eqn{p \times (nd \cdot \max(nt,1))}, with
 #'     \eqn{nd = nm(nm - 1)/2}. The grid design matrix is
