@@ -57,7 +57,7 @@ Defaults to the identity.}
 fitted variance components and \eqn{S_B} for each fit (overall or
 pairwise). Default \code{FALSE}.}
 
-\item{digits}{Integer (\(\ge 0\)). Number of decimal places to use in the
+\item{digits}{Integer (\(\geq 0\)). Number of decimal places to use in the
 printed summary when \code{verbose=TRUE}. Default \code{4}.}
 
 \item{use_message}{Logical. When \code{verbose=TRUE}, choose the printing
@@ -71,7 +71,7 @@ uses \code{cat()} to \code{stdout}. Default \code{TRUE}.}
 class \code{c("ccc","ccc_ci")} (when \code{ci=TRUE}) or
 \code{c("ccc","matrix")} with a \eqn{1\times 1} matrix containing the
 overall CCC estimate.
-\item If \code{rmet} has \eqn{L\ge 2} levels, a symmetric \eqn{L\times L}
+\item If \code{rmet} has \eqn{L\geq 2} levels, a symmetric \eqn{L\times L}
 matrix with pairwise CCC estimates between methods (diagonal set to 1).
 When \code{ci=TRUE}, \code{lwr.ci} and \code{upr.ci} matrices are
 included.
@@ -288,10 +288,16 @@ u  <- rnorm(n_subj, 0, sqrt(sigA))
 y  <- c(u + rnorm(n_subj, 0, sqrt(sigE)),
          u + 0.2 + rnorm(n_subj, 0, sqrt(sigE)))
 dat <- data.frame(y, id, method = meth)
-ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
+ccc_rm1 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
+print(ccc_rm1)
+summary(ccc_rm1)
+plot(ccc_rm1)
 
 # 95\% CI container (limits currently NA by design)
-ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
+ccc_rm2 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
+print(ccc_rm2)
+summary(ccc_rm2)
+plot(ccc_rm2)
 
 #--------------------------------------------------------------------
 ## Two methods x time (balanced 2x2), with and without interaction
@@ -300,7 +306,7 @@ dat$time <- factor(rep(rep(c("t1","t2"), each = n_subj/2), times = 2))
 ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
              interaction = FALSE)
 ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-             interaction = TRUE)
+             interaction = TRUE, verbose = TRUE)
 
 #--------------------------------------------------------------------
 ## Three methods - pairwise CCCs
@@ -316,6 +322,10 @@ e  <- rnorm(3 * n_subj, 0, sqrt(sigE))
 y  <- u[as.integer(id)] + unname(mu[method]) + e
 dat3 <- data.frame(y, id, method)
 ccc_lmm_reml(dat3, "y", "id", rmet = "method")
+
+# To get variance-components estimate per method combination, turn
+# verbose to TRUE
+ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
 
 }
 \seealso{

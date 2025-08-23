@@ -131,11 +131,13 @@
 #' # CCC matrix (no CIs)
 #' ccc1 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time")
 #' print(ccc1)
+#' summary(ccc1)
 #' plot(ccc1)
 #'
 #' # With confidence intervals
 #' ccc2 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", ci = TRUE)
 #' print(ccc2)
+#' summary(ccc2)
 #' plot(ccc2)
 #'
 #' #------------------------------------------------------------------------
@@ -225,6 +227,7 @@ ccc_pairwise_u_stat <- function(data,
     attr(result, "method") <- "Repeated-measures Lin's concordance"
     attr(result, "description") <- "Repeated-measures CCC (pairwise) with confidence intervals"
     attr(result, "package") <- "matrixCorr"
+    attr(result, "conf.level")  <- conf_level
     class(result) <- c("ccc", "ccc_ci")
   } else {
     result <- cccr_est
@@ -271,7 +274,7 @@ ccc_pairwise_u_stat <- function(data,
 #' @param verbose Logical. If \code{TRUE}, prints a structured summary of the
 #'   fitted variance components and \eqn{S_B} for each fit (overall or
 #'   pairwise). Default \code{FALSE}.
-#' @param digits Integer (\(\ge 0\)). Number of decimal places to use in the
+#' @param digits Integer (\(\geq 0\)). Number of decimal places to use in the
 #'   printed summary when \code{verbose=TRUE}. Default \code{4}.
 #' @param use_message Logical. When \code{verbose=TRUE}, choose the printing
 #'   mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
@@ -460,7 +463,7 @@ ccc_pairwise_u_stat <- function(data,
 #'     class \code{c("ccc","ccc_ci")} (when \code{ci=TRUE}) or
 #'     \code{c("ccc","matrix")} with a \eqn{1\times 1} matrix containing the
 #'     overall CCC estimate.
-#'   \item If \code{rmet} has \eqn{L\ge 2} levels, a symmetric \eqn{L\times L}
+#'   \item If \code{rmet} has \eqn{L\geq 2} levels, a symmetric \eqn{L\times L}
 #'     matrix with pairwise CCC estimates between methods (diagonal set to 1).
 #'     When \code{ci=TRUE}, \code{lwr.ci} and \code{upr.ci} matrices are
 #'     included.
@@ -494,10 +497,16 @@ ccc_pairwise_u_stat <- function(data,
 #' y  <- c(u + rnorm(n_subj, 0, sqrt(sigE)),
 #'          u + 0.2 + rnorm(n_subj, 0, sqrt(sigE)))
 #' dat <- data.frame(y, id, method = meth)
-#' ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
+#' ccc_rm1 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
+#' print(ccc_rm1)
+#' summary(ccc_rm1)
+#' plot(ccc_rm1)
 #'
 #' # 95% CI container (limits currently NA by design)
-#' ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
+#' ccc_rm2 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
+#' print(ccc_rm2)
+#' summary(ccc_rm2)
+#' plot(ccc_rm2)
 #'
 #' #--------------------------------------------------------------------
 #' ## Two methods x time (balanced 2x2), with and without interaction
@@ -506,7 +515,7 @@ ccc_pairwise_u_stat <- function(data,
 #' ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
 #'              interaction = FALSE)
 #' ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-#'              interaction = TRUE)
+#'              interaction = TRUE, verbose = TRUE)
 #'
 #' #--------------------------------------------------------------------
 #' ## Three methods - pairwise CCCs
@@ -522,6 +531,10 @@ ccc_pairwise_u_stat <- function(data,
 #' y  <- u[as.integer(id)] + unname(mu[method]) + e
 #' dat3 <- data.frame(y, id, method)
 #' ccc_lmm_reml(dat3, "y", "id", rmet = "method")
+#'
+#' # To get variance-components estimate per method combination, turn
+#' # verbose to TRUE
+#' ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
 #'
 #' @author Thiago de Paula Oliveira
 #' @importFrom stats as.formula model.matrix setNames
@@ -776,7 +789,7 @@ ccc_lmm_reml <- function(data, ry, rind,
 #' \code{Dm} used to compute the fixed-effect dispersion term \eqn{S_B} in the
 #' CCC. For the common case of exactly two methods (\eqn{nm = 2}), \code{L} is
 #' built directly from column names, guaranteeing perfect alignment and
-#' avoiding grid/contrast mismatches. For \eqn{nm \ge 3},
+#' avoiding grid/contrast mismatches. For \eqn{nm \geq 3},
 #' a grid-based construction is used but re-ordered to match the real design.
 #'
 #' @param df_sub A \code{data.frame} subset corresponding to the data being
@@ -812,7 +825,7 @@ ccc_lmm_reml <- function(data, ry, rind,
 #'         \eqn{p \times 1} matrix that picks the \code{met2} column in \eqn{X}
 #'         (i.e., the treatment-coded difference
 #'         \eqn{\beta_{\text{met2}} = \mu_2 - \mu_1}).
-#'       \item If \eqn{nt \ge 1}, \code{L} is \eqn{p \times nt} with columns
+#'       \item If \eqn{nt \geq 1}, \code{L} is \eqn{p \times nt} with columns
 #'         representing the method difference at each time level. With
 #'         interaction, column \eqn{j} encodes \eqn{\beta_{\text{met2}} +
 #'         \beta_{\text{met2:time}_j}} for \eqn{j > 1} and
@@ -821,7 +834,7 @@ ccc_lmm_reml <- function(data, ry, rind,
 #'       \item \code{Dm} is the time-weighting matrix of size \eqn{nt \times nt}
 #'         (\code{diag(nt)} if \code{Dmat_global} is \code{NULL}).
 #'     }
-#'   \item \strong{General path} (\eqn{nm \ge 3}) represents
+#'   \item \strong{General path} (\eqn{nm \geq 3}) represents
 #'     a method-time grid, where pairwise method differences are encoded
 #'     within each time level, yielding \code{L} of size
 #'     \eqn{p \times (nd \cdot \max(nt,1))}, with
@@ -842,8 +855,8 @@ ccc_lmm_reml <- function(data, ry, rind,
 #'         \eqn{p \times q}, where \eqn{q = nt} if \eqn{nm = 2} and
 #'         \eqn{q = nd \cdot \max(nt,1)} otherwise.
 #'   \item \code{Dm}: numeric time-weighting matrix of size \eqn{q \times q}.
-#'   \item \code{nm}: effective number of method levels used (\eqn{\ge 0}).
-#'   \item \code{nt}: effective number of time levels used (\eqn{\ge 0}).
+#'   \item \code{nm}: effective number of method levels used (\eqn{\geq 0}).
+#'   \item \code{nt}: effective number of time levels used (\eqn{\geq 0}).
 #' }
 #'
 #' @section Errors and checks:

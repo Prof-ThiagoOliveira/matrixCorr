@@ -41,8 +41,8 @@ A list with components:
 \eqn{p \times q}, where \eqn{q = nt} if \eqn{nm = 2} and
 \eqn{q = nd \cdot \max(nt,1)} otherwise.
 \item \code{Dm}: numeric time-weighting matrix of size \eqn{q \times q}.
-\item \code{nm}: effective number of method levels used (\eqn{\ge 0}).
-\item \code{nt}: effective number of time levels used (\eqn{\ge 0}).
+\item \code{nm}: effective number of method levels used (\eqn{\geq 0}).
+\item \code{nt}: effective number of time levels used (\eqn{\geq 0}).
 }
 }
 \description{
@@ -52,7 +52,7 @@ of the \emph{actual} design matrix produced by
 \code{Dm} used to compute the fixed-effect dispersion term \eqn{S_B} in the
 CCC. For the common case of exactly two methods (\eqn{nm = 2}), \code{L} is
 built directly from column names, guaranteeing perfect alignment and
-avoiding grid/contrast mismatches. For \eqn{nm \ge 3},
+avoiding grid/contrast mismatches. For \eqn{nm \geq 3},
 a grid-based construction is used but re-ordered to match the real design.
 }
 \details{
@@ -66,7 +66,7 @@ This function returns:
 \eqn{p \times 1} matrix that picks the \code{met2} column in \eqn{X}
 (i.e., the treatment-coded difference
 \eqn{\beta_{\text{met2}} = \mu_2 - \mu_1}).
-\item If \eqn{nt \ge 1}, \code{L} is \eqn{p \times nt} with columns
+\item If \eqn{nt \geq 1}, \code{L} is \eqn{p \times nt} with columns
 representing the method difference at each time level. With
 interaction, column \eqn{j} encodes \eqn{\beta_{\text{met2}} +
         \beta_{\text{met2:time}_j}} for \eqn{j > 1} and
@@ -75,7 +75,7 @@ without interaction, all columns equal \eqn{\beta_{\text{met2}}}.
 \item \code{Dm} is the time-weighting matrix of size \eqn{nt \times nt}
 (\code{diag(nt)} if \code{Dmat_global} is \code{NULL}).
 }
-\item \strong{General path} (\eqn{nm \ge 3}) represents
+\item \strong{General path} (\eqn{nm \geq 3}) represents
 a method-time grid, where pairwise method differences are encoded
 within each time level, yielding \code{L} of size
 \eqn{p \times (nd \cdot \max(nt,1))}, with

@@ -149,11 +149,13 @@ df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
 # CCC matrix (no CIs)
 ccc1 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time")
 print(ccc1)
+summary(ccc1)
 plot(ccc1)
 
 # With confidence intervals
 ccc2 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", ci = TRUE)
 print(ccc2)
+summary(ccc2)
 plot(ccc2)
 
 #------------------------------------------------------------------------
