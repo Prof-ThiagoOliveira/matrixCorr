@@ -8,7 +8,7 @@
 \usage{
 ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
 
-\method{print}{ccc}(x, digits = 4, ...)
+\method{print}{ccc}(x, digits = 4, ci_digits = 2, show_ci = c("auto", "yes", "no"), ...)
 
 \method{plot}{ccc}(
   x,
@@ -33,8 +33,16 @@ Non-numeric columns will be ignored.}
 
 \item{x}{An object of class \code{"ccc"} (either a matrix or a list with CIs).}
 
-\item{digits}{Integer; number of decimal places to print in the concordance
-matrix (default is 4).}
+\item{digits}{Integer; decimals for CCC estimates (default 4).}
+
+\item{ci_digits}{Integer; decimals for CI bounds (default 2).}
+
+\item{show_ci}{One of "auto", "yes", "no".
+\itemize{
+\item "auto" (default): show CI columns only if the object has non-NA CIs.
+\item "yes": always show CI columns (may contain NA).
+\item "no": never show CI columns.
+}}
 
 \item{...}{Passed to \code{ggplot2::theme()}.}
 

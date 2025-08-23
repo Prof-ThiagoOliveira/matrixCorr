@@ -545,22 +545,35 @@ ccc_lmm_reml <- function(data, ry, rind,
       max(0, min(1, ccc + z*se)))
   }
 
-  .vc_message <- function(ans, label, nm, nt, conf_level, digits = 4, use_message = TRUE) {
-    fmt <- function(x) if (is.na(x)) "NA" else formatC(x, format = "f", digits = digits)
+  .vc_message <- function(ans, label, nm, nt, conf_level,
+                          digits = 4, use_message = TRUE) {
+    fmt <-
+      function(x) if (is.na(x)) "NA" else formatC(x, format = "f",
+                                                  digits = digits)
     out <- c(
       sprintf("---- matrixCorr::ccc_lmm_reml — variance-components (%s) ----", label),
       sprintf("Design: methods nm = %d, times nt = %d", nm, nt),
       "Estimates:",
-      sprintf("  sigma_A^2 (subject)          : %s", fmt(num_or_na(ans[["sigma2_subject"]]))),
-      sprintf("  sigma_A×M^2 (subject×method) : %s", fmt(num_or_na(ans[["sigma2_subject_method"]]))),
-      sprintf("  sigma_A×T^2 (subject×time)   : %s", fmt(num_or_na(ans[["sigma2_subject_time"]]))),
-      sprintf("  sigma_E^2 (error)            : %s", fmt(num_or_na(ans[["sigma2_error"]]))),
-      sprintf("  S_B (fixed-effect dispersion): %s", fmt(num_or_na(ans[["SB"]]))),
+      sprintf("  sigma_A^2 (subject)          : %s",
+              fmt(num_or_na(ans[["sigma2_subject"]]))),
+      sprintf("  sigma_A×M^2 (subject×method) : %s",
+              fmt(num_or_na(ans[["sigma2_subject_method"]]))),
+      sprintf("  sigma_A×T^2 (subject×time)   : %s",
+              fmt(num_or_na(ans[["sigma2_subject_time"]]))),
+      sprintf("  sigma_E^2 (error)            : %s",
+              fmt(num_or_na(ans[["sigma2_error"]]))),
+      sprintf("  S_B (fixed-effect dispersion): %s",
+              fmt(num_or_na(ans[["SB"]]))),
+      sprintf("  SE(CCC)                      : %s",
+              fmt(num_or_na(ans[["se_ccc"]]))),
       "--------------------------------------------------------------------------"
     )
 
-    if (use_message) message(paste(out, collapse = "\n")) else cat(paste(out, collapse = "\n"), "\n")
+    if (use_message) {
+      message(paste(out, collapse = "\n"))
+    } else cat(paste(out, collapse = "\n"), "\n")
   }
+
 
   # Definitions
 

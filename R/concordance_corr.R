@@ -109,39 +109,100 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 
 #' @rdname ccc
 #' @method print ccc
-#' @param digits Integer; number of decimal places to print in the concordance
-#' matrix (default is 4).
+#' @param digits Integer; decimals for CCC estimates (default 4).
+#' @param ci_digits Integer; decimals for CI bounds (default 2).
+#' @param show_ci One of "auto", "yes", "no".
+#'   * "auto" (default): show CI columns only if the object has non-NA CIs.
+#'   * "yes": always show CI columns (may contain NA).
+#'   * "no": never show CI columns.
 #' @export
-print.ccc <- function(x, digits = 4, ...) {
-  # helper to strip non-essential attributes
-  strip_attrs <- function(m) {
-    m <- as.matrix(m)
-    attributes(m) <- attributes(m)[c("dim", "dimnames")]
-    m
-  }
+print.ccc <- function(x,
+                      digits = 4,
+                      ci_digits = 2,
+                      show_ci = c("auto", "yes", "no"),
+                      ...) {
+  show_ci <- match.arg(show_ci)
 
-  if (inherits(x, "ccc_ci") || (is.list(x) && all(c("est", "lwr.ci", "upr.ci") %in% names(x)))) {
-    cat("Concordance matrix (estimates):\n")
-    est <- strip_attrs(x$est)
-    print(round(est, digits), ...)
+  # -- identify object type ----------------------------------------------------
+  is_ci_obj <- inherits(x, "ccc_ci") ||
+    (is.list(x) && all(c("est", "lwr.ci", "upr.ci") %in% names(x)))
 
-    cat("\nConfidence intervals:\nLower:\n")
-    lwr <- strip_attrs(x$lwr.ci)
-    print(round(lwr, 2), ...)
-
-    cat("\nUpper:\n")
-    upr <- strip_attrs(x$upr.ci)
-    print(round(upr, 2), ...)
+  if (is_ci_obj) {
+    est <- as.matrix(x$est)
+    lwr <- as.matrix(x$lwr.ci)
+    upr <- as.matrix(x$upr.ci)
   } else if (is.matrix(x)) {
-    cat("Concordance matrix:\n")
-    M <- strip_attrs(x)
-    print(round(M, digits), ...)
+    est <- as.matrix(x)
+    lwr <- matrix(NA_real_, nrow(est), ncol(est), dimnames = dimnames(est))
+    upr <- lwr
   } else {
     stop("Invalid object format for class 'ccc'.")
   }
 
+  rn <- rownames(est); cn <- colnames(est)
+  if (is.null(rn)) rn <- paste0("m", seq_len(nrow(est)))
+  if (is.null(cn)) cn <- rn
+
+  # -- decide whether to print CI columns --------------------------------------
+  has_any_ci <- any(is.finite(lwr) | is.finite(upr))
+  include_ci <- switch(show_ci,
+                       auto = has_any_ci,
+                       yes  = TRUE,
+                       no   = FALSE)
+
+  # -- header ------------------------------------------------------------------
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+  if (include_ci && is.finite(cl)) {
+    cat(sprintf("Concordance pairs (Lin's CCC, %g%% CI)\n\n", 100 * cl))
+  } else {
+    cat("Concordance pairs (Lin's CCC)\n\n")
+  }
+
+  # -- 1x1 case (overall CCC) --------------------------------------------------
+  if (nrow(est) == 1L && ncol(est) == 1L) {
+    df <- data.frame(
+      method1  = rn[1],
+      method2  = cn[1],
+      estimate = formatC(est[1,1], format = "f", digits = digits),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    if (include_ci) {
+      df$lwr <- ifelse(is.na(lwr[1,1]), NA,
+                       formatC(lwr[1,1], format = "f", digits = ci_digits))
+      df$upr <- ifelse(is.na(upr[1,1]), NA,
+                       formatC(upr[1,1], format = "f", digits = ci_digits))
+    }
+    print(df, row.names = FALSE, right = FALSE, ...)
+    return(invisible(x))
+  }
+
+  # -- long table for i < j pairs ----------------------------------------------
+  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L); k <- 0L
+  for (i in seq_len(nrow(est) - 1L)) {
+    for (j in (i + 1L):ncol(est)) {
+      k <- k + 1L
+      row <- list(
+        method1  = rn[i],
+        method2  = cn[j],
+        estimate = formatC(est[i, j], format = "f", digits = digits)
+      )
+      if (include_ci) {
+        row$lwr <- ifelse(is.na(lwr[i, j]), NA,
+                          formatC(lwr[i, j], format = "f", digits = ci_digits))
+        row$upr <- ifelse(is.na(upr[i, j]), NA,
+                          formatC(upr[i, j], format = "f", digits = ci_digits))
+      }
+      rows[[k]] <- row
+    }
+  }
+
+  df <- do.call(rbind.data.frame, rows)
+  rownames(df) <- NULL
+  print(df, row.names = FALSE, right = FALSE, ...)
   invisible(x)
 }
+
 
 #' @rdname ccc
 #' @method plot ccc
