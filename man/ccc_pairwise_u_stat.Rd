@@ -22,7 +22,8 @@ ccc_pairwise_u_stat(
 
 \item{ry}{Character. Name of the numeric outcome column.}
 
-\item{rmet}{Character. Name of the method column (factor with L ≥ 2 levels).}
+\item{rmet}{Character. Name of the method column (factor with L
+\eqn{\geq} 2 levels).}
 
 \item{rtime}{Character or NULL. Name of the time/repetition column. If NULL,
 one time point is assumed.}
@@ -49,7 +50,7 @@ measurement disagreement.}
 
 \item{conf_level}{Confidence level for CI (default 0.95).}
 
-\item{n_threads}{Integer (≥ 1). Number of OpenMP threads to use for computation.
+\item{n_threads}{Integer (\eqn{\geq} 1). Number of OpenMP threads to use for computation.
 Defaults to \code{getOption("matrixCorr.threads", 1L)}.}
 
 \item{verbose}{Logical. If TRUE, prints diagnostic output (default FALSE).}
@@ -65,9 +66,9 @@ If \code{ci = TRUE}, a list of class \code{"ccc"}, \code{"ccc_ci"} with elements
 }
 \description{
 Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)
-across multiple methods (L ≥ 2) for repeated-measures data. Each subject
-must be measured by all methods across the same set of time points or
-replicates.
+across multiple methods (L \eqn{\geq} 2) for repeated-measures data.
+Each subject must be measured by all methods across the same set of time
+points or replicates.
 
 CCC measures both accuracy (how close measurements are to the line of
 equality) and precision (Pearson correlation). Confidence intervals are
@@ -75,13 +76,13 @@ optionally computed using a U-statistics-based estimator with Fisher's Z
 transformation
 }
 \details{
-This function computes pairwise Lin’s Concordance Correlation Coefficient
+This function computes pairwise Lin's Concordance Correlation Coefficient
 (CCC) between methods in a repeated-measures design using a
 U-statistics-based nonparametric estimator proposed by
 Carrasco et al. (2013). It is computationally efficient and robust,
 particularly for large-scale or balanced longitudinal designs.
 
-Lin’s CCC is defined as
+Lin's CCC is defined as
 \deqn{
 \rho_c = \frac{2 \cdot \mathrm{cov}(X, Y)}{\sigma_X^2 + \sigma_Y^2 +
 (\mu_X - \mu_Y)^2}
@@ -158,10 +159,10 @@ plot(ccc2)
 #------------------------------------------------------------------------
 # Choosing delta based on distance sensitivity
 #------------------------------------------------------------------------
-# Absolute distance (L1 norm) – robust
+# Absolute distance (L1 norm) - robust
 ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 1)
 
-# Squared distance (L2 norm) – amplifies large deviations
+# Squared distance (L2 norm) - amplifies large deviations
 ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 2)
 
 # Presence/absence of disagreement (like kappa)
@@ -170,13 +171,13 @@ ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 0)
 }
 \references{
 Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.
-\emph{Biometrics}, 45: 255–268.
+\emph{Biometrics}, 45: 255-268.
 
 Lin L (2000). A note on the concordance correlation coefficient.
-\emph{Biometrics}, 56: 324–325.
+\emph{Biometrics}, 56: 324-325.
 
 Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
-a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519–539.
+a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519-539.
 }
 \seealso{
 \code{\link{ccc}}, \code{\link{ccc_lmm_reml}},

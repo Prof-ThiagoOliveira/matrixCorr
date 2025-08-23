@@ -406,7 +406,7 @@ ccc_pairwise_u_stat <- function(data,
 #' ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
 #'
 #' #--------------------------------------------------------------------
-#' ## Two methods × time (balanced 2x2), with and without interaction
+#' ## Two methods x time (balanced 2x2), with and without interaction
 #' #--------------------------------------------------------------------
 #' dat$time <- factor(rep(rep(c("t1","t2"), each = n_subj/2), times = 2))
 #' ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
@@ -415,7 +415,7 @@ ccc_pairwise_u_stat <- function(data,
 #'              interaction = TRUE)
 #'
 #' #--------------------------------------------------------------------
-#' ## Three methods — pairwise CCCs
+#' ## Three methods - pairwise CCCs
 #' #--------------------------------------------------------------------
 #' set.seed(2)
 #' n_subj <- 40
@@ -597,7 +597,7 @@ ccc_lmm_reml <- function(data, ry, rind,
     diag(upr_mat) <- NA_real_
     out <- list(est = est_mat, lwr.ci = lwr_mat, upr.ci = upr_mat)
     attr(out, "method")     <-
-      "Variance Components REML — pairwise"
+      "Variance Components REML - pairwise"
     attr(out, "description")<-
       "Lin's CCC per method pair from random-effects LMM"
     attr(out, "package")    <- "matrixCorr"
@@ -607,7 +607,7 @@ ccc_lmm_reml <- function(data, ry, rind,
   } else {
     est <- est_mat
     attr(est, "method")     <-
-      "Variance Components REML — pairwise"
+      "Variance Components REML - pairwise"
     attr(est, "description")<-
       "Lin's CCC per method pair from random-effects LMM"
     attr(est, "package")    <- "matrixCorr"

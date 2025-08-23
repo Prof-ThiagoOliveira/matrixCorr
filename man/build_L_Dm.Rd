@@ -76,7 +76,7 @@ without interaction, all columns equal \eqn{\beta_{\text{met2}}}.
 (\code{diag(nt)} if \code{Dmat_global} is \code{NULL}).
 }
 \item \strong{General path} (\eqn{nm \ge 3}) represents
-a method–time grid, where pairwise method differences are encoded
+a method-time grid, where pairwise method differences are encoded
 within each time level, yielding \code{L} of size
 \eqn{p \times (nd \cdot \max(nt,1))}, with
 \eqn{nd = nm(nm - 1)/2}. The grid design matrix is

@@ -34,7 +34,7 @@ ccc_lmm_reml(
 \item{interaction}{Logical. Include \code{method:time} interaction?
 (default \code{TRUE}).}
 
-\item{max_iter}{Integer. Maximum iterations for variance–component updates
+\item{max_iter}{Integer. Maximum iterations for variance-component updates
 (default \code{100}).}
 
 \item{tol}{Numeric. Convergence tolerance on parameter change
@@ -65,7 +65,7 @@ In all cases, attributes \code{"method"}, \code{"description"},
 \code{"package"}, and (if \code{ci=TRUE}) \code{"conf.level"} are set.
 }
 \description{
-Compute Lin’s Concordance Correlation Coefficient (CCC) from a linear
+Compute Lin's Concordance Correlation Coefficient (CCC) from a linear
 mixed-effects model fitted by REML. The fixed-effects part can include
 \code{method} and/or \code{time} factors (and optionally their interaction),
 while a subject-specific random intercept captures between-subject variation.
@@ -112,7 +112,7 @@ U_i^\top / \sigma_E^2\big)}:
 Solves/inversions use symmetric-PD routines with a tiny diagonal "jitter" and
 a pseudo-inverse fallback when needed.
 
-\strong{EM-style variance–component updates.} With current \eqn{\hat\beta},
+\strong{EM-style variance-component updates.} With current \eqn{\hat\beta},
 residuals \eqn{r_i = y_i - X_i\hat\beta} are formed. The BLUPs and
 conditional covariances are
 \deqn{ b_i \;=\; M_i^{-1}\,(U_i^\top r_i \!/\! \sigma_E^2), \qquad
@@ -147,7 +147,7 @@ truncated at 0. The helper \code{\link{build_L_Dm}} constructs \eqn{L} so it
 aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}
 passed to 'C++'.
 For exactly two methods (\eqn{nm=2}), a fast path builds \eqn{L} directly
-from the design’s column names, where, with interaction, the per-time
+from the design's column names, where, with interaction, the per-time
 difference at time \eqn{j} is
 \eqn{\beta_{\text{met2}}+\beta_{\text{met2:time}_j}} (baseline time uses
 \eqn{\beta_{\text{met2}}}); while without interaction, the same
@@ -194,7 +194,7 @@ ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
 ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
 
 #--------------------------------------------------------------------
-## Two methods × time (balanced 2x2), with and without interaction
+## Two methods x time (balanced 2x2), with and without interaction
 #--------------------------------------------------------------------
 dat$time <- factor(rep(rep(c("t1","t2"), each = n_subj/2), times = 2))
 ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
@@ -203,7 +203,7 @@ ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
              interaction = TRUE)
 
 #--------------------------------------------------------------------
-## Three methods — pairwise CCCs
+## Three methods - pairwise CCCs
 #--------------------------------------------------------------------
 set.seed(2)
 n_subj <- 40
