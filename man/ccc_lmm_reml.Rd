@@ -158,7 +158,7 @@ each time level) and an optional time-weighting matrix \eqn{\mathrm{D_m}}:
        \;-\; \mathrm{tr}\!\Big(\big(L\,\mathrm{D_m}\,L^\top\big)\,
        \mathrm{Var}(\hat\beta)\Big)}
       {\,nm\,(nm-1)\,\max(nt,1)\,}, }
-truncated at 0. The helper \code{\link{build_L_Dm}} constructs \eqn{L} so it
+truncated at 0. The helper \code{\link{build_L_Dm_cpp}} constructs \eqn{L} so it
 aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}
 passed to 'C++'.
 For exactly two methods (\eqn{nm=2}), a fast path builds \eqn{L} directly
@@ -329,7 +329,7 @@ ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
 
 }
 \seealso{
-\code{\link{build_L_Dm}} for constructing \eqn{L} and
+\code{\link{build_L_Dm_cpp}} for constructing \eqn{L} and
 \eqn{\mathrm{D_m}}; \code{\link{ccc_pairwise_u_stat}} for a U-statistic
 alternative; and \pkg{cccrm} for a reference approach via \pkg{nlme}.
 }

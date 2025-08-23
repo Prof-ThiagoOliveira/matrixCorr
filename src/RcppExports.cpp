@@ -130,6 +130,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// build_L_Dm_cpp
+Rcpp::List build_L_Dm_cpp(Rcpp::CharacterVector colnames_X, Rcpp::Nullable<Rcpp::CharacterVector> rmet_name, Rcpp::Nullable<Rcpp::CharacterVector> rtime_name, Rcpp::CharacterVector method_levels, Rcpp::CharacterVector time_levels, bool has_interaction, Rcpp::Nullable<Rcpp::NumericMatrix> Dmat_global);
+RcppExport SEXP _matrixCorr_build_L_Dm_cpp(SEXP colnames_XSEXP, SEXP rmet_nameSEXP, SEXP rtime_nameSEXP, SEXP method_levelsSEXP, SEXP time_levelsSEXP, SEXP has_interactionSEXP, SEXP Dmat_globalSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type colnames_X(colnames_XSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type rmet_name(rmet_nameSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type rtime_name(rtime_nameSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type method_levels(method_levelsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type time_levels(time_levelsSEXP);
+    Rcpp::traits::input_parameter< bool >::type has_interaction(has_interactionSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type Dmat_global(Dmat_globalSEXP);
+    rcpp_result_gen = Rcpp::wrap(build_L_Dm_cpp(colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ccc_vc_cpp
 Rcpp::List ccc_vc_cpp(Rcpp::NumericMatrix Xr, Rcpp::NumericVector yr, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int nm, int nt, int max_iter, double tol, double conf_level, Rcpp::Nullable<Rcpp::NumericMatrix> Lr, Rcpp::Nullable<Rcpp::NumericMatrix> auxDr);
 RcppExport SEXP _matrixCorr_ccc_vc_cpp(SEXP XrSEXP, SEXP yrSEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP nmSEXP, SEXP ntSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP LrSEXP, SEXP auxDrSEXP) {
@@ -327,6 +344,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 10},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},
+    {"_matrixCorr_build_L_Dm_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_cpp, 7},
     {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 12},
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},

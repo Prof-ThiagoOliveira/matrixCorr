@@ -112,7 +112,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 #' @rdname ccc
 #' @method print ccc
 #' @param digits Integer; decimals for CCC estimates (default 4).
-#' @param ci_digits Integer; decimals for CI bounds (default 2).
+#' @param ci_digits Integer; decimals for CI bounds (default 4).
 #' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}.
 #'   \itemize{
 #'     \item \code{"auto"} (default): include CI columns only if the object has non-NA CIs.
@@ -123,7 +123,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 #' @export
 print.ccc <- function(x,
                       digits = 4,
-                      ci_digits = 2,
+                      ci_digits = 4,
                       show_ci = c("auto", "yes", "no"),
                       ...) {
   show_ci <- match.arg(show_ci)

@@ -351,7 +351,7 @@ ccc_pairwise_u_stat <- function(data,
 #'        \;-\; \mathrm{tr}\!\Big(\big(L\,\mathrm{D_m}\,L^\top\big)\,
 #'        \mathrm{Var}(\hat\beta)\Big)}
 #'       {\,nm\,(nm-1)\,\max(nt,1)\,}, }
-#' truncated at 0. The helper \code{\link{build_L_Dm}} constructs \eqn{L} so it
+#' truncated at 0. The helper \code{\link{build_L_Dm_cpp}} constructs \eqn{L} so it
 #' aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}
 #' passed to 'C++'.
 #' For exactly two methods (\eqn{nm=2}), a fast path builds \eqn{L} directly
@@ -480,7 +480,7 @@ ccc_pairwise_u_stat <- function(data,
 #' extreme imbalance can still make \eqn{S_B} numerically delicate; negative
 #' estimates are truncated to 0 by construction.
 #'
-#' @seealso \code{\link{build_L_Dm}} for constructing \eqn{L} and
+#' @seealso \code{\link{build_L_Dm_cpp}} for constructing \eqn{L} and
 #' \eqn{\mathrm{D_m}}; \code{\link{ccc_pairwise_u_stat}} for a U-statistic
 #' alternative; and \pkg{cccrm} for a reference approach via \pkg{nlme}.
 #'
@@ -537,7 +537,7 @@ ccc_pairwise_u_stat <- function(data,
 #' ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
 #'
 #' @author Thiago de Paula Oliveira
-#' @importFrom stats as.formula model.matrix setNames
+#' @importFrom stats as.formula model.matrix setNames qnorm
 #' @export
 ccc_lmm_reml <- function(data, ry, rind,
                          rmet = NULL, rtime = NULL, interaction = TRUE,
@@ -545,60 +545,45 @@ ccc_lmm_reml <- function(data, ry, rind,
                          Dmat = NULL, ci = FALSE, conf_level = 0.95,
                          verbose = FALSE, digits = 4, use_message = TRUE) {
 
-  # helper
+  ## ---- small helpers --------------------------------------------------------
   num_or_na <- function(x) {
     x <- suppressWarnings(as.numeric(x))
     if (length(x) != 1 || !is.finite(x)) NA_real_ else x
   }
-
   compute_ci_from_se <- function(ccc, se, level) {
     if (!is.finite(ccc) || !is.finite(se)) return(c(NA_real_, NA_real_))
     z <- qnorm(1 - (1 - level)/2)
-    c(max(0, min(1, ccc - z*se)),
-      max(0, min(1, ccc + z*se)))
+    c(max(0, min(1, ccc - z*se)), max(0, min(1, ccc + z*se)))
   }
-
   .vc_message <- function(ans, label, nm, nt, conf_level,
                           digits = 4, use_message = TRUE) {
-    fmt <-
-      function(x) if (is.na(x)) "NA" else formatC(x, format = "f",
-                                                  digits = digits)
+    fmt <- function(x) if (is.na(x)) "NA" else formatC(x, format = "f", digits = digits)
     out <- c(
-      sprintf("---- matrixCorr::ccc_lmm_reml — variance-components (%s) ----", label),
+      sprintf("---- matrixCorr::ccc_lmm_reml - variance-components (%s) ----", label),
       sprintf("Design: methods nm = %d, times nt = %d", nm, nt),
       "Estimates:",
-      sprintf("  sigma_A^2 (subject)          : %s",
-              fmt(num_or_na(ans[["sigma2_subject"]]))),
-      sprintf("  sigma_A×M^2 (subject×method) : %s",
-              fmt(num_or_na(ans[["sigma2_subject_method"]]))),
-      sprintf("  sigma_A×T^2 (subject×time)   : %s",
-              fmt(num_or_na(ans[["sigma2_subject_time"]]))),
-      sprintf("  sigma_E^2 (error)            : %s",
-              fmt(num_or_na(ans[["sigma2_error"]]))),
-      sprintf("  S_B (fixed-effect dispersion): %s",
-              fmt(num_or_na(ans[["SB"]]))),
-      sprintf("  SE(CCC)                      : %s",
-              fmt(num_or_na(ans[["se_ccc"]]))),
+      sprintf("  sigma_A^2 (subject)            : %s", fmt(num_or_na(ans[["sigma2_subject"]]))),
+      sprintf("  sigma_A_M^2 (subject x method) : %s", fmt(num_or_na(ans[["sigma2_subject_method"]]))),
+      sprintf("  sigma_A_T^2 (subject x time)   : %s", fmt(num_or_na(ans[["sigma2_subject_time"]]))),
+      sprintf("  sigma_E^2 (error)              : %s", fmt(num_or_na(ans[["sigma2_error"]]))),
+      sprintf("  S_B (fixed-effect dispersion)  : %s", fmt(num_or_na(ans[["SB"]]))),
+      sprintf("  SE(CCC)                        : %s", fmt(num_or_na(ans[["se_ccc"]]))),
       "--------------------------------------------------------------------------"
     )
-
-    if (use_message) {
-      message(paste(out, collapse = "\n"))
-    } else cat(paste(out, collapse = "\n"), "\n")
+    if (use_message) message(paste(out, collapse = "\n")) else cat(paste(out, collapse = "\n"), "\n")
   }
 
-
-  # Definitions
-
+  ## ---- coerce once ----------------------------------------------------------
   df <- as.data.frame(data)
   df[[ry]]   <- as.numeric(df[[ry]])
   df[[rind]] <- factor(df[[rind]])
   if (!is.null(rmet))  df[[rmet]]  <- factor(df[[rmet]])
   if (!is.null(rtime)) df[[rtime]] <- factor(df[[rtime]])
 
-  #-----------------------------------------------------------------------------
-  ## ---- fixed-effects formula ----
-  #-----------------------------------------------------------------------------
+  # keep the overall time levels for Dmat subsetting in pairwise path
+  all_time_lvls <- if (!is.null(rtime)) levels(df[[rtime]]) else character(0)
+
+  ## ---- fixed-effects formula ------------------------------------------------
   rhs <- "1"
   if (!is.null(rmet))  rhs <- paste(rhs, "+", rmet)
   if (!is.null(rtime)) rhs <- paste(rhs, "+", rtime)
@@ -606,23 +591,28 @@ ccc_lmm_reml <- function(data, ry, rind,
     rhs <- paste(rhs, "+", paste0(rmet, ":", rtime))
   fml <- as.formula(paste("~", rhs))
 
-  #-----------------------------------------------------------------------------
-  ## Case 1: no (or single) method -> overall CCC (1x1)
-  #-----------------------------------------------------------------------------
+  ## ---- Case 1: no (or single) method -> overall CCC (1x1) ------------------
   if (is.null(rmet) || nlevels(df[[rmet]]) < 2L) {
     X <- model.matrix(fml, data = df)
-    Laux <- build_L_Dm(df_sub = df, fml_sub = fml,
-                       rmet = rmet, rtime = rtime,
-                       # nm will be 0
-                       Dmat_global = Dmat, has_interaction = interaction)
+
+    # For overall case, pass Dmat if time has >=2 levels (else NULL)
+    Dsub <- if (!is.null(Dmat) && !is.null(rtime) && nlevels(df[[rtime]]) >= 2L) {
+      as.matrix(Dmat)
+    } else NULL
+
+    Laux <- build_L_Dm_cpp(
+      colnames_X      = colnames(X),
+      rmet_name       = if (is.null(rmet)) NULL else rmet,
+      rtime_name      = if (is.null(rtime)) NULL else rtime,
+      method_levels   = if (is.null(rmet)) character(0) else levels(df[[rmet]]),
+      time_levels     = if (is.null(rtime)) character(0) else levels(df[[rtime]]),
+      has_interaction = interaction,
+      Dmat_global     = Dsub
+    )
 
     # integer codes for method/time (0-length if absent or single level)
-    method_int <- if (!is.null(rmet)  && nlevels(df[[rmet]])  >= 2L) {
-      as.integer(df[[rmet]])
-    } else integer(0)
-    time_int   <- if (!is.null(rtime) && nlevels(df[[rtime]]) >= 2L) {
-      as.integer(df[[rtime]])
-    } else integer(0)
+    method_int <- if (!is.null(rmet)  && nlevels(df[[rmet]])  >= 2L) as.integer(df[[rmet]])  else integer(0)
+    time_int   <- if (!is.null(rtime) && nlevels(df[[rtime]]) >= 2L) as.integer(df[[rtime]]) else integer(0)
 
     ans <- tryCatch(
       ccc_vc_cpp(
@@ -644,24 +634,19 @@ ccc_lmm_reml <- function(data, ry, rind,
     )
 
     if (isTRUE(verbose)) {
-      .vc_message(ans, label = "Overall",
-                  nm = Laux$nm, nt = Laux$nt,
+      .vc_message(ans, label = "Overall", nm = Laux$nm, nt = Laux$nt,
                   conf_level = conf_level, digits = digits, use_message = use_message)
     }
 
     lab <- "Overall"
     est_mat <- matrix(unname(ans$ccc), 1, 1, dimnames = list(lab, lab))
-
     if (isTRUE(ci)) {
-      # try to use C++ lwr/upr; if absent, fall back to se_ccc
-      lwr_cpp <- num_or_na(ans[["lwr"]])
-      upr_cpp <- num_or_na(ans[["upr"]])
+      lwr_cpp <- num_or_na(ans[["lwr"]]); upr_cpp <- num_or_na(ans[["upr"]])
       if (is.na(lwr_cpp) || is.na(upr_cpp)) {
         se_cpp <- num_or_na(ans[["se_ccc"]])
         ci2 <- compute_ci_from_se(num_or_na(ans[["ccc"]]), se_cpp, conf_level)
         lwr_cpp <- ci2[1]; upr_cpp <- ci2[2]
       }
-
       out <- list(
         est    = est_mat,
         lwr.ci = matrix(lwr_cpp, 1, 1, dimnames = dimnames(est_mat)),
@@ -675,18 +660,15 @@ ccc_lmm_reml <- function(data, ry, rind,
       return(out)
     } else {
       est <- est_mat
-      attr(est, "method")     <-
-        "Variance Components REML"
-      attr(est, "description")<- "Lin's CCC from random-effects LMM"
-      attr(est, "package")    <- "matrixCorr"
+      attr(est, "method")      <- "Variance Components REML"
+      attr(est, "description") <- "Lin's CCC from random-effects LMM"
+      attr(est, "package")     <- "matrixCorr"
       class(est) <- c("ccc", "matrix")
       return(est)
     }
   }
 
-  #-----------------------------------------------------------------------------
-  ## Case 2: pairwise by method (L >= 2)
-  #-----------------------------------------------------------------------------
+  ## ---- Case 2: pairwise by method (L >= 2) ---------------------------------
   df[[rmet]] <- droplevels(df[[rmet]])
   method_levels <- levels(df[[rmet]])
   Lm <- length(method_levels)
@@ -700,24 +682,41 @@ ccc_lmm_reml <- function(data, ry, rind,
   for (i in 1:(Lm - 1L)) {
     for (j in (i + 1L):Lm) {
       m1 <- method_levels[i]; m2 <- method_levels[j]
-      sub <- df[df[[rmet]] %in% c(m1, m2), , drop = FALSE]
-      sub[[rmet]] <- droplevels(sub[[rmet]])
-      if (!is.null(rtime)) sub[[rtime]] <- droplevels(sub[[rtime]])
 
-      Xp   <- model.matrix(fml, data = sub)
+      idx <- which(df[[rmet]] %in% c(m1, m2))
+      # cheap “sub” views
+      subj_int   <- as.integer(df[[rind]][idx])
+      y_sub      <- df[[ry]][idx]
+      met_fac    <- droplevels(df[[rmet]][idx])        # ensures exactly 2 levels
+      time_fac   <- if (!is.null(rtime)) droplevels(df[[rtime]][idx]) else NULL
 
-      Laux <- build_L_Dm(df_sub = sub, fml_sub = fml,
-                         rmet = rmet, rtime = rtime,
-                         Dmat_global = Dmat, has_interaction = interaction)
+      Xp <- model.matrix(fml, data = df[idx, , drop = FALSE])
 
-      method_int <- if (nlevels(sub[[rmet]])  >= 2L) as.integer(sub[[rmet]]) else integer(0)
-      time_int   <- if (!is.null(rtime) && nlevels(sub[[rtime]]) >= 2L) as.integer(sub[[rtime]]) else integer(0)
+      # subset Dmat to present time levels in this pair (if any)
+      lev_time_sub <- if (!is.null(time_fac)) levels(time_fac) else character(0)
+      Dsub <- if (!is.null(Dmat) && length(lev_time_sub) >= 2L) {
+        pos <- match(lev_time_sub, all_time_lvls)
+        as.matrix(Dmat[pos, pos, drop = FALSE])
+      } else NULL
+
+      Laux <- build_L_Dm_cpp(
+        colnames_X      = colnames(Xp),
+        rmet_name       = rmet,
+        rtime_name      = if (is.null(rtime)) NULL else rtime,
+        method_levels   = levels(met_fac),
+        time_levels     = lev_time_sub,
+        has_interaction = interaction,
+        Dmat_global     = Dsub
+      )
+
+      method_int <- if (nlevels(met_fac)  >= 2L) as.integer(met_fac)  else integer(0)
+      time_int   <- if (!is.null(time_fac) && nlevels(time_fac) >= 2L) as.integer(time_fac) else integer(0)
 
       ans <- tryCatch(
         ccc_vc_cpp(
           Xr = unname(Xp),
-          yr = sub[[ry]],
-          subject = as.integer(sub[[rind]]),
+          yr = y_sub,
+          subject = subj_int,
           method  = method_int,
           time    = time_int,
           nm = Laux$nm, nt = Laux$nt,
@@ -744,7 +743,6 @@ ccc_lmm_reml <- function(data, ry, rind,
       est_mat[i, j] <- est_mat[j, i] <- val
 
       if (isTRUE(ci)) {
-        # prefer C++ lwr/upr; else compute from se_ccc
         lwr_cpp <- num_or_na(if (!is.null(ans)) ans[["lwr"]] else NA_real_)
         upr_cpp <- num_or_na(if (!is.null(ans)) ans[["upr"]] else NA_real_)
         if (is.na(lwr_cpp) || is.na(upr_cpp)) {
@@ -777,228 +775,4 @@ ccc_lmm_reml <- function(data, ry, rind,
     class(est) <- c("ccc", "matrix")
     return(est)
   }
-}
-
-
-#' Build per-time method contrast matrix L and time-weighting D
-#'
-#' @description
-#' Helper that constructs the contrast matrix \code{L} (aligned to the columns
-#' of the *actual* design matrix produced by
-#' \code{model.matrix(fml_sub, df_sub)}) and the time-weighting matrix
-#' \code{Dm} used to compute the fixed-effect dispersion term \eqn{S_B} in the
-#' CCC. For the common case of exactly two methods (\eqn{nm = 2}), \code{L} is
-#' built directly from column names, guaranteeing perfect alignment and
-#' avoiding grid/contrast mismatches. For \eqn{nm \geq 3},
-#' a grid-based construction is used but re-ordered to match the real design.
-#'
-#' @param df_sub A \code{data.frame} subset corresponding to the data being
-#' analyzed (e.g., overall or a pair of methods). \code{df_sub[[rmet]]} and
-#' \code{df_sub[[rtime]]} must already be factors with the intended levels
-#' (use \code{droplevels()} upstream as needed).
-#' @param fml_sub A right-hand-side formula (e.g. \code{~ 1 + rmet + rtime}
-#' or \code{~ 1 + rmet + rtime + rmet:rtime}) that matches the fixed-effects
-#' part of the model passed to 'C++'.
-#' @param rmet Character scalar. Column name of the method factor in
-#' \code{df_sub} (or \code{NULL} if no method factor).
-#' @param rtime Character scalar. Column name of the time factor in
-#' \code{df_sub} (or \code{NULL} if no time factor).
-#' @param Dmat_global Optional numeric matrix of size \eqn{n_t \times n_t}
-#' (where \eqn{n_t} is the number of time levels in the *original* data)
-#' providing time weights for \eqn{S_B}. If \code{NULL}, the identity is used.
-#' When working on a subset, this function subsets \code{Dmat_global} to the
-#' time levels present in \code{df_sub}.
-#' @param has_interaction Logical. Whether the fixed-effects design includes the
-#' \code{rmet:rtime} interaction term. This determines the form of the method
-#' contrasts when \eqn{nm = 2}: with interaction, \eqn{\Delta(t_j) =
-#' \beta_{\text{met2}} + \beta_{\text{met2:time}_j}}; without interaction,
-#' \eqn{\Delta(t_j) = \beta_{\text{met2}}} for all \eqn{j}.
-#'
-#' @details
-#' Let \eqn{X = \texttt{model.matrix}(fml\_sub, df\_sub)} with \eqn{p} columns.
-#' This function returns:
-#'
-#' \itemize{
-#'   \item \strong{Two-method fast path} (\eqn{nm = 2}):
-#'     \itemize{
-#'       \item If there is no time factor (\eqn{nt = 0}), \code{L} is a
-#'         \eqn{p \times 1} matrix that picks the \code{met2} column in \eqn{X}
-#'         (i.e., the treatment-coded difference
-#'         \eqn{\beta_{\text{met2}} = \mu_2 - \mu_1}).
-#'       \item If \eqn{nt \geq 1}, \code{L} is \eqn{p \times nt} with columns
-#'         representing the method difference at each time level. With
-#'         interaction, column \eqn{j} encodes \eqn{\beta_{\text{met2}} +
-#'         \beta_{\text{met2:time}_j}} for \eqn{j > 1} and
-#'         \eqn{\beta_{\text{met2}}} for the baseline;
-#'         without interaction, all columns equal \eqn{\beta_{\text{met2}}}.
-#'       \item \code{Dm} is the time-weighting matrix of size \eqn{nt \times nt}
-#'         (\code{diag(nt)} if \code{Dmat_global} is \code{NULL}).
-#'     }
-#'   \item \strong{General path} (\eqn{nm \geq 3}) represents
-#'     a method-time grid, where pairwise method differences are encoded
-#'     within each time level, yielding \code{L} of size
-#'     \eqn{p \times (nd \cdot \max(nt,1))}, with
-#'     \eqn{nd = nm(nm - 1)/2}. The grid design matrix is
-#'     column-reordered to match the actual \eqn{X} columns (critical to keep
-#'     \eqn{S_B} correct). \code{Dm} is \eqn{\mathrm{kronecker}(D, I_{nd})}
-#'     with \code{D} the time-weighting matrix.
-#' }
-#'
-#' All constructions are based on the \emph{actual} column names of \eqn{X}
-#' to ensure \code{L} aligns perfectly with the design passed to the 'C++' core.
-#' This makes the \eqn{S_B} term numerically stable, especially in small or
-#' unbalanced designs.
-#'
-#' @return A list with components:
-#' \itemize{
-#'   \item \code{L}: numeric matrix of contrasts, dimension
-#'         \eqn{p \times q}, where \eqn{q = nt} if \eqn{nm = 2} and
-#'         \eqn{q = nd \cdot \max(nt,1)} otherwise.
-#'   \item \code{Dm}: numeric time-weighting matrix of size \eqn{q \times q}.
-#'   \item \code{nm}: effective number of method levels used (\eqn{\geq 0}).
-#'   \item \code{nt}: effective number of time levels used (\eqn{\geq 0}).
-#' }
-#'
-#' @section Errors and checks:
-#' \itemize{
-#'   \item If the required method or interaction columns cannot be found in
-#'         \code{colnames(model.matrix(fml_sub, df_sub))}, an error is thrown.
-#'   \item If \code{Dmat_global} is supplied but its dimension does not match
-#'         the total number of time levels in the original data, an error is
-#'         thrown.
-#' }
-#'
-#' @seealso \code{\link{ccc_lmm_reml}} for the high-level wrapper that calls
-#' this helper, and the 'C++' core that consumes \code{L}/\code{Dm}.
-#' @author Thiago de Paula Oliveira
-#' @keywords internal
-build_L_Dm <- function(df_sub, fml_sub, rmet, rtime, Dmat_global,
-                       has_interaction) {
-  nm_levels <- if (is.null(rmet)) 0L else nlevels(df_sub[[rmet]])
-  nt_levels <- if (is.null(rtime)) 0L else nlevels(df_sub[[rtime]])
-  nm_eff <- if (nm_levels >= 2L) nm_levels else 0L
-  nt_eff <- if (nt_levels >= 2L) nt_levels else 0L
-
-  #-----------------------------------------------------------------------------
-  # If no method contrasts are needed
-  #-----------------------------------------------------------------------------
-  if (nm_eff == 0L) return(list(L = NULL, Dm = NULL, nm = nm_eff, nt = nt_eff))
-
-  #-----------------------------------------------------------------------------
-  # Use the actual design you'll pass to 'C++' (column names must match)
-  #-----------------------------------------------------------------------------
-  Xsub <- model.matrix(fml_sub, data = df_sub)
-  cn   <- colnames(Xsub)
-  p    <- ncol(Xsub)
-
-  #-----------------------------------------------------------------------------
-  # ---- Fast, exact path for two methods ----
-  #-----------------------------------------------------------------------------
-  if (nm_eff == 2L) {
-    lev_met  <- levels(df_sub[[rmet]])
-    met2_name <- paste0(rmet, lev_met[2L])
-    met2_idx  <- match(met2_name, cn)
-    if (is.na(met2_idx)) stop("Could not find column for '", met2_name,
-                              "' in model matrix.")
-
-    # Time weighting matrix
-    if (nt_eff == 0L) {
-      Dsub <- matrix(1, 1, 1)
-    } else if (is.null(Dmat_global)) {
-      Dsub <- diag(nt_eff)
-    } else {
-      lev_all <- levels(df_sub[[rtime]])
-      if (!all(dim(Dmat_global) == c(length(lev_all), length(lev_all))))
-        stop("Dmat dimension mismatch: expected ", length(lev_all), " x ",
-             length(lev_all))
-      idx_t <- match(levels(df_sub[[rtime]]), lev_all)
-      Dsub  <- as.matrix(Dmat_global[idx_t, idx_t, drop = FALSE])
-    }
-
-    # Build L directly against Xsub
-    if (nt_eff == 0L) {
-      # Methods-only: one contrast (met2 - met1)
-      L <- matrix(0, nrow = p, ncol = 1); colnames(L) <- "method"
-      L[met2_idx, 1L] <- 1
-    } else {
-      # Methods x time uses per-time diffs
-      lev_time <- levels(df_sub[[rtime]])
-      L <- matrix(0, nrow = p, ncol = nt_eff); colnames(L) <- lev_time
-
-      # baseline time (first level): delta = beta_met2
-      L[met2_idx, 1L] <- 1
-
-      if (isTRUE(has_interaction)) {
-        # other times uses delta(t_j) = beta_met2 + beta_met2:time_j
-        for (j in 2:nt_eff) {
-          L[met2_idx, j] <- 1
-          inter_name1 <- paste0(met2_name, ":", rtime, lev_time[j])
-          inter_name2 <- paste0(rtime, lev_time[j], ":", met2_name) # fallback
-          inter_idx   <- match(inter_name1, cn, nomatch = NA_integer_)
-          if (is.na(inter_idx)) inter_idx <- match(inter_name2, cn,
-                                                   nomatch = NA_integer_)
-          if (is.na(inter_idx))
-            stop("Could not find interaction column for '", met2_name, ":",
-                 rtime, lev_time[j], "' in model matrix.")
-          L[inter_idx, j] <- 1
-        }
-      } else {
-        # No interaction: method difference is the same at all times
-        for (j in 2:nt_eff) L[met2_idx, j] <- 1
-      }
-    }
-
-    return(list(L = L, Dm = Dsub, nm = nm_eff, nt = nt_eff))
-  }
-
-  #-----------------------------------------------------------------------------
-  # ---- General path (>=3 methods) ----
-  #-----------------------------------------------------------------------------
-  if (nt_eff == 0L) {
-    grid <- data.frame(setNames(list(levels(df_sub[[rmet]])), rmet),
-                       stringsAsFactors = FALSE)
-  } else {
-    grid <- do.call(expand.grid, c(
-      setNames(list(levels(df_sub[[rtime]])), rtime),  # time outer
-      setNames(list(levels(df_sub[[rmet]])),  rmet),   # method inner
-      list(KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
-    ))
-  }
-  grid[[rmet]]  <- factor(grid[[rmet]],  levels = levels(df_sub[[rmet]]))
-  if (nt_eff > 0L)
-    grid[[rtime]] <- factor(grid[[rtime]], levels = levels(df_sub[[rtime]]))
-
-  gridX <- model.matrix(fml_sub, data = grid)
-  #-----------------------------------------------------------------------------
-  # Reorder to match the actual Xsub columns (CRITICAL)
-  #-----------------------------------------------------------------------------
-  if (!identical(colnames(gridX), cn)) {
-    gridX <- gridX[, cn, drop = FALSE]
-  }
-
-  nd <- nm_eff * (nm_eff - 1L) / 2L
-  Diffs <- matrix(0, nrow = nd * max(nt_eff, 1L),
-                  ncol = nm_eff * max(nt_eff, 1L))
-  row <- 0L
-  idx <- function(m, t) (t - 1L) * nm_eff + m
-  for (t in seq_len(max(nt_eff, 1L))) {
-    for (i in 1:(nm_eff - 1L)) for (j in (i + 1L):nm_eff) {
-      row <- row + 1L
-      Diffs[row, idx(i, t)] <-  1
-      Diffs[row, idx(j, t)] <- -1
-    }
-  }
-  L <- t(gridX) %*% t(Diffs)
-
-  if (nt_eff == 0L) {
-    Dsub <- matrix(1, 1, 1)
-  } else if (is.null(Dmat_global)) {
-    Dsub <- diag(nt_eff)
-  } else {
-    lev_all <- levels(df_sub[[rtime]])
-    idx_t <- match(levels(df_sub[[rtime]]), lev_all)
-    Dsub  <- as.matrix(Dmat_global[idx_t, idx_t, drop = FALSE])
-  }
-  Dm <- kronecker(Dsub, diag(nd))
-  list(L = L, Dm = Dm, nm = nm_eff, nt = nt_eff)
 }

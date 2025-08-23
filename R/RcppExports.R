@@ -33,6 +33,10 @@ get_omp_threads <- function() {
     .Call(`_matrixCorr_get_omp_threads`)
 }
 
+build_L_Dm_cpp <- function(colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global = NULL) {
+    .Call(`_matrixCorr_build_L_Dm_cpp`, colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global)
+}
+
 ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, Lr = NULL, auxDr = NULL) {
     .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr)
 }

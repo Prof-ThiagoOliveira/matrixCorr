@@ -10,7 +10,7 @@
 \usage{
 ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
 
-\method{print}{ccc}(x, digits = 4, ci_digits = 2, show_ci = c("auto", "yes", "no"), ...)
+\method{print}{ccc}(x, digits = 4, ci_digits = 4, show_ci = c("auto", "yes", "no"), ...)
 
 \method{summary}{ccc}(
   object,
