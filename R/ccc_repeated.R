@@ -268,6 +268,15 @@ ccc_pairwise_u_stat <- function(data,
 #' (see \strong{CIs} note below).
 #' @param conf_level Numeric in \eqn{(0,1)}. Confidence level when
 #' \code{ci=TRUE} (default \code{0.95}).
+#' @param verbose Logical. If \code{TRUE}, prints a structured summary of the
+#'   fitted variance components and \eqn{S_B} for each fit (overall or
+#'   pairwise). Default \code{FALSE}.
+#' @param digits Integer (\(\ge 0\)). Number of decimal places to use in the
+#'   printed summary when \code{verbose=TRUE}. Default \code{4}.
+#' @param use_message Logical. When \code{verbose=TRUE}, choose the printing
+#'   mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
+#'   easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
+#'   uses \code{cat()} to \code{stdout}. Default \code{TRUE}.
 #'
 #' @details
 #' For measurement \eqn{y_{ij}} on subject \eqn{i} under fixed
@@ -358,7 +367,92 @@ ccc_pairwise_u_stat <- function(data,
 #' then \eqn{S_B=0} and \eqn{\sigma_{A\times M}^2=0}; if there is no
 #' time factor (or a single level), then \eqn{\sigma_{A\times T}^2=0}.
 #'
-#' \strong{CIs / SEs.}
+#' \strong{CIs / SEs (delta method for CCC).}
+#' Let
+#' \deqn{ \theta \;=\; \big(\sigma_A^2,\ \sigma_{A\times M}^2,\
+#' \sigma_{A\times T}^2,\ \sigma_E^2,\ S_B\big)^\top, }
+#' and write the concordance as
+#' \deqn{ \mathrm{CCC}(\theta) \;=\; \frac{N}{D}
+#'       \;=\; \frac{\sigma_A^2 + \sigma_{A\times T}^2}
+#'                    {\sigma_A^2 + \sigma_{A\times M}^2 +
+#'                    \sigma_{A\times T}^2 + S_B + \sigma_E^2}. }
+#'
+#' A first-order (large-sample) standard error follows from the delta method:
+#' \deqn{ \mathrm{Var}\{\widehat{\mathrm{CCC}}\}
+#'       \;\approx\; \nabla \mathrm{CCC}(\hat\theta)^\top\,
+#'                   \mathrm{Var}(\hat\theta)\,
+#'                   \nabla \mathrm{CCC}(\hat\theta), }
+#' with gradient components (using \eqn{N} and \eqn{D} as above)
+#' \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_A^2}
+#'       \;=\; \frac{D - N}{D^2}
+#'       \;=\; \frac{\sigma_{A\times M}^2 + S_B + \sigma_E^2}{D^2}, }
+#' \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times M}^2}
+#'       \;=\; -\,\frac{N}{D^2}, \qquad
+#'        \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times T}^2}
+#'       \;=\; \frac{D - N}{D^2}, }
+#' \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_E^2}
+#'       \;=\; -\,\frac{N}{D^2}, \qquad
+#'        \frac{\partial\,\mathrm{CCC}}{\partial S_B}
+#'       \;=\; -\,\frac{N}{D^2}. }
+#'
+#' \emph{Estimating \eqn{\mathrm{Var}(\hat\theta)}.}
+#' The EM updates write each variance component as an average of per-subject
+#' quantities. For subject \eqn{i},
+#' \deqn{ t_{A,i} \;=\; b_{i,0}^2 + (M_i^{-1})_{00},\qquad
+#'        t_{M,i} \;=\; \frac{1}{nm}\sum_{\ell=1}^{nm}
+#'                        \Big(b_{i,\ell}^2 + (M_i^{-1})_{\ell\ell}\Big), }
+#' \deqn{ t_{T,i} \;=\; \frac{1}{nt}\sum_{j=1}^{nt}
+#'                        \Big(b_{i,j}^2 + (M_i^{-1})_{jj}\Big),\qquad
+#'        s_i \;=\; \frac{\|r_i - U_i b_i\|^2 +
+#'        \mathrm{tr}(M_i^{-1}U_i^\top U_i)}{n_i}, }
+#' where \eqn{b_i = M_i^{-1}(U_i^\top r_i/\sigma_E^2)} and
+#' \eqn{M_i = G^{-1} + U_i^\top U_i/\sigma_E^2}.
+#' With \eqn{m} subjects, we form the empirical covariance of the stacked
+#' subject vectors and scale by \eqn{m} to approximate the covariance of the
+#' means:
+#' \deqn{ \widehat{\mathrm{Cov}}\!\left(
+#'       \begin{bmatrix} t_{A,\cdot} \\ t_{M,\cdot} \\ t_{T,\cdot} \end{bmatrix}
+#'       \right)
+#'       \;\approx\; \frac{1}{m}\,
+#'        \mathrm{Cov}_i\!\left(
+#'       \begin{bmatrix} t_{A,i} \\ t_{M,i} \\ t_{T,i} \end{bmatrix}\right). }
+#' (Drop rows/columns as needed when \code{nm==0} or \code{nt==0}.)
+#'
+#' The residual variance estimator is a weighted mean
+#' \eqn{\hat\sigma_E^2=\sum_i w_i s_i} with \eqn{w_i=n_i/n}. Its variance is
+#' approximated by the variance of a weighted mean of independent terms,
+#' \deqn{ \widehat{\mathrm{Var}}(\hat\sigma_E^2)
+#'       \;\approx\; \Big(\sum_i w_i^2\Big)\,\widehat{\mathrm{Var}}(s_i), }
+#' where \eqn{\widehat{\mathrm{Var}}(s_i)} is the sample variance across
+#' subjects. The method-dispersion term uses the quadratic-form delta already
+#' computed for \eqn{S_B}:
+#' \deqn{ \widehat{\mathrm{Var}}(S_B)
+#'       \;=\; \frac{2\,\mathrm{tr}\!\big((A_{\!fix}\,\mathrm{Var}(\hat\beta))^2\big)
+#'              \;+\; 4\,\hat\beta^\top A_{\!fix}\,\mathrm{Var}(\hat\beta)\,
+#'              A_{\!fix}\,\hat\beta}
+#'                    {\big[nm\,(nm-1)\,\max(nt,1)\big]^2}, }
+#' with \eqn{A_{\!fix}=L\,\mathrm{Dm}\,L^\top}.
+#'
+#' \emph{Putting it together.} Assemble
+#' \eqn{\widehat{\mathrm{Var}}(\hat\theta)} by combining the
+#' \eqn{(\sigma_A^2,\sigma_{A\times M}^2,\sigma_{A\times T}^2)} covariance
+#' block from the subject-level empirical covariance, add the
+#' \eqn{\widehat{\mathrm{Var}}(\hat\sigma_E^2)} and
+#' \eqn{\widehat{\mathrm{Var}}(S_B)} terms on the diagonal,
+#' and ignore cross-covariances across these blocks (a standard large-sample
+#' simplification). Then
+#' \deqn{ \widehat{\mathrm{se}}\{\widehat{\mathrm{CCC}}\}
+#'       \;=\; \sqrt{\,\nabla \mathrm{CCC}(\hat\theta)^\top\,
+#'                     \widehat{\mathrm{Var}}(\hat\theta)\,
+#'                     \nabla \mathrm{CCC}(\hat\theta)\,}. }
+#'
+#' A two-sided \eqn{(1-\alpha)} normal CI is
+#' \deqn{ \widehat{\mathrm{CCC}} \;\pm\; z_{1-\alpha/2}\,
+#'       \widehat{\mathrm{se}}\{\widehat{\mathrm{CCC}}\}, }
+#' truncated to \eqn{[0,1]} in the output for convenience. When \eqn{S_B} is
+#' truncated at 0 or samples are very small/imbalanced, the normal CI can be
+#' mildly anti-conservative near the boundary; a logit transform for CCC or a
+#' subject-level (cluster) bootstrap can be used for sensitivity analysis.
 #'
 #' @return
 #' \itemize{
@@ -435,7 +529,40 @@ ccc_pairwise_u_stat <- function(data,
 ccc_lmm_reml <- function(data, ry, rind,
                          rmet = NULL, rtime = NULL, interaction = TRUE,
                          max_iter = 100, tol = 1e-6,
-                         Dmat = NULL, ci = FALSE, conf_level = 0.95) {
+                         Dmat = NULL, ci = FALSE, conf_level = 0.95,
+                         verbose = FALSE, digits = 4, use_message = TRUE) {
+
+  # helper
+  num_or_na <- function(x) {
+    x <- suppressWarnings(as.numeric(x))
+    if (length(x) != 1 || !is.finite(x)) NA_real_ else x
+  }
+
+  compute_ci_from_se <- function(ccc, se, level) {
+    if (!is.finite(ccc) || !is.finite(se)) return(c(NA_real_, NA_real_))
+    z <- qnorm(1 - (1 - level)/2)
+    c(max(0, min(1, ccc - z*se)),
+      max(0, min(1, ccc + z*se)))
+  }
+
+  .vc_message <- function(ans, label, nm, nt, conf_level, digits = 4, use_message = TRUE) {
+    fmt <- function(x) if (is.na(x)) "NA" else formatC(x, format = "f", digits = digits)
+    out <- c(
+      sprintf("---- matrixCorr::ccc_lmm_reml — variance-components (%s) ----", label),
+      sprintf("Design: methods nm = %d, times nt = %d", nm, nt),
+      "Estimates:",
+      sprintf("  sigma_A^2 (subject)          : %s", fmt(num_or_na(ans[["sigma2_subject"]]))),
+      sprintf("  sigma_A×M^2 (subject×method) : %s", fmt(num_or_na(ans[["sigma2_subject_method"]]))),
+      sprintf("  sigma_A×T^2 (subject×time)   : %s", fmt(num_or_na(ans[["sigma2_subject_time"]]))),
+      sprintf("  sigma_E^2 (error)            : %s", fmt(num_or_na(ans[["sigma2_error"]]))),
+      sprintf("  S_B (fixed-effect dispersion): %s", fmt(num_or_na(ans[["SB"]]))),
+      "--------------------------------------------------------------------------"
+    )
+
+    if (use_message) message(paste(out, collapse = "\n")) else cat(paste(out, collapse = "\n"), "\n")
+  }
+
+  # Definitions
 
   df <- as.data.frame(data)
   df[[ry]]   <- as.numeric(df[[ry]])
@@ -490,21 +617,31 @@ ccc_lmm_reml <- function(data, ry, rind,
       }
     )
 
+    if (isTRUE(verbose)) {
+      .vc_message(ans, label = "Overall",
+                  nm = Laux$nm, nt = Laux$nt,
+                  conf_level = conf_level, digits = digits, use_message = use_message)
+    }
+
     lab <- "Overall"
     est_mat <- matrix(unname(ans$ccc), 1, 1, dimnames = list(lab, lab))
 
     if (isTRUE(ci)) {
+      # try to use C++ lwr/upr; if absent, fall back to se_ccc
+      lwr_cpp <- num_or_na(ans[["lwr"]])
+      upr_cpp <- num_or_na(ans[["upr"]])
+      if (is.na(lwr_cpp) || is.na(upr_cpp)) {
+        se_cpp <- num_or_na(ans[["se_ccc"]])
+        ci2 <- compute_ci_from_se(num_or_na(ans[["ccc"]]), se_cpp, conf_level)
+        lwr_cpp <- ci2[1]; upr_cpp <- ci2[2]
+      }
+
       out <- list(
         est    = est_mat,
-        lwr.ci = matrix(if (!is.null(ans$lwr)) {
-          unname(ans$lwr)
-        } else NA_real_, 1, 1, dimnames = list(lab, lab)),
-        upr.ci = matrix(if (!is.null(ans$upr)) {
-          unname(ans$upr)
-        } else NA_real_, 1, 1, dimnames = list(lab, lab))
+        lwr.ci = matrix(lwr_cpp, 1, 1, dimnames = dimnames(est_mat)),
+        upr.ci = matrix(upr_cpp, 1, 1, dimnames = dimnames(est_mat))
       )
-      attr(out, "method")     <-
-        "Variance Components REML"
+      attr(out, "method")     <- "Variance Components REML"
       attr(out, "description")<- "Lin's CCC from random-effects LMM"
       attr(out, "package")    <- "matrixCorr"
       attr(out, "conf.level") <- conf_level
@@ -530,10 +667,8 @@ ccc_lmm_reml <- function(data, ry, rind,
 
   est_mat <- matrix(1,  Lm, Lm, dimnames = list(method_levels, method_levels))
   if (isTRUE(ci)) {
-    lwr_mat <- matrix(NA_real_, Lm, Lm,
-                      dimnames = list(method_levels, method_levels))
-    upr_mat <- matrix(NA_real_, Lm, Lm,
-                      dimnames = list(method_levels, method_levels))
+    lwr_mat <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
+    upr_mat <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
   }
 
   for (i in 1:(Lm - 1L)) {
@@ -546,16 +681,11 @@ ccc_lmm_reml <- function(data, ry, rind,
       Xp   <- model.matrix(fml, data = sub)
 
       Laux <- build_L_Dm(df_sub = sub, fml_sub = fml,
-                           rmet = rmet, rtime = rtime,
-                           Dmat_global = Dmat, has_interaction = interaction)
+                         rmet = rmet, rtime = rtime,
+                         Dmat_global = Dmat, has_interaction = interaction)
 
-      method_int <- if (nlevels(sub[[rmet]])  >= 2L) {
-        as.integer(sub[[rmet]])
-      } else integer(0)
-      time_int   <-
-        if (!is.null(rtime) && nlevels(sub[[rtime]]) >= 2L) {
-          as.integer(sub[[rtime]])
-        } else integer(0)
+      method_int <- if (nlevels(sub[[rmet]])  >= 2L) as.integer(sub[[rmet]]) else integer(0)
+      time_int   <- if (!is.null(rtime) && nlevels(sub[[rtime]]) >= 2L) as.integer(sub[[rtime]]) else integer(0)
 
       ans <- tryCatch(
         ccc_vc_cpp(
@@ -577,16 +707,27 @@ ccc_lmm_reml <- function(data, ry, rind,
         }
       )
 
+      if (isTRUE(verbose) && !is.null(ans)) {
+        .vc_message(ans, label = sprintf("Pair: %s vs %s", m1, m2),
+                    nm = Laux$nm, nt = Laux$nt,
+                    conf_level = conf_level, digits = digits,
+                    use_message = use_message)
+      }
+
       val <- if (is.null(ans)) NA_real_ else unname(ans$ccc)
       est_mat[i, j] <- est_mat[j, i] <- val
 
       if (isTRUE(ci)) {
-        lwr_mat[i, j] <-
-          lwr_mat[j, i] <-
-          if (!is.null(ans) && !is.null(ans$lwr)) unname(ans$lwr) else NA_real_
-        upr_mat[i, j] <-
-          upr_mat[j, i] <-
-          if (!is.null(ans) && !is.null(ans$upr)) unname(ans$upr) else NA_real_
+        # prefer C++ lwr/upr; else compute from se_ccc
+        lwr_cpp <- num_or_na(if (!is.null(ans)) ans[["lwr"]] else NA_real_)
+        upr_cpp <- num_or_na(if (!is.null(ans)) ans[["upr"]] else NA_real_)
+        if (is.na(lwr_cpp) || is.na(upr_cpp)) {
+          se_cpp <- num_or_na(if (!is.null(ans)) ans[["se_ccc"]] else NA_real_)
+          ci2 <- compute_ci_from_se(num_or_na(val), se_cpp, conf_level)
+          lwr_cpp <- ci2[1]; upr_cpp <- ci2[2]
+        }
+        lwr_mat[i, j] <- lwr_mat[j, i] <- lwr_cpp
+        upr_mat[i, j] <- upr_mat[j, i] <- upr_cpp
       }
     }
   }
@@ -596,21 +737,17 @@ ccc_lmm_reml <- function(data, ry, rind,
     diag(lwr_mat) <- NA_real_
     diag(upr_mat) <- NA_real_
     out <- list(est = est_mat, lwr.ci = lwr_mat, upr.ci = upr_mat)
-    attr(out, "method")     <-
-      "Variance Components REML - pairwise"
-    attr(out, "description")<-
-      "Lin's CCC per method pair from random-effects LMM"
-    attr(out, "package")    <- "matrixCorr"
-    attr(out, "conf.level") <- conf_level
+    attr(out, "method")      <- "Variance Components REML - pairwise"
+    attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
+    attr(out, "package")     <- "matrixCorr"
+    attr(out, "conf.level")  <- conf_level
     class(out) <- c("ccc", "ccc_ci")
     return(out)
   } else {
     est <- est_mat
-    attr(est, "method")     <-
-      "Variance Components REML - pairwise"
-    attr(est, "description")<-
-      "Lin's CCC per method pair from random-effects LMM"
-    attr(est, "package")    <- "matrixCorr"
+    attr(est, "method")      <- "Variance Components REML - pairwise"
+    attr(est, "description") <- "Lin's CCC per method pair from random-effects LMM"
+    attr(est, "package")     <- "matrixCorr"
     class(est) <- c("ccc", "matrix")
     return(est)
   }
@@ -830,7 +967,7 @@ build_L_Dm <- function(df_sub, fml_sub, rmet, rtime, Dmat_global,
   if (nt_eff == 0L) {
     Dsub <- matrix(1, 1, 1)
   } else if (is.null(Dmat_global)) {
-    Dsub <- diag(nt_levels)
+    Dsub <- diag(nt_eff)
   } else {
     lev_all <- levels(df_sub[[rtime]])
     idx_t <- match(levels(df_sub[[rtime]]), lev_all)

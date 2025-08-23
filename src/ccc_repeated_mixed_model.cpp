@@ -156,7 +156,7 @@ static inline void accum_Ut_vec(const std::vector<int>& rows_i,
                                 const std::vector<int>& tim_i,
                                 int nm, int nt,
                                 Accessor v, vec& Utv) {
-  const int r = Utv.n_rows;
+  //const int r = Utv.n_rows;
   Utv.zeros();
 
   // intercept
@@ -166,23 +166,30 @@ static inline void accum_Ut_vec(const std::vector<int>& rows_i,
 
   // method sums
   if (nm > 0) {
-    for (int l=0; l<nm; ++l) {
+    for (int l = 0; l < nm; ++l) {
       double sm = 0.0;
-      for (size_t k=0; k<rows_i.size(); ++k)
+      for (size_t k = 0; k < rows_i.size(); ++k) {
         if (met_i[k] == l) sm += v(rows_i[k]);
-        Utv[1+l] = sm;
+      }
+      Utv[1 + l] = sm;
     }
   }
   // time sums
   if (nt > 0) {
-    for (int t=0; t<nt; ++t) {
+    for (int t = 0; t < nt; ++t) {
       double st = 0.0;
-      for (size_t k=0; k<rows_i.size(); ++k)
+      for (size_t k = 0; k < rows_i.size(); ++k) {
         if (tim_i[k] == t) st += v(rows_i[k]);
-        int jt = 1 + (nm>0?nm:0) + t;
-        Utv[jt] = st;
+      }
+      int jt = 1 + (nm > 0 ? nm : 0) + t;
+      Utv[jt] = st;
     }
   }
+
+  const int r_expected = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
+  if ((int)Utv.n_rows != r_expected)
+    Rcpp::stop("accum_Ut_vec: Utv length mismatch (got %d, expected %d)",
+               (int)Utv.n_rows, r_expected);
 }
 
 //---------------- Ua builder (fixed) ----------------//
@@ -252,6 +259,14 @@ Rcpp::List ccc_vc_cpp(
   vec Ut_y(r);
   mat XtViX(p,p,fill::zeros);
   vec XtViy(p, fill::zeros);
+
+  // for delta-method (filled in the last EM pass)
+  std::vector<double> sa_term(m, 0.0);
+  std::vector<double> sab_term(m, 0.0);
+  std::vector<double> sag_term(m, 0.0);
+  std::vector<double> se_term(m, 0.0);
+  std::vector<int>    n_per_subj(m, 0);
+
 
   for (int iter=0; iter<max_iter; ++iter) {
     XtViX.zeros(); XtViy.zeros();
@@ -381,6 +396,36 @@ Rcpp::List ccc_vc_cpp(
       int pos = 1;
       if (nm>0) { for (int l=0;l<nm;++l) sab_acc += b_i[pos+l]*b_i[pos+l] + Minv(pos+l, pos+l); pos += nm; }
       if (nt>0) { for (int t=0;t<nt;++t)  sag_acc += b_i[pos+t]*b_i[pos+t] + Minv(pos+t, pos+t); }
+      // ---- store per-subject contributions for the final (converged) pass ----
+      n_per_subj[i] = n_i;
+
+      // contributions entering the VC means
+      sa_term[i] = b_i[0]*b_i[0] + Minv(0,0);
+
+      int pos_cov = 1;
+      if (nm > 0) {
+        double acc_m = 0.0;
+        for (int l = 0; l < nm; ++l)
+          acc_m += b_i[pos_cov + l]*b_i[pos_cov + l] + Minv(pos_cov + l, pos_cov + l);
+        sab_term[i] = acc_m / (double)nm;
+        pos_cov += nm;
+      } else {
+        sab_term[i] = 0.0;
+      }
+
+      if (nt > 0) {
+        double acc_t = 0.0;
+        for (int t = 0; t < nt; ++t)
+          acc_t += b_i[pos_cov + t]*b_i[pos_cov + t] + Minv(pos_cov + t, pos_cov + t);
+        sag_term[i] = acc_t / (double)nt;
+      } else {
+        sag_term[i] = 0.0;
+      }
+
+      // per-subject residual mean square s_i = S_i / n_i,
+      // where S_i = ||r_i - U b_i||^2 + tr(M^{-1} U^T U)
+      double Si = ss + trace(Minv * UtU);
+      se_term[i] = Si / (double)n_i;
     }
 
     double sa_new  = std::max(sa_acc  / (double)m, eps);
@@ -465,6 +510,75 @@ Rcpp::List ccc_vc_cpp(
 
   const double ccc = (sa + sag) / (sa + sab + sag + SB + se);
 
+  // ---------------- delta-method SE & CI for CCC ---------------- //
+  double Nnum = sa + sag;
+  double Dden = sa + sab + sag + SB + se;
+  if (Dden < 1e-14) Dden = 1e-14;
+
+  // gradient wrt (sa, sab, sag, se, SB)
+  const double d_sa  = (sab + SB + se) / (Dden * Dden);
+  const double d_sab = -Nnum / (Dden * Dden);
+  const double d_sag = (sab + SB + se) / (Dden * Dden);
+  const double d_se  = -Nnum / (Dden * Dden);
+  const double d_SB  = -Nnum / (Dden * Dden);
+
+  // sample covariance of per-subject terms (sa, sab, sag)
+  arma::mat Z;
+  if (nm > 0 && nt > 0) {
+    Z.set_size(m, 3);
+    for (int i = 0; i < m; ++i) { Z(i,0)=sa_term[i]; Z(i,1)=sab_term[i]; Z(i,2)=sag_term[i]; }
+  } else if (nm > 0 && nt == 0) {
+    Z.set_size(m, 2);
+    for (int i = 0; i < m; ++i) { Z(i,0)=sa_term[i]; Z(i,1)=sab_term[i]; }
+  } else if (nm == 0 && nt > 0) {
+    Z.set_size(m, 2);
+    for (int i = 0; i < m; ++i) { Z(i,0)=sa_term[i]; Z(i,1)=sag_term[i]; }
+  } else {
+    Z.set_size(m, 1);
+    for (int i = 0; i < m; ++i) { Z(i,0)=sa_term[i]; }
+  }
+  arma::mat Sigma_vc = arma::cov(Z);                       // sample cov across subjects
+  if (Z.n_cols == 1u) Sigma_vc(0,0) = sample_var(Z.col(0)); // ensure 1x1 case
+  Sigma_vc /= std::max(1.0, (double)m);                    // cov of the mean (divide by m)
+
+  // variance of sigma_E^2 via weighted mean of per-subject s_i
+  arma::vec se_vec(m);
+  double n_total = 0.0;
+  for (int i = 0; i < m; ++i) n_total += (double)n_per_subj[i];
+  double w2sum = 0.0;
+  for (int i = 0; i < m; ++i) {
+    se_vec[i] = se_term[i];
+    const double wi = ((double)n_per_subj[i]) / std::max(1.0, n_total);
+    w2sum += wi * wi;
+  }
+  double var_sehat = sample_var(se_vec) * w2sum;
+
+  // assemble variance of CCC: g^T Σ g
+  double var_ccc = 0.0;
+  if (nm > 0 && nt > 0) {
+    arma::vec g3(3); g3[0]=d_sa; g3[1]=d_sab; g3[2]=d_sag;
+    var_ccc += arma::as_scalar(g3.t() * Sigma_vc * g3);
+  } else if (nm > 0 && nt == 0) {
+    arma::vec g2(2); g2[0]=d_sa; g2[1]=d_sab;
+    var_ccc += arma::as_scalar(g2.t() * Sigma_vc * g2);
+  } else if (nm == 0 && nt > 0) {
+    arma::vec g2(2); g2[0]=d_sa; g2[1]=d_sag;
+    var_ccc += arma::as_scalar(g2.t() * Sigma_vc * g2);
+  } else {
+    var_ccc += d_sa * d_sa * Sigma_vc(0,0);
+  }
+  var_ccc += d_se * d_se * var_sehat;  // add sigma_E^2 piece
+  var_ccc += d_SB * d_SB * varSB;      // add SB piece
+
+  double se_ccc = std::sqrt(std::max(0.0, var_ccc));
+
+  // normal-theory CI
+  const double alpha = 1.0 - std::min(std::max(conf_level, 0.0), 1.0);
+  const double z = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0);
+  double lwr = std::min(1.0, std::max(0.0, ccc - z * se_ccc));
+  double upr = std::min(1.0, std::max(0.0, ccc + z * se_ccc));
+
+
   return Rcpp::List::create(
     _["sigma2_subject"]        = sa,
     _["sigma2_subject_method"] = sab,
@@ -474,9 +588,9 @@ Rcpp::List ccc_vc_cpp(
     _["beta"]                  = beta,
     _["varFix"]                = VarFix,
     _["ccc"]                   = ccc,
-    _["lwr"]                   = R_NilValue,
-    _["upr"]                   = R_NilValue,
-    _["se_ccc"]                = R_NilValue,
+    _["lwr"]                   = lwr,
+    _["upr"]                   = upr,
+    _["se_ccc"]                = se_ccc,
     _["conf_level"]            = conf_level
   );
 }

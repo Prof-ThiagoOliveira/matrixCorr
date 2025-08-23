@@ -15,7 +15,10 @@ ccc_lmm_reml(
   tol = 1e-06,
   Dmat = NULL,
   ci = FALSE,
-  conf_level = 0.95
+  conf_level = 0.95,
+  verbose = FALSE,
+  digits = 4,
+  use_message = TRUE
 )
 }
 \arguments{
@@ -49,6 +52,18 @@ Defaults to the identity.}
 
 \item{conf_level}{Numeric in \eqn{(0,1)}. Confidence level when
 \code{ci=TRUE} (default \code{0.95}).}
+
+\item{verbose}{Logical. If \code{TRUE}, prints a structured summary of the
+fitted variance components and \eqn{S_B} for each fit (overall or
+pairwise). Default \code{FALSE}.}
+
+\item{digits}{Integer (\(\ge 0\)). Number of decimal places to use in the
+printed summary when \code{verbose=TRUE}. Default \code{4}.}
+
+\item{use_message}{Logical. When \code{verbose=TRUE}, choose the printing
+mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
+easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
+uses \code{cat()} to \code{stdout}. Default \code{TRUE}.}
 }
 \value{
 \itemize{
@@ -162,7 +177,92 @@ There are special cases when there is no method factor (or a single level),
 then \eqn{S_B=0} and \eqn{\sigma_{A\times M}^2=0}; if there is no
 time factor (or a single level), then \eqn{\sigma_{A\times T}^2=0}.
 
-\strong{CIs / SEs.}
+\strong{CIs / SEs (delta method for CCC).}
+Let
+\deqn{ \theta \;=\; \big(\sigma_A^2,\ \sigma_{A\times M}^2,\
+\sigma_{A\times T}^2,\ \sigma_E^2,\ S_B\big)^\top, }
+and write the concordance as
+\deqn{ \mathrm{CCC}(\theta) \;=\; \frac{N}{D}
+      \;=\; \frac{\sigma_A^2 + \sigma_{A\times T}^2}
+                   {\sigma_A^2 + \sigma_{A\times M}^2 +
+                   \sigma_{A\times T}^2 + S_B + \sigma_E^2}. }
+
+A first-order (large-sample) standard error follows from the delta method:
+\deqn{ \mathrm{Var}\{\widehat{\mathrm{CCC}}\}
+      \;\approx\; \nabla \mathrm{CCC}(\hat\theta)^\top\,
+                  \mathrm{Var}(\hat\theta)\,
+                  \nabla \mathrm{CCC}(\hat\theta), }
+with gradient components (using \eqn{N} and \eqn{D} as above)
+\deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_A^2}
+      \;=\; \frac{D - N}{D^2}
+      \;=\; \frac{\sigma_{A\times M}^2 + S_B + \sigma_E^2}{D^2}, }
+\deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times M}^2}
+      \;=\; -\,\frac{N}{D^2}, \qquad
+       \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times T}^2}
+      \;=\; \frac{D - N}{D^2}, }
+\deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_E^2}
+      \;=\; -\,\frac{N}{D^2}, \qquad
+       \frac{\partial\,\mathrm{CCC}}{\partial S_B}
+      \;=\; -\,\frac{N}{D^2}. }
+
+\emph{Estimating \eqn{\mathrm{Var}(\hat\theta)}.}
+The EM updates write each variance component as an average of per-subject
+quantities. For subject \eqn{i},
+\deqn{ t_{A,i} \;=\; b_{i,0}^2 + (M_i^{-1})_{00},\qquad
+       t_{M,i} \;=\; \frac{1}{nm}\sum_{\ell=1}^{nm}
+                       \Big(b_{i,\ell}^2 + (M_i^{-1})_{\ell\ell}\Big), }
+\deqn{ t_{T,i} \;=\; \frac{1}{nt}\sum_{j=1}^{nt}
+                       \Big(b_{i,j}^2 + (M_i^{-1})_{jj}\Big),\qquad
+       s_i \;=\; \frac{\|r_i - U_i b_i\|^2 +
+       \mathrm{tr}(M_i^{-1}U_i^\top U_i)}{n_i}, }
+where \eqn{b_i = M_i^{-1}(U_i^\top r_i/\sigma_E^2)} and
+\eqn{M_i = G^{-1} + U_i^\top U_i/\sigma_E^2}.
+With \eqn{m} subjects, we form the empirical covariance of the stacked
+subject vectors and scale by \eqn{m} to approximate the covariance of the
+means:
+\deqn{ \widehat{\mathrm{Cov}}\!\left(
+      \begin{bmatrix} t_{A,\cdot} \\ t_{M,\cdot} \\ t_{T,\cdot} \end{bmatrix}
+      \right)
+      \;\approx\; \frac{1}{m}\,
+       \mathrm{Cov}_i\!\left(
+      \begin{bmatrix} t_{A,i} \\ t_{M,i} \\ t_{T,i} \end{bmatrix}\right). }
+(Drop rows/columns as needed when \code{nm==0} or \code{nt==0}.)
+
+The residual variance estimator is a weighted mean
+\eqn{\hat\sigma_E^2=\sum_i w_i s_i} with \eqn{w_i=n_i/n}. Its variance is
+approximated by the variance of a weighted mean of independent terms,
+\deqn{ \widehat{\mathrm{Var}}(\hat\sigma_E^2)
+      \;\approx\; \Big(\sum_i w_i^2\Big)\,\widehat{\mathrm{Var}}(s_i), }
+where \eqn{\widehat{\mathrm{Var}}(s_i)} is the sample variance across
+subjects. The method-dispersion term uses the quadratic-form delta already
+computed for \eqn{S_B}:
+\deqn{ \widehat{\mathrm{Var}}(S_B)
+      \;=\; \frac{2\,\mathrm{tr}\!\big((A_{\!fix}\,\mathrm{Var}(\hat\beta))^2\big)
+             \;+\; 4\,\hat\beta^\top A_{\!fix}\,\mathrm{Var}(\hat\beta)\,
+             A_{\!fix}\,\hat\beta}
+                   {\big[nm\,(nm-1)\,\max(nt,1)\big]^2}, }
+with \eqn{A_{\!fix}=L\,\mathrm{Dm}\,L^\top}.
+
+\emph{Putting it together.} Assemble
+\eqn{\widehat{\mathrm{Var}}(\hat\theta)} by combining the
+\eqn{(\sigma_A^2,\sigma_{A\times M}^2,\sigma_{A\times T}^2)} covariance
+block from the subject-level empirical covariance, add the
+\eqn{\widehat{\mathrm{Var}}(\hat\sigma_E^2)} and
+\eqn{\widehat{\mathrm{Var}}(S_B)} terms on the diagonal,
+and ignore cross-covariances across these blocks (a standard large-sample
+simplification). Then
+\deqn{ \widehat{\mathrm{se}}\{\widehat{\mathrm{CCC}}\}
+      \;=\; \sqrt{\,\nabla \mathrm{CCC}(\hat\theta)^\top\,
+                    \widehat{\mathrm{Var}}(\hat\theta)\,
+                    \nabla \mathrm{CCC}(\hat\theta)\,}. }
+
+A two-sided \eqn{(1-\alpha)} normal CI is
+\deqn{ \widehat{\mathrm{CCC}} \;\pm\; z_{1-\alpha/2}\,
+      \widehat{\mathrm{se}}\{\widehat{\mathrm{CCC}}\}, }
+truncated to \eqn{[0,1]} in the output for convenience. When \eqn{S_B} is
+truncated at 0 or samples are very small/imbalanced, the normal CI can be
+mildly anti-conservative near the boundary; a logit transform for CCC or a
+subject-level (cluster) bootstrap can be used for sensitivity analysis.
 }
 \section{Notes on stability and performance}{
 
