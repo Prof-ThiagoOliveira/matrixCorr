@@ -328,6 +328,16 @@ ccc_lmm_reml(dat3, "y", "id", rmet = "method")
 ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
 
 }
+\references{
+Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.
+\emph{Biometrics}, 45: 255-268.
+
+Lin L (2000). A note on the concordance correlation coefficient.
+\emph{Biometrics}, 56: 324-325.
+
+Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
+a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519-539.
+}
 \seealso{
 \code{\link{build_L_Dm_cpp}} for constructing \eqn{L} and
 \eqn{\mathrm{D_m}}; \code{\link{ccc_pairwise_u_stat}} for a U-statistic
