@@ -568,7 +568,7 @@ ccc_lmm_reml <- function(data, ry, rind,
           max_iter = max_iter, tol = tol,
           conf_level = conf_level,
           Lr   = if (is.null(Laux$L))    NULL else unname(Laux$L),
-          Dmr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm)
+          auxDr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm)
         ),
         error = function(e) {
           warning(sprintf("ccc_vc_cpp failed for pair (%s, %s): %s",

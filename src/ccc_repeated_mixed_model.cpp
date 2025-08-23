@@ -5,7 +5,7 @@
 using namespace Rcpp;
 using namespace arma;
 
-//---------------- helpers: stable solve / inverse ----------------//
+//---------------- helpers ----------------//
 static inline mat solve_sympd_safe(const mat& A, const mat& B) {
   mat Z;
   // first try: symmetric PD solve (fast path)
@@ -41,6 +41,17 @@ static inline bool inv_sympd_safe(mat& out, const mat& A) {
   out = pinv(A);
   return out.is_finite();
 }
+
+// unbiased sample variance (n-1 in denom); returns 0 if <2
+static inline double sample_var(const arma::vec& v) {
+  const arma::uword n = v.n_elem;
+  if (n < 2u) return 0.0;
+  const double mu = arma::mean(v);
+  double acc = 0.0;
+  for (arma::uword i=0;i<n;++i) { double d = v[i]-mu; acc += d*d; }
+  return acc / (double)(n-1);
+}
+
 
 //---------------- reindex subjects ----------------//
 static inline void reindex_subject(const IntegerVector& subject,

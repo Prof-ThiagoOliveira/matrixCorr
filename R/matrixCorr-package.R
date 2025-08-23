@@ -12,5 +12,5 @@
 # Silence NOTES about NSE vars in ggplot2 etc.
 utils::globalVariables(c(
   "Var1", "Var2", "Tau", "Rho", "Pearson", "CCC",
-  "label", "PCor", "r", "dCor", "bicor"
+  "label", "PCor", "r", "dCor", "bicor", "ci_label"
 ))
