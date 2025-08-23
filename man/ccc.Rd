@@ -3,12 +3,24 @@
 \name{ccc}
 \alias{ccc}
 \alias{print.ccc}
+\alias{summary.ccc}
+\alias{print.summary.ccc}
 \alias{plot.ccc}
 \title{Pairwise Lin's concordance correlation coefficient}
 \usage{
 ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
 
 \method{print}{ccc}(x, digits = 4, ci_digits = 2, show_ci = c("auto", "yes", "no"), ...)
+
+\method{summary}{ccc}(
+  object,
+  digits = 4,
+  ci_digits = 2,
+  show_ci = c("auto", "yes", "no"),
+  ...
+)
+
+\method{print}{summary.ccc}(x, ...)
 
 \method{plot}{ccc}(
   x,
@@ -37,14 +49,16 @@ Non-numeric columns will be ignored.}
 
 \item{ci_digits}{Integer; decimals for CI bounds (default 2).}
 
-\item{show_ci}{One of "auto", "yes", "no".
+\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}.
 \itemize{
-\item "auto" (default): show CI columns only if the object has non-NA CIs.
-\item "yes": always show CI columns (may contain NA).
-\item "no": never show CI columns.
+\item \code{"auto"} (default): include CI columns only if the object has non-NA CIs.
+\item \code{"yes"}: always include CI columns (may contain NA).
+\item \code{"no"}: never include CI columns.
 }}
 
 \item{...}{Passed to \code{ggplot2::theme()}.}
+
+\item{object}{A \code{"ccc"} or \code{"ccc_ci"} object to summarize.}
 
 \item{title}{Title for the plot.}
 
@@ -67,6 +81,10 @@ A symmetric numeric matrix with class \code{"ccc"} and attributes:
 If \code{ci = FALSE}, returns matrix of class \code{"ccc"}.
 If \code{ci = TRUE}, returns a list with elements: \code{est},
 \code{lwr.ci}, \code{upr.ci}.
+
+For \code{summary.ccc}, a data frame with columns
+\code{method1}, \code{method2}, \code{estimate} and (optionally)
+\code{lwr}, \code{upr}.
 }
 \description{
 Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)
@@ -106,6 +124,7 @@ set.seed(123)
 mat_mvn <- MASS::mvrnorm(n = 100, mu = mu, Sigma = Sigma)
 result_mvn <- ccc(mat_mvn)
 print(result_mvn)
+summary(result_mvn)
 plot(result_mvn)
 
 }

@@ -55,6 +55,7 @@
 #' mat_mvn <- MASS::mvrnorm(n = 100, mu = mu, Sigma = Sigma)
 #' result_mvn <- ccc(mat_mvn)
 #' print(result_mvn)
+#' summary(result_mvn)
 #' plot(result_mvn)
 #'
 #' @importFrom stats var cov cor
@@ -100,6 +101,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
     attr(ccc_lin, "method") <- "Lin's concordance"
     attr(ccc_lin, "description") <- "Pairwise Lin's concordance correlation matrix"
     attr(ccc_lin, "package") <- "matrixCorr"
+    attr(ccc_lin, "conf.level")  <- conf_level
     class(ccc_lin) <- c("ccc", "matrix")   # matrix printing still available
   }
 
@@ -111,10 +113,13 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 #' @method print ccc
 #' @param digits Integer; decimals for CCC estimates (default 4).
 #' @param ci_digits Integer; decimals for CI bounds (default 2).
-#' @param show_ci One of "auto", "yes", "no".
-#'   * "auto" (default): show CI columns only if the object has non-NA CIs.
-#'   * "yes": always show CI columns (may contain NA).
-#'   * "no": never show CI columns.
+#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}.
+#'   \itemize{
+#'     \item \code{"auto"} (default): include CI columns only if the object has non-NA CIs.
+#'     \item \code{"yes"}: always include CI columns (may contain NA).
+#'     \item \code{"no"}: never include CI columns.
+#'   }
+#' @param ... Passed to \code{\link[base]{print.data.frame}}.
 #' @export
 print.ccc <- function(x,
                       digits = 4,
@@ -200,6 +205,140 @@ print.ccc <- function(x,
   df <- do.call(rbind.data.frame, rows)
   rownames(df) <- NULL
   print(df, row.names = FALSE, right = FALSE, ...)
+  invisible(x)
+}
+
+#' @rdname ccc
+#' @method summary ccc
+#' @param object A \code{"ccc"} or \code{"ccc_ci"} object to summarize.
+#' @param digits Integer; decimals for CCC estimates (default 4).
+#' @param ci_digits Integer; decimals for CI bounds (default 2).
+#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}.
+#'   \itemize{
+#'     \item \code{"auto"} (default): include CI columns only if the object has non-NA CIs.
+#'     \item \code{"yes"}: always include CI columns (may contain NA).
+#'     \item \code{"no"}: never include CI columns.
+#'   }
+#' @param ... Ignored.
+#' @return For \code{summary.ccc}, a data frame with columns
+#'   \code{method1}, \code{method2}, \code{estimate} and (optionally)
+#'   \code{lwr}, \code{upr}.
+#' @export
+summary.ccc <- function(object,
+                        digits = 4,
+                        ci_digits = 2,
+                        show_ci = c("auto", "yes", "no"),
+                        ...) {
+  show_ci <- match.arg(show_ci)
+
+  # detect CI container
+  is_ci_obj <- inherits(object, "ccc_ci") ||
+    (is.list(object) && all(c("est", "lwr.ci", "upr.ci") %in% names(object)))
+
+  if (is_ci_obj) {
+    est <- as.matrix(object$est)
+    lwr <- as.matrix(object$lwr.ci)
+    upr <- as.matrix(object$upr.ci)
+    conf_level <- suppressWarnings(as.numeric(attr(object, "conf.level")))
+  } else if (is.matrix(object)) {
+    est <- as.matrix(object)
+    lwr <- matrix(NA_real_, nrow(est), ncol(est), dimnames = dimnames(est))
+    upr <- lwr
+    conf_level <- NA_real_
+  } else {
+    stop("Invalid object format for class 'ccc'.")
+  }
+
+  # labels (fallback if missing)
+  rn <- rownames(est); cn <- colnames(est)
+  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
+  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
+
+  # decide whether to include CI columns
+  has_any_ci <- any(is.finite(lwr) | is.finite(upr))
+  include_ci <- switch(show_ci,
+                       auto = has_any_ci,
+                       yes  = TRUE,
+                       no   = FALSE)
+
+  # 1x1 case
+  if (nrow(est) == 1L && ncol(est) == 1L) {
+    df <- data.frame(
+      method1  = rn[1],
+      method2  = cn[1],
+      estimate = round(est[1, 1], digits),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    if (include_ci) {
+      df$lwr <- if (is.na(lwr[1,1])) NA_real_ else round(lwr[1,1], ci_digits)
+      df$upr <- if (is.na(upr[1,1])) NA_real_ else round(upr[1,1], ci_digits)
+    }
+  } else {
+    # long table over i<j
+    rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L); k <- 0L
+    for (i in seq_len(nrow(est) - 1L)) {
+      for (j in (i + 1L):ncol(est)) {
+        k <- k + 1L
+        rec <- list(
+          method1  = rn[i],
+          method2  = cn[j],
+          estimate = round(est[i, j], digits)
+        )
+        if (include_ci) {
+          rec$lwr <- if (is.na(lwr[i, j])) NA_real_ else round(lwr[i, j], ci_digits)
+          rec$upr <- if (is.na(upr[i, j])) NA_real_ else round(upr[i, j], ci_digits)
+        }
+        rows[[k]] <- rec
+      }
+    }
+    df <- do.call(rbind.data.frame, rows)
+    rownames(df) <- NULL
+    # ensure proper column types
+    num_cols <- c("estimate", if (include_ci) c("lwr","upr"))
+    for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
+  }
+
+  # carry attrs for printing
+  attr(df, "conf.level") <- if (is.finite(conf_level)) conf_level else NA_real_
+  attr(df, "has_ci")     <- isTRUE(include_ci)
+  attr(df, "digits")     <- digits
+  attr(df, "ci_digits")  <- ci_digits
+
+  class(df) <- c("summary.ccc", "data.frame")
+  df
+}
+
+#' @rdname ccc
+#' @method print summary.ccc
+#' @param ... Passed to \code{\link[base]{print.data.frame}}.
+#' @export
+print.summary.ccc <- function(x, ...) {
+  has_ci <- isTRUE(attr(x, "has_ci")) ||
+    (all(c("lwr","upr") %in% names(x)))
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+  if (!is.finite(cl)) cl <- NA_real_
+
+  if (has_ci && is.finite(cl)) {
+    cat(sprintf("Concordance pairs (Lin's CCC, %g%% CI)\n\n", 100 * cl))
+  } else {
+    cat("Concordance pairs (Lin's CCC)\n\n")
+  }
+
+  # format for display using stored preferences
+  digits    <- attr(x, "digits");    if (!is.numeric(digits))    digits <- 4
+  ci_digits <- attr(x, "ci_digits"); if (!is.numeric(ci_digits)) ci_digits <- 2
+
+  df <- x
+  if (is.numeric(df$estimate)) {
+    df$estimate <- formatC(df$estimate, format = "f", digits = digits)
+  }
+  if (has_ci) {
+    if (is.numeric(df$lwr)) df$lwr <- ifelse(is.na(df$lwr), NA, formatC(df$lwr, format = "f", digits = ci_digits))
+    if (is.numeric(df$upr)) df$upr <- ifelse(is.na(df$upr), NA, formatC(df$upr, format = "f", digits = ci_digits))
+  }
+
+  print.data.frame(df, row.names = FALSE, right = FALSE, ...)
   invisible(x)
 }
 
