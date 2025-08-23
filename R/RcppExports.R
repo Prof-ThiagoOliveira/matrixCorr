@@ -21,6 +21,22 @@ bicor_matrix_weighted_pairwise_cpp <- function(X, w, c_const = 9.0, maxPOutliers
     .Call(`_matrixCorr_bicor_matrix_weighted_pairwise_cpp`, X, w, c_const, maxPOutliers, pearson_fallback, min_n, n_threads)
 }
 
+cccUst_rcpp <- function(y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl) {
+    .Call(`_matrixCorr_cccUst_rcpp`, y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl)
+}
+
+set_omp_threads <- function(n) {
+    invisible(.Call(`_matrixCorr_set_omp_threads`, n))
+}
+
+get_omp_threads <- function() {
+    .Call(`_matrixCorr_get_omp_threads`)
+}
+
+ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, Lr = NULL, auxDr = NULL) {
+    .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr)
+}
+
 ccc_cpp <- function(X) {
     .Call(`_matrixCorr_ccc_cpp`, X)
 }

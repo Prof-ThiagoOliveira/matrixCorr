@@ -145,49 +145,82 @@ print.ccc <- function(x, digits = 4, ...) {
 
 #' @rdname ccc
 #' @method plot ccc
-#' @param x An object of class \code{"ccc"} (either a matrix or a list with
-#' confidence intervals).
+#' @param x An object of class \code{"ccc"} (either a matrix or a list with CIs).
 #' @param title Title for the plot.
 #' @param low_color Color for low CCC values.
 #' @param high_color Color for high CCC values.
-#' @param mid_color Color for mid CCC values (typically near 0).
-#' @param value_text_size Text size for numbers in the heatmap.
-#' @param ... Additional arguments passed to underlying functions
-#' (like \code{theme} or \code{print}).
+#' @param mid_color Color for mid CCC values.
+#' @param value_text_size Text size for CCC values in the heatmap.
+#' @param ci_text_size Text size for confidence intervals.
+#' @param ... Passed to \code{ggplot2::theme()}.
 #' @export
 plot.ccc <- function(x,
                      title = "Lin's Concordance Correlation Heatmap",
                      low_color = "indianred1",
                      high_color = "steelblue1",
                      mid_color = "white",
-                     value_text_size = 4, ...) {
+                     value_text_size = 4,
+                     ci_text_size = 3,
+                     ...) {
 
-  if (!inherits(x, "ccc")) stop("x must be of class 'ccc'.")
+  if (!inherits(x, "ccc"))
+    stop("x must be of class 'ccc'.")
 
-  # Use estimates if CI list, otherwise the matrix itself
-  mat <- if (is.list(x) && !is.null(x$est)) x$est else unclass(x)
+  # --- Build long data with proper alignment by (Var1, Var2) ---
+  est_mat <- if (is.list(x) && !is.null(x$est)) x$est else unclass(x)
+  df_est  <- as.data.frame(as.table(est_mat))
+  names(df_est) <- c("Var1", "Var2", "CCC")
 
-  df <- as.data.frame(as.table(mat))
-  names(df) <- c("Var1", "Var2", "CCC")
+  if (is.list(x) && !is.null(x$lwr.ci) && !is.null(x$upr.ci)) {
+    df_lwr <- as.data.frame(as.table(x$lwr.ci)); names(df_lwr)[3] <- "lwr"
+    df_upr <- as.data.frame(as.table(x$upr.ci)); names(df_upr)[3] <- "upr"
+    df <- Reduce(function(a, b) merge(a, b, by = c("Var1","Var2"), all = TRUE),
+                 list(df_est, df_lwr, df_upr))
 
-  # Order for a tidy heatmap and precompute labels
-  df$Var1  <- factor(df$Var1, levels = rev(unique(df$Var1)))
+    # Blank CI on the diagonal (show 1.00 but no CI there)
+    diag_idx <- df$Var1 == df$Var2
+    df$lwr[diag_idx] <- NA_real_
+    df$upr[diag_idx] <- NA_real_
+    df$ci_label <- ifelse(is.na(df$lwr) | is.na(df$upr),
+                          NA_character_,
+                          sprintf("(%.2f, %.2f)", df$lwr, df$upr))
+  } else {
+    df <- df_est
+    df$ci_label <- NA_character_
+  }
+
+  # Reverse Y axis for heatmap look, keep X in natural order
+  lev_row <- unique(df_est$Var1)
+  lev_col <- unique(df_est$Var2)
+  df$Var1 <- factor(df$Var1, levels = rev(lev_row))
+  df$Var2 <- factor(df$Var2, levels = lev_col)
+
+  # Main estimate label
   df$label <- sprintf("%.2f", df$CCC)
 
-  ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = CCC)) +
+  # --- Plot ---
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = CCC)) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = label),
-                       size = value_text_size, color = "black") +
+    ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size) +
     ggplot2::scale_fill_gradient2(
       low = low_color, high = high_color, mid = mid_color,
       midpoint = 0, limit = c(-1, 1), name = "CCC"
     ) +
+    ggplot2::coord_fixed() +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
       axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-      panel.grid  = ggplot2::element_blank(),
+      panel.grid = ggplot2::element_blank(),
       ...
     ) +
-    ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
+
+  if (any(!is.na(df$ci_label))) {
+    p <- p + ggplot2::geom_text(
+      ggplot2::aes(label = ci_label, y = as.numeric(Var1) - 0.25),
+      size = ci_text_size, color = "gray30", na.rm = TRUE
+    )
+  }
+
+  p
 }

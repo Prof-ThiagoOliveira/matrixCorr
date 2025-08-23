@@ -90,6 +90,68 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cccUst_rcpp
+List cccUst_rcpp(NumericVector y_vec, IntegerVector met_vec, IntegerVector time_vec, int nmet0, int nmet1, int ntime, int ns, NumericMatrix Dmat, double delta, double cl);
+RcppExport SEXP _matrixCorr_cccUst_rcpp(SEXP y_vecSEXP, SEXP met_vecSEXP, SEXP time_vecSEXP, SEXP nmet0SEXP, SEXP nmet1SEXP, SEXP ntimeSEXP, SEXP nsSEXP, SEXP DmatSEXP, SEXP deltaSEXP, SEXP clSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type y_vec(y_vecSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type met_vec(met_vecSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type time_vec(time_vecSEXP);
+    Rcpp::traits::input_parameter< int >::type nmet0(nmet0SEXP);
+    Rcpp::traits::input_parameter< int >::type nmet1(nmet1SEXP);
+    Rcpp::traits::input_parameter< int >::type ntime(ntimeSEXP);
+    Rcpp::traits::input_parameter< int >::type ns(nsSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Dmat(DmatSEXP);
+    Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
+    Rcpp::traits::input_parameter< double >::type cl(clSEXP);
+    rcpp_result_gen = Rcpp::wrap(cccUst_rcpp(y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl));
+    return rcpp_result_gen;
+END_RCPP
+}
+// set_omp_threads
+void set_omp_threads(const int n);
+RcppExport SEXP _matrixCorr_set_omp_threads(SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const int >::type n(nSEXP);
+    set_omp_threads(n);
+    return R_NilValue;
+END_RCPP
+}
+// get_omp_threads
+int get_omp_threads();
+RcppExport SEXP _matrixCorr_get_omp_threads() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(get_omp_threads());
+    return rcpp_result_gen;
+END_RCPP
+}
+// ccc_vc_cpp
+Rcpp::List ccc_vc_cpp(Rcpp::NumericMatrix Xr, Rcpp::NumericVector yr, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int nm, int nt, int max_iter, double tol, double conf_level, Rcpp::Nullable<Rcpp::NumericMatrix> Lr, Rcpp::Nullable<Rcpp::NumericMatrix> auxDr);
+RcppExport SEXP _matrixCorr_ccc_vc_cpp(SEXP XrSEXP, SEXP yrSEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP nmSEXP, SEXP ntSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP LrSEXP, SEXP auxDrSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Xr(XrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type yr(yrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< int >::type nm(nmSEXP);
+    Rcpp::traits::input_parameter< int >::type nt(ntSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type Lr(LrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type auxDr(auxDrSEXP);
+    rcpp_result_gen = Rcpp::wrap(ccc_vc_cpp(Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ccc_cpp
 arma::mat ccc_cpp(const arma::mat& X);
 RcppExport SEXP _matrixCorr_ccc_cpp(SEXP XSEXP) {
@@ -262,6 +324,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bicor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_pairwise_cpp, 6},
     {"_matrixCorr_bicor_matrix_weighted_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_cpp, 6},
     {"_matrixCorr_bicor_matrix_weighted_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_pairwise_cpp, 7},
+    {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 10},
+    {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
+    {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},
+    {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 12},
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},

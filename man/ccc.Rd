@@ -17,6 +17,7 @@ ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  ci_text_size = 3,
   ...
 )
 }
@@ -30,14 +31,12 @@ Non-numeric columns will be ignored.}
 
 \item{verbose}{Logical; if TRUE, prints how many threads are used}
 
-\item{x}{An object of class \code{"ccc"} (either a matrix or a list with
-confidence intervals).}
+\item{x}{An object of class \code{"ccc"} (either a matrix or a list with CIs).}
 
 \item{digits}{Integer; number of decimal places to print in the concordance
 matrix (default is 4).}
 
-\item{...}{Additional arguments passed to underlying functions
-(like \code{theme} or \code{print}).}
+\item{...}{Passed to \code{ggplot2::theme()}.}
 
 \item{title}{Title for the plot.}
 
@@ -45,9 +44,11 @@ matrix (default is 4).}
 
 \item{high_color}{Color for high CCC values.}
 
-\item{mid_color}{Color for mid CCC values (typically near 0).}
+\item{mid_color}{Color for mid CCC values.}
 
-\item{value_text_size}{Text size for numbers in the heatmap.}
+\item{value_text_size}{Text size for CCC values in the heatmap.}
+
+\item{ci_text_size}{Text size for confidence intervals.}
 }
 \value{
 A symmetric numeric matrix with class \code{"ccc"} and attributes:

@@ -22,7 +22,7 @@ LazyData: true
 LinkingTo: 
     cpp11,
     Rcpp,
-    RcppArmadillo,
+    RcppArmadillo
 Imports:
     Rcpp (>= 1.1.0),
     ggplot2 (>= 3.5.2),
