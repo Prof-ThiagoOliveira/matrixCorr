@@ -344,11 +344,11 @@ ccc_pairwise_u_stat <- function(data,
 #' \strong{Fixed-effect dispersion \eqn{\mathbf{S_B}}.} Method dispersion is
 #' computed from \eqn{\hat\beta} and \eqn{\mathrm{Var}(\hat\beta)} with a
 #' contrast matrix \eqn{L} (columns encode pairwise method differences within
-#' each time level) and an optional time-weighting matrix \eqn{\mathrm{Dm}}:
+#' each time level) and an optional time-weighting matrix \eqn{\mathrm{D_m}}:
 #' \deqn{ S_B \;=\;
-#'  \frac{\big(L^\top \hat\beta\big)^\top\,\mathrm{Dm}\,
+#'  \frac{\big(L^\top \hat\beta\big)^\top\,\mathrm{D_m}\,
 #'  \big(L^\top \hat\beta\big)
-#'        \;-\; \mathrm{tr}\!\Big(\big(L\,\mathrm{Dm}\,L^\top\big)\,
+#'        \;-\; \mathrm{tr}\!\Big(\big(L\,\mathrm{D_m}\,L^\top\big)\,
 #'        \mathrm{Var}(\hat\beta)\Big)}
 #'       {\,nm\,(nm-1)\,\max(nt,1)\,}, }
 #' truncated at 0. The helper \code{\link{build_L_Dm}} constructs \eqn{L} so it
@@ -434,7 +434,7 @@ ccc_pairwise_u_stat <- function(data,
 #'              \;+\; 4\,\hat\beta^\top A_{\!fix}\,\mathrm{Var}(\hat\beta)\,
 #'              A_{\!fix}\,\hat\beta}
 #'                    {\big[nm\,(nm-1)\,\max(nt,1)\big]^2}, }
-#' with \eqn{A_{\!fix}=L\,\mathrm{Dm}\,L^\top}.
+#' with \eqn{A_{\!fix}=L\,\mathrm{D_m}\,L^\top}.
 #'
 #' \emph{Putting it together.} Assemble
 #' \eqn{\widehat{\mathrm{Var}}(\hat\theta)} by combining the
@@ -481,7 +481,7 @@ ccc_pairwise_u_stat <- function(data,
 #' estimates are truncated to 0 by construction.
 #'
 #' @seealso \code{\link{build_L_Dm}} for constructing \eqn{L} and
-#' \eqn{\mathrm{Dm}}; \code{\link{ccc_pairwise_u_stat}} for a U-statistic
+#' \eqn{\mathrm{D_m}}; \code{\link{ccc_pairwise_u_stat}} for a U-statistic
 #' alternative; and \pkg{cccrm} for a reference approach via \pkg{nlme}.
 #'
 #' @examples
