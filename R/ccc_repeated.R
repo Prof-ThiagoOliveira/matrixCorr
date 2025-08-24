@@ -255,37 +255,64 @@ ccc_pairwise_u_stat <- function(data,
 #' @param ry Character. Response variable name.
 #' @param rind Character. Subject ID variable name (random intercept).
 #' @param rmet Character or \code{NULL}. Optional column name of method factor
-#' (added to fixed effects).
+#'   (added to fixed effects).
 #' @param rtime Character or \code{NULL}. Optional column name of time factor
-#' (added to fixed effects).
+#'   (added to fixed effects).
 #' @param interaction Logical. Include \code{method:time} interaction?
-#' (default \code{TRUE}).
+#'   (default \code{TRUE}).
 #' @param max_iter Integer. Maximum iterations for variance-component updates
-#' (default \code{100}).
+#'   (default \code{100}).
 #' @param tol Numeric. Convergence tolerance on parameter change
-#' (default \code{1e-6}).
+#'   (default \code{1e-6}).
 #' @param Dmat Optional \eqn{n_t \times n_t} numeric matrix to weight/contrast
-#' time levels when computing the fixed-effect dispersion term \eqn{S_B}.
-#' Defaults to the identity.
-#' @param ci Logical. If \code{TRUE}, return a CI container with NA limits
-#' (see \strong{CIs} note below).
+#'   time levels when computing the fixed-effect dispersion term \eqn{S_B}.
+#'   Defaults to the identity.
+#' @param ci Logical. If \code{TRUE}, return a CI container; limits are computed
+#'   by a large-sample delta method for CCC (see \strong{CIs} note below).
 #' @param conf_level Numeric in \eqn{(0,1)}. Confidence level when
-#' \code{ci=TRUE} (default \code{0.95}).
+#'   \code{ci = TRUE} (default \code{0.95}).
 #' @param verbose Logical. If \code{TRUE}, prints a structured summary of the
 #'   fitted variance components and \eqn{S_B} for each fit (overall or
 #'   pairwise). Default \code{FALSE}.
-#' @param digits Integer (\(\geq 0\)). Number of decimal places to use in the
-#'   printed summary when \code{verbose=TRUE}. Default \code{4}.
-#' @param use_message Logical. When \code{verbose=TRUE}, choose the printing
+#' @param digits Integer \eqn{(\ge 0)}. Number of decimal places to use in the
+#'   printed summary when \code{verbose = TRUE}. Default \code{4}.
+#' @param use_message Logical. When \code{verbose = TRUE}, choose the printing
 #'   mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
 #'   easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
 #'   uses \code{cat()} to \code{stdout}. Default \code{TRUE}.
+#'
+#' @param ar Character. Residual correlation structure: \code{"none"} (iid) or
+#'   \code{"ar1"} for subject-level AR(1) correlation within contiguous time
+#'   runs. Default \code{c("none","ar1")}.
+#' @param ar_rho Numeric of length 1 in \eqn{(-0.999,\,0.999)} or \code{NA}.
+#'   When \code{ar = "ar1"} and \code{ar_rho} is finite, it is treated as fixed.
+#'   When \code{ar = "ar1"} and \code{ar_rho = NA}, a one-dimensional profile
+#'   optimization is used to estimate \eqn{\rho} (see \strong{AR(1)} in
+#'   \strong{Details}). Default \code{NA_real_}.
+#'
+#' @param slope Character. Optional extra random-effect design \eqn{Z}.
+#'   With \code{"subject"} a single random slope is added (one column in \eqn{Z});
+#'   with \code{"method"} one column per method level is added; with
+#'   \code{"custom"} you provide \code{slope_Z} directly. Default
+#'   \code{c("none","subject","method","custom")}.
+#' @param slope_var For \code{slope \%in\% c("subject","method")}, a character
+#'   string giving the name of a column in \code{data} used as the slope regressor
+#'   (e.g., centered time). It is looked up inside \code{data}; do not
+#'   pass the vector itself. NAs are treated as zeros in \eqn{Z}.
+#' @param slope_Z For \code{slope = "custom"}, a numeric matrix with \eqn{n}
+#'   rows (same order as \code{data}) providing the full extra random-effect
+#'   design \eqn{Z}. \strong{Note:} all columns of \code{slope_Z} share a
+#'   single pooled variance component \eqn{\sigma_Z^2}; per-column variances
+#'   are not yet supported (under development). Ignored otherwise.
+#' @param drop_zero_cols Logical. When \code{slope = "method"}, drop all-zero
+#'   columns of \eqn{Z} after subsetting (useful in pairwise fits). Default
+#'   \code{TRUE}.
 #'
 #' @details
 #' For measurement \eqn{y_{ij}} on subject \eqn{i} under fixed
 #' levels (method, time), we fit
 #' \deqn{ y = X\beta + Zu + \varepsilon,\qquad
-#'        u \sim N(0,\,G),\ \varepsilon \sim N(0,\,\sigma_E^2 I). }
+#'        u \sim N(0,\,G),\ \varepsilon \sim N(0,\,R). }
 #' Here \eqn{Z} is the subject-structured random-effects design and \eqn{G} is
 #' block-diagonal at the subject level with the following \emph{per-subject}
 #' parameterization:
@@ -296,34 +323,74 @@ ccc_pairwise_u_stat <- function(data,
 #'         covariances across levels (i.e., multiple of an identity);
 #'   \item optionally, \emph{time} deviations (one column per time level)
 #'         with a common variance \eqn{\sigma_{A\times T}^2} and zero
-#'         covariances across levels.
+#'         covariances across levels;
+#'   \item optionally, an \emph{extra} random effect aligned with \eqn{Z}
+#'         (random slope): variance \eqn{\sigma_Z^2} times an identity on the
+#'         \eqn{Z}-columns (see \strong{Random-slope \eqn{Z}}).
 #' }
 #' The fixed-effects design is \code{~ 1 + rmet + rtime} and, if
 #' \code{interaction=TRUE}, \code{+ rmet:rtime}.
+#'
+#' \strong{Residual correlation \eqn{R}.}
+#' With \code{ar="none"}, \eqn{R=\sigma_E^2 I}. With \code{ar="ar1"},
+#' within-subject residuals follow
+#' \deqn{ \varepsilon_i \sim N\!\big(0,\; \sigma_E^2\,C_i(\rho)\big), }
+#' where \eqn{C_i(\rho)} is an AR(1) correlation matrix along the subject's
+#' observations \emph{after ordering by increasing time level}; ties retain input
+#' order, and any \code{NA} time code breaks the series so each contiguous block
+#' of non-\code{NA} times forms a run. Internally we work with the \emph{precision}
+#' of \eqn{C_i}: for a run of length \eqn{L\ge 2}, the tridiagonal inverse has
+#' \deqn{ (C^{-1})_{11}=(C^{-1})_{LL}=\frac{1}{1-\rho^2},\quad
+#'        (C^{-1})_{tt}=\frac{1+\rho^2}{1-\rho^2}\ (2\le t\le L-1),\quad
+#'        (C^{-1})_{t,t+1}=(C^{-1})_{t+1,t}=\frac{-\rho}{1-\rho^2}. }
+#' It contributes \eqn{1/(1-\rho^2)} on the diagonal. The working inverse
+#' is \eqn{R_i^{-1}=\sigma_E^{-2}\,C_i(\rho)^{-1}}.
 #'
 #' \strong{Per-subject Woodbury system.} For subject \eqn{i} with \eqn{n_i}
 #' rows, define the per-subject random-effects design \eqn{U_i} (columns:
 #' intercept, method indicators, time indicators; dimension
 #' \eqn{\,r=1+nm+nt\,}). The core never forms
-#' \eqn{V_i = \sigma_E^2 I_{n_i} + U_i G U_i^\top} explicitly. Instead,
-#' it builds
-#' \deqn{ M_i \;=\; G^{-1} \;+\; \frac{1}{\sigma_E^2}\,U_i^\top U_i, }
+#' \eqn{V_i = R_i + U_i G U_i^\top} explicitly. Instead,
+#' \deqn{ M_i \;=\; G^{-1} \;+\; U_i^\top R_i^{-1} U_i, }
 #' and accumulates GLS blocks via rank-\eqn{r} corrections using
-#' \eqn{\,V_i^{-1} = \tfrac{1}{\sigma_E^2}\big(I_{n_i} - U_i M_i^{-1}
-#' U_i^\top / \sigma_E^2\big)}:
-#' \deqn{ X^\top V^{-1} X \;=\; \sum_i \frac{1}{\sigma_E^2}\Big[
-#'        X_i^\top X_i \;-\; (X_i^\top U_i)\,
-#'        M_i^{-1}\,(U_i^\top X_i)/\sigma_E^2 \Big], }
-#' \deqn{ X^\top V^{-1} y \;=\; \sum_i \frac{1}{\sigma_E^2}\Big[
-#'        X_i^\top y_i \;-\; (X_i^\top U_i)\,M_i^{-1}\,
-#'        (U_i^\top y_i)/\sigma_E^2 \Big]. }
+#' \eqn{\,V_i^{-1} = R_i^{-1}-R_i^{-1}U_i M_i^{-1}U_i^\top R_i^{-1}\,}:
+#' \deqn{ X^\top V^{-1} X \;=\; \sum_i \Big[
+#'        X_i^\top R_i^{-1}X_i \;-\; (X_i^\top R_i^{-1}U_i)\,
+#'        M_i^{-1}\,(U_i^\top R_i^{-1}X_i) \Big], }
+#' \deqn{ X^\top V^{-1} y \;=\; \sum_i \Big[
+#'        X_i^\top R_i^{-1}y_i \;-\; (X_i^\top R_i^{-1}U_i)\,M_i^{-1}\,
+#'        (U_i^\top R_i^{-1}y_i) \Big]. }
 #' Solves/inversions use symmetric-PD routines with a tiny diagonal "jitter" and
 #' a pseudo-inverse fallback when needed.
+#'
+#' \strong{Random-slope \eqn{Z}.}
+#' Besides \eqn{U_i}, the function can include an extra design \eqn{Z_i} and a
+#' corresponding variance \eqn{\sigma_Z^2}:
+#' \itemize{
+#'   \item \code{slope="subject"}: \eqn{Z} has one column (the regressor in
+#'         \code{slope_var}); \eqn{Z_{i}} is the subject-\eqn{i} block.
+#'   \item \code{slope="method"}: \eqn{Z} has one column per method level;
+#'         row \eqn{t} uses the slope regressor if its method equals level \eqn{\ell},
+#'         otherwise 0; all-zero columns can be dropped via
+#'         \code{drop_zero_cols=TRUE} after subsetting.
+#'   \item \code{slope="custom"}: \eqn{Z} is provided fully via \code{slope_Z}.
+#' }
+#' Computations simply augment \eqn{U_i} to \eqn{\tilde U_i=[U_i\ Z_i]} and
+#' \eqn{G^{-1}} to \eqn{\tilde G^{-1}} by appending a diagonal block
+#' \eqn{\sigma_Z^{-2} I_{q_Z}}. The EM updates then include
+#' \deqn{ \sigma_Z^{2\,(new)} \;=\; \frac{1}{m\,q_Z}
+#'       \sum_i \sum_{j=1}^{q_Z}\!\Big( b_{i,\text{extra},j}^2 +
+#'       (M_i^{-1})_{\text{extra},jj} \Big)
+#'       \quad (\text{if } q_Z>0). }
+#' \emph{Interpretation:} \eqn{\sigma_Z^2} represents additional within-subject
+#' variability explained by the slope regressor(s). By design it \emph{does not}
+#' enter the CCC formula below, where CCC targets agreement across methods/time, not
+#' variability along a subject- or method-specific slope.
 #'
 #' \strong{EM-style variance-component updates.} With current \eqn{\hat\beta},
 #' residuals \eqn{r_i = y_i - X_i\hat\beta} are formed. The BLUPs and
 #' conditional covariances are
-#' \deqn{ b_i \;=\; M_i^{-1}\,(U_i^\top r_i \!/\! \sigma_E^2), \qquad
+#' \deqn{ b_i \;=\; M_i^{-1}\,(U_i^\top R_i^{-1} r_i), \qquad
 #'       \mathrm{Var}(b_i\mid y) \;=\; M_i^{-1}. }
 #' Expected squares yield closed-form updates:
 #' \deqn{ \sigma_A^{2\,(new)} \;=\; \frac{1}{m}\sum_i \Big( b_{i,0}^2 +
@@ -336,8 +403,10 @@ ccc_pairwise_u_stat <- function(data,
 #'       \sum_i \sum_{t=1}^{nt}\!\Big( b_{i,t}^2 + (M_i^{-1})_{tt} \Big)
 #'       \quad (\text{if } nt>0), }
 #' \deqn{ \sigma_E^{2\,(new)} \;=\; \frac{1}{n} \sum_i
-#'       \Big( \| r_i - U_i b_i \|^2 + \mathrm{tr}\!\big(M_i^{-1} U_i^\top
-#'       U_i\big) \Big). }
+#'       \Big( r_i^\top C_i(\rho)^{-1} r_i +
+#'       \mathrm{tr}\!\big(M_i^{-1}\,U_i^\top C_i(\rho)^{-1} U_i\big) \Big), }
+#' where \eqn{C_i(\rho)^{-1}} is the AR(1) precision built on the
+#' time-ordered runs described above (and equals \eqn{I} for iid residuals).
 #' Iterate until the \eqn{\ell_1} change across components is \eqn{<}
 #' \code{tol} or \code{max_iter} is reached.
 #'
@@ -352,8 +421,7 @@ ccc_pairwise_u_stat <- function(data,
 #'        \mathrm{Var}(\hat\beta)\Big)}
 #'       {\,nm\,(nm-1)\,\max(nt,1)\,}, }
 #' truncated at 0. The helper \code{\link{build_L_Dm_cpp}} constructs \eqn{L} so it
-#' aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}
-#' passed to 'C++'.
+#' aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}.
 #' For exactly two methods (\eqn{nm=2}), a fast path builds \eqn{L} directly
 #' from the design's column names, where, with interaction, the per-time
 #' difference at time \eqn{j} is
@@ -369,6 +437,9 @@ ccc_pairwise_u_stat <- function(data,
 #' There are special cases when there is no method factor (or a single level),
 #' then \eqn{S_B=0} and \eqn{\sigma_{A\times M}^2=0}; if there is no
 #' time factor (or a single level), then \eqn{\sigma_{A\times T}^2=0}.
+#' The extra random-effect variance \eqn{\sigma_Z^2} (if used) is \emph{not}
+#' included, where CCC targets agreement across methods/time, not variability along
+#' the user-specified slope.
 #'
 #' \strong{CIs / SEs (delta method for CCC).}
 #' Let
@@ -406,10 +477,10 @@ ccc_pairwise_u_stat <- function(data,
 #'                        \Big(b_{i,\ell}^2 + (M_i^{-1})_{\ell\ell}\Big), }
 #' \deqn{ t_{T,i} \;=\; \frac{1}{nt}\sum_{j=1}^{nt}
 #'                        \Big(b_{i,j}^2 + (M_i^{-1})_{jj}\Big),\qquad
-#'        s_i \;=\; \frac{\|r_i - U_i b_i\|^2 +
-#'        \mathrm{tr}(M_i^{-1}U_i^\top U_i)}{n_i}, }
-#' where \eqn{b_i = M_i^{-1}(U_i^\top r_i/\sigma_E^2)} and
-#' \eqn{M_i = G^{-1} + U_i^\top U_i/\sigma_E^2}.
+#'        s_i \;=\; \frac{r_i^\top C_i(\rho)^{-1} r_i +
+#'        \mathrm{tr}\!\big(M_i^{-1}U_i^\top C_i(\rho)^{-1} U_i\big)}{n_i}, }
+#' where \eqn{b_i = M_i^{-1}(U_i^\top R_i^{-1} r_i)} and
+#' \eqn{M_i = G^{-1} + U_i^\top R_i^{-1} U_i}.
 #' With \eqn{m} subjects, we form the empirical covariance of the stacked
 #' subject vectors and scale by \eqn{m} to approximate the covariance of the
 #' means:
@@ -457,6 +528,13 @@ ccc_pairwise_u_stat <- function(data,
 #' mildly anti-conservative near the boundary; a logit transform for CCC or a
 #' subject-level (cluster) bootstrap can be used for sensitivity analysis.
 #'
+#' \strong{Estimating \eqn{\rho} for AR(1).}
+#' If \code{ar="ar1"} and \code{ar_rho=NA}, a 1-D Brent search is used to
+#' profile \eqn{\rho\in[-0.95,0.95]} by repeatedly fitting the model and
+#' maximizing the REML log-likelihood. If the
+#' core does not return a log-likelihood, a mild proxy objective is used. For
+#' pairwise method fits, \eqn{\rho} is profiled \emph{per pair}.
+#'
 #' @return
 #' \itemize{
 #'   \item If \code{rmet} is \code{NULL} or has a single level, an object of
@@ -470,19 +548,25 @@ ccc_pairwise_u_stat <- function(data,
 #' }
 #' In all cases, attributes \code{"method"}, \code{"description"},
 #' \code{"package"}, and (if \code{ci=TRUE}) \code{"conf.level"} are set.
+#' When \code{ar="ar1"}, an additional attribute \code{"ar_rho"} is attached:
+#' a scalar (overall) or an \eqn{L\times L} matrix (pairwise) with the
+#' \eqn{\rho} values used/estimated.
 #'
 #' @section Notes on stability and performance:
-#' All per-subject solves are \eqn{\,r\times r} with \eqn{r=1+nm+nt}, so cost
+#' All per-subject solves are \eqn{\,r\times r} with \eqn{r=1+nm+nt+q_Z}, so cost
 #' scales with the number of subjects and the fixed-effects dimension rather
 #' than the total number of observations. Solvers use symmetric-PD paths with
 #' a small diagonal ridge and pseudo-inverse fallback, which helps for
 #' tiny/unbalanced subsets and near-boundary estimates. Very small samples or
 #' extreme imbalance can still make \eqn{S_B} numerically delicate; negative
-#' estimates are truncated to 0 by construction.
+#' estimates are truncated to 0 by construction. For AR(1), observations are
+#' first ordered by time within subject before building the run-wise precision;
+#' \code{NA} time codes break the correlation run.
 #'
-#' @seealso \code{\link{build_L_Dm_cpp}} for constructing \eqn{L} and
-#' \eqn{\mathrm{D_m}}; \code{\link{ccc_pairwise_u_stat}} for a U-statistic
-#' alternative; and \pkg{cccrm} for a reference approach via \pkg{nlme}.
+#' @seealso \code{\link{build_L_Dm_cpp}} and \code{\link{build_L_Dm_Z_cpp}}
+#' for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_pairwise_u_stat}}
+#' for a U-statistic alternative; and \pkg{cccrm} for a reference approach via
+#' \pkg{nlme}.
 #'
 #' @references
 #' Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.
@@ -510,13 +594,10 @@ ccc_pairwise_u_stat <- function(data,
 #' ccc_rm1 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
 #' print(ccc_rm1)
 #' summary(ccc_rm1)
-#' plot(ccc_rm1)
 #'
-#' # 95% CI container (limits currently NA by design)
+#' # 95% CI container
 #' ccc_rm2 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
-#' print(ccc_rm2)
-#' summary(ccc_rm2)
-#' plot(ccc_rm2)
+#' ccc_rm2
 #'
 #' #--------------------------------------------------------------------
 #' ## Two methods x time (balanced 2x2), with and without interaction
@@ -528,23 +609,143 @@ ccc_pairwise_u_stat <- function(data,
 #'              interaction = TRUE, verbose = TRUE)
 #'
 #' #--------------------------------------------------------------------
+#' ## Random slope by subject: create a centered numeric time within subject
+#' #--------------------------------------------------------------------
+#' dat$t_num <- as.integer(dat$time)
+#' dat$t_c   <- ave(dat$t_num, dat$id, FUN = function(v) v - mean(v))
+#' ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
+#'              slope = "subject", slope_var = "t_c",
+#'              ar = "ar1", ar_rho = NA_real_, verbose = TRUE)
+#'
+#' #--------------------------------------------------------------------
 #' ## Three methods - pairwise CCCs
 #' #--------------------------------------------------------------------
 #' set.seed(2)
 #' n_subj <- 40
-#' id     <- factor(rep(seq_len(n_subj), times = 3))
-#' method <- factor(rep(c("A","B","C"), each = n_subj))
+#' id2     <- factor(rep(seq_len(n_subj), times = 3))
+#' method2 <- factor(rep(c("A","B","C"), each = n_subj))
 #' sigA <- 1.2; sigE <- 0.6
 #' u  <- rnorm(n_subj, 0, sqrt(sigA))
 #' mu <- c(A = 0.00, B = 0.15, C = -0.10)
 #' e  <- rnorm(3 * n_subj, 0, sqrt(sigE))
-#' y  <- u[as.integer(id)] + unname(mu[method]) + e
-#' dat3 <- data.frame(y, id, method)
-#' ccc_lmm_reml(dat3, "y", "id", rmet = "method")
-#'
-#' # To get variance-components estimate per method combination, turn
-#' # verbose to TRUE
+#' y2 <- u[as.integer(id2)] + unname(mu[method2]) + e
+#' dat3 <- data.frame(y = y2, id = id2, method = method2)
 #' ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
+#'
+#' # ------------------------------------------------------------------
+#' # AR(1) residual correlation (fixed rho, threads forced to 1)
+#' # When needed: repeated measures over time with serially correlated
+#' # residuals within subject (e.g., values drift smoothly across visits).
+#' # ------------------------------------------------------------------
+#' \donttest{
+#'   # Make threaded math libraries behave during examples/CI
+#'   Sys.setenv(OMP_NUM_THREADS = "1",
+#'              OPENBLAS_NUM_THREADS = "1",
+#'              MKL_NUM_THREADS = "1",
+#'              VECLIB_MAXIMUM_THREADS = "1")
+#'   if (requireNamespace("RhpcBLASctl", quietly = TRUE)) {
+#'     RhpcBLASctl::blas_set_num_threads(1)
+#'     RhpcBLASctl::omp_set_num_threads(1)
+#'   }
+#'
+#'   set.seed(10)
+#'   n_subj <- 40
+#'   n_time <- 6                      # ≥ 3 time points recommended for AR(1)
+#'   id  <- factor(rep(seq_len(n_subj), each = n_time))
+#'   tim <- factor(rep(seq_len(n_time),  times = n_subj))
+#'   beta0 <- 0; beta_t <- 0.2
+#'   rho_true <- 0.6; sigE <- 0.7
+#'   y <- numeric(length(id))
+#'   for (i in seq_len(n_subj)) {
+#'     idx <- which(id == levels(id)[i])
+#'     e <- stats::arima.sim(list(ar = rho_true), n = n_time, sd = sigE)
+#'     # small linear trend so AR(1) isn't swallowed by fixed effects
+#'     y[idx] <- beta0 + beta_t*(seq_len(n_time) - mean(seq_len(n_time))) + e
+#'   }
+#'   dat_ar <- data.frame(y = y, id = id, time = tim)
+#'   # Fit with AR(1) and rho fixed (nonzero). Estimation of rho is not
+#'   # implemented yet; use a plausible value (e.g., 0.4–0.8) for sensitivity.
+#'   ccc_lmm_reml(dat_ar, ry = "y", rind = "id", rtime = "time",
+#'                ar = "ar1", ar_rho = 0.6, verbose = TRUE)
+#' }
+#'
+#' # ------------------------------------------------------------------
+#' # Random slope by SUBJECT
+#' # When needed: each subject shows a systematic linear change over time
+#' # (e.g., individual-specific trends), regardless of method.
+#' # ------------------------------------------------------------------
+#' set.seed(2)
+#' n_subj <- 60; n_time <- 4
+#' id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
+#' tim <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+#' method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+#' # subject-specific slopes around 0
+#' subj <- as.integer(id)
+#' slope_i <- rnorm(n_subj, 0, 0.15)
+#' slope_vec <- slope_i[subj]
+#' base <- rnorm(n_subj, 0, 1.0)[subj]
+#' tnum <- as.integer(tim)
+#' y <- base + 0.3*(method=="B") + slope_vec*(tnum - mean(seq_len(n_time))) +
+#'      rnorm(length(id), 0, 0.5)
+#' dat_s <- data.frame(y, id, method, time = tim)
+#' # center time within subject (recommended for random slopes)
+#' dat_s$t_num <- as.integer(dat_s$time)
+#' dat_s$t_c   <- ave(dat_s$t_num, dat_s$id, FUN = function(v) v - mean(v))
+#' ccc_lmm_reml(dat_s, "y", "id", rmet = "method", rtime = "time",
+#'              slope = "subject", slope_var = "t_c", verbose = TRUE)
+#'
+#' # ------------------------------------------------------------------
+#' # Random slope by METHOD
+#' # When needed: methods drift differently across time (e.g., biases that
+#' # change with time are method-specific).
+#' # ------------------------------------------------------------------
+#' set.seed(3)
+#' n_subj <- 60; n_time <- 4
+#' id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
+#' tim <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+#' method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+#' # method-specific slopes: A ~ 0, B ~ positive drift
+#' slope_m <- ifelse(method=="B", 0.25, 0.00)
+#' base <- rnorm(n_subj, 0, 1.0)[as.integer(id)]
+#' tnum <- as.integer(tim)
+#' y <- base + 0.3*(method=="B") + slope_m*(tnum - mean(seq_len(n_time))) +
+#'      rnorm(length(id), 0, 0.5)
+#' dat_m <- data.frame(y, id, method, time = tim)
+#' dat_m$t_num <- as.integer(dat_m$time)
+#' dat_m$t_c   <- ave(dat_m$t_num, dat_m$id, FUN = function(v) v - mean(v))
+#' ccc_lmm_reml(dat_m, "y", "id", rmet = "method", rtime = "time",
+#'              slope = "method", slope_var = "t_c", verbose = TRUE)
+#'
+#' # ------------------------------------------------------------------
+#' # Random slopes for SUBJECT *and* METHOD (custom Z)
+#' # When needed: subjects have their own time trends, AND methods carry
+#' # additional method-specific trends. Supply a custom Z with both parts.
+#' # ------------------------------------------------------------------
+#' set.seed(4)
+#' n_subj <- 50; n_time <- 4
+#' id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
+#' tim <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+#' method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+#' subj <- as.integer(id)
+#' # subject slopes + extra slope on method B
+#' slope_subj <- rnorm(n_subj, 0, 0.12)[subj]
+#' slope_B    <- ifelse(method=="B", 0.18, 0.00)
+#' tnum <- as.integer(tim)
+#' base <- rnorm(n_subj, 0, 1.0)[subj]
+#' y <- base + 0.3*(method=="B") +
+#'      (slope_subj + slope_B) * (tnum - mean(seq_len(n_time))) +
+#'      rnorm(length(id), 0, 0.5)
+#' dat_both <- data.frame(y, id, method, time = tim)
+#' # build Z = [subject_slope | method_A_slope | method_B_slope]
+#' dat_both$t_num <- as.integer(dat_both$time)
+#' dat_both$t_c   <- ave(dat_both$t_num, dat_both$id, FUN = function(v) v - mean(v))
+#' MM <- model.matrix(~ 0 + method, data = dat_both)  # one col per method
+#' Z_custom <- cbind(
+#'   subj_slope   = dat_both$t_c,            # subject slope
+#'   MM * dat_both$t_c                       # method-specific slopes
+#' )
+#' ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+#'              slope = "custom", slope_Z = Z_custom, verbose = TRUE)
 #'
 #' @author Thiago de Paula Oliveira
 #' @importFrom stats as.formula model.matrix setNames qnorm
@@ -553,7 +754,26 @@ ccc_lmm_reml <- function(data, ry, rind,
                          rmet = NULL, rtime = NULL, interaction = TRUE,
                          max_iter = 100, tol = 1e-6,
                          Dmat = NULL, ci = FALSE, conf_level = 0.95,
-                         verbose = FALSE, digits = 4, use_message = TRUE) {
+                         verbose = FALSE, digits = 4, use_message = TRUE,
+                         ar = c("none","ar1"),
+                         ar_rho = NA_real_,            # <--- default now NA (estimate rho when AR1)
+                         slope = c("none","subject","method","custom"),
+                         slope_var = NULL,
+                         slope_Z = NULL,
+                         drop_zero_cols = TRUE) {
+
+  ar    <- match.arg(ar)
+  slope <- match.arg(slope)
+
+  # allow NA when AR1 (means: estimate it); otherwise validate numeric in (-0.999,0.999)
+  if (identical(ar, "ar1")) {
+    if (length(ar_rho) != 1L) {
+      stop("ar_rho must be length 1 (or NA to estimate).")
+    }
+    if (!is.na(ar_rho) && abs(ar_rho) >= 0.999) {
+      stop("ar_rho must be in (-0.999, 0.999).")
+    }
+  }
 
   ## ---- small helpers --------------------------------------------------------
   num_or_na <- function(x) {
@@ -566,22 +786,57 @@ ccc_lmm_reml <- function(data, ry, rind,
     c(max(0, min(1, ccc - z*se)), max(0, min(1, ccc + z*se)))
   }
   .vc_message <- function(ans, label, nm, nt, conf_level,
-                          digits = 4, use_message = TRUE) {
-    fmt <- function(x) if (is.na(x)) "NA" else formatC(x, format = "f", digits = digits)
+                          digits = 4, use_message = TRUE,
+                          extra_label = NULL,
+                          ar = c("none","ar1"),
+                          ar_rho = NA_real_) {
+    ar <- match.arg(ar)
+    fmt  <- function(x) if (is.na(x)) "NA" else formatC(x, format = "f", digits = digits)
+
+    # fixed-width first column for alignment
+    colw <- 38L
+    v <- function(s, x) sprintf("  %-*s : %s", colw, s, fmt(as.numeric(x)))
+
     out <- c(
       sprintf("---- matrixCorr::ccc_lmm_reml - variance-components (%s) ----", label),
-      sprintf("Design: methods nm = %d, times nt = %d", nm, nt),
-      "Estimates:",
-      sprintf("  sigma_A^2 (subject)            : %s", fmt(num_or_na(ans[["sigma2_subject"]]))),
-      sprintf("  sigma_A_M^2 (subject x method) : %s", fmt(num_or_na(ans[["sigma2_subject_method"]]))),
-      sprintf("  sigma_A_T^2 (subject x time)   : %s", fmt(num_or_na(ans[["sigma2_subject_time"]]))),
-      sprintf("  sigma_E^2 (error)              : %s", fmt(num_or_na(ans[["sigma2_error"]]))),
-      sprintf("  S_B (fixed-effect dispersion)  : %s", fmt(num_or_na(ans[["SB"]]))),
-      sprintf("  SE(CCC)                        : %s", fmt(num_or_na(ans[["se_ccc"]]))),
-      "--------------------------------------------------------------------------"
+      sprintf("Design: methods nm = %d, times nt = %d", nm, nt)
     )
+
+    if (identical(ar, "ar1")) {
+      info <- if (is.na(ar_rho)) "AR(1) (rho estimated)" else sprintf("AR(1) with rho = %s", fmt(ar_rho))
+      out <- c(out, paste("Residual correlation:", info))
+    } else {
+      out <- c(out, "Residual correlation: independent (iid)")
+    }
+
+    out <- c(out,
+             "Estimates:",
+             v("sigma_A^2 (subject)",             ans[["sigma2_subject"]]),
+             v("sigma_A_M^2 (subject x method)",  ans[["sigma2_subject_method"]]),
+             v("sigma_A_T^2 (subject x time)",    ans[["sigma2_subject_time"]]),
+             v("sigma_E^2 (error)",               ans[["sigma2_error"]])
+    )
+
+    if (!is.null(ans[["sigma2_extra"]])) {
+      lab <- if (is.null(extra_label)) "extra random effect" else extra_label
+      out <- c(out, v(sprintf("sigma_Z^2 (%s)", lab), ans[["sigma2_extra"]]))
+    }
+
+    out <- c(out,
+             v("S_B (fixed-effect dispersion)",   ans[["SB"]]),
+             v("SE(CCC)",                         ans[["se_ccc"]]),
+             "--------------------------------------------------------------------------"
+    )
+
     if (use_message) message(paste(out, collapse = "\n")) else cat(paste(out, collapse = "\n"), "\n")
   }
+
+  # small label used in printout for extra random effect
+  extra_label <- switch(slope,
+                        "subject" = "random slope (subject)",
+                        "method"  = "random slope (by method)",
+                        "custom"  = "custom random effect",
+                        "none"    = NULL)
 
   ## ---- coerce once ----------------------------------------------------------
   df <- as.data.frame(data)
@@ -590,7 +845,7 @@ ccc_lmm_reml <- function(data, ry, rind,
   if (!is.null(rmet))  df[[rmet]]  <- factor(df[[rmet]])
   if (!is.null(rtime)) df[[rtime]] <- factor(df[[rtime]])
 
-  # keep the overall time levels for Dmat subsetting in pairwise path
+  # overall time levels for Dmat subsetting in pairwise path
   all_time_lvls <- if (!is.null(rtime)) levels(df[[rtime]]) else character(0)
 
   ## ---- fixed-effects formula ------------------------------------------------
@@ -601,6 +856,83 @@ ccc_lmm_reml <- function(data, ry, rind,
     rhs <- paste(rhs, "+", paste0(rmet, ":", rtime))
   fml <- as.formula(paste("~", rhs))
 
+  ## helper to build L/Dm/Z in C++ (subject/method slopes)
+  build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub = df,
+                        rmet_name = rmet, rtime_name = rtime) {
+    slope_mode_cpp <- switch(slope, none="none", subject="subject", method="method", custom="none")
+    if (!identical(slope, "custom")) {
+      build_L_Dm_Z_cpp(
+        colnames_X      = colnames_X,
+        rmet_name       = if (is.null(rmet_name)) NULL else rmet_name,
+        rtime_name      = if (is.null(rtime_name)) NULL else rtime_name,
+        method_levels   = if (is.null(rmet_name)) character(0) else method_levels,
+        time_levels     = if (is.null(rtime_name)) character(0) else time_levels,
+        has_interaction = interaction,
+        Dmat_global     = Dsub,
+        slope_mode      = slope_mode_cpp,
+        slope_var       = if (!is.null(slope_var)) df_sub[[slope_var]] else NULL,
+        method_codes    = if (!is.null(rmet_name)) as.integer(df_sub[[rmet_name]]) else NULL,
+        drop_zero_cols  = drop_zero_cols
+      )
+    } else {
+      build_L_Dm_cpp(
+        colnames_X      = colnames_X,
+        rmet_name       = if (is.null(rmet_name)) NULL else rmet_name,
+        rtime_name      = if (is.null(rtime_name)) NULL else rtime_name,
+        method_levels   = if (is.null(rmet_name)) character(0) else method_levels,
+        time_levels     = if (is.null(rtime_name)) character(0) else time_levels,
+        has_interaction = interaction,
+        Dmat_global     = Dsub
+      )
+    }
+  }
+
+  ## helper to run C++ core once
+  run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
+                      use_ar1, ar1_rho) {
+    ccc_vc_cpp(
+      Xr = unname(Xr),
+      yr = yr,
+      subject = subject,
+      method  = method_int,
+      time    = time_int,
+      nm = Laux$nm, nt = Laux$nt,
+      max_iter = max_iter, tol = tol,
+      conf_level = conf_level,
+      Lr   = if (is.null(Laux$L))    NULL else unname(Laux$L),
+      auxDr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm),
+      Zr   = if (is.null(Z)) NULL else unname(Z),
+      use_ar1 = use_ar1,
+      ar1_rho = as.numeric(ar1_rho)
+    )
+  }
+
+  ## objective to estimate rho (maximize REML → minimize negative REML)
+  estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
+                           rho_lo = -0.95, rho_hi = 0.95) {
+
+    used_reml <- TRUE
+    obj <- function(r) {
+      fit <- run_cpp(Xr, yr, subject, method_int, time_int, Laux, Z,
+                     use_ar1 = TRUE, ar1_rho = r)
+      ll <- fit[["reml_loglik"]]
+      if (is.null(ll) || !is.finite(ll)) {
+        # fallback proxy if C++ hasn't added REML log-lik yet:
+        used_reml <<- FALSE
+        # smaller SE and SB are loosely "better"
+        se_ccc <- suppressWarnings(as.numeric(fit[["se_ccc"]]))
+        SB     <- suppressWarnings(as.numeric(fit[["SB"]]))
+        if (!is.finite(se_ccc)) se_ccc <- 0
+        if (!is.finite(SB))     SB     <- 0
+        return(se_ccc + SB)
+      }
+      -as.numeric(ll)
+    }
+
+    oo <- optimize(obj, interval = c(rho_lo, rho_hi))
+    list(rho = unname(oo$minimum), used_reml = used_reml)
+  }
+
   ## ---- Case 1: no (or single) method -> overall CCC (1x1) ------------------
   if (is.null(rmet) || nlevels(df[[rmet]]) < 2L) {
     X <- model.matrix(fml, data = df)
@@ -610,33 +942,37 @@ ccc_lmm_reml <- function(data, ry, rind,
       as.matrix(Dmat)
     } else NULL
 
-    Laux <- build_L_Dm_cpp(
-      colnames_X      = colnames(X),
-      rmet_name       = if (is.null(rmet)) NULL else rmet,
-      rtime_name      = if (is.null(rtime)) NULL else rtime,
-      method_levels   = if (is.null(rmet)) character(0) else levels(df[[rmet]]),
-      time_levels     = if (is.null(rtime)) character(0) else levels(df[[rtime]]),
-      has_interaction = interaction,
-      Dmat_global     = Dsub
+    Laux <- build_LDZ(
+      colnames_X    = colnames(X),
+      method_levels = if (is.null(rmet)) character(0) else levels(df[[rmet]]),
+      time_levels   = if (is.null(rtime)) character(0) else levels(df[[rtime]]),
+      Dsub          = Dsub,
+      df_sub        = df,
+      rmet_name     = rmet,
+      rtime_name    = rtime
     )
 
-    # integer codes for method/time (0-length if absent or single level)
     method_int <- if (!is.null(rmet)  && nlevels(df[[rmet]])  >= 2L) as.integer(df[[rmet]])  else integer(0)
     time_int   <- if (!is.null(rtime) && nlevels(df[[rtime]]) >= 2L) as.integer(df[[rtime]]) else integer(0)
+    Z_overall  <- if (!identical(slope, "custom")) Laux$Z else {
+      if (is.null(slope_Z)) NULL else as.matrix(slope_Z)
+    }
+
+    # estimate rho if requested
+    rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
+      er <- estimate_rho(X, df[[ry]], as.integer(df[[rind]]),
+                         method_int, time_int, Laux, Z_overall)
+      if (!er$used_reml && isTRUE(verbose)) {
+        message("Note: ccc_vc_cpp did not return 'reml_loglik'; rho estimated via a proxy objective.")
+      }
+      er$rho
+    } else ar_rho
 
     ans <- tryCatch(
-      ccc_vc_cpp(
-        Xr = unname(X),
-        yr = df[[ry]],
-        subject = as.integer(df[[rind]]),
-        method  = method_int,
-        time    = time_int,
-        nm = Laux$nm, nt = Laux$nt,
-        max_iter = max_iter, tol = tol,
-        conf_level = conf_level,
-        Lr   = if (is.null(Laux$L))    NULL else unname(Laux$L),
-        auxDr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm)
-      ),
+      run_cpp(X, df[[ry]], as.integer(df[[rind]]),
+              method_int, time_int, Laux, Z_overall,
+              use_ar1 = identical(ar, "ar1"),
+              ar1_rho = if (identical(ar,"ar1")) rho_used else 0),
       error = function(e) {
         stop("ccc_vc_cpp failed on this dataset (near-singular tiny data): ",
              conditionMessage(e), call. = FALSE)
@@ -645,7 +981,8 @@ ccc_lmm_reml <- function(data, ry, rind,
 
     if (isTRUE(verbose)) {
       .vc_message(ans, label = "Overall", nm = Laux$nm, nt = Laux$nt,
-                  conf_level = conf_level, digits = digits, use_message = use_message)
+                  conf_level = conf_level, digits = digits, use_message = use_message,
+                  extra_label = extra_label, ar = ar, ar_rho = if (identical(ar,"ar1")) rho_used else NA_real_)
     }
 
     lab <- "Overall"
@@ -666,14 +1003,16 @@ ccc_lmm_reml <- function(data, ry, rind,
       attr(out, "description")<- "Lin's CCC from random-effects LMM"
       attr(out, "package")    <- "matrixCorr"
       attr(out, "conf.level") <- conf_level
-      class(out) <- c("ccc", "ccc_ci")
+      if (identical(ar, "ar1")) attr(out, "ar_rho") <- as.numeric(rho_used)
+      class(out) <- c("matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc")
       return(out)
     } else {
       est <- est_mat
       attr(est, "method")      <- "Variance Components REML"
       attr(est, "description") <- "Lin's CCC from random-effects LMM"
       attr(est, "package")     <- "matrixCorr"
-      class(est) <- c("ccc", "matrix")
+      if (identical(ar, "ar1")) attr(est, "ar_rho") <- as.numeric(rho_used)
+      class(est) <- c("matrixCorr_ccc", "ccc", "matrix")
       return(est)
     }
   }
@@ -689,12 +1028,14 @@ ccc_lmm_reml <- function(data, ry, rind,
     upr_mat <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
   }
 
+  # store rho per pair if estimated
+  rho_mat <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
+
   for (i in 1:(Lm - 1L)) {
     for (j in (i + 1L):Lm) {
       m1 <- method_levels[i]; m2 <- method_levels[j]
 
       idx <- which(df[[rmet]] %in% c(m1, m2))
-      # cheap “sub” views
       subj_int   <- as.integer(df[[rind]][idx])
       y_sub      <- df[[ry]][idx]
       met_fac    <- droplevels(df[[rmet]][idx])        # ensures exactly 2 levels
@@ -709,32 +1050,37 @@ ccc_lmm_reml <- function(data, ry, rind,
         as.matrix(Dmat[pos, pos, drop = FALSE])
       } else NULL
 
-      Laux <- build_L_Dm_cpp(
-        colnames_X      = colnames(Xp),
-        rmet_name       = rmet,
-        rtime_name      = if (is.null(rtime)) NULL else rtime,
-        method_levels   = levels(met_fac),
-        time_levels     = lev_time_sub,
-        has_interaction = interaction,
-        Dmat_global     = Dsub
+      df_sub <- df[idx, , drop = FALSE]
+      Laux <- build_LDZ(
+        colnames_X    = colnames(Xp),
+        method_levels = levels(met_fac),
+        time_levels   = lev_time_sub,
+        Dsub          = Dsub,
+        df_sub        = df_sub,
+        rmet_name     = rmet,
+        rtime_name    = rtime
       )
 
       method_int <- if (nlevels(met_fac)  >= 2L) as.integer(met_fac)  else integer(0)
       time_int   <- if (!is.null(time_fac) && nlevels(time_fac) >= 2L) as.integer(time_fac) else integer(0)
+      Zp <- if (!identical(slope, "custom")) Laux$Z else {
+        if (is.null(slope_Z)) NULL else as.matrix(slope_Z)[idx, , drop = FALSE]
+      }
+
+      # estimate rho for this pair if requested
+      rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
+        er <- estimate_rho(Xp, y_sub, subj_int, method_int, time_int, Laux, Zp)
+        if (!er$used_reml && isTRUE(verbose)) {
+          message(sprintf("Note: REML log-lik not available for pair (%s,%s); rho estimated via a proxy objective.", m1, m2))
+        }
+        er$rho
+      } else ar_rho
+      rho_mat[i,j] <- rho_mat[j,i] <- as.numeric(rho_used)
 
       ans <- tryCatch(
-        ccc_vc_cpp(
-          Xr = unname(Xp),
-          yr = y_sub,
-          subject = subj_int,
-          method  = method_int,
-          time    = time_int,
-          nm = Laux$nm, nt = Laux$nt,
-          max_iter = max_iter, tol = tol,
-          conf_level = conf_level,
-          Lr   = if (is.null(Laux$L))    NULL else unname(Laux$L),
-          auxDr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm)
-        ),
+        run_cpp(Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
+                use_ar1 = identical(ar, "ar1"),
+                ar1_rho = if (identical(ar,"ar1")) rho_used else 0),
         error = function(e) {
           warning(sprintf("ccc_vc_cpp failed for pair (%s, %s): %s",
                           m1, m2, conditionMessage(e)))
@@ -746,7 +1092,9 @@ ccc_lmm_reml <- function(data, ry, rind,
         .vc_message(ans, label = sprintf("Pair: %s vs %s", m1, m2),
                     nm = Laux$nm, nt = Laux$nt,
                     conf_level = conf_level, digits = digits,
-                    use_message = use_message)
+                    use_message = use_message,
+                    extra_label = extra_label, ar = ar,
+                    ar_rho = if (identical(ar,"ar1")) rho_used else NA_real_)
       }
 
       val <- if (is.null(ans)) NA_real_ else unname(ans$ccc)
@@ -775,14 +1123,122 @@ ccc_lmm_reml <- function(data, ry, rind,
     attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
     attr(out, "package")     <- "matrixCorr"
     attr(out, "conf.level")  <- conf_level
-    class(out) <- c("ccc", "ccc_ci")
+    if (identical(ar, "ar1")) attr(out, "ar_rho") <- rho_mat
+    class(out) <- c("matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc")
     return(out)
   } else {
     est <- est_mat
     attr(est, "method")      <- "Variance Components REML - pairwise"
     attr(est, "description") <- "Lin's CCC per method pair from random-effects LMM"
     attr(est, "package")     <- "matrixCorr"
-    class(est) <- c("ccc", "matrix")
+    if (identical(ar, "ar1")) attr(est, "ar_rho") <- rho_mat
+    class(est) <- c("matrixCorr_ccc", "ccc", "matrix")
     return(est)
   }
 }
+
+
+#' Print method for matrixCorr CCC objects
+#'
+#' @param x A `matrixCorr_ccc` or `matrixCorr_ccc_ci` object.
+#' @param digits Number of digits for CCC estimates.
+#' @param ci_digits Number of digits for CI bounds.
+#' @param show_ci One of `"auto"`, `"yes"`, `"no"`.
+#' @param ... Passed to underlying printers.
+#' @export
+#' @method print matrixCorr_ccc
+print.matrixCorr_ccc <- function(x,
+                                 digits = 4,
+                                 ci_digits = 4,
+                                 show_ci = c("auto", "yes", "no"),
+                                 ...) {
+  show_ci <- match.arg(show_ci)
+  is_ci_obj <- inherits(x, "matrixCorr_ccc_ci") ||
+    (is.list(x) && all(c("est", "lwr.ci", "upr.ci") %in% names(x)))
+
+  if (is_ci_obj) {
+    est <- as.matrix(x$est)
+    lwr <- as.matrix(x$lwr.ci)
+    upr <- as.matrix(x$lwr.ci); upr[,] <- x$upr.ci
+  } else if (is.matrix(x)) {
+    est <- as.matrix(x)
+    lwr <- matrix(NA_real_, nrow(est), ncol(est), dimnames = dimnames(est))
+    upr <- lwr
+  } else {
+    stop("Invalid object format for class 'ccc'.")
+  }
+
+  rn <- rownames(est); cn <- colnames(est)
+  if (is.null(rn)) rn <- paste0("m", seq_len(nrow(est)))
+  if (is.null(cn)) cn <- rn
+
+  has_any_ci <- any(is.finite(lwr) | is.finite(upr))
+  include_ci <- switch(show_ci, auto = has_any_ci, yes = TRUE, no = FALSE)
+
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+  if (include_ci && is.finite(cl)) {
+    cat(sprintf("Concordance pairs (Lin's CCC, %g%% CI)\n\n", 100 * cl))
+  } else {
+    cat("Concordance pairs (Lin's CCC)\n\n")
+  }
+
+  if (nrow(est) == 1L && ncol(est) == 1L) {
+    df <- data.frame(
+      method1  = rn[1],
+      method2  = cn[1],
+      estimate = formatC(est[1,1], format = "f", digits = digits),
+      stringsAsFactors = FALSE, check.names = FALSE
+    )
+    if (include_ci) {
+      df$lwr <- ifelse(is.na(lwr[1,1]), NA,
+                       formatC(lwr[1,1], format = "f", digits = ci_digits))
+      df$upr <- ifelse(is.na(upr[1,1]), NA,
+                       formatC(upr[1,1], format = "f", digits = ci_digits))
+    }
+    print(df, row.names = FALSE, right = FALSE, ...)
+    return(invisible(x))
+  }
+
+  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L); k <- 0L
+  for (i in seq_len(nrow(est) - 1L)) {
+    for (j in (i + 1L):ncol(est)) {
+      k <- k + 1L
+      row <- list(
+        method1  = rn[i],
+        method2  = cn[j],
+        estimate = formatC(est[i, j], format = "f", digits = digits)
+      )
+      if (include_ci) {
+        row$lwr <- ifelse(is.na(lwr[i, j]), NA,
+                          formatC(lwr[i, j], format = "f", digits = ci_digits))
+        row$upr <- ifelse(is.na(upr[i, j]), NA,
+                          formatC(upr[i, j], format = "f", digits = ci_digits))
+      }
+      rows[[k]] <- row
+    }
+  }
+
+  df <- do.call(rbind.data.frame, rows); rownames(df) <- NULL
+  print(df, row.names = FALSE, right = FALSE, ...)
+  invisible(x)
+}
+
+#' Print method for matrixCorr CCC objects with CIs
+#'
+#' @inheritParams print.matrixCorr_ccc
+#' @export
+#' @method print matrixCorr_ccc_ci
+print.matrixCorr_ccc_ci <- function(x, ...) {
+  print.matrixCorr_ccc(x, ...)
+}
+
+#' S3 print for legacy class `ccc_ci`
+#'
+#' For compatibility with objects that still carry class `"ccc_ci"`.
+#' @inheritParams print.matrixCorr_ccc
+#' @export
+#' @method print ccc_ci
+print.ccc_ci <- function(x, ...) {
+  print.matrixCorr_ccc(x, ...)
+}
+

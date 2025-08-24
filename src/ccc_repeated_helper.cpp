@@ -1,19 +1,17 @@
 // Thiago de Paula Oliveira
+// helper: L, Dm, Z builders and AR(1) precision
 // [[Rcpp::depends(RcppArmadillo)]]
 #include <RcppArmadillo.h>
 #include <unordered_map>
 using namespace Rcpp;
 using arma::mat;
-using arma::uword;
 
-// find column index or -1
+// ---------- tiny utils ----------
 static inline int find_col(const std::unordered_map<std::string,int>& pos,
                            const std::string& key) {
   auto it = pos.find(key);
-  return (it==pos.end()? -1 : it->second);
+  return (it == pos.end() ? -1 : it->second);
 }
-
-// try "a:b" then "b:a"
 static inline int find_inter(const std::unordered_map<std::string,int>& pos,
                              const std::string& a, const std::string& b) {
   int id = find_col(pos, a + ":" + b);
@@ -23,13 +21,13 @@ static inline int find_inter(const std::unordered_map<std::string,int>& pos,
 
 // [[Rcpp::export]]
 Rcpp::List build_L_Dm_cpp(
-  Rcpp::CharacterVector colnames_X,      // colnames(model.matrix(..., df_sub))
-  Rcpp::Nullable<Rcpp::CharacterVector> rmet_name,   // e.g. "method" or NULL
-  Rcpp::Nullable<Rcpp::CharacterVector> rtime_name,  // e.g. "time"   or NULL
-  Rcpp::CharacterVector method_levels,   // levels(df_sub[[rmet]]) or character(0)
-  Rcpp::CharacterVector time_levels,     // levels(df_sub[[rtime]]) or character(0)
-  bool has_interaction,
-  Rcpp::Nullable<Rcpp::NumericMatrix> Dmat_global = R_NilValue
+    Rcpp::CharacterVector colnames_X,
+    Rcpp::Nullable<Rcpp::CharacterVector> rmet_name,
+    Rcpp::Nullable<Rcpp::CharacterVector> rtime_name,
+    Rcpp::CharacterVector method_levels,
+    Rcpp::CharacterVector time_levels,
+    bool has_interaction,
+    Rcpp::Nullable<Rcpp::NumericMatrix> Dmat_global
 ) {
   const bool have_met  = rmet_name.isNotNull()  && method_levels.size() >= 1;
   const bool have_time = rtime_name.isNotNull() && time_levels.size()  >= 1;
@@ -37,22 +35,18 @@ Rcpp::List build_L_Dm_cpp(
   const std::string rmet  = have_met  ? as<std::string>(as<CharacterVector>(rmet_name)[0])  : std::string();
   const std::string rtime = have_time ? as<std::string>(as<CharacterVector>(rtime_name)[0]) : std::string();
 
-  // effective counts (need >=2 to “exist” in this contrast)
   const int nm = have_met  ? (int)method_levels.size() : 0;
   const int nt = have_time ? (int)time_levels.size()   : 0;
   const int nm_eff = (nm >= 2 ? nm : 0);
   const int nt_eff = (nt >= 2 ? nt : 0);
 
-  // p = number of beta columns
   const int p = colnames_X.size();
   if (p <= 0) stop("Empty design column names.");
 
-  // map column name -> position
   std::unordered_map<std::string,int> pos;
   pos.reserve((size_t)p);
   for (int j=0; j<p; ++j) pos.emplace(std::string(colnames_X[j]), j);
 
-  // no method contrasts -> NULL/NULL
   if (nm_eff == 0) {
     return Rcpp::List::create(
       _["L"]  = R_NilValue,
@@ -62,7 +56,6 @@ Rcpp::List build_L_Dm_cpp(
     );
   }
 
-  // Helper to fetch Dsub (nt_eff==0 => 1x1)
   auto make_Dsub = [&](int nt_eff)->mat{
     if (nt_eff == 0) {
       mat D(1,1,arma::fill::ones);
@@ -70,120 +63,100 @@ Rcpp::List build_L_Dm_cpp(
     }
     if (Dmat_global.isNotNull()) {
       NumericMatrix Dg(Dmat_global);
-      if ((int)Dg.nrow() != nt_eff || (int)Dg.ncol() != nt_eff) {
+      if ((int)Dg.nrow() != nt_eff || (int)Dg.ncol() != nt_eff)
         stop("Dmat_global must be %d x %d for the provided time levels.", nt_eff, nt_eff);
-      }
-      mat D(&Dg[0], Dg.nrow(), Dg.ncol(), /*copy_aux_mem*/ false);
-      return D; // shallow view is fine (we immediately copy via return)
+      mat D(&Dg[0], Dg.nrow(), Dg.ncol(), false);
+      return D;
     } else {
       return arma::eye<mat>(nt_eff, nt_eff);
     }
   };
 
-  // ---------- Case A: exactly two methods (fast path) ----------
-    if (nm_eff == 2) {
-      // Column for the 2nd method main effect: paste0(rmet, lev2)
-      const std::string lev2 = as<std::string>(method_levels[1]); // 2nd level
-      const std::string met2_name = rmet + lev2;
-      const int met2_idx = find_col(pos, met2_name);
-      if (met2_idx < 0) stop("Cannot find method column '%s' in design.", met2_name.c_str());
+  // ----- nm==2 fast path -----
+  if (nm_eff == 2) {
+    const std::string lev2 = as<std::string>(method_levels[1]);
+    const std::string met2_name = rmet + lev2;
+    const int met2_idx = find_col(pos, met2_name);
+    if (met2_idx < 0) stop("Cannot find method column '%s' in design.", met2_name.c_str());
 
-      mat L;
-      if (nt_eff == 0) {
-        // p x 1, picks beta_met2
-        L.zeros(p, 1);
-        L(met2_idx, 0) = 1.0;
-      } else {
-        // p x nt_eff, per-time diffs; baseline time uses only beta_met2
-        L.zeros(p, nt_eff);
-        for (int t = 0; t < nt_eff; ++t) {
-          L(met2_idx, t) = 1.0; // all times include main effect
-          if (has_interaction && t >= 1) {
-            const std::string tlev = as<std::string>(time_levels[t]);
-            // try "met2:rtimetlev" then "rtimetlev:met2"
-            const std::string tname = rtime + tlev;
-            int inter_idx = find_inter(pos, met2_name, tname);
-            if (inter_idx < 0) {
-              stop("Cannot find interaction column for '%s:%s' (or swapped) in design.",
-                   met2_name.c_str(), tname.c_str());
-            }
-            L(inter_idx, t) = 1.0;
-          }
+    mat L;
+    if (nt_eff == 0) {
+      L.zeros(p, 1);
+      L(met2_idx, 0) = 1.0;
+    } else {
+      L.zeros(p, nt_eff);
+      for (int t = 0; t < nt_eff; ++t) {
+        L(met2_idx, t) = 1.0;
+        if (has_interaction && t >= 1) {
+          const std::string tlev = as<std::string>(time_levels[t]);
+          const std::string tname = rtime + tlev;
+          int inter_idx = find_inter(pos, met2_name, tname);
+          if (inter_idx < 0)
+            stop("Cannot find interaction column for '%s:%s' (or swapped) in design.",
+                 met2_name.c_str(), tname.c_str());
+          L(inter_idx, t) = 1.0;
         }
       }
-
-      mat Dsub = make_Dsub(nt_eff);
-      // For nm==2: Dm is just Dsub (nt_eff x nt_eff) or 1x1
-      return Rcpp::List::create(
-        _["L"]  = Rcpp::wrap(L),
-        _["Dm"] = Rcpp::wrap(Dsub),
-        _["nm"] = nm_eff,
-        _["nt"] = nt_eff
-      );
     }
 
-  // ---------- Case B: >= 3 methods ----------
-    // number of pairwise diffs per time
+    mat Dsub = make_Dsub(nt_eff);
+    return Rcpp::List::create(
+      _["L"]  = Rcpp::wrap(L),
+      _["Dm"] = Rcpp::wrap(Dsub),
+      _["nm"] = nm_eff,
+      _["nt"] = nt_eff
+    );
+  }
+
+  // ----- nm>=3 -----
   const int nd = nm_eff * (nm_eff - 1) / 2;
   const int ntime_blocks = std::max(nt_eff, 1);
   const int q = nd * ntime_blocks;
 
   mat L(p, q, arma::fill::zeros);
 
-  // Precompute method main-effect column indices (treatment contrasts):
-    // level1 (baseline) has no column -> index = -1
+  // method main-effect columns (treatment coding; level1 absent)
   std::vector<int> met_col(nm_eff, -1);
   for (int mlev = 1; mlev < nm_eff; ++mlev) {
     const std::string mname = rmet + std::string(method_levels[mlev]);
     met_col[mlev] = find_col(pos, mname);
-    if (met_col[mlev] < 0) {
-      stop("Cannot find method column '%s' in design.", mname.c_str());
-    }
+    if (met_col[mlev] < 0) stop("Cannot find method column '%s' in design.", mname.c_str());
   }
-  // Precompute interaction indices for (method level >=2, time level >=2)
-    // Missing entries stay -1 (will error if referenced).
-  std::vector< std::vector<int> > inter_col(
-    nm_eff, std::vector<int>(std::max(nt_eff,2), -1));
+
+  // interactions
+  std::vector< std::vector<int> > inter_col(nm_eff, std::vector<int>(std::max(nt_eff,2), -1));
   if (has_interaction && nt_eff > 0) {
     for (int mlev = 1; mlev < nm_eff; ++mlev) {
       const std::string mname = rmet + std::string(method_levels[mlev]);
       for (int t = 1; t < nt_eff; ++t) {
         const std::string tname = rtime + std::string(time_levels[t]);
         int id = find_inter(pos, mname, tname);
-        if (id < 0) {
-          stop("Cannot find interaction column for '%s:%s' (or swapped).",
-               mname.c_str(), tname.c_str());
-        }
+        if (id < 0) stop("Cannot find interaction column for '%s:%s' (or swapped).",
+            mname.c_str(), tname.c_str());
         inter_col[mlev][t] = id;
       }
     }
   }
 
-  // Fill L: for each time block (or 1 if no time) and each pair (i<j)
+  // fill L
   int col = 0;
   for (int tb = 0; tb < ntime_blocks; ++tb) {
     for (int i = 0; i < nm_eff - 1; ++i) {
       for (int j = i + 1; j < nm_eff; ++j, ++col) {
-        // Main-effect part at baseline time (always contributes)
-        // treatment coding: level1 has no column
         if (i == 0 && j > 0) {
-          // difference (j - 1): +beta_mj
           L(met_col[j], col) += 1.0;
         } else if (i > 0 && j == 0) {
-          // difference (0 - i): -beta_mi
           L(met_col[i], col) -= 1.0;
-        } else { // i>0, j>0
+        } else {
           L(met_col[j], col) += 1.0;
           L(met_col[i], col) -= 1.0;
         }
-
-        // Interaction part (only if time exists, tb>=1, and interactions on)
         if (has_interaction && nt_eff > 0 && tb >= 1) {
           if (i == 0 && j > 0) {
             L(inter_col[j][tb], col) += 1.0;
           } else if (i > 0 && j == 0) {
             L(inter_col[i][tb], col) -= 1.0;
-          } else { // i>0, j>0
+          } else {
             L(inter_col[j][tb], col) += 1.0;
             L(inter_col[i][tb], col) -= 1.0;
           }
@@ -192,15 +165,8 @@ Rcpp::List build_L_Dm_cpp(
     }
   }
 
-  // Dm = kron(Dsub, I_nd) when nm>=3 (nt_eff==0 => Dsub=1x1, so Dm = I_nd)
   mat Dsub = make_Dsub(nt_eff);
-  mat Dm;
-  if (nd == 1) {
-    // rare case nm_eff==2 would have been caught above; still safe:
-      Dm = Dsub;
-  } else {
-    Dm = arma::kron(Dsub, arma::eye<mat>(nd, nd));
-  }
+  mat Dm = (nd == 1 ? Dsub : arma::kron(Dsub, arma::eye<mat>(nd, nd)));
 
   return Rcpp::List::create(
     _["L"]  = Rcpp::wrap(L),
@@ -209,3 +175,138 @@ Rcpp::List build_L_Dm_cpp(
     _["nt"] = nt_eff
   );
 }
+
+// drop all-zero columns
+static inline NumericMatrix drop_zero_columns(const NumericMatrix& Zin) {
+  const int n = Zin.nrow(), q = Zin.ncol();
+  if (q == 0) return Zin;
+  std::vector<int> keep; keep.reserve(q);
+  for (int j = 0; j < q; ++j) {
+    bool nonzero = false;
+    for (int i = 0; i < n; ++i) { if (Zin(i,j) != 0.0) { nonzero = true; break; } }
+    if (nonzero) keep.push_back(j);
+  }
+  if ((int)keep.size() == q) return Zin;
+  if (keep.empty()) return NumericMatrix(n, 0);
+  NumericMatrix Zout(n, (int)keep.size());
+  for (int jj = 0; jj < (int)keep.size(); ++jj) {
+    const int j = keep[jj];
+    for (int i = 0; i < n; ++i) Zout(i, jj) = Zin(i, j);
+  }
+  return Zout;
+}
+
+// [[Rcpp::export]]
+Rcpp::List build_L_Dm_Z_cpp(
+    Rcpp::CharacterVector colnames_X,
+    Rcpp::Nullable<Rcpp::CharacterVector> rmet_name,
+    Rcpp::Nullable<Rcpp::CharacterVector> rtime_name,
+    Rcpp::CharacterVector method_levels,
+    Rcpp::CharacterVector time_levels,
+    bool has_interaction,
+    Rcpp::Nullable<Rcpp::NumericMatrix> Dmat_global,
+    std::string slope_mode,
+    Rcpp::Nullable<Rcpp::NumericVector> slope_var,
+    Rcpp::Nullable<Rcpp::IntegerVector> method_codes,
+    bool drop_zero_cols
+) {
+  Rcpp::List Laux = build_L_Dm_cpp(
+    colnames_X, rmet_name, rtime_name,
+    method_levels, time_levels,
+    has_interaction, Dmat_global
+  );
+
+  if (slope_mode == "none") {
+    return Rcpp::List::create(
+      _["L"]  = Laux["L"],
+                    _["Dm"] = Laux["Dm"],
+                                  _["nm"] = Laux["nm"],
+                                                _["nt"] = Laux["nt"],
+                                                              _["Z"]  = R_NilValue
+    );
+  }
+
+  int n = -1;
+  if (slope_var.isNotNull()) n = as<NumericVector>(slope_var).size();
+  if (method_codes.isNotNull()) {
+    int nmeth = as<IntegerVector>(method_codes).size();
+    if (n < 0) n = nmeth; else if (n != nmeth)
+      stop("method_codes and slope_var must have the same length.");
+  }
+  if (n <= 0) stop("Cannot infer 'n' for Z; provide 'slope_var' (and 'method_codes' for slope_mode='method').");
+
+  NumericMatrix Z;
+
+  if (slope_mode == "subject") {
+    if (!slope_var.isNotNull()) stop("slope_var is required for slope_mode='subject'.");
+    NumericVector z = as<NumericVector>(slope_var);
+    if ((int)z.size() != n) stop("slope_var length mismatch.");
+    Z = NumericMatrix(n, 1);
+    for (int i = 0; i < n; ++i) Z(i,0) = (NumericVector::is_na(z[i]) ? 0.0 : (double)z[i]);
+
+  } else if (slope_mode == "method") {
+    if (!slope_var.isNotNull())   stop("slope_var is required for slope_mode='method'.");
+    if (!method_codes.isNotNull())stop("method_codes is required for slope_mode='method'.");
+
+    NumericVector z = as<NumericVector>(slope_var);
+    IntegerVector met = as<IntegerVector>(method_codes);
+    if ((int)z.size() != n || (int)met.size() != n)
+      stop("Length mismatch for slope_var / method_codes.");
+
+    const int Lm = method_levels.size();
+    if (Lm <= 0) stop("slope_mode='method' but no method_levels provided.");
+
+    Z = NumericMatrix(n, Lm);
+    for (int i = 0; i < n; ++i) {
+      const double zi = NumericVector::is_na(z[i]) ? 0.0 : (double)z[i];
+      const int mc = (met[i] == NA_INTEGER ? 0 : (int)met[i]); // 1..Lm
+      if (mc >= 1 && mc <= Lm) Z(i, mc-1) = zi;
+    }
+    if (drop_zero_cols) Z = drop_zero_columns(Z);
+  } else {
+    stop("Unsupported slope_mode: '", slope_mode, "'");
+  }
+
+  return Rcpp::List::create(
+    _["L"]  = Laux["L"],
+                  _["Dm"] = Laux["Dm"],
+                                _["nm"] = Laux["nm"],
+                                              _["nt"] = Laux["nt"],
+                                                            _["Z"]  = (Z.ncol() == 0 ? R_NilValue : Rcpp::wrap(Z))
+  );
+}
+
+// [[Rcpp::export]]
+arma::mat ar1_precision_from_time(Rcpp::IntegerVector time_codes, double rho) {
+  const int n = time_codes.size();
+  arma::mat Cinv(n, n, arma::fill::zeros);
+  if (n == 0) return Cinv;
+  if (std::fabs(rho) >= 0.999) stop("rho must be in (-0.999, 0.999)");
+  const double r2 = rho * rho;
+  const double denom = std::max(1.0 - r2, 1e-12);
+
+  auto is_na_or_neg = [](int v){ return v == NA_INTEGER || v < 0; };
+
+  int s = 0;
+  while (s < n) {
+    if (is_na_or_neg(time_codes[s])) { Cinv(s,s) += 1.0; ++s; continue; }
+    int e = s;
+    while (e + 1 < n && !is_na_or_neg(time_codes[e+1])) ++e;
+
+    const int L = e - s + 1;
+    if (L == 1) {
+      Cinv(s,s) += 1.0 / denom;
+    } else {
+      Cinv(s,s) += 1.0 / denom;
+      Cinv(e,e) += 1.0 / denom;
+      for (int t = s + 1; t <= e - 1; ++t) Cinv(t,t) += (1.0 + r2) / denom;
+      for (int t = s; t <= e - 1; ++t) {
+        Cinv(t, t+1) += -rho / denom;
+        Cinv(t+1, t) += -rho / denom;
+      }
+    }
+    s = e + 1;
+  }
+  return Cinv;
+}
+

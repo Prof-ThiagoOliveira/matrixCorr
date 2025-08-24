@@ -33,12 +33,20 @@ get_omp_threads <- function() {
     .Call(`_matrixCorr_get_omp_threads`)
 }
 
-build_L_Dm_cpp <- function(colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global = NULL) {
+build_L_Dm_cpp <- function(colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global) {
     .Call(`_matrixCorr_build_L_Dm_cpp`, colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global)
 }
 
-ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, Lr = NULL, auxDr = NULL) {
-    .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr)
+build_L_Dm_Z_cpp <- function(colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global, slope_mode, slope_var, method_codes, drop_zero_cols) {
+    .Call(`_matrixCorr_build_L_Dm_Z_cpp`, colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global, slope_mode, slope_var, method_codes, drop_zero_cols)
+}
+
+ar1_precision_from_time <- function(time_codes, rho) {
+    .Call(`_matrixCorr_ar1_precision_from_time`, time_codes, rho)
+}
+
+ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, Lr = NULL, auxDr = NULL, Zr = NULL, use_ar1 = FALSE, ar1_rho = 0.0) {
+    .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr, Zr, use_ar1, ar1_rho)
 }
 
 ccc_cpp <- function(X) {

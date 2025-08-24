@@ -147,9 +147,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// build_L_Dm_Z_cpp
+Rcpp::List build_L_Dm_Z_cpp(Rcpp::CharacterVector colnames_X, Rcpp::Nullable<Rcpp::CharacterVector> rmet_name, Rcpp::Nullable<Rcpp::CharacterVector> rtime_name, Rcpp::CharacterVector method_levels, Rcpp::CharacterVector time_levels, bool has_interaction, Rcpp::Nullable<Rcpp::NumericMatrix> Dmat_global, std::string slope_mode, Rcpp::Nullable<Rcpp::NumericVector> slope_var, Rcpp::Nullable<Rcpp::IntegerVector> method_codes, bool drop_zero_cols);
+RcppExport SEXP _matrixCorr_build_L_Dm_Z_cpp(SEXP colnames_XSEXP, SEXP rmet_nameSEXP, SEXP rtime_nameSEXP, SEXP method_levelsSEXP, SEXP time_levelsSEXP, SEXP has_interactionSEXP, SEXP Dmat_globalSEXP, SEXP slope_modeSEXP, SEXP slope_varSEXP, SEXP method_codesSEXP, SEXP drop_zero_colsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type colnames_X(colnames_XSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type rmet_name(rmet_nameSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type rtime_name(rtime_nameSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type method_levels(method_levelsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type time_levels(time_levelsSEXP);
+    Rcpp::traits::input_parameter< bool >::type has_interaction(has_interactionSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type Dmat_global(Dmat_globalSEXP);
+    Rcpp::traits::input_parameter< std::string >::type slope_mode(slope_modeSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type slope_var(slope_varSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type method_codes(method_codesSEXP);
+    Rcpp::traits::input_parameter< bool >::type drop_zero_cols(drop_zero_colsSEXP);
+    rcpp_result_gen = Rcpp::wrap(build_L_Dm_Z_cpp(colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global, slope_mode, slope_var, method_codes, drop_zero_cols));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ar1_precision_from_time
+arma::mat ar1_precision_from_time(Rcpp::IntegerVector time_codes, double rho);
+RcppExport SEXP _matrixCorr_ar1_precision_from_time(SEXP time_codesSEXP, SEXP rhoSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type time_codes(time_codesSEXP);
+    Rcpp::traits::input_parameter< double >::type rho(rhoSEXP);
+    rcpp_result_gen = Rcpp::wrap(ar1_precision_from_time(time_codes, rho));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ccc_vc_cpp
-Rcpp::List ccc_vc_cpp(Rcpp::NumericMatrix Xr, Rcpp::NumericVector yr, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int nm, int nt, int max_iter, double tol, double conf_level, Rcpp::Nullable<Rcpp::NumericMatrix> Lr, Rcpp::Nullable<Rcpp::NumericMatrix> auxDr);
-RcppExport SEXP _matrixCorr_ccc_vc_cpp(SEXP XrSEXP, SEXP yrSEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP nmSEXP, SEXP ntSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP LrSEXP, SEXP auxDrSEXP) {
+Rcpp::List ccc_vc_cpp(Rcpp::NumericMatrix Xr, Rcpp::NumericVector yr, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int nm, int nt, int max_iter, double tol, double conf_level, Rcpp::Nullable<Rcpp::NumericMatrix> Lr, Rcpp::Nullable<Rcpp::NumericMatrix> auxDr, Rcpp::Nullable<Rcpp::NumericMatrix> Zr, bool use_ar1, double ar1_rho);
+RcppExport SEXP _matrixCorr_ccc_vc_cpp(SEXP XrSEXP, SEXP yrSEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP nmSEXP, SEXP ntSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP LrSEXP, SEXP auxDrSEXP, SEXP ZrSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -165,7 +198,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type Lr(LrSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type auxDr(auxDrSEXP);
-    rcpp_result_gen = Rcpp::wrap(ccc_vc_cpp(Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type Zr(ZrSEXP);
+    Rcpp::traits::input_parameter< bool >::type use_ar1(use_ar1SEXP);
+    Rcpp::traits::input_parameter< double >::type ar1_rho(ar1_rhoSEXP);
+    rcpp_result_gen = Rcpp::wrap(ccc_vc_cpp(Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr, Zr, use_ar1, ar1_rho));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -345,7 +381,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},
     {"_matrixCorr_build_L_Dm_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_cpp, 7},
-    {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 12},
+    {"_matrixCorr_build_L_Dm_Z_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_Z_cpp, 11},
+    {"_matrixCorr_ar1_precision_from_time", (DL_FUNC) &_matrixCorr_ar1_precision_from_time, 2},
+    {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 15},
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
