@@ -563,7 +563,7 @@ ccc_pairwise_u_stat <- function(data,
 #' first ordered by time within subject before building the run-wise precision;
 #' \code{NA} time codes break the correlation run.
 #'
-#' @seealso \code{\link{build_L_Dm_cpp}} and \code{\link{build_L_Dm_Z_cpp}}
+#' @seealso \code{build_L_Dm_Z_cpp}
 #' for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_pairwise_u_stat}}
 #' for a U-statistic alternative; and \pkg{cccrm} for a reference approach via
 #' \pkg{nlme}.
@@ -637,17 +637,6 @@ ccc_pairwise_u_stat <- function(data,
 #' # When needed: repeated measures over time with serially correlated
 #' # residuals within subject (e.g., values drift smoothly across visits).
 #' # ------------------------------------------------------------------
-#' \donttest{
-#'   # Make threaded math libraries behave during examples/CI
-#'   Sys.setenv(OMP_NUM_THREADS = "1",
-#'              OPENBLAS_NUM_THREADS = "1",
-#'              MKL_NUM_THREADS = "1",
-#'              VECLIB_MAXIMUM_THREADS = "1")
-#'   if (requireNamespace("RhpcBLASctl", quietly = TRUE)) {
-#'     RhpcBLASctl::blas_set_num_threads(1)
-#'     RhpcBLASctl::omp_set_num_threads(1)
-#'   }
-#'
 #'   set.seed(10)
 #'   n_subj <- 40
 #'   n_time <- 6                      # ≥ 3 time points recommended for AR(1)
@@ -667,7 +656,6 @@ ccc_pairwise_u_stat <- function(data,
 #'   # implemented yet; use a plausible value (e.g., 0.4–0.8) for sensitivity.
 #'   ccc_lmm_reml(dat_ar, ry = "y", rind = "id", rtime = "time",
 #'                ar = "ar1", ar_rho = 0.6, verbose = TRUE)
-#' }
 #'
 #' # ------------------------------------------------------------------
 #' # Random slope by SUBJECT
@@ -748,7 +736,7 @@ ccc_pairwise_u_stat <- function(data,
 #'              slope = "custom", slope_Z = Z_custom, verbose = TRUE)
 #'
 #' @author Thiago de Paula Oliveira
-#' @importFrom stats as.formula model.matrix setNames qnorm
+#' @importFrom stats as.formula model.matrix setNames qnorm optimize
 #' @export
 ccc_lmm_reml <- function(data, ry, rind,
                          rmet = NULL, rtime = NULL, interaction = TRUE,

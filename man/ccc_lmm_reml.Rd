@@ -427,17 +427,6 @@ ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
 # When needed: repeated measures over time with serially correlated
 # residuals within subject (e.g., values drift smoothly across visits).
 # ------------------------------------------------------------------
-\donttest{
-  # Make threaded math libraries behave during examples/CI
-  Sys.setenv(OMP_NUM_THREADS = "1",
-             OPENBLAS_NUM_THREADS = "1",
-             MKL_NUM_THREADS = "1",
-             VECLIB_MAXIMUM_THREADS = "1")
-  if (requireNamespace("RhpcBLASctl", quietly = TRUE)) {
-    RhpcBLASctl::blas_set_num_threads(1)
-    RhpcBLASctl::omp_set_num_threads(1)
-  }
-
   set.seed(10)
   n_subj <- 40
   n_time <- 6                      # ≥ 3 time points recommended for AR(1)
@@ -457,7 +446,6 @@ ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
   # implemented yet; use a plausible value (e.g., 0.4–0.8) for sensitivity.
   ccc_lmm_reml(dat_ar, ry = "y", rind = "id", rtime = "time",
                ar = "ar1", ar_rho = 0.6, verbose = TRUE)
-}
 
 # ------------------------------------------------------------------
 # Random slope by SUBJECT
@@ -549,7 +537,7 @@ Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
 a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519-539.
 }
 \seealso{
-\code{\link{build_L_Dm_cpp}} and \code{\link{build_L_Dm_Z_cpp}}
+\code{build_L_Dm_Z_cpp}
 for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_pairwise_u_stat}}
 for a U-statistic alternative; and \pkg{cccrm} for a reference approach via
 \pkg{nlme}.
