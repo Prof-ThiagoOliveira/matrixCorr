@@ -1,5 +1,4 @@
 // Thiago de Paula Oliveira
-// Thiago de Paula Oliveira
 // [[Rcpp::depends(RcppArmadillo)]]
 #include <RcppArmadillo.h>
 #include <unordered_map>
@@ -147,6 +146,23 @@ static inline double sample_var(const arma::vec& v) {
   for (arma::uword i=0;i<n;++i) { double d = v[i]-mu; acc += d*d; }
   return acc / (double)(n-1);
 }
+
+// AR(1) variance reduction factor for the mean of T equally spaced points
+static inline double ar1_kappa_T(double rho, int T) {
+  if (T <= 1) return 1.0;                    // mean of 1 point has no reduction
+  const double r = rho;
+  double acc = (double)T;                    // the 'T' term
+  double rpow = r;
+  for (int k = 1; k <= T-1; ++k) {           // add 2*(T-k)*rho^k
+    acc += 2.0 * (double)(T - k) * rpow;
+    rpow *= r;
+  }
+  double TT = (double)T * (double)T;
+  double kappa = acc / TT;
+  // guard against tiny negatives from rounding (rho near ±1)
+  return std::max(kappa, 1e-12);
+}
+
 
 //---------------- reindex subjects ----------------//
 static inline void reindex_subject(const IntegerVector& subject,
@@ -324,7 +340,7 @@ static inline void make_ar1_Cinv(const std::vector<int>& tim_i, double rho, arma
 
     const int L = e - s + 1;
     if (L == 1) {
-      Cinv(s,s) += 1.0 / denom;
+      Cinv(s,s) += 1.0;
     } else {
       Cinv(s,s)         += 1.0 / denom;
       Cinv(e,e)         += 1.0 / denom;
@@ -425,8 +441,8 @@ Rcpp::List ccc_vc_cpp(
   if (method.size()  && method.size()!=n)  stop("length(method) mismatch");
   if (time.size()    && time.size()!=n)    stop("length(time) mismatch");
 
-  mat X(Xr.begin(), Xr.nrow(), Xr.ncol(), false);
-  vec y(yr.begin(), yr.size(), false);
+  arma::mat X(Xr.begin(), Xr.nrow(), Xr.ncol(), false);
+  arma::vec y(yr.begin(), yr.size(), false);
   const int p = X.n_cols;
 
   // ---------------- optional extra random-effect design Zr ---------
@@ -449,7 +465,6 @@ Rcpp::List ccc_vc_cpp(
       Rcpp::warning("use_ar1=TRUE but nt==0; AR(1) will be ignored.");
   }
 
-
   // subjects
   std::vector<int> subj_idx; int m = 0;
   reindex_subject(subject, subj_idx, m);
@@ -463,7 +478,7 @@ Rcpp::List ccc_vc_cpp(
   double tau2 = 0.5; // only used when has_extra
   const double eps = 1e-10;
 
-  vec beta(p, fill::zeros);
+  arma::vec beta(p, arma::fill::zeros);
 
   // workspace sizes
   const int r = 1 + (nm>0?nm:0) + (nt>0?nt:0);
@@ -485,7 +500,7 @@ Rcpp::List ccc_vc_cpp(
 
     C[i].Utx.set_size(r, p);
     for (int k=0;k<p;++k) {
-      vec tmp(r, fill::zeros);
+      arma::vec tmp(r, arma::fill::zeros);
       accum_Ut_vec(rows, met, tim, nm, nt, [&](int idx){ return X(idx,k); }, tmp);
       C[i].Utx.col(k) = tmp;
     }
@@ -515,24 +530,24 @@ Rcpp::List ccc_vc_cpp(
   for (int iter=0; iter<max_iter; ++iter) {
 
     // (1) Assemble XtViX, XtViy
-    mat XtViX(p,p,fill::zeros);
-    vec XtViy(p, fill::zeros);
+    arma::mat XtViX(p,p,arma::fill::zeros);
+    arma::vec XtViy(p, arma::fill::zeros);
 
     if (use_ar1 || has_extra) {
-      // -------- NEW BRANCH: generic Woodbury with R_i^{-1} and extra U --------
+      // -------- generic Woodbury with R_i^{-1} and extra U --------
 #ifdef _OPENMP
       int nthreads = omp_get_max_threads();
-      std::vector<mat> XtViX_tls(nthreads, mat(p,p, fill::zeros));
-      std::vector<vec> XtViy_tls(nthreads, vec(p, fill::zeros));
+      std::vector<arma::mat> XtViX_tls(nthreads, arma::mat(p,p, arma::fill::zeros));
+      std::vector<arma::vec> XtViy_tls(nthreads, arma::vec(p, arma::fill::zeros));
 
 #pragma omp parallel
 {
   int tid = omp_get_thread_num();
-  mat& XtViX_loc = XtViX_tls[tid];
-  vec& XtViy_loc = XtViy_tls[tid];
+  arma::mat& XtViX_loc = XtViX_tls[tid];
+  arma::vec& XtViy_loc = XtViy_tls[tid];
 
-  mat Ubase, Ueff, Zi, Cinv, Rinv, M, A, Zsol, X_i, RinvX, RinvU, S_ux, XTRinvX;
-  vec y_i, S_uy, XTRinvY;
+  arma::mat Ubase, Ueff, Zi, Cinv, Rinv, M, A, Zsol, X_i, RinvX, RinvU, S_ux, XTRinvX;
+  arma::vec y_i, S_uy, XTRinvY;
 
 #pragma omp for schedule(static)
   for (int i=0; i<m; ++i) {
@@ -561,20 +576,15 @@ Rcpp::List ccc_vc_cpp(
     }
 
     std::vector<int> tim_ord(n_i);
-    std::vector<int> met_ord(n_i, -1);           // fill with -1 when nm==0
+    std::vector<int> met_ord(n_i, -1);
     for (int k = 0; k < n_i; ++k) {
       const int ok = ord[k];
       tim_ord[k] = tim_i[ ok ];
-      if (nm > 0) met_ord[k] = met_i[ ok ];      // only read when nm>0
+      if (nm > 0) met_ord[k] = met_i[ ok ];
     }
 
 #ifndef NDEBUG
-    if (nm == 0) {
-      // met_ord is dummy but must have n_i elements
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    } else {
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    }
+    if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
     if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
 #endif
 
@@ -582,9 +592,9 @@ Rcpp::List ccc_vc_cpp(
     build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
 
     if (has_extra) {
-      rows_take_to(Z, rows_i, Zi);                     // subset by subject
+      rows_take_to(Z, rows_i, Zi);
       arma::uvec ord_u = arma::conv_to<arma::uvec>::from(ord);
-      Zi = Zi.rows(ord_u);                             // permute to time order
+      Zi = Zi.rows(ord_u);
     } else {
       Zi.reset();
     }
@@ -621,8 +631,8 @@ Rcpp::List ccc_vc_cpp(
     A.cols(1, p) = S_ux;
     Zsol = solve_sympd_safe(M, A);
 
-    vec Z_y = Zsol.col(0);
-    mat Z_X = Zsol.cols(1, p);
+    arma::vec Z_y = Zsol.col(0);
+    arma::mat Z_X = Zsol.cols(1, p);
 
     for (int k=0; k<p; ++k)
       XtViy_loc[k] += XTRinvY[k] - dot(S_ux.col(k), Z_y);
@@ -636,8 +646,8 @@ Rcpp::List ccc_vc_cpp(
 for (int t=0; t<nthreads; ++t) { XtViX += XtViX_tls[t]; XtViy += XtViy_tls[t]; }
 #else
 // serial
-mat Ubase, Ueff, Zi, Cinv, Rinv, M, A, Zsol, X_i, RinvX, RinvU, S_ux, XTRinvX;
-vec y_i, S_uy, XTRinvY;
+arma::mat Ubase, Ueff, Zi, Cinv, Rinv, M, A, Zsol, X_i, RinvX, RinvU, S_ux, XTRinvX;
+arma::vec y_i, S_uy, XTRinvY;
 
 for (int i=0; i<m; ++i) {
   const auto& rows_i = S.rows[i];
@@ -665,22 +675,12 @@ for (int i=0; i<m; ++i) {
   }
 
   std::vector<int> tim_ord(n_i);
-  std::vector<int> met_ord(n_i, -1);           // fill with -1 when nm==0
+  std::vector<int> met_ord(n_i, -1);
   for (int k = 0; k < n_i; ++k) {
     const int ok = ord[k];
     tim_ord[k] = tim_i[ ok ];
-    if (nm > 0) met_ord[k] = met_i[ ok ];      // only read when nm>0
+    if (nm > 0) met_ord[k] = met_i[ ok ];
   }
-
-#ifndef NDEBUG
-  if (nm == 0) {
-    // met_ord is dummy but must have n_i elements
-    if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-  } else {
-    if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-  }
-  if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
-#endif
 
   const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
   build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
@@ -724,8 +724,8 @@ for (int i=0; i<m; ++i) {
   A.cols(1, p) = S_ux;
   Zsol = solve_sympd_safe(M, A);
 
-  vec Z_y = Zsol.col(0);
-  mat Z_X = Zsol.cols(1, p);
+  arma::vec Z_y = Zsol.col(0);
+  arma::mat Z_X = Zsol.cols(1, p);
 
   for (int k=0; k<p; ++k)
     XtViy[k] += XTRinvY[k] - dot(S_ux.col(k), Z_y);
@@ -738,19 +738,19 @@ for (int i=0; i<m; ++i) {
 #endif
 
     } else {
-      // ---------------- OLD BRANCH (iid residuals, cached) ----------------
+      // ---------------- cached iid residuals ----------------
       const double inv_se = 1.0 / std::max(se, eps);
 #ifdef _OPENMP
       int nthreads = omp_get_max_threads();
-      std::vector<mat> XtViX_tls(nthreads, mat(p,p, fill::zeros));
-      std::vector<vec> XtViy_tls(nthreads, vec(p, fill::zeros));
+      std::vector<arma::mat> XtViX_tls(nthreads, arma::mat(p,p, arma::fill::zeros));
+      std::vector<arma::vec> XtViy_tls(nthreads, arma::vec(p, arma::fill::zeros));
 
 #pragma omp parallel
 {
   int tid = omp_get_thread_num();
-  mat& XtViX_loc = XtViX_tls[tid];
-  vec& XtViy_loc = XtViy_tls[tid];
-  mat M(r,r), A(r, 1+p), Zsol(r, 1+p), TX;
+  arma::mat& XtViX_loc = XtViX_tls[tid];
+  arma::vec& XtViy_loc = XtViy_tls[tid];
+  arma::mat M(r,r), A(r, 1+p), Zsol(r, 1+p), TX;
 
 #pragma omp for schedule(static)
   for (int i=0; i<m; ++i) {
@@ -767,8 +767,8 @@ for (int i=0; i<m; ++i) {
     Zsol = solve_sympd_safe(M, A * inv_se);
 
     TX = A.cols(1,p);
-    vec Z_y = Zsol.col(0);
-    mat Z_X = Zsol.cols(1,p);
+    arma::vec Z_y = Zsol.col(0);
+    arma::mat Z_X = Zsol.cols(1,p);
 
     for (int k=0; k<p; ++k) {
       XtViy_loc[k] += inv_se * (Ci.Xty[k] - dot(TX.col(k), Z_y));
@@ -782,7 +782,7 @@ for (int i=0; i<m; ++i) {
 }
 for (int t=0; t<nthreads; ++t) { XtViX += XtViX_tls[t]; XtViy += XtViy_tls[t]; }
 #else
-mat M(r,r), A(r, 1+p), Zsol(r, 1+p);
+arma::mat M(r,r), A(r, 1+p), Zsol(r, 1+p);
 
 for (int i=0; i<m; ++i) {
   const Cache& Ci = C[i];
@@ -797,9 +797,9 @@ for (int i=0; i<m; ++i) {
   A.cols(1,p) = Ci.Utx;
   Zsol = solve_sympd_safe(M, A * inv_se);
 
-  mat TX  = A.cols(1,p);
-  vec Z_y = Zsol.col(0);
-  mat Z_X = Zsol.cols(1,p);
+  arma::mat TX  = A.cols(1,p);
+  arma::vec Z_y = Zsol.col(0);
+  arma::mat Z_X = Zsol.cols(1,p);
 
   for (int k=0; k<p; ++k) {
     XtViy[k] += inv_se * (Ci.Xty[k] - dot(TX.col(k), Z_y));
@@ -814,13 +814,13 @@ for (int i=0; i<m; ++i) {
 
     // (2) GLS beta
     {
-      mat XtViX_inv;
+      arma::mat XtViX_inv;
       if (!inv_sympd_safe(XtViX_inv, XtViX)) {
         // adaptive ridge if needed
-        mat XtViXj = XtViX;
+        arma::mat XtViXj = XtViX;
         double base = 1.0;
         if (XtViX.n_rows > 0) {
-          double tr = trace(XtViX);
+          double tr = arma::trace(XtViX);
           if (std::isfinite(tr) && tr > 0.0) base = std::max(1.0, tr / XtViX.n_rows);
         }
         double lam = std::max(1e-12, 1e-8 * base);
@@ -828,10 +828,10 @@ for (int i=0; i<m; ++i) {
         for (int k=0; k<6 && !ok; ++k) {
           XtViXj = XtViX;
           XtViXj.diag() += lam;
-          ok = inv_sympd(XtViX_inv, XtViXj);
+          ok = arma::inv_sympd(XtViX_inv, XtViXj);
           lam *= 10.0;
         }
-        if (!ok) XtViX_inv = pinv(XtViX);
+        if (!ok) XtViX_inv = arma::pinv(XtViX);
       }
       beta = XtViX_inv * XtViy;
     }
@@ -840,7 +840,7 @@ for (int i=0; i<m; ++i) {
     double sa_acc = 0.0, sab_acc = 0.0, sag_acc = 0.0, tau2_acc = 0.0;
     double se_sumsq = 0.0, se_trace = 0.0;
 
-    vec r_global = y - X * beta;
+    arma::vec r_global = y - X * beta;
 
     if (use_ar1 || has_extra) {
 #ifdef _OPENMP
@@ -851,9 +851,9 @@ for (int i=0; i<m; ++i) {
 #pragma omp parallel
 {
   int tid = omp_get_thread_num();
-  mat Ubase, Ueff, Zi, Cinv, Rinv, M, Minv, RinvU;
-  mat X_i;
-  vec y_i, Utr, b_i;
+  arma::mat Ubase, Ueff, Zi, Cinv, Rinv, M, Minv, RinvU;
+  arma::mat X_i;
+  arma::vec y_i, Utr, b_i;
 
 #pragma omp for schedule(static)
   for (int i=0; i<m; ++i) {
@@ -882,30 +882,15 @@ for (int i=0; i<m; ++i) {
     }
 
     std::vector<int> tim_ord(n_i);
-    std::vector<int> met_ord(n_i, -1);           // fill with -1 when nm==0
+    std::vector<int> met_ord(n_i, -1);
     for (int k = 0; k < n_i; ++k) {
       const int ok = ord[k];
       tim_ord[k] = tim_i[ ok ];
-      if (nm > 0) met_ord[k] = met_i[ ok ];      // only read when nm>0
+      if (nm > 0) met_ord[k] = met_i[ ok ];
     }
 
 #ifndef NDEBUG
-    if (nm == 0) {
-      // met_ord is dummy but must have n_i elements
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    } else {
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    }
-    if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
-#endif
-
-#ifndef NDEBUG
-    if (nm == 0) {
-      // met_ord is dummy but must have n_i elements
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    } else {
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    }
+    if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
     if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
 #endif
 
@@ -913,9 +898,9 @@ for (int i=0; i<m; ++i) {
     build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
 
     if (has_extra) {
-      rows_take_to(Z, rows_i, Zi);                     // subset by subject
+      rows_take_to(Z, rows_i, Zi);
       arma::uvec ord_u = arma::conv_to<arma::uvec>::from(ord);
-      Zi = Zi.rows(ord_u);                             // permute to time order
+      Zi = Zi.rows(ord_u);
     } else {
       Zi.reset();
     }
@@ -940,17 +925,17 @@ for (int i=0; i<m; ++i) {
     RinvU = Rinv * Ueff;
     M += Ueff.t() * RinvU;
 
-    vec r_i(n_i);
+    arma::vec r_i(n_i);
     for (int t=0; t<n_i; ++t) r_i[t] = r_global[ rows_i[ ord[t] ] ];
 
     Utr = Ueff.t() * (Rinv * r_i);
     b_i = solve_sympd_safe(M, Utr);
     inv_sympd_safe(Minv, M);
 
-    vec e = r_i - Ueff * b_i;
+    arma::vec e = r_i - Ueff * b_i;
 
-    double quad = as_scalar(e.t() * Rinv * e);
-    double trce = trace(Minv * (Ueff.t() * Rinv * Ueff));
+    double quad = arma::as_scalar(e.t() * Rinv * e);
+    double trce = arma::trace(Minv * (Ueff.t() * Rinv * Ueff));
     ss_tls[tid] += quad;
     tr_tls[tid] += trce;
     se_term[i] = (quad + trce) / std::max(1, n_i);
@@ -985,9 +970,9 @@ for (int t=0; t<nthreads2; ++t) {
 }
 #else
 // serial
-mat Ubase, Ueff, Zi, Cinv, Rinv, M, Minv, RinvU;
-mat X_i, RinvX, S_ux;
-vec y_i, Utr, b_i;
+arma::mat Ubase, Ueff, Zi, Cinv, Rinv, M, Minv, RinvU;
+arma::mat X_i, RinvX, S_ux;
+arma::vec y_i, Utr, b_i;
 
 for (int i=0; i<m; ++i) {
   const auto& rows_i = S.rows[i];
@@ -996,7 +981,7 @@ for (int i=0; i<m; ++i) {
   const int n_i = (int)rows_i.size();
   if (n_i == 0) continue;
 
-  // order by time (NA goes last), stable within ties
+  // order by time (NA last), stable within ties
   std::vector<int> ord(n_i);
   std::iota(ord.begin(), ord.end(), 0);
   std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){
@@ -1016,20 +1001,15 @@ for (int i=0; i<m; ++i) {
   }
 
   std::vector<int> tim_ord(n_i);
-  std::vector<int> met_ord(n_i, -1);           // fill with -1 when nm==0
+  std::vector<int> met_ord(n_i, -1);
   for (int k = 0; k < n_i; ++k) {
     const int ok = ord[k];
     tim_ord[k] = tim_i[ ok ];
-    if (nm > 0) met_ord[k] = met_i[ ok ];      // only read when nm>0
+    if (nm > 0) met_ord[k] = met_i[ ok ];
   }
 
 #ifndef NDEBUG
-  if (nm == 0) {
-    // met_ord is dummy but must have n_i elements
-    if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-  } else {
-    if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-  }
+  if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
   if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
 #endif
 
@@ -1064,16 +1044,16 @@ for (int i=0; i<m; ++i) {
   RinvU = Rinv * Ueff;
   M += Ueff.t() * RinvU;
 
-  vec r_i(n_i);
+  arma::vec r_i(n_i);
   for (int t=0; t<n_i; ++t) r_i[t] = r_global[ rows_i[ ord[t] ] ];
 
   Utr = Ueff.t() * (Rinv * r_i);
   b_i = solve_sympd_safe(M, Utr);
   inv_sympd_safe(Minv, M);
 
-  vec e = r_i - Ueff * b_i;
-  double quad = as_scalar(e.t() * Rinv * e);
-  double trce = trace(Minv * (Ueff.t() * Rinv * Ueff));
+  arma::vec e = r_i - Ueff * b_i;
+  double quad = arma::as_scalar(e.t() * Rinv * e);
+  double trce = arma::trace(Minv * (Ueff.t() * Rinv * Ueff));
   se_sumsq += quad;
   se_trace += trce;
   se_term[i] = (quad + trce) / std::max(1, n_i);
@@ -1110,8 +1090,8 @@ for (int i=0; i<m; ++i) {
 #pragma omp parallel
 {
   int tid = omp_get_thread_num();
-  mat M(r,r), Minv;
-  vec Utr(r), b_i;
+  arma::mat M(r,r), Minv;
+  arma::vec Utr(r), b_i;
 
 #pragma omp for schedule(static)
   for (int i=0; i<m; ++i) {
@@ -1132,16 +1112,16 @@ for (int i=0; i<m; ++i) {
     b_i = solve_sympd_safe(M, Utr / std::max(se,eps));
     inv_sympd_safe(Minv, M);
 
-    vec r_i(n_i);
+    arma::vec r_i(n_i);
     for (int t=0; t<n_i; ++t) r_i[t] = r_global[ rows_i[t] ];
 
-    vec Ub(n_i, fill::zeros);
+    arma::vec Ub(n_i, arma::fill::zeros);
     add_U_times(rows_i, met_i, tim_i, nm, nt, b_i, Ub);
 
     double ss = 0.0;
     for (int t=0; t<n_i; ++t) { double e = r_i[t] - Ub[t]; ss += e*e; }
     ss_tls[tid] += ss;
-    double trce = trace(Minv * Ci.UtU);
+    double trce = arma::trace(Minv * Ci.UtU);
     tr_tls[tid] += trce;
     se_term[i] = (ss + trce) / std::max(1, n_i);
     sa_tls[tid] += b_i[0]*b_i[0] + Minv(0,0);
@@ -1158,8 +1138,9 @@ for (int t=0; t<nthreads2; ++t) {
   se_trace+= tr_tls[t];
 }
 #else
-mat M(r,r), Minv;
-vec Utr(r), b_i;
+// serial
+arma::mat M(r,r), Minv;
+arma::vec Utr(r), b_i;
 for (int i=0; i<m; ++i) {
   const Cache& Ci = C[i];
   const auto& rows_i = S.rows[i];
@@ -1178,15 +1159,15 @@ for (int i=0; i<m; ++i) {
   b_i = solve_sympd_safe(M, Utr / std::max(se,eps));
   inv_sympd_safe(Minv, M);
 
-  vec r_i(n_i);
+  arma::vec r_i(n_i);
   for (int t=0; t<n_i; ++t) r_i[t] = r_global[ rows_i[t] ];
 
-  vec Ub(n_i, fill::zeros);
+  arma::vec Ub(n_i, arma::fill::zeros);
   add_U_times(rows_i, met_i, tim_i, nm, nt, b_i, Ub);
 
   double ss = 0.0; for (int t=0;t<n_i;++t) { double e = r_i[t] - Ub[t]; ss += e*e; }
   se_sumsq += ss;
-  se_trace += trace(Minv * Ci.UtU);
+  se_trace += arma::trace(Minv * Ci.UtU);
 
   sa_acc += b_i[0]*b_i[0] + Minv(0,0);
   int pos = 1;
@@ -1215,18 +1196,18 @@ for (int i=0; i<m; ++i) {
   } // end EM iterations
 
   // ---------------- VarFix using caches ----------------
-  mat XtViX_final(p,p,fill::zeros);
+  arma::mat XtViX_final(p,p,arma::fill::zeros);
 
   if (use_ar1 || has_extra) {
 #ifdef _OPENMP
     int nthreads3 = omp_get_max_threads();
-    std::vector<mat> XtViX_tls2(nthreads3, mat(p,p, fill::zeros));
+    std::vector<arma::mat> XtViX_tls2(nthreads3, arma::mat(p,p, arma::fill::zeros));
 #pragma omp parallel
 {
   int tid = omp_get_thread_num();
-  mat& XtViX_loc = XtViX_tls2[tid];
+  arma::mat& XtViX_loc = XtViX_tls2[tid];
 
-  mat Ubase, Ueff, Zi, Cinv, Rinv, M, Zx, X_i, RinvU, S_ux, XTRinvX;
+  arma::mat Ubase, Ueff, Zi, Cinv, Rinv, M, Zx, X_i, RinvU, S_ux, XTRinvX;
 
 #pragma omp for schedule(static)
   for (int i=0; i<m; ++i) {
@@ -1253,22 +1234,12 @@ for (int i=0; i<m; ++i) {
     }
 
     std::vector<int> tim_ord(n_i);
-    std::vector<int> met_ord(n_i, -1);           // fill with -1 when nm==0
+    std::vector<int> met_ord(n_i, -1);
     for (int k = 0; k < n_i; ++k) {
       const int ok = ord[k];
       tim_ord[k] = tim_i[ ok ];
-      if (nm > 0) met_ord[k] = met_i[ ok ];      // only read when nm>0
+      if (nm > 0) met_ord[k] = met_i[ ok ];
     }
-
-#ifndef NDEBUG
-    if (nm == 0) {
-      // met_ord is dummy but must have n_i elements
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    } else {
-      if ((int)met_ord.size() != n_i) Rcpp::stop("met_ord size mismatch");
-    }
-    if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
-#endif
 
     const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
     build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
@@ -1289,14 +1260,14 @@ for (int i=0; i<m; ++i) {
     Cinv.zeros(n_i, n_i);
     if (use_ar1 && nt > 0) make_ar1_Cinv(tim_ord, ar1_rho, Cinv);
     else Cinv.eye(n_i, n_i);
-    Rinv = (1.0 / std::max(se, 1e-10)) * Cinv;
+    Rinv = (1.0 / std::max(se, eps)) * Cinv;
 
     M.zeros(r_eff, r_eff);
-    M(0,0) = 1.0 / std::max(sa, 1e-10);
+    M(0,0) = 1.0 / std::max(sa, eps);
     int off = 1;
-    if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,1e-10); off += nm; }
-    if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,1e-10); off += nt; }
-    if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,1e-10); }
+    if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
+    if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
+    if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,eps); }
 
     RinvU = Rinv * Ueff;
     S_ux = Ueff.t() * (Rinv * X_i);
@@ -1313,7 +1284,7 @@ for (int i=0; i<m; ++i) {
 for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
 #else
 // serial
-mat Ubase, Ueff, Zi, Cinv, Rinv, M, Zx, X_i, RinvU, S_ux, XTRinvX;
+arma::mat Ubase, Ueff, Zi, Cinv, Rinv, M, Zx, X_i, RinvU, S_ux, XTRinvX;
 
 for (int i=0; i<m; ++i) {
   const auto& rows_i = S.rows[i];
@@ -1326,10 +1297,10 @@ for (int i=0; i<m; ++i) {
   std::iota(ord.begin(), ord.end(), 0);
   std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){
     int ta = tim_i[a], tb = tim_i[b];
-    if (ta < 0 && tb < 0) return a < b; // keep original order for NA/NA
-    if (ta < 0) return false;           // NA goes after any valid time
+    if (ta < 0 && tb < 0) return a < b;
+    if (ta < 0) return false;
     if (tb < 0) return true;
-    return ta < tb;                      // ascending time
+    return ta < tb;
   });
 
   X_i.set_size(n_i, p);
@@ -1339,20 +1310,20 @@ for (int i=0; i<m; ++i) {
   }
 
   std::vector<int> tim_ord(n_i);
-  std::vector<int> met_ord(n_i, -1);           // fill with -1 when nm==0
+  std::vector<int> met_ord(n_i, -1);
   for (int k = 0; k < n_i; ++k) {
     const int ok = ord[k];
     tim_ord[k] = tim_i[ ok ];
-    if (nm > 0) met_ord[k] = met_i[ ok ];      // only read when nm>0
+    if (nm > 0) met_ord[k] = met_i[ ok ];
   }
 
   const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
   build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
 
   if (has_extra) {
-    rows_take_to(Z, rows_i, Zi);                     // subset by subject
+    rows_take_to(Z, rows_i, Zi);
     arma::uvec ord_u = arma::conv_to<arma::uvec>::from(ord);
-    Zi = Zi.rows(ord_u);                             // permute to time order
+    Zi = Zi.rows(ord_u);
   } else {
     Zi.reset();
   }
@@ -1365,14 +1336,14 @@ for (int i=0; i<m; ++i) {
   Cinv.zeros(n_i, n_i);
   if (use_ar1 && nt > 0) make_ar1_Cinv(tim_ord, ar1_rho, Cinv);
   else Cinv.eye(n_i, n_i);
-  Rinv = (1.0 / std::max(se, 1e-10)) * Cinv;
+  Rinv = (1.0 / std::max(se, eps)) * Cinv;
 
   M.zeros(r_eff, r_eff);
-  M(0,0) = 1.0 / std::max(sa, 1e-10);
+  M(0,0) = 1.0 / std::max(sa, eps);
   int off = 1;
-  if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,1e-10); off += nm; }
-  if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,1e-10); off += nt; }
-  if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,1e-10); }
+  if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
+  if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
+  if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,eps); }
 
   RinvU = Rinv * Ueff;
   S_ux = Ueff.t() * (Rinv * X_i);
@@ -1391,12 +1362,12 @@ for (int i=0; i<m; ++i) {
     const double inv_se_final = 1.0 / std::max(se, eps);
 #ifdef _OPENMP
     int nthreads3 = omp_get_max_threads();
-    std::vector<mat> XtViX_tls2(nthreads3, mat(p,p, fill::zeros));
+    std::vector<arma::mat> XtViX_tls2(nthreads3, arma::mat(p,p, arma::fill::zeros));
 #pragma omp parallel
 {
   int tid = omp_get_thread_num();
-  mat& XtViX_loc = XtViX_tls2[tid];
-  mat M(r,r), Zx(r,p);
+  arma::mat& XtViX_loc = XtViX_tls2[tid];
+  arma::mat M(r,r), Zx(r,p);
 #pragma omp for schedule(static)
   for (int i=0; i<m; ++i) {
     const Cache& Ci = C[i];
@@ -1416,7 +1387,7 @@ for (int i=0; i<m; ++i) {
 for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
 #else
 {
-  mat M(r,r), Zx(r,p);
+  arma::mat M(r,r), Zx(r,p);
   for (int i=0; i<m; ++i) {
     const Cache& Ci = C[i];
     M.zeros();
@@ -1435,44 +1406,109 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
 #endif
   }
 
-  mat VarFix;
-  if (!inv_sympd_safe(VarFix, XtViX_final)) stop("Failed to invert XtViX.");
-  if (!arma::is_finite(VarFix)) stop("VarFix is not finite");
+  arma::mat VarFix;
+  if (!inv_sympd_safe(VarFix, XtViX_final)) Rcpp::stop("Failed to invert XtViX.");
+  if (!arma::is_finite(VarFix)) Rcpp::stop("VarFix is not finite");
 
   // ---------------- SB and CCC ----------------
   double SB = 0.0, varSB = 0.0;
   if (nm > 0 && Lr.isNotNull() && auxDr.isNotNull()) {
-    NumericMatrix Lrm = as<NumericMatrix>(Lr);
-    NumericMatrix Drm = as<NumericMatrix>(auxDr);
-    mat L(Lrm.begin(), X.n_cols, Lrm.ncol(), false);
-    mat auxD(Drm.begin(), Drm.nrow(), Drm.ncol(), false);
+    Rcpp::NumericMatrix Lrm = Rcpp::as<Rcpp::NumericMatrix>(Lr);
+    Rcpp::NumericMatrix Drm = Rcpp::as<Rcpp::NumericMatrix>(auxDr);
+    arma::mat L(Lrm.begin(), X.n_cols, Lrm.ncol(), false);
+    arma::mat auxD(Drm.begin(), Drm.nrow(), Drm.ncol(), false);
     const double den = (double)nm * (double)(nm-1) * (double)std::max(nt,1);
 
-    vec difmed = L.t() * beta;
-    mat Afix   = L * auxD * L.t();
-    double num = as_scalar(difmed.t() * auxD * difmed) - trace(Afix * VarFix);
+    arma::vec difmed = L.t() * beta;
+    arma::mat Afix   = L * auxD * L.t();
+    double num = arma::as_scalar(difmed.t() * auxD * difmed) - arma::trace(Afix * VarFix);
     SB = std::max(num / den, 0.0);
 
     if (!std::isfinite(SB))    SB    = 0.0;
     if (!std::isfinite(varSB) || varSB < 0.0) varSB = 0.0;
 
-    mat AV = Afix * VarFix;
-    double term1 = 2.0 * trace(AV * AV);
-    double term2 = 4.0 * as_scalar(beta.t() * Afix * VarFix * Afix * beta);
+    arma::mat AV = Afix * VarFix;
+    double term1 = 2.0 * arma::trace(AV * AV);
+    double term2 = 4.0 * arma::as_scalar(beta.t() * Afix * VarFix * Afix * beta);
     varSB = std::max((term1 + term2) / (den * den), 0.0);
   }
 
-  const double ccc = (sa + sag) / (sa + sab + sag + SB + se);
+  // ---- kappa factors for time-averaged CCC ----
+  // for subject by time variance (sag)
+  double kappa_g_bar = 1.0;
+  // for residual variance (se)
+  double kappa_e_bar = 1.0;
+  int    units = 0;
+
+  if (nt > 0) {
+    kappa_g_bar = 0.0;
+    kappa_e_bar = 0.0;
+
+    for (int i = 0; i < m; ++i) {
+      const auto& met_i = S.met[i];
+      const auto& tim_i = S.tim[i];
+
+      if (nm > 0) {
+        // per-(subject,method) blocks
+        for (int l = 0; l < nm; ++l) {
+          // count observed times for this (i,l)
+          int T = 0;
+          for (size_t k = 0; k < tim_i.size(); ++k)
+            if (met_i[k] == l && tim_i[k] >= 0) ++T;
+            if (T <= 0) continue;
+
+            kappa_g_bar += 1.0 / static_cast<double>(T);
+            kappa_e_bar += use_ar1 ? ar1_kappa_T(ar1_rho, T)
+              : 1.0 / static_cast<double>(T);
+            ++units;
+        }
+      } else {
+        // no method factor: one block per subject
+        int T = 0;
+        for (size_t k = 0; k < tim_i.size(); ++k)
+          if (tim_i[k] >= 0) ++T;
+          if (T <= 0) continue;
+
+          kappa_g_bar += 1.0 / static_cast<double>(T);
+          kappa_e_bar += use_ar1 ? ar1_kappa_T(ar1_rho, T)
+            : 1.0 / static_cast<double>(T);
+          ++units;
+      }
+    }
+
+    if (units > 0) {
+      kappa_g_bar /= static_cast<double>(units);
+      kappa_e_bar /= static_cast<double>(units);
+    } else {
+      // no usable time info despite nt>0
+      kappa_g_bar = 1.0;
+      kappa_e_bar = 1.0;
+    }
+
+    // numerical guard (helps when |rho| ~ 1 and T is large)
+    kappa_e_bar = std::min(1.0, std::max(kappa_e_bar, 1e-12));
+  } else {
+    // no time factor -> no averaging shrinkage (sag==0), residual unchanged
+    kappa_g_bar = 0.0; // unused because sag==0
+    kappa_e_bar = 1.0;
+  }
+
+  // Effective (averaged) time-varying components
+  const double sag_bar = (nt > 0 ? kappa_g_bar * sag : 0.0);
+  const double se_bar  = kappa_e_bar * se;
+
+  // ---- CCC of the time-averaged measurement ----
+  const double ccc = (sa + sag_bar) / (sa + sab + sag_bar + SB + se_bar);
 
   // ---------------- delta-method SE & CI for CCC ----------------
-  double Nnum = sa + sag;
-  double Dden = sa + sab + sag + SB + se;
+  double Nnum = sa + sag_bar;
+  double Dden = sa + sab + sag_bar + SB + se_bar;
   if (Dden < 1e-14) Dden = 1e-14;
 
-  const double d_sa  = (sab + SB + se) / (Dden * Dden);
+  const double d_sa  = (sab + SB + se_bar) / (Dden * Dden);
   const double d_sab = -Nnum / (Dden * Dden);
-  const double d_sag = (sab + SB + se) / (Dden * Dden);
-  const double d_se  = -Nnum / (Dden * Dden);
+  const double d_sag =  kappa_g_bar * (sab + SB + se_bar) / (Dden * Dden);
+  const double d_se  = -kappa_e_bar * Nnum / (Dden * Dden);
   const double d_SB  = -Nnum / (Dden * Dden);
 
   arma::mat Zdm;
@@ -1543,4 +1579,3 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     _["conf_level"]            = conf_level
   );
 }
-

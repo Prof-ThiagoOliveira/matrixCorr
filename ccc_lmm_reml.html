@@ -1,0 +1,729 @@
+<!DOCTYPE html><html><head><title>R: Concordance Correlation via REML (Linear Mixed-Effects Model)</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.css">
+<script type="text/javascript">
+const macros = { "\\R": "\\textsf{R}", "\\code": "\\texttt"};
+function processMathHTML() {
+    var l = document.getElementsByClassName('reqn');
+    for (let e of l) { katex.render(e.textContent, e, { throwOnError: false, macros }); }
+    return;
+}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.js"
+    onload="processMathHTML();"></script>
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body><div class="container"><main>
+
+<table style="width: 100%;"><tr><td>ccc_lmm_reml</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>Concordance Correlation via REML (Linear Mixed-Effects Model)</h2>
+
+<h3>Description</h3>
+
+<p>Compute Lin's Concordance Correlation Coefficient (CCC) from a linear
+mixed-effects model fitted by REML. The fixed-effects part can include
+<code>method</code> and/or <code>time</code> factors (and optionally their interaction),
+while a subject-specific random intercept captures between-subject variation.
+The implementation avoids any <code class="reqn">n \times n</code>
+inversions by working with small per-subject systems via the Woodbury
+identity.
+</p>
+
+
+<h3>Usage</h3>
+
+<pre><code class='language-R'>ccc_lmm_reml(
+  data,
+  ry,
+  rind,
+  rmet = NULL,
+  rtime = NULL,
+  interaction = TRUE,
+  max_iter = 100,
+  tol = 1e-06,
+  Dmat = NULL,
+  ci = FALSE,
+  conf_level = 0.95,
+  verbose = FALSE,
+  digits = 4,
+  use_message = TRUE,
+  ar = c("none", "ar1"),
+  ar_rho = NA_real_,
+  slope = c("none", "subject", "method", "custom"),
+  slope_var = NULL,
+  slope_Z = NULL,
+  drop_zero_cols = TRUE
+)
+</code></pre>
+
+
+<h3>Arguments</h3>
+
+<table>
+<tr><td><code id="data">data</code></td>
+<td>
+<p>A data frame.</p>
+</td></tr>
+<tr><td><code id="ry">ry</code></td>
+<td>
+<p>Character. Response variable name.</p>
+</td></tr>
+<tr><td><code id="rind">rind</code></td>
+<td>
+<p>Character. Subject ID variable name (random intercept).</p>
+</td></tr>
+<tr><td><code id="rmet">rmet</code></td>
+<td>
+<p>Character or <code>NULL</code>. Optional column name of method factor
+(added to fixed effects).</p>
+</td></tr>
+<tr><td><code id="rtime">rtime</code></td>
+<td>
+<p>Character or <code>NULL</code>. Optional column name of time factor
+(added to fixed effects).</p>
+</td></tr>
+<tr><td><code id="interaction">interaction</code></td>
+<td>
+<p>Logical. Include <code>method:time</code> interaction?
+(default <code>TRUE</code>).</p>
+</td></tr>
+<tr><td><code id="max_iter">max_iter</code></td>
+<td>
+<p>Integer. Maximum iterations for variance-component updates
+(default <code>100</code>).</p>
+</td></tr>
+<tr><td><code id="tol">tol</code></td>
+<td>
+<p>Numeric. Convergence tolerance on parameter change
+(default <code>1e-6</code>).</p>
+</td></tr>
+<tr><td><code id="Dmat">Dmat</code></td>
+<td>
+<p>Optional <code class="reqn">n_t \times n_t</code> numeric matrix to weight/contrast
+time levels when computing the fixed-effect dispersion term <code class="reqn">S_B</code>.
+Defaults to the identity.</p>
+</td></tr>
+<tr><td><code id="ci">ci</code></td>
+<td>
+<p>Logical. If <code>TRUE</code>, return a CI container; limits are computed
+by a large-sample delta method for CCC (see <strong>CIs</strong> note below).</p>
+</td></tr>
+<tr><td><code id="conf_level">conf_level</code></td>
+<td>
+<p>Numeric in <code class="reqn">(0,1)</code>. Confidence level when
+<code>ci = TRUE</code> (default <code>0.95</code>).</p>
+</td></tr>
+<tr><td><code id="verbose">verbose</code></td>
+<td>
+<p>Logical. If <code>TRUE</code>, prints a structured summary of the
+fitted variance components and <code class="reqn">S_B</code> for each fit (overall or
+pairwise). Default <code>FALSE</code>.</p>
+</td></tr>
+<tr><td><code id="digits">digits</code></td>
+<td>
+<p>Integer <code class="reqn">(\ge 0)</code>. Number of decimal places to use in the
+printed summary when <code>verbose = TRUE</code>. Default <code>4</code>.</p>
+</td></tr>
+<tr><td><code id="use_message">use_message</code></td>
+<td>
+<p>Logical. When <code>verbose = TRUE</code>, choose the printing
+mechanism, where <code>TRUE</code> uses <code>message()</code> (respects <code>sink()</code>,
+easily suppressible via <code>suppressMessages()</code>), whereas <code>FALSE</code>
+uses <code>cat()</code> to <code>stdout</code>. Default <code>TRUE</code>.</p>
+</td></tr>
+<tr><td><code id="ar">ar</code></td>
+<td>
+<p>Character. Residual correlation structure: <code>"none"</code> (iid) or
+<code>"ar1"</code> for subject-level AR(1) correlation within contiguous time
+runs. Default <code>c("none","ar1")</code>.</p>
+</td></tr>
+<tr><td><code id="ar_rho">ar_rho</code></td>
+<td>
+<p>Numeric of length 1 in <code class="reqn">(-0.999,\,0.999)</code> or <code>NA</code>.
+When <code>ar = "ar1"</code> and <code>ar_rho</code> is finite, it is treated as fixed.
+When <code>ar = "ar1"</code> and <code>ar_rho = NA</code>, a one-dimensional profile
+optimization is used to estimate <code class="reqn">\rho</code> (see <strong>AR(1)</strong> in
+<strong>Details</strong>). Default <code>NA_real_</code>.</p>
+</td></tr>
+<tr><td><code id="slope">slope</code></td>
+<td>
+<p>Character. Optional extra random-effect design <code class="reqn">Z</code>.
+With <code>"subject"</code> a single random slope is added (one column in <code class="reqn">Z</code>);
+with <code>"method"</code> one column per method level is added; with
+<code>"custom"</code> you provide <code>slope_Z</code> directly. Default
+<code>c("none","subject","method","custom")</code>.</p>
+</td></tr>
+<tr><td><code id="slope_var">slope_var</code></td>
+<td>
+<p>For <code>slope %in% c("subject","method")</code>, a character
+string giving the name of a column in <code>data</code> used as the slope regressor
+(e.g., centered time). It is looked up inside <code>data</code>; do not
+pass the vector itself. NAs are treated as zeros in <code class="reqn">Z</code>.</p>
+</td></tr>
+<tr><td><code id="slope_Z">slope_Z</code></td>
+<td>
+<p>For <code>slope = "custom"</code>, a numeric matrix with <code class="reqn">n</code>
+rows (same order as <code>data</code>) providing the full extra random-effect
+design <code class="reqn">Z</code>. <strong>Note:</strong> all columns of <code>slope_Z</code> share a
+single pooled variance component <code class="reqn">\sigma_Z^2</code>; per-column variances
+are not yet supported (under development). Ignored otherwise.</p>
+</td></tr>
+<tr><td><code id="drop_zero_cols">drop_zero_cols</code></td>
+<td>
+<p>Logical. When <code>slope = "method"</code>, drop all-zero
+columns of <code class="reqn">Z</code> after subsetting (useful in pairwise fits). Default
+<code>TRUE</code>.</p>
+</td></tr>
+</table>
+
+
+<h3>Details</h3>
+
+<p>For measurement <code class="reqn">y_{ij}</code> on subject <code class="reqn">i</code> under fixed
+levels (method, time), we fit
+</p>
+<p style="text-align: center;"><code class="reqn"> y = X\beta + Zu + \varepsilon,\qquad
+       u \sim N(0,\,G),\ \varepsilon \sim N(0,\,R). </code>
+</p>
+
+<p>Here <code class="reqn">Z</code> is the subject-structured random-effects design and <code class="reqn">G</code> is
+block-diagonal at the subject level with the following <em>per-subject</em>
+parameterization:
+</p>
+
+<ul>
+<li><p> one random intercept with variance <code class="reqn">\sigma_A^2</code>;
+</p>
+</li>
+<li><p> optionally, <em>method</em> deviations (one column per method level)
+with a common variance <code class="reqn">\sigma_{A\times M}^2</code> and zero
+covariances across levels (i.e., multiple of an identity);
+</p>
+</li>
+<li><p> optionally, <em>time</em> deviations (one column per time level)
+with a common variance <code class="reqn">\sigma_{A\times T}^2</code> and zero
+covariances across levels;
+</p>
+</li>
+<li><p> optionally, an <em>extra</em> random effect aligned with <code class="reqn">Z</code>
+(random slope): variance <code class="reqn">\sigma_Z^2</code> times an identity on the
+<code class="reqn">Z</code>-columns (see <strong>Random-slope <code class="reqn">Z</code></strong>).
+</p>
+</li></ul>
+
+<p>The fixed-effects design is <code>~ 1 + rmet + rtime</code> and, if
+<code>interaction=TRUE</code>, <code>+ rmet:rtime</code>.
+</p>
+<p><strong>Residual correlation <code class="reqn">R</code>.</strong>
+With <code>ar="none"</code>, <code class="reqn">R=\sigma_E^2 I</code>. With <code>ar="ar1"</code>,
+within-subject residuals follow
+</p>
+<p style="text-align: center;"><code class="reqn"> \varepsilon_i \sim N\!\big(0,\; \sigma_E^2\,C_i(\rho)\big), </code>
+</p>
+
+<p>where <code class="reqn">C_i(\rho)</code> is an AR(1) correlation matrix along the subject's
+observations <em>after ordering by increasing time level</em>; ties retain input
+order, and any <code>NA</code> time code breaks the series so each contiguous block
+of non-<code>NA</code> times forms a run. Internally we work with the <em>precision</em>
+of <code class="reqn">C_i</code>: for a run of length <code class="reqn">L\ge 2</code>, the tridiagonal inverse has
+</p>
+<p style="text-align: center;"><code class="reqn"> (C^{-1})_{11}=(C^{-1})_{LL}=\frac{1}{1-\rho^2},\quad
+       (C^{-1})_{tt}=\frac{1+\rho^2}{1-\rho^2}\ (2\le t\le L-1),\quad
+       (C^{-1})_{t,t+1}=(C^{-1})_{t+1,t}=\frac{-\rho}{1-\rho^2}. </code>
+</p>
+
+<p>It contributes <code class="reqn">1/(1-\rho^2)</code> on the diagonal. The working inverse
+is <code class="reqn">R_i^{-1}=\sigma_E^{-2}\,C_i(\rho)^{-1}</code>.
+</p>
+<p><strong>Per-subject Woodbury system.</strong> For subject <code class="reqn">i</code> with <code class="reqn">n_i</code>
+rows, define the per-subject random-effects design <code class="reqn">U_i</code> (columns:
+intercept, method indicators, time indicators; dimension
+<code class="reqn">\,r=1+nm+nt\,</code>). The core never forms
+<code class="reqn">V_i = R_i + U_i G U_i^\top</code> explicitly. Instead,
+</p>
+<p style="text-align: center;"><code class="reqn"> M_i \;=\; G^{-1} \;+\; U_i^\top R_i^{-1} U_i, </code>
+</p>
+
+<p>and accumulates GLS blocks via rank-<code class="reqn">r</code> corrections using
+<code class="reqn">\,V_i^{-1} = R_i^{-1}-R_i^{-1}U_i M_i^{-1}U_i^\top R_i^{-1}\,</code>:
+</p>
+<p style="text-align: center;"><code class="reqn"> X^\top V^{-1} X \;=\; \sum_i \Big[
+       X_i^\top R_i^{-1}X_i \;-\; (X_i^\top R_i^{-1}U_i)\,
+       M_i^{-1}\,(U_i^\top R_i^{-1}X_i) \Big], </code>
+</p>
+
+<p style="text-align: center;"><code class="reqn"> X^\top V^{-1} y \;=\; \sum_i \Big[
+       X_i^\top R_i^{-1}y_i \;-\; (X_i^\top R_i^{-1}U_i)\,M_i^{-1}\,
+       (U_i^\top R_i^{-1}y_i) \Big]. </code>
+</p>
+
+<p>Solves/inversions use symmetric-PD routines with a tiny diagonal &quot;jitter&quot; and
+a pseudo-inverse fallback when needed.
+</p>
+<p><strong>Random-slope <code class="reqn">Z</code>.</strong>
+Besides <code class="reqn">U_i</code>, the function can include an extra design <code class="reqn">Z_i</code> and a
+corresponding variance <code class="reqn">\sigma_Z^2</code>:
+</p>
+
+<ul>
+<li> <p><code>slope="subject"</code>: <code class="reqn">Z</code> has one column (the regressor in
+<code>slope_var</code>); <code class="reqn">Z_{i}</code> is the subject-<code class="reqn">i</code> block.
+</p>
+</li>
+<li> <p><code>slope="method"</code>: <code class="reqn">Z</code> has one column per method level;
+row <code class="reqn">t</code> uses the slope regressor if its method equals level <code class="reqn">\ell</code>,
+otherwise 0; all-zero columns can be dropped via
+<code>drop_zero_cols=TRUE</code> after subsetting.
+</p>
+</li>
+<li> <p><code>slope="custom"</code>: <code class="reqn">Z</code> is provided fully via <code>slope_Z</code>.
+</p>
+</li></ul>
+
+<p>Computations simply augment <code class="reqn">U_i</code> to <code class="reqn">\tilde U_i=[U_i\ Z_i]</code> and
+<code class="reqn">G^{-1}</code> to <code class="reqn">\tilde G^{-1}</code> by appending a diagonal block
+<code class="reqn">\sigma_Z^{-2} I_{q_Z}</code>. The EM updates then include
+</p>
+<p style="text-align: center;"><code class="reqn"> \sigma_Z^{2\,(new)} \;=\; \frac{1}{m\,q_Z}
+      \sum_i \sum_{j=1}^{q_Z}\!\Big( b_{i,\text{extra},j}^2 +
+      (M_i^{-1})_{\text{extra},jj} \Big)
+      \quad (\text{if } q_Z&gt;0). </code>
+</p>
+
+<p><em>Interpretation:</em> <code class="reqn">\sigma_Z^2</code> represents additional within-subject
+variability explained by the slope regressor(s). By design it <em>does not</em>
+enter the CCC formula below, where CCC targets agreement across methods/time, not
+variability along a subject- or method-specific slope.
+</p>
+<p><strong>EM-style variance-component updates.</strong> With current <code class="reqn">\hat\beta</code>,
+residuals <code class="reqn">r_i = y_i - X_i\hat\beta</code> are formed. The BLUPs and
+conditional covariances are
+</p>
+<p style="text-align: center;"><code class="reqn"> b_i \;=\; M_i^{-1}\,(U_i^\top R_i^{-1} r_i), \qquad
+      \mathrm{Var}(b_i\mid y) \;=\; M_i^{-1}. </code>
+</p>
+
+<p>Expected squares yield closed-form updates:
+</p>
+<p style="text-align: center;"><code class="reqn"> \sigma_A^{2\,(new)} \;=\; \frac{1}{m}\sum_i \Big( b_{i,0}^2 +
+(M_i^{-1})_{00} \Big), </code>
+</p>
+
+<p style="text-align: center;"><code class="reqn"> \sigma_{A\times M}^{2\,(new)} \;=\; \frac{1}{m\,nm}
+      \sum_i \sum_{\ell=1}^{nm}\!\Big( b_{i,\ell}^2 +
+      (M_i^{-1})_{\ell\ell} \Big)
+      \quad (\text{if } nm&gt;0), </code>
+</p>
+
+<p style="text-align: center;"><code class="reqn"> \sigma_{A\times T}^{2\,(new)} \;=\; \frac{1}{m\,nt}
+      \sum_i \sum_{t=1}^{nt}\!\Big( b_{i,t}^2 + (M_i^{-1})_{tt} \Big)
+      \quad (\text{if } nt&gt;0), </code>
+</p>
+
+<p style="text-align: center;"><code class="reqn"> \sigma_E^{2\,(new)} \;=\; \frac{1}{n} \sum_i
+      \Big( r_i^\top C_i(\rho)^{-1} r_i +
+      \mathrm{tr}\!\big(M_i^{-1}\,U_i^\top C_i(\rho)^{-1} U_i\big) \Big), </code>
+</p>
+
+<p>where <code class="reqn">C_i(\rho)^{-1}</code> is the AR(1) precision built on the
+time-ordered runs described above (and equals <code class="reqn">I</code> for iid residuals).
+Iterate until the <code class="reqn">\ell_1</code> change across components is <code class="reqn">&lt;</code>
+<code>tol</code> or <code>max_iter</code> is reached.
+</p>
+<p><strong>Fixed-effect dispersion <code class="reqn">\mathbf{S_B}</code>.</strong> Method dispersion is
+computed from <code class="reqn">\hat\beta</code> and <code class="reqn">\mathrm{Var}(\hat\beta)</code> with a
+contrast matrix <code class="reqn">L</code> (columns encode pairwise method differences within
+each time level) and an optional time-weighting matrix <code class="reqn">\mathrm{D_m}</code>:
+</p>
+<p style="text-align: center;"><code class="reqn"> S_B \;=\;
+ \frac{\big(L^\top \hat\beta\big)^\top\,\mathrm{D_m}\,
+ \big(L^\top \hat\beta\big)
+       \;-\; \mathrm{tr}\!\Big(\big(L\,\mathrm{D_m}\,L^\top\big)\,
+       \mathrm{Var}(\hat\beta)\Big)}
+      {\,nm\,(nm-1)\,\max(nt,1)\,}, </code>
+</p>
+
+<p>truncated at 0. The helper <code>build_L_Dm_cpp</code> constructs <code class="reqn">L</code> so it
+aligns exactly with the columns of <code class="reqn">X=\mathrm{model.matrix}(\cdot)</code>.
+For exactly two methods (<code class="reqn">nm=2</code>), a fast path builds <code class="reqn">L</code> directly
+from the design's column names, where, with interaction, the per-time
+difference at time <code class="reqn">j</code> is
+<code class="reqn">\beta_{\text{met2}}+\beta_{\text{met2:time}_j}</code> (baseline time uses
+<code class="reqn">\beta_{\text{met2}}</code>); while without interaction, the same
+<code class="reqn">\beta_{\text{met2}}</code> is used for all times.
+</p>
+<p><strong>Concordance correlation coefficient.</strong> The CCC used is defined by
+</p>
+<p style="text-align: center;"><code class="reqn"> \mathrm{CCC} \;=\;
+      \frac{\sigma_A^2 + \sigma_{A\times T}^2}
+           {\sigma_A^2 + \sigma_{A\times M}^2 +
+            \sigma_{A\times T}^2 + S_B + \sigma_E^2}. </code>
+</p>
+
+<p>There are special cases when there is no method factor (or a single level),
+then <code class="reqn">S_B=0</code> and <code class="reqn">\sigma_{A\times M}^2=0</code>; if there is no
+time factor (or a single level), then <code class="reqn">\sigma_{A\times T}^2=0</code>.
+The extra random-effect variance <code class="reqn">\sigma_Z^2</code> (if used) is <em>not</em>
+included, where CCC targets agreement across methods/time, not variability along
+the user-specified slope.
+</p>
+<p><strong>CIs / SEs (delta method for CCC).</strong>
+Let
+</p>
+<p style="text-align: center;"><code class="reqn"> \theta \;=\; \big(\sigma_A^2,\ \sigma_{A\times M}^2,\
+\sigma_{A\times T}^2,\ \sigma_E^2,\ S_B\big)^\top, </code>
+</p>
+
+<p>and write the concordance as
+</p>
+<p style="text-align: center;"><code class="reqn"> \mathrm{CCC}(\theta) \;=\; \frac{N}{D}
+      \;=\; \frac{\sigma_A^2 + \sigma_{A\times T}^2}
+                   {\sigma_A^2 + \sigma_{A\times M}^2 +
+                   \sigma_{A\times T}^2 + S_B + \sigma_E^2}. </code>
+</p>
+
+<p>A first-order (large-sample) standard error follows from the delta method:
+</p>
+<p style="text-align: center;"><code class="reqn"> \mathrm{Var}\{\widehat{\mathrm{CCC}}\}
+      \;\approx\; \nabla \mathrm{CCC}(\hat\theta)^\top\,
+                  \mathrm{Var}(\hat\theta)\,
+                  \nabla \mathrm{CCC}(\hat\theta), </code>
+</p>
+
+<p>with gradient components (using <code class="reqn">N</code> and <code class="reqn">D</code> as above)
+</p>
+<p style="text-align: center;"><code class="reqn"> \frac{\partial\,\mathrm{CCC}}{\partial \sigma_A^2}
+      \;=\; \frac{D - N}{D^2}
+      \;=\; \frac{\sigma_{A\times M}^2 + S_B + \sigma_E^2}{D^2}, </code>
+</p>
+
+<p style="text-align: center;"><code class="reqn"> \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times M}^2}
+      \;=\; -\,\frac{N}{D^2}, \qquad
+       \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times T}^2}
+      \;=\; \frac{D - N}{D^2}, </code>
+</p>
+
+<p style="text-align: center;"><code class="reqn"> \frac{\partial\,\mathrm{CCC}}{\partial \sigma_E^2}
+      \;=\; -\,\frac{N}{D^2}, \qquad
+       \frac{\partial\,\mathrm{CCC}}{\partial S_B}
+      \;=\; -\,\frac{N}{D^2}. </code>
+</p>
+
+<p><em>Estimating <code class="reqn">\mathrm{Var}(\hat\theta)</code>.</em>
+The EM updates write each variance component as an average of per-subject
+quantities. For subject <code class="reqn">i</code>,
+</p>
+<p style="text-align: center;"><code class="reqn"> t_{A,i} \;=\; b_{i,0}^2 + (M_i^{-1})_{00},\qquad
+       t_{M,i} \;=\; \frac{1}{nm}\sum_{\ell=1}^{nm}
+                       \Big(b_{i,\ell}^2 + (M_i^{-1})_{\ell\ell}\Big), </code>
+</p>
+
+<p style="text-align: center;"><code class="reqn"> t_{T,i} \;=\; \frac{1}{nt}\sum_{j=1}^{nt}
+                       \Big(b_{i,j}^2 + (M_i^{-1})_{jj}\Big),\qquad
+       s_i \;=\; \frac{r_i^\top C_i(\rho)^{-1} r_i +
+       \mathrm{tr}\!\big(M_i^{-1}U_i^\top C_i(\rho)^{-1} U_i\big)}{n_i}, </code>
+</p>
+
+<p>where <code class="reqn">b_i = M_i^{-1}(U_i^\top R_i^{-1} r_i)</code> and
+<code class="reqn">M_i = G^{-1} + U_i^\top R_i^{-1} U_i</code>.
+With <code class="reqn">m</code> subjects, we form the empirical covariance of the stacked
+subject vectors and scale by <code class="reqn">m</code> to approximate the covariance of the
+means:
+</p>
+<p style="text-align: center;"><code class="reqn"> \widehat{\mathrm{Cov}}\!\left(
+      \begin{bmatrix} t_{A,\cdot} \\ t_{M,\cdot} \\ t_{T,\cdot} \end{bmatrix}
+      \right)
+      \;\approx\; \frac{1}{m}\,
+       \mathrm{Cov}_i\!\left(
+      \begin{bmatrix} t_{A,i} \\ t_{M,i} \\ t_{T,i} \end{bmatrix}\right). </code>
+</p>
+
+<p>(Drop rows/columns as needed when <code>nm==0</code> or <code>nt==0</code>.)
+</p>
+<p>The residual variance estimator is a weighted mean
+<code class="reqn">\hat\sigma_E^2=\sum_i w_i s_i</code> with <code class="reqn">w_i=n_i/n</code>. Its variance is
+approximated by the variance of a weighted mean of independent terms,
+</p>
+<p style="text-align: center;"><code class="reqn"> \widehat{\mathrm{Var}}(\hat\sigma_E^2)
+      \;\approx\; \Big(\sum_i w_i^2\Big)\,\widehat{\mathrm{Var}}(s_i), </code>
+</p>
+
+<p>where <code class="reqn">\widehat{\mathrm{Var}}(s_i)</code> is the sample variance across
+subjects. The method-dispersion term uses the quadratic-form delta already
+computed for <code class="reqn">S_B</code>:
+</p>
+<p style="text-align: center;"><code class="reqn"> \widehat{\mathrm{Var}}(S_B)
+      \;=\; \frac{2\,\mathrm{tr}\!\big((A_{\!fix}\,\mathrm{Var}(\hat\beta))^2\big)
+             \;+\; 4\,\hat\beta^\top A_{\!fix}\,\mathrm{Var}(\hat\beta)\,
+             A_{\!fix}\,\hat\beta}
+                   {\big[nm\,(nm-1)\,\max(nt,1)\big]^2}, </code>
+</p>
+
+<p>with <code class="reqn">A_{\!fix}=L\,\mathrm{D_m}\,L^\top</code>.
+</p>
+<p><em>Putting it together.</em> Assemble
+<code class="reqn">\widehat{\mathrm{Var}}(\hat\theta)</code> by combining the
+<code class="reqn">(\sigma_A^2,\sigma_{A\times M}^2,\sigma_{A\times T}^2)</code> covariance
+block from the subject-level empirical covariance, add the
+<code class="reqn">\widehat{\mathrm{Var}}(\hat\sigma_E^2)</code> and
+<code class="reqn">\widehat{\mathrm{Var}}(S_B)</code> terms on the diagonal,
+and ignore cross-covariances across these blocks (a standard large-sample
+simplification). Then
+</p>
+<p style="text-align: center;"><code class="reqn"> \widehat{\mathrm{se}}\{\widehat{\mathrm{CCC}}\}
+      \;=\; \sqrt{\,\nabla \mathrm{CCC}(\hat\theta)^\top\,
+                    \widehat{\mathrm{Var}}(\hat\theta)\,
+                    \nabla \mathrm{CCC}(\hat\theta)\,}. </code>
+</p>
+
+<p>A two-sided <code class="reqn">(1-\alpha)</code> normal CI is
+</p>
+<p style="text-align: center;"><code class="reqn"> \widehat{\mathrm{CCC}} \;\pm\; z_{1-\alpha/2}\,
+      \widehat{\mathrm{se}}\{\widehat{\mathrm{CCC}}\}, </code>
+</p>
+
+<p>truncated to <code class="reqn">[0,1]</code> in the output for convenience. When <code class="reqn">S_B</code> is
+truncated at 0 or samples are very small/imbalanced, the normal CI can be
+mildly anti-conservative near the boundary; a logit transform for CCC or a
+subject-level (cluster) bootstrap can be used for sensitivity analysis.
+</p>
+<p><strong>Estimating <code class="reqn">\rho</code> for AR(1).</strong>
+If <code>ar="ar1"</code> and <code>ar_rho=NA</code>, a 1-D Brent search is used to
+profile <code class="reqn">\rho\in[-0.95,0.95]</code> by repeatedly fitting the model and
+maximizing the REML log-likelihood. If the
+core does not return a log-likelihood, a mild proxy objective is used. For
+pairwise method fits, <code class="reqn">\rho</code> is profiled <em>per pair</em>.
+</p>
+
+
+<h3>Value</h3>
+
+
+<ul>
+<li><p> If <code>rmet</code> is <code>NULL</code> or has a single level, an object of
+class <code>c("ccc","ccc_ci")</code> (when <code>ci=TRUE</code>) or
+<code>c("ccc","matrix")</code> with a <code class="reqn">1\times 1</code> matrix containing the
+overall CCC estimate.
+</p>
+</li>
+<li><p> If <code>rmet</code> has <code class="reqn">L\geq 2</code> levels, a symmetric <code class="reqn">L\times L</code>
+matrix with pairwise CCC estimates between methods (diagonal set to 1).
+When <code>ci=TRUE</code>, <code>lwr.ci</code> and <code>upr.ci</code> matrices are
+included.
+</p>
+</li></ul>
+
+<p>In all cases, attributes <code>"method"</code>, <code>"description"</code>,
+<code>"package"</code>, and (if <code>ci=TRUE</code>) <code>"conf.level"</code> are set.
+When <code>ar="ar1"</code>, an additional attribute <code>"ar_rho"</code> is attached:
+a scalar (overall) or an <code class="reqn">L\times L</code> matrix (pairwise) with the
+<code class="reqn">\rho</code> values used/estimated.
+</p>
+
+
+<h3>Notes on stability and performance</h3>
+
+<p>All per-subject solves are <code class="reqn">\,r\times r</code> with <code class="reqn">r=1+nm+nt+q_Z</code>, so cost
+scales with the number of subjects and the fixed-effects dimension rather
+than the total number of observations. Solvers use symmetric-PD paths with
+a small diagonal ridge and pseudo-inverse fallback, which helps for
+tiny/unbalanced subsets and near-boundary estimates. Very small samples or
+extreme imbalance can still make <code class="reqn">S_B</code> numerically delicate; negative
+estimates are truncated to 0 by construction. For AR(1), observations are
+first ordered by time within subject before building the run-wise precision;
+<code>NA</code> time codes break the correlation run.
+</p>
+
+
+<h3>Author(s)</h3>
+
+<p>Thiago de Paula Oliveira
+</p>
+
+
+<h3>References</h3>
+
+<p>Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.
+<em>Biometrics</em>, 45: 255-268.
+</p>
+<p>Lin L (2000). A note on the concordance correlation coefficient.
+<em>Biometrics</em>, 56: 324-325.
+</p>
+<p>Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
+a new approach. <em>Computational Statistics &amp; Data Analysis</em>, 47(4): 519-539.
+</p>
+
+
+<h3>See Also</h3>
+
+<p><code>build_L_Dm_Z_cpp</code>
+for constructing <code class="reqn">L</code>/<code class="reqn">D_m</code>/<code class="reqn">Z</code>; <code>ccc_pairwise_u_stat</code>
+for a U-statistic alternative; and <span class="pkg">cccrm</span> for a reference approach via
+<span class="pkg">nlme</span>.
+</p>
+
+
+<h3>Examples</h3>
+
+<pre><code class='language-R'>#--------------------------------------------------------------------
+## Two methods (no time)
+#--------------------------------------------------------------------
+set.seed(1)
+n_subj &lt;- 30
+meth   &lt;- factor(rep(c("A","B"), each = n_subj))
+id     &lt;- factor(rep(seq_len(n_subj), times = 2))
+sigA &lt;- 1.0; sigE &lt;- 0.5
+u  &lt;- rnorm(n_subj, 0, sqrt(sigA))
+y  &lt;- c(u + rnorm(n_subj, 0, sqrt(sigE)),
+         u + 0.2 + rnorm(n_subj, 0, sqrt(sigE)))
+dat &lt;- data.frame(y, id, method = meth)
+ccc_rm1 &lt;- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
+print(ccc_rm1)
+summary(ccc_rm1)
+
+# 95% CI container
+ccc_rm2 &lt;- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
+ccc_rm2
+
+#--------------------------------------------------------------------
+## Two methods x time (balanced 2x2), with and without interaction
+#--------------------------------------------------------------------
+dat$time &lt;- factor(rep(rep(c("t1","t2"), each = n_subj/2), times = 2))
+ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
+             interaction = FALSE)
+ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
+             interaction = TRUE, verbose = TRUE)
+
+#--------------------------------------------------------------------
+## Random slope by subject: create a centered numeric time within subject
+#--------------------------------------------------------------------
+dat$t_num &lt;- as.integer(dat$time)
+dat$t_c   &lt;- ave(dat$t_num, dat$id, FUN = function(v) v - mean(v))
+ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
+             slope = "subject", slope_var = "t_c",
+             ar = "ar1", ar_rho = NA_real_, verbose = TRUE)
+
+#--------------------------------------------------------------------
+## Three methods - pairwise CCCs
+#--------------------------------------------------------------------
+set.seed(2)
+n_subj &lt;- 40
+id2     &lt;- factor(rep(seq_len(n_subj), times = 3))
+method2 &lt;- factor(rep(c("A","B","C"), each = n_subj))
+sigA &lt;- 1.2; sigE &lt;- 0.6
+u  &lt;- rnorm(n_subj, 0, sqrt(sigA))
+mu &lt;- c(A = 0.00, B = 0.15, C = -0.10)
+e  &lt;- rnorm(3 * n_subj, 0, sqrt(sigE))
+y2 &lt;- u[as.integer(id2)] + unname(mu[method2]) + e
+dat3 &lt;- data.frame(y = y2, id = id2, method = method2)
+ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
+
+# ------------------------------------------------------------------
+# AR(1) residual correlation (fixed rho, threads forced to 1)
+# When needed: repeated measures over time with serially correlated
+# residuals within subject (e.g., values drift smoothly across visits).
+# ------------------------------------------------------------------
+  set.seed(10)
+  n_subj &lt;- 40
+  n_time &lt;- 6                      # ≥ 3 time points recommended for AR(1)
+  id  &lt;- factor(rep(seq_len(n_subj), each = n_time))
+  tim &lt;- factor(rep(seq_len(n_time),  times = n_subj))
+  beta0 &lt;- 0; beta_t &lt;- 0.2
+  rho_true &lt;- 0.6; sigE &lt;- 0.7
+  y &lt;- numeric(length(id))
+  for (i in seq_len(n_subj)) {
+    idx &lt;- which(id == levels(id)[i])
+    e &lt;- stats::arima.sim(list(ar = rho_true), n = n_time, sd = sigE)
+    # small linear trend so AR(1) isn't swallowed by fixed effects
+    y[idx] &lt;- beta0 + beta_t*(seq_len(n_time) - mean(seq_len(n_time))) + e
+  }
+  dat_ar &lt;- data.frame(y = y, id = id, time = tim)
+  # Fit with AR(1) and rho fixed (nonzero). Estimation of rho is not
+  # implemented yet; use a plausible value (e.g., 0.4–0.8) for sensitivity.
+  ccc_lmm_reml(dat_ar, ry = "y", rind = "id", rtime = "time",
+               ar = "ar1", ar_rho = 0.6, verbose = TRUE)
+
+# ------------------------------------------------------------------
+# Random slope by SUBJECT
+# When needed: each subject shows a systematic linear change over time
+# (e.g., individual-specific trends), regardless of method.
+# ------------------------------------------------------------------
+set.seed(2)
+n_subj &lt;- 60; n_time &lt;- 4
+id  &lt;- factor(rep(seq_len(n_subj), each = 2 * n_time))
+tim &lt;- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+method &lt;- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+# subject-specific slopes around 0
+subj &lt;- as.integer(id)
+slope_i &lt;- rnorm(n_subj, 0, 0.15)
+slope_vec &lt;- slope_i[subj]
+base &lt;- rnorm(n_subj, 0, 1.0)[subj]
+tnum &lt;- as.integer(tim)
+y &lt;- base + 0.3*(method=="B") + slope_vec*(tnum - mean(seq_len(n_time))) +
+     rnorm(length(id), 0, 0.5)
+dat_s &lt;- data.frame(y, id, method, time = tim)
+# center time within subject (recommended for random slopes)
+dat_s$t_num &lt;- as.integer(dat_s$time)
+dat_s$t_c   &lt;- ave(dat_s$t_num, dat_s$id, FUN = function(v) v - mean(v))
+ccc_lmm_reml(dat_s, "y", "id", rmet = "method", rtime = "time",
+             slope = "subject", slope_var = "t_c", verbose = TRUE)
+
+# ------------------------------------------------------------------
+# Random slope by METHOD
+# When needed: methods drift differently across time (e.g., biases that
+# change with time are method-specific).
+# ------------------------------------------------------------------
+set.seed(3)
+n_subj &lt;- 60; n_time &lt;- 4
+id  &lt;- factor(rep(seq_len(n_subj), each = 2 * n_time))
+tim &lt;- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+method &lt;- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+# method-specific slopes: A ~ 0, B ~ positive drift
+slope_m &lt;- ifelse(method=="B", 0.25, 0.00)
+base &lt;- rnorm(n_subj, 0, 1.0)[as.integer(id)]
+tnum &lt;- as.integer(tim)
+y &lt;- base + 0.3*(method=="B") + slope_m*(tnum - mean(seq_len(n_time))) +
+     rnorm(length(id), 0, 0.5)
+dat_m &lt;- data.frame(y, id, method, time = tim)
+dat_m$t_num &lt;- as.integer(dat_m$time)
+dat_m$t_c   &lt;- ave(dat_m$t_num, dat_m$id, FUN = function(v) v - mean(v))
+ccc_lmm_reml(dat_m, "y", "id", rmet = "method", rtime = "time",
+             slope = "method", slope_var = "t_c", verbose = TRUE)
+
+# ------------------------------------------------------------------
+# Random slopes for SUBJECT *and* METHOD (custom Z)
+# When needed: subjects have their own time trends, AND methods carry
+# additional method-specific trends. Supply a custom Z with both parts.
+# ------------------------------------------------------------------
+set.seed(4)
+n_subj &lt;- 50; n_time &lt;- 4
+id  &lt;- factor(rep(seq_len(n_subj), each = 2 * n_time))
+tim &lt;- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+method &lt;- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+subj &lt;- as.integer(id)
+# subject slopes + extra slope on method B
+slope_subj &lt;- rnorm(n_subj, 0, 0.12)[subj]
+slope_B    &lt;- ifelse(method=="B", 0.18, 0.00)
+tnum &lt;- as.integer(tim)
+base &lt;- rnorm(n_subj, 0, 1.0)[subj]
+y &lt;- base + 0.3*(method=="B") +
+     (slope_subj + slope_B) * (tnum - mean(seq_len(n_time))) +
+     rnorm(length(id), 0, 0.5)
+dat_both &lt;- data.frame(y, id, method, time = tim)
+# build Z = [subject_slope | method_A_slope | method_B_slope]
+dat_both$t_num &lt;- as.integer(dat_both$time)
+dat_both$t_c   &lt;- ave(dat_both$t_num, dat_both$id, FUN = function(v) v - mean(v))
+MM &lt;- model.matrix(~ 0 + method, data = dat_both)  # one col per method
+Z_custom &lt;- cbind(
+  subj_slope   = dat_both$t_c,            # subject slope
+  MM * dat_both$t_c                       # method-specific slopes
+)
+ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+             slope = "custom", slope_Z = Z_custom, verbose = TRUE)
+
+</code></pre>
+
+</main>
+
+</div>
+</body></html>

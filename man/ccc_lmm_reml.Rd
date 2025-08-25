@@ -127,6 +127,11 @@ while a subject-specific random intercept captures between-subject variation.
 The implementation avoids any \eqn{n \times n}
 inversions by working with small per-subject systems via the Woodbury
 identity.
+
+\strong{Assumption:} time levels are treated as \emph{regular, equally spaced}
+visits indexed by their order within subject. The AR(1) residual model is discrete-time
+on visit index (not calendar time). \code{NA} time codes break the serial run. Gaps in
+the factor levels are \emph{ignored} (adjacent observed visits are treated as lag-1).
 }
 \details{
 For measurement \eqn{y_{ij}} on subject \eqn{i} under fixed
@@ -151,20 +156,18 @@ covariances across levels;
 The fixed-effects design is \code{~ 1 + rmet + rtime} and, if
 \code{interaction=TRUE}, \code{+ rmet:rtime}.
 
-\strong{Residual correlation \eqn{R}.}
-With \code{ar="none"}, \eqn{R=\sigma_E^2 I}. With \code{ar="ar1"},
-within-subject residuals follow
-\deqn{ \varepsilon_i \sim N\!\big(0,\; \sigma_E^2\,C_i(\rho)\big), }
-where \eqn{C_i(\rho)} is an AR(1) correlation matrix along the subject's
-observations \emph{after ordering by increasing time level}; ties retain input
-order, and any \code{NA} time code breaks the series so each contiguous block
-of non-\code{NA} times forms a run. Internally we work with the \emph{precision}
-of \eqn{C_i}: for a run of length \eqn{L\ge 2}, the tridiagonal inverse has
+\strong{Residual correlation \eqn{R} (regular, equally spaced time).}
+With \code{ar="none"}, \eqn{R=\sigma_E^2 I}. With \code{ar="ar1"}, within-subject
+residuals follow a \emph{discrete} AR(1) process along the visit index after sorting
+by increasing time level. Ties retain input order, and any \code{NA} time code breaks
+the series so each contiguous block of non-\code{NA} times forms a run. The correlation
+between \emph{adjacent observed visits} in a run is \eqn{\rho}; we do not use calendar-time
+gaps. Internally we work with the \emph{precision} of the AR(1) correlation:
+for a run of length \eqn{L\ge 2}, the tridiagonal inverse has
 \deqn{ (C^{-1})_{11}=(C^{-1})_{LL}=\frac{1}{1-\rho^2},\quad
        (C^{-1})_{tt}=\frac{1+\rho^2}{1-\rho^2}\ (2\le t\le L-1),\quad
        (C^{-1})_{t,t+1}=(C^{-1})_{t+1,t}=\frac{-\rho}{1-\rho^2}. }
-It contributes \eqn{1/(1-\rho^2)} on the diagonal. The working inverse
-is \eqn{R_i^{-1}=\sigma_E^{-2}\,C_i(\rho)^{-1}}.
+The working inverse is \eqn{\,R_i^{-1}=\sigma_E^{-2}\,C_i(\rho)^{-1}}.
 
 \strong{Per-subject Woodbury system.} For subject \eqn{i} with \eqn{n_i}
 rows, define the per-subject random-effects design \eqn{U_i} (columns:
@@ -240,7 +243,7 @@ each time level) and an optional time-weighting matrix \eqn{\mathrm{D_m}}:
        \;-\; \mathrm{tr}\!\Big(\big(L\,\mathrm{D_m}\,L^\top\big)\,
        \mathrm{Var}(\hat\beta)\Big)}
       {\,nm\,(nm-1)\,\max(nt,1)\,}, }
-truncated at 0. The helper \code{\link{build_L_Dm_cpp}} constructs \eqn{L} so it
+truncated at 0. The helper \code{build_L_Dm_cpp} constructs \eqn{L} so it
 aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}.
 For exactly two methods (\eqn{nm=2}), a fast path builds \eqn{L} directly
 from the design's column names, where, with interaction, the per-time
@@ -249,14 +252,32 @@ difference at time \eqn{j} is
 \eqn{\beta_{\text{met2}}}); while without interaction, the same
 \eqn{\beta_{\text{met2}}} is used for all times.
 
+\strong{Time-averaging for CCC (regular visits).}
+The reported CCC targets agreement of the \emph{time-averaged} measurements
+per method within subject. Averaging over \eqn{T} non-\code{NA}
+\emph{visits} (equally spaced, discrete AR) leaves subject
+(\eqn{\sigma_A^2}) and subject\eqn{\times}method (\eqn{\sigma_{A\times M}^2})
+components unchanged, while shrinking time-varying components by
+\deqn{ \kappa_T^{(g)} \;=\; 1/T \quad (\text{subject}\times\text{time}), }
+\deqn{ \kappa_T^{(e)} \;=\; \frac{T + 2\sum_{k=1}^{T-1} (T-k)\,\rho^k}{T^2}
+       \quad \text{(residual AR(1) on visit index; equals }1/T\text{ if iid).} }
+With unbalanced \eqn{T}, the implementation uses the average of the
+per-(subject,method) \eqn{\kappa} values across the pairs contributing
+to CCC. (Numerical guard: after averaging,
+\eqn{\kappa_T^{(e)}} is clamped to \eqn{[10^{-12},\,1]}.)
+
 \strong{Concordance correlation coefficient.} The CCC used is defined by
 \deqn{ \mathrm{CCC} \;=\;
-      \frac{\sigma_A^2 + \sigma_{A\times T}^2}
+      \frac{\sigma_A^2 + \kappa_T^{(g)}\,\sigma_{A\times T}^2}
            {\sigma_A^2 + \sigma_{A\times M}^2 +
-            \sigma_{A\times T}^2 + S_B + \sigma_E^2}. }
+            \kappa_T^{(g)}\,\sigma_{A\times T}^2 + S_B +
+            \kappa_T^{(e)}\,\sigma_E^2}. }
 There are special cases when there is no method factor (or a single level),
 then \eqn{S_B=0} and \eqn{\sigma_{A\times M}^2=0}; if there is no
-time factor (or a single level), then \eqn{\sigma_{A\times T}^2=0}.
+time factor (or a single level), then \eqn{\sigma_{A\times T}^2=0} and
+\eqn{\kappa_T^{(g)}} is unused. When \eqn{T=1} (one time point) or
+\eqn{\rho=0}, both \eqn{\kappa}-factors equal 1 and the formula reduces to the
+familiar single-occasion expression.
 The extra random-effect variance \eqn{\sigma_Z^2} (if used) is \emph{not}
 included, where CCC targets agreement across methods/time, not variability along
 the user-specified slope.
@@ -267,9 +288,10 @@ Let
 \sigma_{A\times T}^2,\ \sigma_E^2,\ S_B\big)^\top, }
 and write the concordance as
 \deqn{ \mathrm{CCC}(\theta) \;=\; \frac{N}{D}
-      \;=\; \frac{\sigma_A^2 + \sigma_{A\times T}^2}
+      \;=\; \frac{\sigma_A^2 + \kappa_T^{(g)}\,\sigma_{A\times T}^2}
                    {\sigma_A^2 + \sigma_{A\times M}^2 +
-                   \sigma_{A\times T}^2 + S_B + \sigma_E^2}. }
+                   \kappa_T^{(g)}\,\sigma_{A\times T}^2 + S_B +
+                   \kappa_T^{(e)}\,\sigma_E^2}. }
 
 A first-order (large-sample) standard error follows from the delta method:
 \deqn{ \mathrm{Var}\{\widehat{\mathrm{CCC}}\}
@@ -278,14 +300,14 @@ A first-order (large-sample) standard error follows from the delta method:
                   \nabla \mathrm{CCC}(\hat\theta), }
 with gradient components (using \eqn{N} and \eqn{D} as above)
 \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_A^2}
-      \;=\; \frac{D - N}{D^2}
-      \;=\; \frac{\sigma_{A\times M}^2 + S_B + \sigma_E^2}{D^2}, }
+      \;=\; \frac{\sigma_{A\times M}^2 + S_B + \kappa_T^{(e)}\sigma_E^2}{D^2}, }
 \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times M}^2}
       \;=\; -\,\frac{N}{D^2}, \qquad
        \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times T}^2}
-      \;=\; \frac{D - N}{D^2}, }
+      \;=\; \frac{\kappa_T^{(g)}\big(\sigma_{A\times M}^2 + S_B +
+                                    \kappa_T^{(e)}\sigma_E^2\big)}{D^2}, }
 \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_E^2}
-      \;=\; -\,\frac{N}{D^2}, \qquad
+      \;=\; -\,\frac{\kappa_T^{(e)}\,N}{D^2}, \qquad
        \frac{\partial\,\mathrm{CCC}}{\partial S_B}
       \;=\; -\,\frac{N}{D^2}. }
 
@@ -348,12 +370,10 @@ truncated at 0 or samples are very small/imbalanced, the normal CI can be
 mildly anti-conservative near the boundary; a logit transform for CCC or a
 subject-level (cluster) bootstrap can be used for sensitivity analysis.
 
-\strong{Estimating \eqn{\rho} for AR(1).}
-If \code{ar="ar1"} and \code{ar_rho=NA}, a 1-D Brent search is used to
-profile \eqn{\rho\in[-0.95,0.95]} by repeatedly fitting the model and
-maximizing the REML log-likelihood. If the
-core does not return a log-likelihood, a mild proxy objective is used. For
-pairwise method fits, \eqn{\rho} is profiled \emph{per pair}.
+\strong{Choosing \eqn{\rho} for AR(1).}
+This function \emph{requires a fixed} \eqn{\rho\in(-0.999,0.999)} when \code{ar="ar1"}; it does
+not estimate \eqn{\rho} internally. Higher-level wrappers may profile \eqn{\rho} by refitting
+across a grid and selecting by (R)EML or another criterion, but that is outside this core.
 }
 \section{Notes on stability and performance}{
 
@@ -363,9 +383,10 @@ than the total number of observations. Solvers use symmetric-PD paths with
 a small diagonal ridge and pseudo-inverse fallback, which helps for
 tiny/unbalanced subsets and near-boundary estimates. Very small samples or
 extreme imbalance can still make \eqn{S_B} numerically delicate; negative
-estimates are truncated to 0 by construction. For AR(1), observations are
-first ordered by time within subject before building the run-wise precision;
-\code{NA} time codes break the correlation run.
+estimates are truncated to 0 by construction.
+For AR(1), observations are first ordered by time within subject before building the
+run-wise tridiagonal precision; \code{NA} time codes break the run, and gaps between
+factor levels are treated as regular steps (we do not use elapsed time).
 }
 
 \examples{
