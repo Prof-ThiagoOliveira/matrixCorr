@@ -433,6 +433,13 @@ estimates are truncated to 0 by construction. For AR(1), observations are
 ordered by time within subject before building the run-wise tridiagonal precision;
 \code{NA} time codes break the run, and gaps between factor levels are treated as
 regular steps (we do not use elapsed time).
+
+\emph{Heteroscedastic slopes are not supported yet.}
+When \code{slope_Z = "custom"} the current implementation assumes a single
+\eqn{\sigma_Z^2} for \emph{all} custom-slope columns. Distinct variances
+(e.g., one for the global slope and another for method-specific
+slopes) are not estimated. Column rescaling changes the implied prior on
+\eqn{b_{i,\text{extra}}} but does not introduce separate variance components.
 }
 
 \examples{
@@ -548,7 +555,7 @@ ccc_lmm_reml(dat_m, "y", "id", rmet = "method", rtime = "time",
              slope = "method", slope_var = "t_c", verbose = TRUE)
 
 # ------------------------------------------------------------------
-# Random slopes for SUBJECT *and* METHOD (custom Z)
+# Random slopes for SUBJECT and METHOD (custom Z)
 # ------------------------------------------------------------------
 set.seed(4)
 n_subj <- 50; n_time <- 4
@@ -567,6 +574,8 @@ dat_both <- data.frame(y, id, method, time = tim)
 dat_both$t_num <- as.integer(dat_both$time)
 dat_both$t_c   <- ave(dat_both$t_num, dat_both$id, FUN = function(v) v - mean(v))
 MM <- model.matrix(~ 0 + method, data = dat_both)  # one col per method
+# All custom-slope columns share the same variance component and are
+# modelled as uncorrelated. Take care when using custom approach.
 Z_custom <- cbind(
   subj_slope   = dat_both$t_c,
   MM * dat_both$t_c
