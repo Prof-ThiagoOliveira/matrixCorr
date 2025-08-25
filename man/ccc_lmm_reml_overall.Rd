@@ -25,7 +25,10 @@ ccc_lmm_reml_overall(
   digits,
   use_message,
   extra_label,
-  ci
+  ci,
+  Dmat_type = c("time-avg", "typical-visit", "weighted-avg", "weighted-sq"),
+  Dmat_weights = NULL,
+  Dmat_rescale = TRUE
 )
 }
 \description{

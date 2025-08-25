@@ -20,6 +20,6 @@ run_cpp(
 )
 }
 \description{
-Wrapper for calling C++ backend for CCC estimation.
+Wrapper for calling 'C++' backend for CCC estimation.
 }
 \keyword{internal}

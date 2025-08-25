@@ -264,14 +264,47 @@ ccc_pairwise_u_stat <- function(data,
 #' @param rtime Character or \code{NULL}. Optional column name of time factor
 #'   (added to fixed effects).
 #' @param interaction Logical. Include \code{method:time} interaction?
-#'   (default \code{TRUE}).
+#'   (default \code{FALSE}).
 #' @param max_iter Integer. Maximum iterations for variance-component updates
 #'   (default \code{100}).
 #' @param tol Numeric. Convergence tolerance on parameter change
 #'   (default \code{1e-6}).
-#' @param Dmat Optional \eqn{n_t \times n_t} numeric matrix to weight/contrast
-#'   time levels when computing the fixed-effect dispersion term \eqn{S_B}.
-#'   Defaults to the identity.
+#'
+#' @param Dmat Optional \eqn{n_t \times n_t} numeric matrix to weight/aggregate
+#'   time-specific fixed biases in the \eqn{S_B} quadratic form. If supplied, it
+#'   is used (after optional mass rescaling; see \code{Dmat_rescale}) whenever at
+#'   least two \emph{present} time levels exist; otherwise it is ignored. \strong{If
+#'   \code{Dmat} is \code{NULL}}, a canonical kernel \eqn{D_m} is \emph{constructed}
+#'   from \code{Dmat_type} and \code{Dmat_weights} (see below). \code{Dmat} should be
+#'   symmetric positive semidefinite; small asymmetries are symmetrized internally.
+#'
+#' @param Dmat_type Character, one of \code{c("time-avg","typical-visit",
+#'   "weighted-avg","weighted-sq")}. Only used when \code{Dmat = NULL}.
+#'   It selects the aggregation target for time-specific fixed biases in
+#'   \eqn{S_B}. Options are:
+#'
+#'   \itemize{
+#'     \item \code{"time-avg"}: square of the time-averaged bias, \eqn{D_m=(1/n_t)\,11^\top}.
+#'     \item \code{"typical-visit"}: average of squared per-time biases, \eqn{D_m=I_{n_t}}.
+#'     \item \code{"weighted-avg"}: square of a weighted average, \eqn{D_m=n_t\,w\,w^\top} with \eqn{\sum w=1}.
+#'     \item \code{"weighted-sq"}: weighted average of squared biases, \eqn{D_m=n_t\,\mathrm{diag}(w)} with \eqn{\sum w=1}.
+#'   }
+#'   Pick \code{"time-avg"} for CCC targeting the time-averaged measurement; pick
+#'   \code{"typical-visit"} for CCC targeting a randomly sampled visit (typical occasion).
+#'   Default \code{"time-avg"}.
+#'
+#' @param Dmat_weights Optional numeric weights \eqn{w} used when
+#'   \code{Dmat_type \%in\% c("weighted-avg","weighted-sq")}. Must be nonnegative and
+#'   finite. If \code{names(w)} are provided, they should match the \emph{full} time
+#'   levels in \code{data}; they are aligned to the \emph{present} time subset per fit.
+#'   If unnamed, the length must equal the number of present time levels. In all cases
+#'   \eqn{w} is internally normalized to sum to 1.
+#'
+#' @param Dmat_rescale Logical. When \code{TRUE} (default), the supplied/built
+#'   \eqn{D_m} is rescaled to satisfy the simple mass rule
+#'   \eqn{1^\top D_m 1 = n_t}. This keeps the \eqn{S_B} denominator invariant and
+#'   harmonizes with the \eqn{\kappa}-shrinkage used for variance terms.
+#'
 #' @param ci Logical. If \code{TRUE}, return a CI container; limits are computed
 #'   by a large-sample delta method for CCC (see \strong{CIs} note below).
 #' @param conf_level Numeric in \eqn{(0,1)}. Confidence level when
@@ -291,9 +324,9 @@ ccc_pairwise_u_stat <- function(data,
 #'   runs. Default \code{c("none","ar1")}.
 #' @param ar_rho Numeric of length 1 in \eqn{(-0.999,\,0.999)} or \code{NA}.
 #'   When \code{ar = "ar1"} and \code{ar_rho} is finite, it is treated as fixed.
-#'   When \code{ar = "ar1"} and \code{ar_rho = NA}, a one-dimensional profile
-#'   optimization is used to estimate \eqn{\rho} (see \strong{AR(1)} in
-#'   \strong{Details}). Default \code{NA_real_}.
+#'   When \code{ar = "ar1"} and \code{ar_rho = NA}, \emph{\eqn{\rho} is estimated}
+#'   by profiling a 1-D objective (preferring REML if available; a proxy objective
+#'   is used as a fallback). Default \code{NA_real_}.
 #'
 #' @param slope Character. Optional extra random-effect design \eqn{Z}.
 #'   With \code{"subject"} a single random slope is added (one column in \eqn{Z});
@@ -318,9 +351,12 @@ ccc_pairwise_u_stat <- function(data,
 #' levels (method, time), we fit
 #' \deqn{ y = X\beta + Zu + \varepsilon,\qquad
 #'        u \sim N(0,\,G),\ \varepsilon \sim N(0,\,R). }
+#' Notation: \eqn{m} subjects, \eqn{n=\sum_i n_i} total rows;
+#' \eqn{nm} method levels; \eqn{nt} time levels; \eqn{q_Z} extra
+#' random-slope columns (if any); \eqn{r=1+nm+nt} (or \eqn{1+nm+nt+q_Z} with slopes).
 #' Here \eqn{Z} is the subject-structured random-effects design and \eqn{G} is
 #' block-diagonal at the subject level with the following \emph{per-subject}
-#' parameterization:
+#' parameterisation. Specifically,
 #' \itemize{
 #'   \item one random intercept with variance \eqn{\sigma_A^2};
 #'   \item optionally, \emph{method} deviations (one column per method level)
@@ -330,20 +366,21 @@ ccc_pairwise_u_stat <- function(data,
 #'         with a common variance \eqn{\sigma_{A\times T}^2} and zero
 #'         covariances across levels;
 #'   \item optionally, an \emph{extra} random effect aligned with \eqn{Z}
-#'         (random slope): variance \eqn{\sigma_Z^2} times an identity on the
+#'         (random slope), where variance \eqn{\sigma_Z^2} times an identity on the
 #'         \eqn{Z}-columns (see \strong{Random-slope \eqn{Z}}).
 #' }
 #' The fixed-effects design is \code{~ 1 + rmet + rtime} and, if
 #' \code{interaction=TRUE}, \code{+ rmet:rtime}.
 #'
 #' \strong{Residual correlation \eqn{R} (regular, equally spaced time).}
-#' With \code{ar="none"}, \eqn{R=\sigma_E^2 I}. With \code{ar="ar1"}, within-subject
-#' residuals follow a \emph{discrete} AR(1) process along the visit index after sorting
-#' by increasing time level. Ties retain input order, and any \code{NA} time code breaks
-#' the series so each contiguous block of non-\code{NA} times forms a run. The correlation
-#' between \emph{adjacent observed visits} in a run is \eqn{\rho}; we do not use calendar-time
-#' gaps. Internally we work with the \emph{precision} of the AR(1) correlation:
-#' for a run of length \eqn{L\ge 2}, the tridiagonal inverse has
+#' Write \eqn{R_i=\sigma_E^2\,C_i(\rho)}. With \code{ar="none"}, \eqn{C_i=I}.
+#' With \code{ar="ar1"}, within-subject residuals follow a \emph{discrete} AR(1)
+#' process along the visit index after sorting by increasing time level. Ties
+#' retain input order, and any \code{NA} time code breaks the series so each
+#' contiguous block of non-\code{NA} times forms a run. The correlation
+#' between \emph{adjacent observed visits} in a run is \eqn{\rho}; we do not use
+#' calendar-time gaps. Internally we work with the \emph{precision} of the AR(1)
+#' correlation: for a run of length \eqn{L\ge 2}, the tridiagonal inverse has
 #' \deqn{ (C^{-1})_{11}=(C^{-1})_{LL}=\frac{1}{1-\rho^2},\quad
 #'        (C^{-1})_{tt}=\frac{1+\rho^2}{1-\rho^2}\ (2\le t\le L-1),\quad
 #'        (C^{-1})_{t,t+1}=(C^{-1})_{t+1,t}=\frac{-\rho}{1-\rho^2}. }
@@ -363,8 +400,9 @@ ccc_pairwise_u_stat <- function(data,
 #' \deqn{ X^\top V^{-1} y \;=\; \sum_i \Big[
 #'        X_i^\top R_i^{-1}y_i \;-\; (X_i^\top R_i^{-1}U_i)\,M_i^{-1}\,
 #'        (U_i^\top R_i^{-1}y_i) \Big]. }
-#' Solves/inversions use symmetric-PD routines with a tiny diagonal "jitter" and
-#' a pseudo-inverse fallback when needed.
+#' Because \eqn{G^{-1}} is diagonal with positive entries, each \eqn{M_i} is
+#' symmetric positive definite; solves/inversions use symmetric-PD routines with
+#' a tiny diagonal "jitter" and a pseudo-inverse fallback when needed.
 #'
 #' \strong{Random-slope \eqn{Z}.}
 #' Besides \eqn{U_i}, the function can include an extra design \eqn{Z_i} and a
@@ -378,24 +416,22 @@ ccc_pairwise_u_stat <- function(data,
 #'         \code{drop_zero_cols=TRUE} after subsetting.
 #'   \item \code{slope="custom"}: \eqn{Z} is provided fully via \code{slope_Z}.
 #' }
-#' Computations simply augment \eqn{U_i} to \eqn{\tilde U_i=[U_i\ Z_i]} and
-#' \eqn{G^{-1}} to \eqn{\tilde G^{-1}} by appending a diagonal block
-#' \eqn{\sigma_Z^{-2} I_{q_Z}}. The EM updates then include
+#' Computations simply augment \eqn{\tilde U_i=[U_i\ Z_i]} and the corresponding
+#' inverse-variance block. The EM updates then include
 #' \deqn{ \sigma_Z^{2\,(new)} \;=\; \frac{1}{m\,q_Z}
 #'       \sum_i \sum_{j=1}^{q_Z}\!\Big( b_{i,\text{extra},j}^2 +
 #'       (M_i^{-1})_{\text{extra},jj} \Big)
 #'       \quad (\text{if } q_Z>0). }
 #' \emph{Interpretation:} \eqn{\sigma_Z^2} represents additional within-subject
-#' variability explained by the slope regressor(s). By design it \emph{does not}
-#' enter the CCC formula below, where CCC targets agreement across methods/time, not
-#' variability along a subject- or method-specific slope.
+#' variability explained by the slope regressor(s) and is \emph{not} part of the CCC
+#' denominator (agreement across methods/time).
 #'
 #' \strong{EM-style variance-component updates.} With current \eqn{\hat\beta},
-#' residuals \eqn{r_i = y_i - X_i\hat\beta} are formed. The BLUPs and
-#' conditional covariances are
+#' form residuals \eqn{r_i = y_i - X_i\hat\beta}. The BLUPs and conditional
+#' covariances are
 #' \deqn{ b_i \;=\; M_i^{-1}\,(U_i^\top R_i^{-1} r_i), \qquad
 #'       \mathrm{Var}(b_i\mid y) \;=\; M_i^{-1}. }
-#' Expected squares yield closed-form updates:
+#' Let \eqn{e_i=r_i-U_i b_i}. Expected squares then yield closed-form updates:
 #' \deqn{ \sigma_A^{2\,(new)} \;=\; \frac{1}{m}\sum_i \Big( b_{i,0}^2 +
 #' (M_i^{-1})_{00} \Big), }
 #' \deqn{ \sigma_{A\times M}^{2\,(new)} \;=\; \frac{1}{m\,nm}
@@ -406,81 +442,102 @@ ccc_pairwise_u_stat <- function(data,
 #'       \sum_i \sum_{t=1}^{nt}\!\Big( b_{i,t}^2 + (M_i^{-1})_{tt} \Big)
 #'       \quad (\text{if } nt>0), }
 #' \deqn{ \sigma_E^{2\,(new)} \;=\; \frac{1}{n} \sum_i
-#'       \Big( r_i^\top C_i(\rho)^{-1} r_i +
-#'       \mathrm{tr}\!\big(M_i^{-1}\,U_i^\top C_i(\rho)^{-1} U_i\big) \Big), }
+#'       \Big( e_i^\top C_i(\rho)^{-1} e_i \;+\;
+#'       \mathrm{tr}\!\big(M_i^{-1}U_i^\top C_i(\rho)^{-1} U_i\big) \Big), }
 #' where \eqn{C_i(\rho)^{-1}} is the AR(1) precision built on the
-#' time-ordered runs described above (and equals \eqn{I} for iid residuals).
+#' time-ordered runs described above (and equals \eqn{I} for i.i.d. residuals).
 #' Iterate until the \eqn{\ell_1} change across components is \eqn{<}
 #' \code{tol} or \code{max_iter} is reached.
 #'
-#' \strong{Fixed-effect dispersion \eqn{\mathbf{S_B}}.} Method dispersion is
-#' computed from \eqn{\hat\beta} and \eqn{\mathrm{Var}(\hat\beta)} with a
-#' contrast matrix \eqn{L} (columns encode pairwise method differences within
-#' each time level) and an optional time-weighting matrix \eqn{\mathrm{D_m}}:
-#' \deqn{ S_B \;=\;
-#'  \frac{\big(L^\top \hat\beta\big)^\top\,\mathrm{D_m}\,
-#'  \big(L^\top \hat\beta\big)
-#'        \;-\; \mathrm{tr}\!\Big(\big(L\,\mathrm{D_m}\,L^\top\big)\,
-#'        \mathrm{Var}(\hat\beta)\Big)}
-#'       {\,nm\,(nm-1)\,\max(nt,1)\,}, }
-#' truncated at 0. The helper \code{build_L_Dm_cpp} constructs \eqn{L} so it
-#' aligns exactly with the columns of \eqn{X=\mathrm{model.matrix}(\cdot)}.
-#' For exactly two methods (\eqn{nm=2}), a fast path builds \eqn{L} directly
-#' from the design's column names, where, with interaction, the per-time
-#' difference at time \eqn{j} is
-#' \eqn{\beta_{\text{met2}}+\beta_{\text{met2:time}_j}} (baseline time uses
-#' \eqn{\beta_{\text{met2}}}); while without interaction, the same
-#'  \eqn{\beta_{\text{met2}}} is used for all times.
+#' \strong{Fixed-effect dispersion \eqn{S_B}: choosing the time-kernel \eqn{D_m}.}
+#'
+#' Let \eqn{d = L^\top \hat\beta} stack the within-time, pairwise method differences,
+#' grouped by time as \eqn{d=(d_1^\top,\ldots,d_{n_t}^\top)^\top} with
+#' \eqn{d_t \in \mathbb{R}^{P}} and \eqn{P = n_m(n_m-1)}. The symmetric
+#' positive semidefinite kernel \eqn{D_m \succeq 0} selects which functional of the
+#' bias profile \eqn{t \mapsto d_t} is targeted by \eqn{S_B}. Internally, the code
+#' rescales any supplied/built \eqn{D_m} to satisfy \eqn{1^\top D_m 1 = n_t} for
+#' stability and comparability.
+#'
+#' \itemize{
+#'   \item \code{Dmat_type = "time-avg"} (square of the time-averaged bias).
+#'     Let \deqn{ w \;=\; \frac{1}{n_t}\,\mathbf{1}_{n_t}, \qquad
+#'                D_m \;\propto\; I_P \otimes (w\,w^\top), }
+#'     so that
+#'     \deqn{ d^\top D_m d \;\propto\; \sum_{p=1}^{P}
+#'            \left( \frac{1}{n_t}\sum_{t=1}^{n_t} d_{t,p} \right)^{\!2}. }
+#'     Methods have equal \eqn{\textit{time-averaged}}
+#'     means within subject, i.e. \eqn{\sum_{t=1}^{n_t} d_{t,p}/n_t = 0} for all
+#'     \eqn{p}. Appropriate when decisions depend on an average over time and
+#'     opposite-signed biases are allowed to cancel.
+#'
+#'   \item \code{Dmat_type = "typical-visit"} (average of squared per-time biases).
+#'     With equal visit probability, take
+#'     \deqn{ D_m \;\propto\; I_P \otimes
+#'            \mathrm{diag}\!\Big(\tfrac{1}{n_t},\ldots,\tfrac{1}{n_t}\Big), }
+#'     yielding
+#'     \deqn{ d^\top D_m d \;\propto\; \frac{1}{n_t}
+#'            \sum_{t=1}^{n_t}\sum_{p=1}^{P} d_{t,p}^{\,2}. }
+#'     Methods agree on a \eqn{\textit{typical}}
+#'     occasion drawn uniformly from the visit set. Use when each visit matters
+#'     on its own; alternating signs \eqn{d_{t,p}} do not cancel.
+#'
+#'   \item \code{Dmat_type = "weighted-avg"} (square of a weighted time average).
+#'     For user weights \eqn{a=(a_1,\ldots,a_{n_t})^\top} with \eqn{a_t \ge 0}, set
+#'     \deqn{ w \;=\; \frac{a}{\sum_{t=1}^{n_t} a_t}, \qquad
+#'            D_m \;\propto\; I_P \otimes (w\,w^\top), }
+#'     so that
+#'     \deqn{ d^\top D_m d \;\propto\; \sum_{p=1}^{P}
+#'            \left( \sum_{t=1}^{n_t} w_t\, d_{t,p} \right)^{\!2}. }
+#'     Methods have equal \eqn{\textit{weighted
+#'     time-averaged}} means, i.e. \eqn{\sum_{t=1}^{n_t} w_t\, d_{t,p} = 0} for all
+#'     \eqn{p}. Use when some visits (e.g., baseline/harvest) are a priori more
+#'     influential; opposite-signed biases may cancel according to \eqn{w}.
+#'
+#'   \item \code{Dmat_type = "weighted-sq"} (weighted average of squared per-time biases).
+#'     With the same weights \eqn{w}, take
+#'     \deqn{ D_m \;\propto\; I_P \otimes \mathrm{diag}(w_1,\ldots,w_{n_t}), }
+#'     giving
+#'     \deqn{ d^\top D_m d \;\propto\; \sum_{t=1}^{n_t} w_t
+#'            \sum_{p=1}^{P} d_{t,p}^{\,2}. }
+#'     Methods agree at visits sampled with
+#'     probabilities \eqn{\{w_t\}}, counting each visit’s discrepancy on its own.
+#'     Use when per-visit agreement is required but some visits should be
+#'     emphasised more than others.
+#' }
 #'
 #' \strong{Time-averaging for CCC (regular visits).}
 #' The reported CCC targets agreement of the \emph{time-averaged} measurements
-#' per method within subject. Averaging over \eqn{T} non-\code{NA}
-#' \emph{visits} (equally spaced, discrete AR) leaves subject
-#' (\eqn{\sigma_A^2}) and subject\eqn{\times}method (\eqn{\sigma_{A\times M}^2})
-#' components unchanged, while shrinking time-varying components by
-#' \deqn{ \kappa_T^{(g)} \;=\; 1/T \quad (\text{subject}\times\text{time}), }
-#' \deqn{ \kappa_T^{(e)} \;=\; \frac{T + 2\sum_{k=1}^{T-1} (T-k)\,\rho^k}{T^2}
-#'        \quad \text{(residual AR(1) on visit index; equals }1/T\text{ if iid).} }
-#' With unbalanced \eqn{T}, the implementation uses the average of the
-#' per-(subject,method) \eqn{\kappa} values across the pairs contributing
-#' to CCC. (Numerical guard: after averaging,
-#' \eqn{\kappa_T^{(e)}} is clamped to \eqn{[10^{-12},\,1]}.)
-
-
+#' per method within subject by default (\code{Dmat_type="time-avg"}). Averaging over \eqn{T}
+#' non-\code{NA} visits shrinks time-varying components by
+#' \deqn{ \kappa_T^{(g)} \;=\; 1/T, \qquad
+#'       \kappa_T^{(e)} \;=\; \{T + 2\sum_{k=1}^{T-1}(T-k)\rho^k\}/T^2, }
+#' with \eqn{\kappa_T^{(e)}=1/T} when residuals are i.i.d. With unbalanced \eqn{T}, the
+#' implementation averages the per-(subject,method) \eqn{\kappa} values across the
+#' pairs contributing to CCC and then clamps \eqn{\kappa_T^{(e)}} to
+#' \eqn{[10^{-12},\,1]} for numerical stability. Choosing
+#' \code{Dmat_type="typical-visit"} makes \eqn{S_B} match the interpretation of a
+#' randomly sampled occasion instead.
 #'
-#' \strong{Concordance correlation coefficient.} The CCC used is defined by
+#' \strong{Concordance correlation coefficient.} The CCC used is
 #' \deqn{ \mathrm{CCC} \;=\;
 #'       \frac{\sigma_A^2 + \kappa_T^{(g)}\,\sigma_{A\times T}^2}
 #'            {\sigma_A^2 + \sigma_{A\times M}^2 +
 #'             \kappa_T^{(g)}\,\sigma_{A\times T}^2 + S_B +
 #'             \kappa_T^{(e)}\,\sigma_E^2}. }
-#' There are special cases when there is no method factor (or a single level),
-#' then \eqn{S_B=0} and \eqn{\sigma_{A\times M}^2=0}; if there is no
-#' time factor (or a single level), then \eqn{\sigma_{A\times T}^2=0} and
-#' \eqn{\kappa_T^{(g)}} is unused. When \eqn{T=1} (one time point) or
-#' \eqn{\rho=0}, both \eqn{\kappa}-factors equal 1 and the formula reduces to the
-#' familiar single-occasion expression.
-#' The extra random-effect variance \eqn{\sigma_Z^2} (if used) is \emph{not}
-#' included, where CCC targets agreement across methods/time, not variability along
-#' the user-specified slope.
+#' Special cases: with no method factor, \eqn{S_B=\sigma_{A\times M}^2=0}; with
+#' a single time level, \eqn{\sigma_{A\times T}^2=0} (no \eqn{\kappa}-shrinkage).
+#' When \eqn{T=1} or \eqn{\rho=0}, both \eqn{\kappa}-factors equal 1. The extra
+#' random-effect variance \eqn{\sigma_Z^2} (if used) is not included.
 #'
 #' \strong{CIs / SEs (delta method for CCC).}
 #' Let
 #' \deqn{ \theta \;=\; \big(\sigma_A^2,\ \sigma_{A\times M}^2,\
 #' \sigma_{A\times T}^2,\ \sigma_E^2,\ S_B\big)^\top, }
-#' and write the concordance as
-#' \deqn{ \mathrm{CCC}(\theta) \;=\; \frac{N}{D}
-#'       \;=\; \frac{\sigma_A^2 + \kappa_T^{(g)}\,\sigma_{A\times T}^2}
-#'                    {\sigma_A^2 + \sigma_{A\times M}^2 +
-#'                    \kappa_T^{(g)}\,\sigma_{A\times T}^2 + S_B +
-#'                    \kappa_T^{(e)}\,\sigma_E^2}. }
-#'
-#' A first-order (large-sample) standard error follows from the delta method:
-#' \deqn{ \mathrm{Var}\{\widehat{\mathrm{CCC}}\}
-#'       \;\approx\; \nabla \mathrm{CCC}(\hat\theta)^\top\,
-#'                   \mathrm{Var}(\hat\theta)\,
-#'                   \nabla \mathrm{CCC}(\hat\theta), }
-#' with gradient components (using \eqn{N} and \eqn{D} as above)
+#' and write \eqn{\mathrm{CCC}(\theta)=N/D} with
+#' \eqn{N=\sigma_A^2+\kappa_T^{(g)}\sigma_{A\times T}^2} and
+#' \eqn{D=\sigma_A^2+\sigma_{A\times M}^2+\kappa_T^{(g)}\sigma_{A\times T}^2+S_B+\kappa_T^{(e)}\sigma_E^2}.
+#' The gradient components are
 #' \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_A^2}
 #'       \;=\; \frac{\sigma_{A\times M}^2 + S_B + \kappa_T^{(e)}\sigma_E^2}{D^2}, }
 #' \deqn{ \frac{\partial\,\mathrm{CCC}}{\partial \sigma_{A\times M}^2}
@@ -501,11 +558,11 @@ ccc_pairwise_u_stat <- function(data,
 #'                        \Big(b_{i,\ell}^2 + (M_i^{-1})_{\ell\ell}\Big), }
 #' \deqn{ t_{T,i} \;=\; \frac{1}{nt}\sum_{j=1}^{nt}
 #'                        \Big(b_{i,j}^2 + (M_i^{-1})_{jj}\Big),\qquad
-#'        s_i \;=\; \frac{r_i^\top C_i(\rho)^{-1} r_i +
+#'        s_i \;=\; \frac{e_i^\top C_i(\rho)^{-1} e_i +
 #'        \mathrm{tr}\!\big(M_i^{-1}U_i^\top C_i(\rho)^{-1} U_i\big)}{n_i}, }
 #' where \eqn{b_i = M_i^{-1}(U_i^\top R_i^{-1} r_i)} and
 #' \eqn{M_i = G^{-1} + U_i^\top R_i^{-1} U_i}.
-#' With \eqn{m} subjects, we form the empirical covariance of the stacked
+#' With \eqn{m} subjects, form the empirical covariance of the stacked
 #' subject vectors and scale by \eqn{m} to approximate the covariance of the
 #' means:
 #' \deqn{ \widehat{\mathrm{Cov}}\!\left(
@@ -529,7 +586,7 @@ ccc_pairwise_u_stat <- function(data,
 #'              \;+\; 4\,\hat\beta^\top A_{\!fix}\,\mathrm{Var}(\hat\beta)\,
 #'              A_{\!fix}\,\hat\beta}
 #'                    {\big[nm\,(nm-1)\,\max(nt,1)\big]^2}, }
-#' with \eqn{A_{\!fix}=L\,\mathrm{D_m}\,L^\top}.
+#' with \eqn{A_{\!fix}=L\,D_m\,L^\top}.
 #'
 #' \emph{Putting it together.} Assemble
 #' \eqn{\widehat{\mathrm{Var}}(\hat\theta)} by combining the
@@ -553,26 +610,12 @@ ccc_pairwise_u_stat <- function(data,
 #' subject-level (cluster) bootstrap can be used for sensitivity analysis.
 #'
 #' \strong{Choosing \eqn{\rho} for AR(1).}
-#' This function \emph{requires a fixed} \eqn{\rho\in(-0.999,0.999)} when \code{ar="ar1"}; it does
-#' not estimate \eqn{\rho} internally. Higher-level wrappers may profile \eqn{\rho} by refitting
-#' across a grid and selecting by (R)EML or another criterion, but that is outside this core.
-#'
-#' @return
-#' \itemize{
-#'   \item If \code{rmet} is \code{NULL} or has a single level, an object of
-#'     class \code{c("ccc","ccc_ci")} (when \code{ci=TRUE}) or
-#'     \code{c("ccc","matrix")} with a \eqn{1\times 1} matrix containing the
-#'     overall CCC estimate.
-#'   \item If \code{rmet} has \eqn{L\geq 2} levels, a symmetric \eqn{L\times L}
-#'     matrix with pairwise CCC estimates between methods (diagonal set to 1).
-#'     When \code{ci=TRUE}, \code{lwr.ci} and \code{upr.ci} matrices are
-#'     included.
-#' }
-#' In all cases, attributes \code{"method"}, \code{"description"},
-#' \code{"package"}, and (if \code{ci=TRUE}) \code{"conf.level"} are set.
-#' When \code{ar="ar1"}, an additional attribute \code{"ar_rho"} is attached:
-#' a scalar (overall) or an \eqn{L\times L} matrix (pairwise) with the
-#' \eqn{\rho} values used/estimated.
+#' When \code{ar="ar1"} and \code{ar_rho = NA}, \eqn{\rho} can be estimated by
+#' profiling the REML log-likelihood computed at the fitted
+#' \eqn{(\hat\beta,\hat G,\hat\sigma_E^2)}; when \code{ar_rho} is finite, that
+#' fixed value is used. Very small numbers of visits per subject can make
+#' \eqn{\rho} weakly identified; sensitivity checks over a plausible range (e.g., 0.3–0.8)
+#' are recommended.
 #'
 #' @section Notes on stability and performance:
 #' All per-subject solves are \eqn{\,r\times r} with \eqn{r=1+nm+nt+q_Z}, so cost
@@ -581,10 +624,10 @@ ccc_pairwise_u_stat <- function(data,
 #' a small diagonal ridge and pseudo-inverse fallback, which helps for
 #' tiny/unbalanced subsets and near-boundary estimates. Very small samples or
 #' extreme imbalance can still make \eqn{S_B} numerically delicate; negative
-#' estimates are truncated to 0 by construction.
-#' For AR(1), observations are first ordered by time within subject before building the
-#' run-wise tridiagonal precision; \code{NA} time codes break the run, and gaps between
-#' factor levels are treated as regular steps (we do not use elapsed time).
+#' estimates are truncated to 0 by construction. For AR(1), observations are
+#' ordered by time within subject before building the run-wise tridiagonal precision;
+#' \code{NA} time codes break the run, and gaps between factor levels are treated as
+#' regular steps (we do not use elapsed time).
 #'
 #' @seealso \code{build_L_Dm_Z_cpp}
 #' for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_pairwise_u_stat}}
@@ -600,7 +643,6 @@ ccc_pairwise_u_stat <- function(data,
 #'
 #' Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
 #' a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519-539.
-#'
 #' @examples
 #' #--------------------------------------------------------------------
 #' ## Two methods (no time)
@@ -632,7 +674,7 @@ ccc_pairwise_u_stat <- function(data,
 #'              interaction = TRUE, verbose = TRUE)
 #'
 #' #--------------------------------------------------------------------
-#' ## Random slope by subject: create a centered numeric time within subject
+#' ## Random slope by subject; AR(1) with rho estimated
 #' #--------------------------------------------------------------------
 #' dat$t_num <- as.integer(dat$time)
 #' dat$t_c   <- ave(dat$t_num, dat$id, FUN = function(v) v - mean(v))
@@ -641,24 +683,20 @@ ccc_pairwise_u_stat <- function(data,
 #'              ar = "ar1", ar_rho = NA_real_, verbose = TRUE)
 #'
 #' #--------------------------------------------------------------------
-#' ## Three methods - pairwise CCCs
+#' ## D_m choices: time-averaged (default) vs typical visit
 #' #--------------------------------------------------------------------
-#' set.seed(2)
-#' n_subj <- 40
-#' id2     <- factor(rep(seq_len(n_subj), times = 3))
-#' method2 <- factor(rep(c("A","B","C"), each = n_subj))
-#' sigA <- 1.2; sigE <- 0.6
-#' u  <- rnorm(n_subj, 0, sqrt(sigA))
-#' mu <- c(A = 0.00, B = 0.15, C = -0.10)
-#' e  <- rnorm(3 * n_subj, 0, sqrt(sigE))
-#' y2 <- u[as.integer(id2)] + unname(mu[method2]) + e
-#' dat3 <- data.frame(y = y2, id = id2, method = method2)
-#' ccc_lmm_reml(dat3, "y", "id", rmet = "method", verbose = TRUE)
+#' ccc_timeavg   <- ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
+#'                               Dmat_type = "time-avg")
+#' ccc_typical   <- ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
+#'                               Dmat_type = "typical-visit")
+#'
+#' # Weighted time-averaging (named weights aligned to time levels)
+#' w <- c(t1 = 0.25, t2 = 0.75)
+#' ccc_wavg <- ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
+#'                          Dmat_type = "weighted-avg", Dmat_weights = w)
 #'
 #' # ------------------------------------------------------------------
-#' # AR(1) residual correlation (fixed rho, threads forced to 1)
-#' # When needed: repeated measures over time with serially correlated
-#' # residuals within subject (e.g., values drift smoothly across visits).
+#' # AR(1) residual correlation with fixed rho
 #' # ------------------------------------------------------------------
 #'   set.seed(10)
 #'   n_subj <- 40
@@ -671,26 +709,20 @@ ccc_pairwise_u_stat <- function(data,
 #'   for (i in seq_len(n_subj)) {
 #'     idx <- which(id == levels(id)[i])
 #'     e <- stats::arima.sim(list(ar = rho_true), n = n_time, sd = sigE)
-#'     # small linear trend so AR(1) isn't swallowed by fixed effects
 #'     y[idx] <- beta0 + beta_t*(seq_len(n_time) - mean(seq_len(n_time))) + e
 #'   }
 #'   dat_ar <- data.frame(y = y, id = id, time = tim)
-#'   # Fit with AR(1) and rho fixed (nonzero). Estimation of rho is not
-#'   # implemented yet; use a plausible value (e.g., 0.4–0.8) for sensitivity.
 #'   ccc_lmm_reml(dat_ar, ry = "y", rind = "id", rtime = "time",
 #'                ar = "ar1", ar_rho = 0.6, verbose = TRUE)
 #'
 #' # ------------------------------------------------------------------
 #' # Random slope by SUBJECT
-#' # When needed: each subject shows a systematic linear change over time
-#' # (e.g., individual-specific trends), regardless of method.
 #' # ------------------------------------------------------------------
 #' set.seed(2)
 #' n_subj <- 60; n_time <- 4
 #' id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
 #' tim <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
 #' method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
-#' # subject-specific slopes around 0
 #' subj <- as.integer(id)
 #' slope_i <- rnorm(n_subj, 0, 0.15)
 #' slope_vec <- slope_i[subj]
@@ -699,7 +731,6 @@ ccc_pairwise_u_stat <- function(data,
 #' y <- base + 0.3*(method=="B") + slope_vec*(tnum - mean(seq_len(n_time))) +
 #'      rnorm(length(id), 0, 0.5)
 #' dat_s <- data.frame(y, id, method, time = tim)
-#' # center time within subject (recommended for random slopes)
 #' dat_s$t_num <- as.integer(dat_s$time)
 #' dat_s$t_c   <- ave(dat_s$t_num, dat_s$id, FUN = function(v) v - mean(v))
 #' ccc_lmm_reml(dat_s, "y", "id", rmet = "method", rtime = "time",
@@ -707,15 +738,12 @@ ccc_pairwise_u_stat <- function(data,
 #'
 #' # ------------------------------------------------------------------
 #' # Random slope by METHOD
-#' # When needed: methods drift differently across time (e.g., biases that
-#' # change with time are method-specific).
 #' # ------------------------------------------------------------------
 #' set.seed(3)
 #' n_subj <- 60; n_time <- 4
 #' id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
 #' tim <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
 #' method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
-#' # method-specific slopes: A ~ 0, B ~ positive drift
 #' slope_m <- ifelse(method=="B", 0.25, 0.00)
 #' base <- rnorm(n_subj, 0, 1.0)[as.integer(id)]
 #' tnum <- as.integer(tim)
@@ -729,8 +757,6 @@ ccc_pairwise_u_stat <- function(data,
 #'
 #' # ------------------------------------------------------------------
 #' # Random slopes for SUBJECT *and* METHOD (custom Z)
-#' # When needed: subjects have their own time trends, AND methods carry
-#' # additional method-specific trends. Supply a custom Z with both parts.
 #' # ------------------------------------------------------------------
 #' set.seed(4)
 #' n_subj <- 50; n_time <- 4
@@ -738,7 +764,6 @@ ccc_pairwise_u_stat <- function(data,
 #' tim <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
 #' method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
 #' subj <- as.integer(id)
-#' # subject slopes + extra slope on method B
 #' slope_subj <- rnorm(n_subj, 0, 0.12)[subj]
 #' slope_B    <- ifelse(method=="B", 0.18, 0.00)
 #' tnum <- as.integer(tim)
@@ -747,13 +772,12 @@ ccc_pairwise_u_stat <- function(data,
 #'      (slope_subj + slope_B) * (tnum - mean(seq_len(n_time))) +
 #'      rnorm(length(id), 0, 0.5)
 #' dat_both <- data.frame(y, id, method, time = tim)
-#' # build Z = [subject_slope | method_A_slope | method_B_slope]
 #' dat_both$t_num <- as.integer(dat_both$time)
 #' dat_both$t_c   <- ave(dat_both$t_num, dat_both$id, FUN = function(v) v - mean(v))
 #' MM <- model.matrix(~ 0 + method, data = dat_both)  # one col per method
 #' Z_custom <- cbind(
-#'   subj_slope   = dat_both$t_c,            # subject slope
-#'   MM * dat_both$t_c                       # method-specific slopes
+#'   subj_slope   = dat_both$t_c,
+#'   MM * dat_both$t_c
 #' )
 #' ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
 #'              slope = "custom", slope_Z = Z_custom, verbose = TRUE)
@@ -762,9 +786,13 @@ ccc_pairwise_u_stat <- function(data,
 #' @importFrom stats as.formula model.matrix setNames qnorm optimize
 #' @export
 ccc_lmm_reml <- function(data, ry, rind,
-                         rmet = NULL, rtime = NULL, interaction = TRUE,
+                         rmet = NULL, rtime = NULL, interaction = FALSE,
                          max_iter = 100, tol = 1e-6,
-                         Dmat = NULL, ci = FALSE, conf_level = 0.95,
+                         Dmat = NULL,
+                         Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
+                         Dmat_weights = NULL,
+                         Dmat_rescale = TRUE,
+                         ci = FALSE, conf_level = 0.95,
                          verbose = FALSE, digits = 4, use_message = TRUE,
                          ar = c("none", "ar1"),
                          ar_rho = NA_real_,
@@ -773,8 +801,9 @@ ccc_lmm_reml <- function(data, ry, rind,
                          slope_Z = NULL,
                          drop_zero_cols = TRUE) {
 
-  ar    <- match.arg(ar)
-  slope <- match.arg(slope)
+  ar         <- match.arg(ar)
+  slope      <- match.arg(slope)
+  Dmat_type  <- match.arg(Dmat_type)
 
   if (identical(ar, "ar1")) {
     if (length(ar_rho) != 1L) stop("ar_rho must be length 1 (or NA to estimate).")
@@ -805,13 +834,19 @@ ccc_lmm_reml <- function(data, ry, rind,
                                 slope, slope_var, slope_Z, drop_zero_cols,
                                 Dmat, ar, ar_rho, max_iter, tol,
                                 conf_level, verbose, digits, use_message,
-                                extra_label, ci))
+                                extra_label, ci,
+                                Dmat_type = Dmat_type,
+                                Dmat_weights = Dmat_weights,
+                                Dmat_rescale = Dmat_rescale))
   } else {
     return(ccc_lmm_reml_pairwise(df, fml, ry, rind, rmet, rtime,
                                  slope, slope_var, slope_Z, drop_zero_cols,
                                  Dmat, ar, ar_rho, max_iter, tol,
                                  conf_level, verbose, digits, use_message,
-                                 extra_label, ci, all_time_lvls))
+                                 extra_label, ci, all_time_lvls,
+                                 Dmat_type = Dmat_type,
+                                 Dmat_weights = Dmat_weights,
+                                 Dmat_rescale = Dmat_rescale))
   }
 }
 
@@ -906,7 +941,7 @@ build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub,
 }
 
 #' @title run_cpp
-#' @description Wrapper for calling C++ backend for CCC estimation.
+#' @description Wrapper for calling 'C++' backend for CCC estimation.
 #' @keywords internal
 run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                     use_ar1, ar1_rho, max_iter, tol, conf_level) {
@@ -933,25 +968,18 @@ run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
 estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                          rho_lo = -0.95, rho_hi = 0.95,
                          max_iter = 100, tol = 1e-6, conf_level = 0.95) {
-  used_reml <- TRUE
   obj <- function(r) {
     fit <- run_cpp(Xr, yr, subject, method_int, time_int, Laux, Z,
                    use_ar1 = TRUE, ar1_rho = r,
                    max_iter = max_iter, tol = tol, conf_level = conf_level)
-    ll <- fit[["reml_loglik"]]
-    if (is.null(ll) || !is.finite(ll)) {
-      used_reml <<- FALSE
-      se_ccc <- suppressWarnings(as.numeric(fit[["se_ccc"]]))
-      SB     <- suppressWarnings(as.numeric(fit[["SB"]]))
-      if (!is.finite(se_ccc)) se_ccc <- 0
-      if (!is.finite(SB))     SB     <- 0
-      return(se_ccc + SB)
-    }
-    -as.numeric(ll)
+    ll <- suppressWarnings(as.numeric(fit[["reml_loglik"]]))
+    if (!is.finite(ll)) return(Inf)  # never prefer invalid values
+    -ll  # minimize negative REML loglik
   }
   oo <- optimize(obj, interval = c(rho_lo, rho_hi))
-  list(rho = unname(oo$minimum), used_reml = used_reml)
+  list(rho = unname(oo$minimum), used_reml = TRUE)
 }
+
 
 #' @title ccc_lmm_reml_overall
 #' @description Internal function to handle overall CCC estimation when `rmet` is NULL or has < 2 levels.
@@ -960,16 +988,43 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
                                  slope, slope_var, slope_Z, drop_zero_cols,
                                  Dmat, ar, ar_rho, max_iter, tol,
                                  conf_level, verbose, digits, use_message,
-                                 extra_label, ci) {
+                                 extra_label, ci,
+                                 Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
+                                 Dmat_weights = NULL,
+                                 Dmat_rescale = TRUE) {
+
+  Dmat_type <- match.arg(Dmat_type)
 
   X <- model.matrix(fml, data = df)
 
-  # For overall case, pass Dmat only if time has >= 2 levels
-  Dsub <- if (!is.null(Dmat) && !is.null(rtime) && nlevels(df[[rtime]]) >= 2L) {
-    as.matrix(Dmat)
-  } else NULL
+  ## Determine present time levels in this (overall) fit
+  lev_time_sub <- if (!is.null(rtime)) levels(df[[rtime]]) else character(0)
 
-  # infer "has_interaction" from model matrix columns
+  ## Build/subset the time kernel Dsub only when there are ≥ 2 time levels
+  if (!is.null(rtime) && length(lev_time_sub) >= 2L) {
+    if (!is.null(Dmat)) {
+      Dfull <- as.matrix(Dmat)
+      ## In overall fits lev_time_sub are the global time levels; require conformity
+      if (nrow(Dfull) != length(lev_time_sub) || ncol(Dfull) != length(lev_time_sub))
+        stop("Dmat has incompatible dimension for present time levels (overall fit).")
+      Dsub <- Dfull
+      if (isTRUE(Dmat_rescale))
+        Dsub <- .Dmat_normalise_mass(Dsub, length(lev_time_sub))
+      ## soft symmetrisation for safety
+      Dsub <- 0.5 * (Dsub + t(Dsub))
+    } else {
+      ## Construct from type/weights; align (named) weights if provided
+      w_sub <- .align_weights_to_levels(Dmat_weights, lev_time_sub, lev_time_sub)
+      Dsub  <- .Dmat_build_kernel(length(lev_time_sub),
+                                  type    = Dmat_type,
+                                  w       = w_sub,
+                                  rescale = Dmat_rescale)
+    }
+  } else {
+    Dsub <- NULL
+  }
+
+  ## infer "has_interaction" from model matrix columns
   has_interaction <- any(grepl(":", colnames(X), fixed = TRUE))
 
   Laux <- build_LDZ(
@@ -992,7 +1047,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
     if (is.null(slope_Z)) NULL else as.matrix(slope_Z)
   }
 
-  # estimate rho if requested
+  ## estimate rho if requested
   rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
     er <- estimate_rho(X, df[[ry]], as.integer(df[[rind]]),
                        method_int, time_int, Laux, Z_overall,
@@ -1043,7 +1098,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
     attr(out, "conf.level")  <- conf_level
     if (identical(ar, "ar1")) attr(out, "ar_rho") <- as.numeric(rho_used)
 
-    # variance-components attributes for overall (scalars)
+    ## variance-components attributes for overall (scalars)
     attr(out, "sigma2_subject")        <- num_or_na(ans[["sigma2_subject"]])
     attr(out, "sigma2_subject_method") <- num_or_na(ans[["sigma2_subject_method"]])
     attr(out, "sigma2_subject_time")   <- num_or_na(ans[["sigma2_subject_time"]])
@@ -1061,7 +1116,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
     attr(out, "package")     <- "matrixCorr"
     if (identical(ar, "ar1")) attr(out, "ar_rho") <- as.numeric(rho_used)
 
-    # variance-components attributes for overall (scalars)
+    ## variance-components attributes for overall (scalars)
     attr(out, "sigma2_subject")        <- num_or_na(ans[["sigma2_subject"]])
     attr(out, "sigma2_subject_method") <- num_or_na(ans[["sigma2_subject_method"]])
     attr(out, "sigma2_subject_time")   <- num_or_na(ans[["sigma2_subject_time"]])
@@ -1082,7 +1137,12 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
                                   slope, slope_var, slope_Z, drop_zero_cols,
                                   Dmat, ar, ar_rho, max_iter, tol,
                                   conf_level, verbose, digits, use_message,
-                                  extra_label, ci, all_time_lvls) {
+                                  extra_label, ci, all_time_lvls,
+                                  Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
+                                  Dmat_weights = NULL,
+                                  Dmat_rescale = TRUE) {
+
+  Dmat_type <- match.arg(Dmat_type)
 
   df[[rmet]] <- droplevels(df[[rmet]])
   method_levels <- levels(df[[rmet]])
@@ -1118,12 +1178,37 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
 
       Xp <- model.matrix(fml, data = df[idx, , drop = FALSE])
 
-      # subset Dmat to present time levels in this pair (if any)
+      # Present time levels in this pair
       lev_time_sub <- if (!is.null(time_fac)) levels(time_fac) else character(0)
-      Dsub <- if (!is.null(Dmat) && length(lev_time_sub) >= 2L) {
-        pos <- match(lev_time_sub, all_time_lvls)
-        as.matrix(Dmat[pos, pos, drop = FALSE])
-      } else NULL
+
+      # Build/subset Dmat for this pair (only if ≥ 2 time levels)
+      if (!is.null(rtime) && length(lev_time_sub) >= 2L) {
+        if (!is.null(Dmat)) {
+          Dfull <- as.matrix(Dmat)
+          if (!is.null(all_time_lvls) && nrow(Dfull) == length(all_time_lvls) && ncol(Dfull) == length(all_time_lvls)) {
+            pos  <- match(lev_time_sub, all_time_lvls)
+            Dsub <- Dfull[pos, pos, drop = FALSE]
+          } else if (nrow(Dfull) == length(lev_time_sub) && ncol(Dfull) == length(lev_time_sub)) {
+            # already in the pair's time order
+            Dsub <- Dfull
+          } else {
+            stop("Dmat has incompatible dimension for present time levels in a pairwise fit.")
+          }
+          if (isTRUE(Dmat_rescale))
+            Dsub <- .Dmat_normalise_mass(Dsub, length(lev_time_sub))
+          # soft symmetrisation for safety
+          Dsub <- 0.5 * (Dsub + t(Dsub))
+        } else {
+          # Construct from type/weights; align (named) weights from global to present levels
+          w_sub <- .align_weights_to_levels(Dmat_weights, lev_time_sub, all_time_lvls)
+          Dsub  <- .Dmat_build_kernel(length(lev_time_sub),
+                                      type    = Dmat_type,
+                                      w       = w_sub,
+                                      rescale = Dmat_rescale)
+        }
+      } else {
+        Dsub <- NULL
+      }
 
       # infer "has_interaction" from model matrix columns for this pair
       has_interaction <- any(grepl(":", colnames(Xp), fixed = TRUE))
@@ -1248,6 +1333,59 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
 
     class(out) <- c("ccc_lmm_reml", "matrixCorr_ccc", "ccc", "matrix")
     return(out)
+  }
+}
+
+#' @keywords internal
+.Dmat_normalise_mass <- function(D, target_mass) {
+  if (is.null(D)) return(NULL)
+  one <- rep(1, nrow(D))
+  mass <- as.numeric(t(one) %*% D %*% one)
+  # leave as is; 'C++' will guard S_B
+  if (!is.finite(mass) || mass <= 0) return(D)
+  D * (target_mass / mass)
+}
+
+#' @keywords internal
+.Dmat_build_kernel <- function(nt, type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
+                               w = NULL, rescale = TRUE) {
+  type <- match.arg(type)
+  if (nt < 2) return(NULL)
+  if (type %in% c("weighted-avg","weighted-sq")) {
+    if (is.null(w)) w <- rep(1/nt, nt)
+    w <- as.numeric(w)
+    if (length(w) != nt) stop("Dmat_weights length must equal the number of present time levels.")
+    if (!all(is.finite(w)) || any(w < 0)) stop("Dmat_weights must be non-negative and finite.")
+    sw <- sum(w); if (sw <= 0) stop("Dmat_weights sums to zero.")
+    w <- w / sw
+  }
+  D <- switch(type,
+              "time-avg"      = (1/nt) * matrix(1, nt, nt),
+              "typical-visit" = diag(nt),
+              "weighted-avg"  = nt * (w %o% w),
+              "weighted-sq"   = nt * diag(w)
+  )
+  if (rescale) D <- .Dmat_normalise_mass(D, nt)
+  # symmetrise softly for safety
+  0.5 * (D + t(D))
+}
+
+#' Align (optional named) weights to a subset of time levels
+#' @keywords internal
+.align_weights_to_levels <- function(w, present_lvls, all_lvls) {
+  if (is.null(w)) return(NULL)
+  if (!is.null(names(w))) {
+    idx <- match(present_lvls, all_lvls)
+    if (anyNA(idx)) stop("Present time levels not found in all_time_lvls.")
+    w_all <- rep(NA_real_, length(all_lvls))
+    w_all[seq_along(all_lvls)] <- w[all_lvls]
+    w_sub <- w_all[idx]
+    if (anyNA(w_sub)) stop("Missing weights for some present time levels.")
+    as.numeric(w_sub)
+  } else {
+    if (length(w) != length(present_lvls))
+      stop("Unnamed Dmat_weights must have length equal to the number of present time levels.")
+    as.numeric(w)
   }
 }
 

@@ -163,6 +163,54 @@ static inline double ar1_kappa_T(double rho, int T) {
   return std::max(kappa, 1e-12);
 }
 
+// log|A| for SPD A via (possibly jittered) Cholesky
+static inline double logdet_spd_safe(const arma::mat& A) {
+  arma::mat L;
+  if (arma::chol(L, A, "lower")) {
+    return 2.0 * arma::sum(arma::log(L.diag()));
+  }
+  // tiny ridge if needed
+  arma::mat Aj = A;
+  double base = 1.0;
+  if (A.n_rows > 0) {
+    double tr = arma::trace(A);
+    if (std::isfinite(tr) && tr > 0.0) base = std::max(1.0, tr / A.n_rows);
+  }
+  double lam = std::max(1e-12, 1e-8 * base);
+  for (int k = 0; k < 6; ++k) {
+    Aj = A; Aj.diag() += lam;
+    if (arma::chol(L, Aj, "lower"))
+      return 2.0 * arma::sum(arma::log(L.diag()));
+    lam *= 10.0;
+  }
+  // last resort (non-SPD): use SVD logdet of A (should be very rare)
+  arma::vec s; arma::mat U, V;
+  arma::svd(U, s, V, A);
+  double acc = 0.0;
+  for (arma::uword i=0;i<s.n_elem;++i) if (s[i] > 0) acc += std::log(s[i]);
+  return acc*2.0; // since SVD gives singular values of symmetric matrix ~ sqrt(eig)
+}
+
+// For AR(1) blocks, log|R_i| without touching jittered Cinv
+// Treats NA times as singletons (R = se * 1); for contiguous valid block of length L:
+// log|R_block| = L*log(se) + (L-1)*log(1 - rho^2)
+static inline double ar1_logdet_R_blocks(const std::vector<int>& tim_i, double rho, double se, double eps=1e-12) {
+  const int n_i = (int)tim_i.size();
+  const double lg_se = std::log(std::max(se, eps));
+  const double lg_one_minus_r2 = std::log(std::max(1.0 - rho*rho, 1e-12));
+  double out = 0.0;
+  int s = 0;
+  while (s < n_i) {
+    if (tim_i[s] < 0) { out += lg_se; ++s; continue; }
+    int e = s; while (e+1 < n_i && tim_i[e+1] >= 0) ++e;
+    const int L = e - s + 1;
+    out += L * lg_se;
+    if (L >= 2) out += (L - 1) * lg_one_minus_r2;
+    s = e + 1;
+  }
+  return out;
+}
+
 
 //---------------- reindex subjects ----------------//
 static inline void reindex_subject(const IntegerVector& subject,
@@ -1563,6 +1611,143 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   double lwr = std::min(1.0, std::max(0.0, ccc - z * se_ccc));
   double upr = std::min(1.0, std::max(0.0, ccc + z * se_ccc));
 
+  // ---------------- REML log-likelihood at final estimates (robust) ----------------
+  // We need: sum_i log|V_i|, log|X' V^{-1} X|, and y' P y.
+  // Using |V_i| = |R_i| * |G| * |M_i| and P = V^{-1} - V^{-1}X (X'V^{-1}X)^{-1} X'V^{-1}.
+  const double two_pi = 2.0 * std::acos(-1.0);  // portable PI
+
+  // log|G| (diagonal G; same for every subject)
+  const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
+  const int r_eff  = r_base + (has_extra ? qZ : 0);
+  const double lg_sa  = std::log(std::max(sa,  eps));
+  const double lg_sab = (nm>0 ? std::log(std::max(sab, eps)) : 0.0);
+  const double lg_sag = (nt>0 ? std::log(std::max(sag, eps)) : 0.0);
+  const double lg_tau = (has_extra ? std::log(std::max(tau2, eps)) : 0.0);
+
+  double logdetG_one = 0.0;
+  logdetG_one += lg_sa;
+  if (nm>0)     logdetG_one += nm * lg_sab;
+  if (nt>0)     logdetG_one += nt * lg_sag;
+  if (has_extra)logdetG_one += qZ * lg_tau;
+
+  double      sum_logdetR  = 0.0;
+  double      sum_logdetM  = 0.0;
+  arma::vec   XtViy_final(p, arma::fill::zeros);
+  double      yTRVY_final  = 0.0;
+
+  {
+    arma::mat Ubase, Ueff, Zi, Cinv, Rinv, M, Minv, X_i;
+    arma::vec y_i, Riny, S_uy, tmpv;
+    arma::mat S_ux;
+
+    for (int i=0; i<m; ++i) {
+      const auto& rows_i = S.rows[i];
+      const auto& met_i  = S.met[i];
+      const auto& tim_i  = S.tim[i];
+      const int n_i = (int)rows_i.size();
+      if (n_i == 0) continue;
+
+      // order rows by time only if nt>0; otherwise keep identity order
+      std::vector<int> ord(n_i);
+      std::iota(ord.begin(), ord.end(), 0);
+      if (nt > 0) {
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){
+          int ta = tim_i[a], tb = tim_i[b];
+          if (ta < 0 && tb < 0) return a < b; // keep input order for NA/NA
+          if (ta < 0) return false;           // NA goes after any valid time
+          if (tb < 0) return true;
+          return ta < tb;                     // ascending time
+        });
+      }
+
+      // gather X_i, y_i in 'ord' order
+      X_i.set_size(n_i, p);
+      y_i.set_size(n_i);
+      for (int k=0; k<n_i; ++k) {
+        int g = rows_i[ ord[k] ];
+        X_i.row(k) = X.row(g);
+        y_i[k]     = y[g];
+      }
+
+      // build ordered codes; for nt==0 fill -1
+      std::vector<int> tim_ord(n_i, -1);
+      std::vector<int> met_ord(n_i, -1);
+      for (int k=0; k<n_i; ++k) {
+        const int ok = ord[k];
+        if (nt > 0) tim_ord[k] = tim_i[ ok ];
+        if (nm > 0) met_ord[k] = met_i[ ok ];
+      }
+
+      // base U
+      build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+
+      // optional extra Z, re-ordered
+      if (has_extra) {
+        rows_take_to(Z, rows_i, Zi);
+        arma::uvec ord_u = arma::conv_to<arma::uvec>::from(ord);
+        Zi = Zi.rows(ord_u);
+      } else {
+        Zi.reset();
+      }
+
+      // effective design [U | Z]
+      Ueff.set_size(n_i, r_eff);
+      Ueff.cols(0, r_base-1) = Ubase;
+      if (has_extra) Ueff.cols(r_base, r_eff-1) = Zi;
+
+      // R^{-1} and log|R|
+      if (use_ar1 && nt > 0) {
+        make_ar1_Cinv(tim_ord, ar1_rho, Cinv);
+        Rinv = (1.0 / std::max(se, eps)) * Cinv;
+        sum_logdetR += ar1_logdet_R_blocks(tim_ord, ar1_rho, se, eps);
+      } else {
+        Cinv.eye(n_i, n_i);
+        Rinv = (1.0 / std::max(se, eps)) * Cinv;
+        sum_logdetR += n_i * std::log(std::max(se, eps));
+      }
+
+      // M_i = G^{-1} + U' R^{-1} U
+      M.zeros(r_eff, r_eff);
+      M(0,0) = 1.0 / std::max(sa,  eps);
+      int off = 1;
+      if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab, eps); off += nm; }
+      if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag, eps); off += nt; }
+      if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2, eps); }
+      M += Ueff.t() * (Rinv * Ueff);
+
+      sum_logdetM += logdet_spd_safe(M);
+
+      // y' V^{-1} y = y'R^{-1}y - S_uy' M^{-1} S_uy
+      Riny = Rinv * y_i;
+      double yTRiny = arma::as_scalar(y_i.t() * Riny);
+      S_uy = Ueff.t() * Riny;
+      inv_sympd_safe(Minv, M);
+      double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
+      yTRVY_final += (yTRiny - corr);
+
+      // X' V^{-1} y = XtRiny - S_ux' M^{-1} S_uy
+      S_ux = Ueff.t() * (Rinv * X_i);  // r_eff x p
+      tmpv = X_i.t() * Riny;           // p
+      XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
+    }
+  }
+
+  // log|X' V^{-1} X|
+  double logdetXtViX = logdet_spd_safe(XtViX_final);
+
+  // y' P y = y' V^{-1} y - (X' V^{-1} y)' (X' V^{-1} X)^{-1} (X' V^{-1} y)
+  double yPy = yTRVY_final - arma::as_scalar( XtViy_final.t() * (VarFix * XtViy_final) );
+
+  // Assemble REML loglik (constant term included; harmless for profiling ρ)
+  double reml_loglik = -0.5 * (
+    ((double)n - (double)p) * std::log(two_pi)
+    + sum_logdetR
+  + (double)m * logdetG_one
+  + sum_logdetM
+  + logdetXtViX
+  + yPy
+  );
+
   return Rcpp::List::create(
     _["sigma2_subject"]        = sa,
     _["sigma2_subject_method"] = sab,
@@ -1576,6 +1761,7 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     _["lwr"]                   = lwr,
     _["upr"]                   = upr,
     _["se_ccc"]                = se_ccc,
-    _["conf_level"]            = conf_level
+    _["conf_level"]            = conf_level,
+    _["reml_loglik"]           = reml_loglik
   );
 }

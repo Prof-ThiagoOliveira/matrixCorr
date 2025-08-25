@@ -66,8 +66,11 @@ Rcpp::List build_L_Dm_cpp(
       if ((int)Dg.nrow() != nt_eff || (int)Dg.ncol() != nt_eff)
         stop("Dmat_global must be %d x %d for the provided time levels.", nt_eff, nt_eff);
       mat D(&Dg[0], Dg.nrow(), Dg.ncol(), false);
+      // soft symmetrize for safety; R already normalizes/psd-guards
+      D = 0.5 * (D + D.t());
       return D;
     } else {
+      // fallback only used when R passed NULL (e.g., nt<2 or legacy path)
       return arma::eye<mat>(nt_eff, nt_eff);
     }
   };
