@@ -188,7 +188,7 @@ static inline double logdet_spd_safe(const arma::mat& A) {
   arma::svd(U, s, V, A);
   double acc = 0.0;
   for (arma::uword i=0;i<s.n_elem;++i) if (s[i] > 0) acc += std::log(s[i]);
-  return acc*2.0; // since SVD gives singular values of symmetric matrix ~ sqrt(eig)
+  return acc;
 }
 
 // For AR(1) blocks, log|R_i| without touching jittered Cinv
@@ -523,7 +523,8 @@ Rcpp::List ccc_vc_cpp(
   double sab = (nm>0 ? 0.5 : 0.0);
   double sag = (nt>0 ? 0.5 : 0.0);
   double se  = 1.0;
-  double tau2 = 0.5; // only used when has_extra
+  arma::vec tau2;     // length qZ if has_extra
+  if (has_extra) tau2 = arma::vec(qZ, arma::fill::value(0.5));
   const double eps = 1e-10;
 
   arma::vec beta(p, arma::fill::zeros);
@@ -670,7 +671,10 @@ Rcpp::List ccc_vc_cpp(
     int off = 1;
     if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm; }
     if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); off += nt; }
-    if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0 / std::max(tau2, eps); }
+    if (has_extra) {
+      for (int j = 0; j < qZ; ++j)
+        M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
+    }
 
     M += Ueff.t() * RinvU;
 
@@ -764,7 +768,10 @@ for (int i=0; i<m; ++i) {
   int off = 1;
   if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm; }
   if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); off += nt; }
-  if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0 / std::max(tau2, eps); }
+  if (has_extra) {
+    for (int j = 0; j < qZ; ++j)
+      M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
+  }
   M += Ueff.t() * RinvU;
 
   A.set_size(r_eff, 1 + p);
@@ -885,17 +892,22 @@ for (int i=0; i<m; ++i) {
     }
 
     // (3) M-step: update sa, sab, sag, se (and tau2 if has_extra)
-    double sa_acc = 0.0, sab_acc = 0.0, sag_acc = 0.0, tau2_acc = 0.0;
+    double sa_acc = 0.0, sab_acc = 0.0, sag_acc = 0.0;
     double se_sumsq = 0.0, se_trace = 0.0;
 
     arma::vec r_global = y - X * beta;
+
+    // Accumulator for extra random effects (only sized if needed)
+    arma::vec tau2_acc;
+    if (has_extra) tau2_acc = arma::vec(qZ, arma::fill::zeros);
 
     if (use_ar1 || has_extra) {
 #ifdef _OPENMP
       int nthreads2 = omp_get_max_threads();
       std::vector<double> sa_tls(nthreads2,0.0), sab_tls(nthreads2,0.0),
-      sag_tls(nthreads2,0.0), tau2_tls(nthreads2,0.0),
-      ss_tls(nthreads2,0.0),   tr_tls(nthreads2,0.0);
+      sag_tls(nthreads2,0.0), ss_tls(nthreads2,0.0),
+      tr_tls(nthreads2,0.0);
+      std::vector<arma::vec> tau2_tls(nthreads2, arma::vec(qZ, arma::fill::zeros));
 #pragma omp parallel
 {
   int tid = omp_get_thread_num();
@@ -968,7 +980,10 @@ for (int i=0; i<m; ++i) {
     int off = 1;
     if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
     if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
-    if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,eps); }
+    if (has_extra) {
+      for (int j = 0; j < qZ; ++j)
+        M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
+    }
 
     RinvU = Rinv * Ueff;
     M += Ueff.t() * RinvU;
@@ -986,12 +1001,15 @@ for (int i=0; i<m; ++i) {
     double trce = arma::trace(Minv * (Ueff.t() * Rinv * Ueff));
     ss_tls[tid] += quad;
     tr_tls[tid] += trce;
-    se_term[i] = (quad + trce) / std::max(1, n_i);
+    se_term[i] = se * (quad + trce) / std::max(1, n_i);
     sa_tls[tid] += b_i[0]*b_i[0] + Minv(0,0);
     int pos = 1;
     if (nm>0) { for (int l=0; l<nm; ++l) sab_tls[tid] += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos+l); pos += nm; }
     if (nt>0) { for (int t=0; t<nt; ++t) sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t,pos+t); pos += nt; }
-    if (has_extra) { for (int j=0; j<qZ; ++j) tau2_tls[tid] += b_i[pos+j]*b_i[pos+j] + Minv(pos+j,pos+j); }
+    if (has_extra) {
+      for (int j = 0; j < qZ; ++j)
+        tau2_tls[tid][j] += b_i[pos + j]*b_i[pos + j] + Minv(pos + j, pos + j);
+    }
 
     // delta-method storage
     sa_term[i] = b_i[0]*b_i[0] + Minv(0,0);
@@ -1012,9 +1030,9 @@ for (int t=0; t<nthreads2; ++t) {
   sa_acc  += sa_tls[t];
   sab_acc += sab_tls[t];
   sag_acc += sag_tls[t];
-  tau2_acc+= tau2_tls[t];
   se_sumsq+= ss_tls[t];
   se_trace+= tr_tls[t];
+  if (has_extra) tau2_acc += tau2_tls[t];
 }
 #else
 // serial
@@ -1087,7 +1105,10 @@ for (int i=0; i<m; ++i) {
   int off = 1;
   if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
   if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
-  if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,eps); }
+  if (has_extra) {
+    for (int j = 0; j < qZ; ++j)
+      M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
+  }
 
   RinvU = Rinv * Ueff;
   M += Ueff.t() * RinvU;
@@ -1104,13 +1125,16 @@ for (int i=0; i<m; ++i) {
   double trce = arma::trace(Minv * (Ueff.t() * Rinv * Ueff));
   se_sumsq += quad;
   se_trace += trce;
-  se_term[i] = (quad + trce) / std::max(1, n_i);
+  se_term[i] = se * (quad + trce) / std::max(1, n_i);
 
   sa_acc += b_i[0]*b_i[0] + Minv(0,0);
   int pos = 1;
   if (nm>0) { for (int l=0; l<nm; ++l) sab_acc += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos+l); pos += nm; }
   if (nt>0) { for (int t=0; t<nt; ++t) sag_acc += b_i[pos+t]*b_i[pos+t] + Minv(pos+t,pos+t); pos += nt; }
-  if (has_extra) { for (int j=0; j<qZ; ++j) tau2_acc += b_i[pos+j]*b_i[pos+j] + Minv(pos+j,pos+j); }
+  if (has_extra) {
+    for (int j = 0; j < qZ; ++j)
+      tau2_acc[j] += b_i[pos + j]*b_i[pos + j] + Minv(pos + j, pos + j);
+  }
 
   // delta-method storage
   sa_term[i] = b_i[0]*b_i[0] + Minv(0,0);
@@ -1132,6 +1156,7 @@ for (int i=0; i<m; ++i) {
       // iid residuals path (no AR1, no extra Z)
 #ifdef _OPENMP
       int nthreads2 = omp_get_max_threads();
+      std::vector<arma::vec> tau2_tls(nthreads2, arma::vec(qZ, arma::fill::zeros));
       std::vector<double> sa_tls(nthreads2,0.0), sab_tls(nthreads2,0.0),
       sag_tls(nthreads2,0.0), ss_tls(nthreads2,0.0),
       tr_tls(nthreads2,0.0);
@@ -1178,12 +1203,14 @@ for (int i=0; i<m; ++i) {
     if (nt>0) { for (int t=0;t<nt;++t)  sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t, pos+t); }
   }
 }
+arma::vec tau2_acc(qZ, arma::fill::zeros);
 for (int t=0; t<nthreads2; ++t) {
   sa_acc  += sa_tls[t];
   sab_acc += sab_tls[t];
   sag_acc += sag_tls[t];
   se_sumsq+= ss_tls[t];
   se_trace+= tr_tls[t];
+  if (has_extra) tau2_acc += tau2_tls[t];
 }
 #else
 // serial
@@ -1229,17 +1256,25 @@ for (int i=0; i<m; ++i) {
     double sa_new   = std::max(sa_acc  / (double)m, eps);
     double sab_new  = (nm>0 ? std::max(sab_acc / (double)(m*nm), eps) : 0.0);
     double sag_new  = (nt>0 ? std::max(sag_acc / (double)(m*nt), eps) : 0.0);
-    double tau2_new = (has_extra ? std::max(tau2_acc / (double)(m*std::max(qZ,1)), eps) : tau2);
-    double se_new   = std::max( (se_sumsq + se_trace) / (double)n, eps );
+    arma::vec tau2_new = tau2;
+    if (has_extra) {
+      for (int j = 0; j < qZ; ++j)
+        tau2_new[j] = std::max(tau2_acc[j] / (double)m, eps);
+    }
+    double se_new = std::max(
+      (use_ar1 || has_extra)
+      ? se * (se_sumsq + se_trace) / (double)n   // Rinv = (1/se) * Cinv
+    :        (se_sumsq + se_trace) / (double)n, // IID path already on Cinv = I
+    eps
+    );
 
     double diff = std::fabs(sa_new - sa)
       + std::fabs(sab_new - sab)
       + std::fabs(sag_new - sag)
-      + (has_extra ? std::fabs(tau2_new - tau2) : 0.0)
+      + (has_extra ? arma::accu(arma::abs(tau2_new - tau2)) : 0.0)
       + std::fabs(se_new  - se);
 
       sa = sa_new; sab = sab_new; sag = sag_new; se = se_new; if (has_extra) tau2 = tau2_new;
-
       if (diff < tol) break;
   } // end EM iterations
 
@@ -1315,7 +1350,10 @@ for (int i=0; i<m; ++i) {
     int off = 1;
     if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
     if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
-    if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,eps); }
+    if (has_extra) {
+      for (int j = 0; j < qZ; ++j)
+        M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
+    }
 
     RinvU = Rinv * Ueff;
     S_ux = Ueff.t() * (Rinv * X_i);
@@ -1391,7 +1429,10 @@ for (int i=0; i<m; ++i) {
   int off = 1;
   if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
   if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
-  if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2,eps); }
+  if (has_extra) {
+    for (int j = 0; j < qZ; ++j)
+      M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
+  }
 
   RinvU = Rinv * Ueff;
   S_ux = Ueff.t() * (Rinv * X_i);
@@ -1473,12 +1514,12 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     SB = std::max(num / den, 0.0);
 
     if (!std::isfinite(SB))    SB    = 0.0;
-    if (!std::isfinite(varSB) || varSB < 0.0) varSB = 0.0;
 
     arma::mat AV = Afix * VarFix;
     double term1 = 2.0 * arma::trace(AV * AV);
     double term2 = 4.0 * arma::as_scalar(beta.t() * Afix * VarFix * Afix * beta);
     varSB = std::max((term1 + term2) / (den * den), 0.0);
+    if (!std::isfinite(varSB) || varSB < 0.0) varSB = 0.0;
   }
 
   // ---- kappa factors for time-averaged CCC ----
@@ -1501,26 +1542,28 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
         for (int l = 0; l < nm; ++l) {
           // count observed times for this (i,l)
           int T = 0;
-          for (size_t k = 0; k < tim_i.size(); ++k)
+          for (size_t k = 0; k < tim_i.size(); ++k) {
             if (met_i[k] == l && tim_i[k] >= 0) ++T;
-            if (T <= 0) continue;
-
-            kappa_g_bar += 1.0 / static_cast<double>(T);
-            kappa_e_bar += use_ar1 ? ar1_kappa_T(ar1_rho, T)
-              : 1.0 / static_cast<double>(T);
-            ++units;
-        }
-      } else {
-        // no method factor: one block per subject
-        int T = 0;
-        for (size_t k = 0; k < tim_i.size(); ++k)
-          if (tim_i[k] >= 0) ++T;
+          }
           if (T <= 0) continue;
 
           kappa_g_bar += 1.0 / static_cast<double>(T);
           kappa_e_bar += use_ar1 ? ar1_kappa_T(ar1_rho, T)
             : 1.0 / static_cast<double>(T);
           ++units;
+        }
+      } else {
+        // no method factor: one block per subject
+        int T = 0;
+        for (size_t k = 0; k < tim_i.size(); ++k) {
+          if (tim_i[k] >= 0) ++T;
+        }
+        if (T <= 0) continue;
+
+        kappa_g_bar += 1.0 / static_cast<double>(T);
+        kappa_e_bar += use_ar1 ? ar1_kappa_T(ar1_rho, T)
+          : 1.0 / static_cast<double>(T);
+        ++units;
       }
     }
 
@@ -1573,9 +1616,19 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     Zdm.set_size(m, 1);
     for (int i = 0; i < m; ++i) { Zdm(i,0)=sa_term[i]; }
   }
-  arma::mat Sigma_vc = arma::cov(Zdm);
-  if (Zdm.n_cols == 1u) Sigma_vc(0,0) = sample_var(Zdm.col(0));
-  Sigma_vc /= std::max(1.0, (double)m);
+  arma::mat Sigma_vc;
+  if (m < 2) {
+    // with only one subject, treat the variance of the mean as 0 to avoid NaNs
+    Sigma_vc.zeros(Zdm.n_cols, Zdm.n_cols);
+  } else {
+    // variance of the mean across subjects
+    if (Zdm.n_cols == 1u) {
+      Sigma_vc.set_size(1,1);
+      Sigma_vc(0,0) = sample_var(Zdm.col(0)) / (double)m;
+    } else {
+      Sigma_vc = arma::cov(Zdm) / (double)m;
+    }
+  }
 
   arma::vec se_vec(m);
   double n_total = 0.0;
@@ -1622,13 +1675,17 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   const double lg_sa  = std::log(std::max(sa,  eps));
   const double lg_sab = (nm>0 ? std::log(std::max(sab, eps)) : 0.0);
   const double lg_sag = (nt>0 ? std::log(std::max(sag, eps)) : 0.0);
-  const double lg_tau = (has_extra ? std::log(std::max(tau2, eps)) : 0.0);
+  double sum_lg_tau = 0.0;
+  if (has_extra) {
+    for (int j = 0; j < qZ; ++j)
+      sum_lg_tau += std::log(std::max(tau2[j], eps));
+  }
 
   double logdetG_one = 0.0;
   logdetG_one += lg_sa;
-  if (nm>0)     logdetG_one += nm * lg_sab;
-  if (nt>0)     logdetG_one += nt * lg_sag;
-  if (has_extra)logdetG_one += qZ * lg_tau;
+  if (nm>0) logdetG_one += nm * lg_sab;
+  if (nt>0) logdetG_one += nt * lg_sag;
+  logdetG_one += sum_lg_tau;
 
   double      sum_logdetR  = 0.0;
   double      sum_logdetM  = 0.0;
@@ -1712,7 +1769,10 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
       int off = 1;
       if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab, eps); off += nm; }
       if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag, eps); off += nt; }
-      if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0/std::max(tau2, eps); }
+      if (has_extra) {
+        for (int j = 0; j < qZ; ++j)
+          M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
+      }
       M += Ueff.t() * (Rinv * Ueff);
 
       sum_logdetM += logdet_spd_safe(M);
@@ -1748,12 +1808,17 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   + yPy
   );
 
+  SEXP sigma2_extra = R_NilValue;
+  if (has_extra) {
+    sigma2_extra = Rcpp::NumericVector(tau2.begin(), tau2.end());
+  }
+
   return Rcpp::List::create(
     _["sigma2_subject"]        = sa,
     _["sigma2_subject_method"] = sab,
     _["sigma2_subject_time"]   = sag,
     _["sigma2_error"]          = se,
-    _["sigma2_extra"]          = (has_extra ? tau2 : NA_REAL),
+    _["sigma2_extra"]          = sigma2_extra,
     _["SB"]                    = SB,
     _["beta"]                  = beta,
     _["varFix"]                = VarFix,

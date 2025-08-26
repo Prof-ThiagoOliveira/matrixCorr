@@ -893,9 +893,21 @@ compute_ci_from_se <- function(ccc, se, level) {
                         ar = c("none", "ar1"),
                         ar_rho = NA_real_) {
   ar <- match.arg(ar)
-  fmt <- function(x) if (is.na(x)) "NA" else formatC(x, format = "f", digits = digits)
+
+  fmt <- function(x) {
+    if (is.null(x)) return("NA")
+    x <- suppressWarnings(as.numeric(x))
+    if (length(x) == 0 || all(!is.finite(x))) return("NA")
+    if (length(x) == 1) {
+      return(formatC(x, format = "f", digits = digits))
+    }
+    # vector: pretty-print as a comma-separated list
+    paste0("[", paste(formatC(x, format = "f", digits = digits), collapse = ", "), "]")
+  }
+
   colw <- 38L
-  v <- function(s, x) sprintf("  %-*s : %s", colw, s, fmt(as.numeric(x)))
+  v <- function(s, x) sprintf("  %-*s : %s", colw, s, fmt(x))
+
   out <- c(
     sprintf("---- matrixCorr::ccc_lmm_reml - variance-components (%s) ----", label),
     sprintf("Design: methods nm = %d, times nt = %d", nm, nt)
@@ -906,20 +918,24 @@ compute_ci_from_se <- function(ccc, se, level) {
   } else {
     out <- c(out, "Residual correlation: independent (iid)")
   }
+
   out <- c(out,
            "Estimates:",
            v("sigma_A^2 (subject)",             ans[["sigma2_subject"]]),
            v("sigma_A_M^2 (subject x method)",  ans[["sigma2_subject_method"]]),
            v("sigma_A_T^2 (subject x time)",    ans[["sigma2_subject_time"]]),
            v("sigma_E^2 (error)",               ans[["sigma2_error"]]))
+
   if (!is.null(ans[["sigma2_extra"]])) {
     lab <- if (is.null(extra_label)) "extra random effect" else extra_label
     out <- c(out, v(sprintf("sigma_Z^2 (%s)", lab), ans[["sigma2_extra"]]))
   }
+
   out <- c(out,
            v("S_B (fixed-effect dispersion)",   ans[["SB"]]),
            v("SE(CCC)",                         ans[["se_ccc"]]),
            "--------------------------------------------------------------------------")
+
   if (use_message) message(paste(out, collapse = "\n")) else cat(paste(out, collapse = "\n"), "\n")
 }
 
@@ -1291,7 +1307,9 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
         vc_subject_method[i, j] <- vc_subject_method[j, i] <- num_or_na(ans[["sigma2_subject_method"]])
         vc_subject_time[i, j]   <- vc_subject_time[j, i]   <- num_or_na(ans[["sigma2_subject_time"]])
         vc_error[i, j]          <- vc_error[j, i]          <- num_or_na(ans[["sigma2_error"]])
-        vc_extra[i, j]          <- vc_extra[j, i]          <- num_or_na(ans[["sigma2_extra"]])
+        extra <- ans[["sigma2_extra"]]
+        vc_extra[i, j] <- vc_extra[j, i] <-
+          if (length(extra) == 1L) as.numeric(extra) else mean(as.numeric(extra))
         vc_SB[i, j]             <- vc_SB[j, i]             <- num_or_na(ans[["SB"]])
         vc_se_ccc[i, j]         <- vc_se_ccc[j, i]         <- num_or_na(ans[["se_ccc"]])
       }
