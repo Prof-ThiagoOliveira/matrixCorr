@@ -327,7 +327,6 @@ ccc_pairwise_u_stat <- function(data,
 #'   When \code{ar = "ar1"} and \code{ar_rho = NA}, \emph{\eqn{\rho} is estimated}
 #'   by profiling a 1-D objective (preferring REML if available; a proxy objective
 #'   is used as a fallback). Default \code{NA_real_}.
-#'
 #' @param slope Character. Optional extra random-effect design \eqn{Z}.
 #'   With \code{"subject"} a single random slope is added (one column in \eqn{Z});
 #'   with \code{"method"} one column per method level is added; with
@@ -339,9 +338,9 @@ ccc_pairwise_u_stat <- function(data,
 #'   pass the vector itself. NAs are treated as zeros in \eqn{Z}.
 #' @param slope_Z For \code{slope = "custom"}, a numeric matrix with \eqn{n}
 #'   rows (same order as \code{data}) providing the full extra random-effect
-#'   design \eqn{Z}. \strong{Note:} all columns of \code{slope_Z} share a
-#'   single pooled variance component \eqn{\sigma_Z^2}; per-column variances
-#'   are not yet supported (under development). Ignored otherwise.
+#'   design \eqn{Z}. \strong{Each column of \code{slope_Z} has its own variance
+#'   component} \eqn{\sigma_{Z,j}^2}; columns are treated as \emph{uncorrelated}
+#'   (diagonal block in \eqn{G}). Ignored otherwise.
 #' @param drop_zero_cols Logical. When \code{slope = "method"}, drop all-zero
 #'   columns of \eqn{Z} after subsetting (useful in pairwise fits). Default
 #'   \code{TRUE}.
@@ -366,8 +365,8 @@ ccc_pairwise_u_stat <- function(data,
 #'         with a common variance \eqn{\sigma_{A\times T}^2} and zero
 #'         covariances across levels;
 #'   \item optionally, an \emph{extra} random effect aligned with \eqn{Z}
-#'         (random slope), where variance \eqn{\sigma_Z^2} times an identity on the
-#'         \eqn{Z}-columns (see \strong{Random-slope \eqn{Z}}).
+#'         (random slope), where each \emph{column} has its own variance
+#'         \eqn{\sigma_{Z,j}^2} and columns are uncorrelated.
 #' }
 #' The fixed-effects design is \code{~ 1 + rmet + rtime} and, if
 #' \code{interaction=TRUE}, \code{+ rmet:rtime}.
@@ -405,25 +404,28 @@ ccc_pairwise_u_stat <- function(data,
 #' a tiny diagonal "jitter" and a pseudo-inverse fallback when needed.
 #'
 #' \strong{Random-slope \eqn{Z}.}
-#' Besides \eqn{U_i}, the function can include an extra design \eqn{Z_i} and a
-#' corresponding variance \eqn{\sigma_Z^2}:
+#' Besides \eqn{U_i}, the function can include an extra design \eqn{Z_i}.
 #' \itemize{
 #'   \item \code{slope="subject"}: \eqn{Z} has one column (the regressor in
-#'         \code{slope_var}); \eqn{Z_{i}} is the subject-\eqn{i} block.
+#'         \code{slope_var}); \eqn{Z_{i}} is the subject-\eqn{i} block, with its own
+#'         variance \eqn{\sigma_{Z,1}^2}.
 #'   \item \code{slope="method"}: \eqn{Z} has one column per method level;
 #'         row \eqn{t} uses the slope regressor if its method equals level \eqn{\ell},
 #'         otherwise 0; all-zero columns can be dropped via
-#'         \code{drop_zero_cols=TRUE} after subsetting.
+#'         \code{drop_zero_cols=TRUE} after subsetting. Each column has its own
+#'         variance \eqn{\sigma_{Z,\ell}^2}.
 #'   \item \code{slope="custom"}: \eqn{Z} is provided fully via \code{slope_Z}.
+#'         Each column is an independent random effect with its own variance
+#'         \eqn{\sigma_{Z,j}^2}; cross-covariances among columns are set to 0.
 #' }
 #' Computations simply augment \eqn{\tilde U_i=[U_i\ Z_i]} and the corresponding
-#' inverse-variance block. The EM updates then include
-#' \deqn{ \sigma_Z^{2\,(new)} \;=\; \frac{1}{m\,q_Z}
-#'       \sum_i \sum_{j=1}^{q_Z}\!\Big( b_{i,\text{extra},j}^2 +
+#' inverse-variance block. The EM updates then include, for each column \eqn{j=1,\ldots,q_Z},
+#' \deqn{ \sigma_{Z,j}^{2\,(new)} \;=\; \frac{1}{m}
+#'       \sum_{i=1}^m \Big( b_{i,\text{extra},j}^2 +
 #'       (M_i^{-1})_{\text{extra},jj} \Big)
 #'       \quad (\text{if } q_Z>0). }
-#' \emph{Interpretation:} \eqn{\sigma_Z^2} represents additional within-subject
-#' variability explained by the slope regressor(s) and is \emph{not} part of the CCC
+#' \emph{Interpretation:} the \eqn{\sigma_{Z,j}^2} represent additional within-subject
+#' variability explained by the slope regressor(s) in column \eqn{j} and are \emph{not} part of the CCC
 #' denominator (agreement across methods/time).
 #'
 #' \strong{EM-style variance-component updates.} With current \eqn{\hat\beta},
@@ -439,15 +441,15 @@ ccc_pairwise_u_stat <- function(data,
 #'       (M_i^{-1})_{\ell\ell} \Big)
 #'       \quad (\text{if } nm>0), }
 #' \deqn{ \sigma_{A\times T}^{2\,(new)} \;=\; \frac{1}{m\,nt}
-#'       \sum_i \sum_{t=1}^{nt}\!\Big( b_{i,t}^2 + (M_i^{-1})_{tt} \Big)
+#'       \sum_i \sum_{t=1}^{nt}
+#'       \Big( b_{i,t}^2 + (M_i^{-1})_{tt} \Big)
 #'       \quad (\text{if } nt>0), }
 #' \deqn{ \sigma_E^{2\,(new)} \;=\; \frac{1}{n} \sum_i
 #'       \Big( e_i^\top C_i(\rho)^{-1} e_i \;+\;
 #'       \mathrm{tr}\!\big(M_i^{-1}U_i^\top C_i(\rho)^{-1} U_i\big) \Big), }
-#' where \eqn{C_i(\rho)^{-1}} is the AR(1) precision built on the
-#' time-ordered runs described above (and equals \eqn{I} for i.i.d. residuals).
-#' Iterate until the \eqn{\ell_1} change across components is \eqn{<}
-#' \code{tol} or \code{max_iter} is reached.
+#' together with the per-column update for \eqn{\sigma_{Z,j}^2} given above.
+#' Iterate until the \eqn{\ell_1} change across components is \eqn{<}\code{tol}
+#' or \code{max_iter} is reached.
 #'
 #' \strong{Fixed-effect dispersion \eqn{S_B}: choosing the time-kernel \eqn{D_m}.}
 #'
@@ -527,8 +529,8 @@ ccc_pairwise_u_stat <- function(data,
 #'             \kappa_T^{(e)}\,\sigma_E^2}. }
 #' Special cases: with no method factor, \eqn{S_B=\sigma_{A\times M}^2=0}; with
 #' a single time level, \eqn{\sigma_{A\times T}^2=0} (no \eqn{\kappa}-shrinkage).
-#' When \eqn{T=1} or \eqn{\rho=0}, both \eqn{\kappa}-factors equal 1. The extra
-#' random-effect variance \eqn{\sigma_Z^2} (if used) is not included.
+#' When \eqn{T=1} or \eqn{\rho=0}, both \eqn{\kappa}-factors equal 1. The \emph{extra}
+#' random-effect variances \eqn{\{\sigma_{Z,j}^2\}} (if used) are \emph{not} included.
 #'
 #' \strong{CIs / SEs (delta method for CCC).}
 #' Let
@@ -629,12 +631,11 @@ ccc_pairwise_u_stat <- function(data,
 #' \code{NA} time codes break the run, and gaps between factor levels are treated as
 #' regular steps (we do not use elapsed time).
 #'
-#' \emph{Heteroscedastic slopes are not supported yet.}
-#' When \code{slope_Z = "custom"} the current implementation assumes a single
-#' \eqn{\sigma_Z^2} for \emph{all} custom-slope columns. Distinct variances
-#' (e.g., one for the global slope and another for method-specific
-#' slopes) are not estimated. Column rescaling changes the implied prior on
-#' \eqn{b_{i,\text{extra}}} but does not introduce separate variance components.
+#' \emph{Heteroscedastic slopes across \eqn{Z} columns are supported.}
+#' Each \eqn{Z} column has its own variance component \eqn{\sigma_{Z,j}^2}, but
+#' cross-covariances among \eqn{Z} columns are set to zero (diagonal block). Column
+#' rescaling changes the implied prior on \eqn{b_{i,\text{extra}}} but does not
+#' introduce correlations.
 #'
 #' @seealso \code{build_L_Dm_Z_cpp}
 #' for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_pairwise_u_stat}}
