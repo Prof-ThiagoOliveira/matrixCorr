@@ -591,8 +591,15 @@ Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.
 Lin L (2000). A note on the concordance correlation coefficient.
 \emph{Biometrics}, 56: 324-325.
 
-Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
-a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519-539.
+Carrasco, J. L. et al. (2013). Estimation of the concordance
+correlation coefficient for repeated measures using SAS and R.
+\emph{Computer Methods and Programs in Biomedicine}, 109(3), 293–304.
+\doi{10.1016/j.cmpb.2012.09.002}
+
+King et al. (2007). A Class of Repeated Measures Concordance
+Correlation Coefficients.
+\emph{Journal of Biopharmaceutical Statistics}, 17(4).
+\doi{10.1080/10543400701329455}
 }
 \seealso{
 \code{build_L_Dm_Z_cpp}
