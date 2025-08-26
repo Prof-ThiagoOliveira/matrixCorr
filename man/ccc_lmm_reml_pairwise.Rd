@@ -34,5 +34,7 @@ ccc_lmm_reml_pairwise(
 }
 \description{
 Internal function to handle pairwise CCC estimation for each method pair.
+
+Internal function to handle pairwise CCC estimation for each method pair.
 }
 \keyword{internal}

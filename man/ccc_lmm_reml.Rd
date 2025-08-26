@@ -574,8 +574,6 @@ dat_both <- data.frame(y, id, method, time = tim)
 dat_both$t_num <- as.integer(dat_both$time)
 dat_both$t_c   <- ave(dat_both$t_num, dat_both$id, FUN = function(v) v - mean(v))
 MM <- model.matrix(~ 0 + method, data = dat_both)  # one col per method
-# All custom-slope columns share the same variance component and are
-# modelled as uncorrelated. Take care when using custom approach.
 Z_custom <- cbind(
   subj_slope   = dat_both$t_c,
   MM * dat_both$t_c

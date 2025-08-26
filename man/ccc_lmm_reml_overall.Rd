@@ -33,5 +33,7 @@ ccc_lmm_reml_overall(
 }
 \description{
 Internal function to handle overall CCC estimation when \code{rmet} is NULL or has < 2 levels.
+
+Internal function to handle overall CCC estimation when \code{rmet} is NULL or has < 2 levels.
 }
 \keyword{internal}

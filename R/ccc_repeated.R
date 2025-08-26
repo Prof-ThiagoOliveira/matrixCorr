@@ -790,8 +790,6 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_both$t_num <- as.integer(dat_both$time)
 #' dat_both$t_c   <- ave(dat_both$t_num, dat_both$id, FUN = function(v) v - mean(v))
 #' MM <- model.matrix(~ 0 + method, data = dat_both)  # one col per method
-#' # All custom-slope columns share the same variance component and are
-#' # modelled as uncorrelated. Take care when using custom approach.
 #' Z_custom <- cbind(
 #'   subj_slope   = dat_both$t_c,
 #'   MM * dat_both$t_c
@@ -883,6 +881,19 @@ compute_ci_from_se <- function(ccc, se, level) {
   z <- qnorm(1 - (1 - level)/2)
   c(max(0, min(1, ccc - z * se)), max(0, min(1, ccc + z * se)))
 }
+
+
+#' @title .vc_message
+#' @description Display variance component estimation details to the console.
+#' @keywords internal
+num_or_na_vec <- function(x) {
+  if (is.null(x)) return(NULL)
+  x <- suppressWarnings(as.numeric(x))
+  if (!length(x)) return(NULL)
+  x[!is.finite(x)] <- NA_real_
+  x
+}
+
 
 #' @title .vc_message
 #' @description Display variance component estimation details to the console.
@@ -1017,6 +1028,9 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
 #' @title ccc_lmm_reml_overall
 #' @description Internal function to handle overall CCC estimation when `rmet` is NULL or has < 2 levels.
 #' @keywords internal
+#' @title ccc_lmm_reml_overall
+#' @description Internal function to handle overall CCC estimation when `rmet` is NULL or has < 2 levels.
+#' @keywords internal
 ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
                                  slope, slope_var, slope_Z, drop_zero_cols,
                                  Dmat, ar, ar_rho, max_iter, tol,
@@ -1136,7 +1150,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
     attr(out, "sigma2_subject_method") <- num_or_na(ans[["sigma2_subject_method"]])
     attr(out, "sigma2_subject_time")   <- num_or_na(ans[["sigma2_subject_time"]])
     attr(out, "sigma2_error")          <- num_or_na(ans[["sigma2_error"]])
-    attr(out, "sigma2_extra")          <- num_or_na(ans[["sigma2_extra"]])
+    attr(out, "sigma2_extra")          <- num_or_na_vec(ans[["sigma2_extra"]])
     attr(out, "SB")                    <- num_or_na(ans[["SB"]])
     attr(out, "se_ccc")                <- num_or_na(ans[["se_ccc"]])
 
@@ -1154,7 +1168,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
     attr(out, "sigma2_subject_method") <- num_or_na(ans[["sigma2_subject_method"]])
     attr(out, "sigma2_subject_time")   <- num_or_na(ans[["sigma2_subject_time"]])
     attr(out, "sigma2_error")          <- num_or_na(ans[["sigma2_error"]])
-    attr(out, "sigma2_extra")          <- num_or_na(ans[["sigma2_extra"]])
+    attr(out, "sigma2_extra")          <- num_or_na_vec(ans[["sigma2_extra"]])
     attr(out, "SB")                    <- num_or_na(ans[["SB"]])
     attr(out, "se_ccc")                <- num_or_na(ans[["se_ccc"]])
 
@@ -1163,6 +1177,9 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
   }
 }
 
+#' @title ccc_lmm_reml_pairwise
+#' @description Internal function to handle pairwise CCC estimation for each method pair.
+#' @keywords internal
 #' @title ccc_lmm_reml_pairwise
 #' @description Internal function to handle pairwise CCC estimation for each method pair.
 #' @keywords internal
@@ -1195,7 +1212,11 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
   vc_subject_method <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
   vc_subject_time   <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
   vc_error          <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
-  vc_extra          <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
+
+  # <-- UPDATED: store sigma2_extra as a list-matrix (per-pair vector of extras)
+  vc_extra <- matrix(vector("list", Lm * Lm), Lm, Lm,
+                     dimnames = list(method_levels, method_levels))
+
   vc_SB             <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
   vc_se_ccc         <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
 
@@ -1307,9 +1328,13 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
         vc_subject_method[i, j] <- vc_subject_method[j, i] <- num_or_na(ans[["sigma2_subject_method"]])
         vc_subject_time[i, j]   <- vc_subject_time[j, i]   <- num_or_na(ans[["sigma2_subject_time"]])
         vc_error[i, j]          <- vc_error[j, i]          <- num_or_na(ans[["sigma2_error"]])
-        extra <- ans[["sigma2_extra"]]
-        vc_extra[i, j] <- vc_extra[j, i] <-
-          if (length(extra) == 1L) as.numeric(extra) else mean(as.numeric(extra))
+
+        # <-- UPDATED: keep full vector of extra variances (per pair)
+        extra_vec <- ans[["sigma2_extra"]]
+        if (!is.null(extra_vec)) extra_vec <- as.numeric(extra_vec)
+        vc_extra[[i, j]] <- extra_vec
+        vc_extra[[j, i]] <- extra_vec
+
         vc_SB[i, j]             <- vc_SB[j, i]             <- num_or_na(ans[["SB"]])
         vc_se_ccc[i, j]         <- vc_se_ccc[j, i]         <- num_or_na(ans[["se_ccc"]])
       }
@@ -1344,7 +1369,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
     attr(out, "sigma2_subject_method") <- vc_subject_method
     attr(out, "sigma2_subject_time")   <- vc_subject_time
     attr(out, "sigma2_error")          <- vc_error
-    attr(out, "sigma2_extra")          <- vc_extra
+    attr(out, "sigma2_extra")          <- vc_extra  # <-- UPDATED: list-matrix
     attr(out, "SB")                    <- vc_SB
     attr(out, "se_ccc")                <- vc_se_ccc
 
@@ -1362,7 +1387,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
     attr(out, "sigma2_subject_method") <- vc_subject_method
     attr(out, "sigma2_subject_time")   <- vc_subject_time
     attr(out, "sigma2_error")          <- vc_error
-    attr(out, "sigma2_extra")          <- vc_extra
+    attr(out, "sigma2_extra")          <- vc_extra  # <-- UPDATED: list-matrix
     attr(out, "SB")                    <- vc_SB
     attr(out, "se_ccc")                <- vc_se_ccc
 
@@ -1570,38 +1595,29 @@ summary.ccc_lmm_reml <- function(object,
   if (is.null(rn)) rn <- as.character(seq_len(nrow(est_mat)))
   if (is.null(cn)) cn <- as.character(seq_len(ncol(est_mat)))
 
-  # Helper: extract VC values in the same order as summary.ccc builds rows
-  extract_pairs_vec <- function(val) {
-    # overall 1x1
+  n_pairs <- if (nrow(est_mat) == 1L && ncol(est_mat) == 1L) 1L else {
+    nrow(est_mat) * (ncol(est_mat) - 1L) / 2L
+  }
+
+  # Helper: extract VC values in the same order as summary.ccc builds rows (numeric-only)
+  extract_pairs_num <- function(val) {
+    # Overall 1x1
     if (nrow(est_mat) == 1L && ncol(est_mat) == 1L) {
       if (is.null(val)) return(NA_real_)
-      if (is.matrix(val)) {
-        return(suppressWarnings(as.numeric(val[1, 1])))
-      } else {
-        return(suppressWarnings(as.numeric(val[1])))
-      }
+      if (is.matrix(val)) return(suppressWarnings(as.numeric(val[1, 1])))
+      return(suppressWarnings(as.numeric(val[1])))
     }
-
-    # pairwise >= 2 methods
-    out <- numeric(nrow(est_mat) * (ncol(est_mat) - 1L) / 2L)
+    # Pairwise
+    out <- numeric(n_pairs)
     k <- 0L
-
-    # Named access if available; otherwise positional
-    use_named <- is.matrix(val) && !is.null(rownames(val)) && !is.null(colnames(val))
-
     for (i in seq_len(nrow(est_mat) - 1L)) {
       for (j in (i + 1L):ncol(est_mat)) {
         k <- k + 1L
         if (is.null(val)) {
           out[k] <- NA_real_
         } else if (is.matrix(val)) {
-          if (use_named) {
-            out[k] <- suppressWarnings(as.numeric(val[rn[i], cn[j]]))
-          } else {
-            out[k] <- suppressWarnings(as.numeric(val[i, j]))
-          }
+          out[k] <- suppressWarnings(as.numeric(val[i, j]))
         } else {
-          # scalar or weird length; recycle if length 1, else NA
           vv <- suppressWarnings(as.numeric(val))
           out[k] <- if (length(vv) == 1L) vv else NA_real_
         }
@@ -1610,21 +1626,86 @@ summary.ccc_lmm_reml <- function(object,
     out
   }
 
-  vc_names <- c("sigma2_subject",
-                "sigma2_subject_method",
-                "sigma2_subject_time",
-                "sigma2_error",
-                "sigma2_extra",
-                "SB",
-                "se_ccc")
+  # UPDATED: extract sigma2_extra as list of numeric vectors (one per pair / overall)
+  extract_pairs_extra_list <- function(val) {
+    # Overall 1x1
+    if (nrow(est_mat) == 1L && ncol(est_mat) == 1L) {
+      if (is.null(val)) return(list(NULL))
+      if (is.matrix(val) && typeof(val) == "list") {
+        return(list(val[[1, 1]]))
+      }
+      # could be a plain numeric vector
+      return(list(suppressWarnings(as.numeric(if (is.matrix(val)) val[1, 1] else val))))
+    }
+    # Pairwise
+    if (is.matrix(val) && typeof(val) == "list") {
+      out <- vector("list", n_pairs)
+      k <- 0L
+      for (i in seq_len(nrow(est_mat) - 1L)) {
+        for (j in (i + 1L):ncol(est_mat)) {
+          k <- k + 1L
+          out[[k]] <- val[[i, j]]
+        }
+      }
+      return(out)
+    } else if (is.null(val)) {
+      return(vector("list", n_pairs))
+    } else {
+      # fallback: recycle a single numeric(vector) across pairs
+      vv <- suppressWarnings(as.numeric(val))
+      return(replicate(n_pairs, vv, simplify = FALSE))
+    }
+  }
 
-  # Build VC columns aligned to the pair order
-  vc_cols <- lapply(vc_names, function(nm) extract_pairs_vec(attr(object, nm)))
-  names(vc_cols) <- vc_names
+  vc_names_num <- c("sigma2_subject",
+                    "sigma2_subject_method",
+                    "sigma2_subject_time",
+                    "sigma2_error",
+                    "SB",
+                    "se_ccc")
 
-  # Bind and round
-  out <- cbind(base_summary, lapply(vc_cols, function(x) round(x, digits)))
-  for (nm in vc_names) out[[nm]] <- as.numeric(out[[nm]])
+  # Numeric VCs (same as before)
+  vc_cols_num <- lapply(vc_names_num, function(nm) extract_pairs_num(attr(object, nm)))
+  names(vc_cols_num) <- vc_names_num
+
+  # sigma2_extra as list of vectors (may be NULL / varying lengths)
+  extra_list <- extract_pairs_extra_list(attr(object, "sigma2_extra"))
+  # Round each vector
+  extra_list <- lapply(extra_list, function(v) if (is.null(v)) NULL else round(as.numeric(v), digits))
+
+  # Determine max number of extra components across pairs/overall
+  max_k <- 0L
+  for (v in extra_list) if (!is.null(v)) max_k <- max(max_k, length(v))
+  # Build extra columns sigma2_extra1..K (NA where not available)
+  extra_cols <- list()
+  if (max_k > 0L) {
+    for (k in seq_len(max_k)) {
+      colk <- rep(NA_real_, n_pairs)
+      for (r in seq_len(n_pairs)) {
+        v <- extra_list[[r]]
+        if (!is.null(v) && length(v) >= k) colk[r] <- v[k]
+      }
+      extra_cols[[paste0("sigma2_extra", k)]] <- colk
+    }
+  }
+
+  # Assemble output
+  out <- base_summary
+
+  # Attach numeric VC columns (rounded)
+  for (nm in vc_names_num) {
+    out[[nm]] <- as.numeric(round(vc_cols_num[[nm]], digits))
+  }
+
+  # Attach expanded extra columns
+  if (length(extra_cols)) {
+    for (nm in names(extra_cols)) {
+      out[[nm]] <- as.numeric(extra_cols[[nm]])
+    }
+  } else {
+    # keep a single column to signal absence, if you prefer:
+    # out[["sigma2_extra1"]] <- NA_real_
+  }
 
   class(out) <- c("summary.ccc_lmm_reml", "data.frame")
   attr(out, "conf.level") <- attr(base_summary, "conf.level")
