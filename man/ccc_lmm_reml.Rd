@@ -27,7 +27,13 @@ ccc_lmm_reml(
   slope = c("none", "subject", "method", "custom"),
   slope_var = NULL,
   slope_Z = NULL,
-  drop_zero_cols = TRUE
+  drop_zero_cols = TRUE,
+  vc_select = c("auto", "none"),
+  vc_alpha = 0.05,
+  vc_test_order = c("subj_time", "subj_method"),
+  include_subj_method = NULL,
+  include_subj_time = NULL,
+  sb_zero_tol = 1e-10
 )
 }
 \arguments{
@@ -135,6 +141,50 @@ component} \eqn{\sigma_{Z,j}^2}; columns are treated as \emph{uncorrelated}
 \item{drop_zero_cols}{Logical. When \code{slope = "method"}, drop all-zero
 columns of \eqn{Z} after subsetting (useful in pairwise fits). Default
 \code{TRUE}.}
+
+\item{vc_select}{Character scalar; one of \code{c("auto","none")}.
+Controls how the subject by method \eqn{\sigma^2_{A\times M}} ("subj_method") and
+subject by time \eqn{\sigma^2_{A\times T}} ("subj_time") variance components are
+included. If \code{"auto"} (default), the function performs boundary-aware
+REML likelihood-ratio tests (LRTs; null on the boundary at zero with a
+half-\eqn{\chi^2_1} reference) to decide whether to retain each component,
+in the order given by \code{vc_test_order}. If \code{"none"}, no testing
+is done and inclusion is taken from \code{include_subj_method}/\code{include_subj_time}
+(or, if \code{NULL}, from the mere presence of the corresponding factor in
+the design).  In pairwise fits, the decision is made independently for each
+method pair.}
+
+\item{vc_alpha}{Numeric scalar in \eqn{(0,1)}; default \code{0.05}.
+Per-component significance level for the boundary-aware REML LRTs used when
+\code{vc_select = "auto"}. The tests are one-sided for variance components
+on the boundary and are \emph{not} multiplicity-adjusted.}
+
+\item{vc_test_order}{Character vector (length 2) with a permutation of
+\code{c("subj_time","subj_method")}; default \code{c("subj_time","subj_method")}. Specifies the order
+in which the two variance components are tested when \code{vc_select = "auto"}.
+The component tested first may be dropped before testing the second. If a
+factor is absent in the design (e.g., no time factor so "subj_time" is undefined),
+the corresponding test is skipped.}
+
+\item{include_subj_method, include_subj_time}{Logical scalars or \code{NULL}.
+When \code{vc_select = "none"}, these control whether the
+\eqn{\sigma^2_{A\times M}} ("subj_method") and \eqn{\sigma^2_{A\times T}} ("subj_time")
+random effects are included (\code{TRUE}) or excluded (\code{FALSE}) in the model.
+If \code{NULL} (default), inclusion defaults to the presence of the
+corresponding factor in the data (i.e., at least two method/time levels).
+When \code{vc_select = "auto"}, these arguments are ignored (automatic
+selection is used instead).}
+
+\item{sb_zero_tol}{Non-negative numeric scalar; default \code{1e-10}.
+Numerical threshold for the fixed-effect dispersion term \eqn{S_B}.
+After computing \eqn{\widehat{S_B}} and its delta-method variance, if
+\eqn{\widehat{S_B} \le} \code{sb_zero_tol} or non-finite, the procedure
+treats \eqn{S_B} as fixed at zero in the delta step. It sets
+\eqn{d_{S_B}=0} and \eqn{\mathrm{Var}(\widehat{S_B})=0}, preventing
+numerical blow-ups of \code{SE(CCC)} when \eqn{\widehat{S_B}\to 0} and the
+fixed-effects variance is ill-conditioned for the contrast. This stabilises
+inference in rare boundary cases; it has no effect when
+\eqn{\widehat{S_B}} is comfortably above the threshold.}
 }
 \description{
 Compute Lin's Concordance Correlation Coefficient (CCC) from a linear
@@ -499,22 +549,59 @@ ccc_wavg <- ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
 # ------------------------------------------------------------------
 # AR(1) residual correlation with fixed rho
 # ------------------------------------------------------------------
-  set.seed(10)
-  n_subj <- 40
-  n_time <- 6                      # ≥ 3 time points recommended for AR(1)
-  id  <- factor(rep(seq_len(n_subj), each = n_time))
-  tim <- factor(rep(seq_len(n_time),  times = n_subj))
-  beta0 <- 0; beta_t <- 0.2
-  rho_true <- 0.6; sigE <- 0.7
-  y <- numeric(length(id))
-  for (i in seq_len(n_subj)) {
-    idx <- which(id == levels(id)[i])
-    e <- stats::arima.sim(list(ar = rho_true), n = n_time, sd = sigE)
-    y[idx] <- beta0 + beta_t*(seq_len(n_time) - mean(seq_len(n_time))) + e
-  }
-  dat_ar <- data.frame(y = y, id = id, time = tim)
-  ccc_lmm_reml(dat_ar, ry = "y", rind = "id", rtime = "time",
-               ar = "ar1", ar_rho = 0.6, verbose = TRUE)
+set.seed(10)
+n_subj   <- 40
+n_time   <- 10
+methods  <- c("A", "B", "C", "D")        # four methods
+nm       <- length(methods)
+# Factors: subject, method, time (balanced design: every subject has
+# all methods x times)
+id     <- factor(rep(seq_len(n_subj), each = n_time * nm))
+method <- factor(rep(rep(methods, each = n_time), times = n_subj),
+                 levels = methods)
+time   <- factor(rep(rep(seq_len(n_time), times = nm), times = n_subj))
+
+# True effects/parameters
+beta0    <- 0
+# common linear time trend
+beta_t   <- 0.2
+# method biases (fixed effect)
+bias_met <- c(A = 0.00, B = 0.30, C = -0.15, D = 0.05)
+# between-subject variance (random intercept)
+sigA     <- 1.0
+# AR(1) correlation within subj x method
+rho_true <- 0.6
+# residual SD
+sigE     <- 0.7
+
+# Build mean structure
+t_num <- as.integer(time)
+t_c   <- t_num - mean(seq_len(n_time))    # centered visit index
+mu    <- beta0 + beta_t * t_c + bias_met[as.character(method)]
+
+# Between-subject random intercepts
+u_subj <- rnorm(n_subj, mean = 0, sd = sqrt(sigA))
+u      <- u_subj[as.integer(id)]
+
+# AR(1) residuals generated per subject x method run of length n_time
+e <- numeric(length(id))
+for (s in seq_len(n_subj)) {
+ for (m in methods) {
+  idx <- which(id == levels(id)[s] & method == m)
+  e[idx] <- stats::arima.sim(list(ar = rho_true), n = n_time, sd = sigE)
+ }
+}
+
+# Response
+y <- mu + u + e
+
+# Data frame
+dat_ar4 <- data.frame(y = y, id = id, method = method, time = time)
+
+# Fit CCC LMM with AR(1) residuals (fixed rho = 0.6)
+ccc_lmm_reml(dat_ar4,
+             ry = "y", rind = "id", rmet = "method", rtime = "time",
+             ar = "ar1", ar_rho = 0.6, verbose = TRUE)
 
 # ------------------------------------------------------------------
 # Random slope by SUBJECT

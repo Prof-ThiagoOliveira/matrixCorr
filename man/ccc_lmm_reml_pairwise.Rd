@@ -29,7 +29,13 @@ ccc_lmm_reml_pairwise(
   all_time_lvls,
   Dmat_type = c("time-avg", "typical-visit", "weighted-avg", "weighted-sq"),
   Dmat_weights = NULL,
-  Dmat_rescale = TRUE
+  Dmat_rescale = TRUE,
+  vc_select = c("auto", "none"),
+  vc_alpha = 0.05,
+  vc_test_order = c("subj_time", "subj_method"),
+  include_subj_method = NULL,
+  include_subj_time = NULL,
+  sb_zero_tol = 1e-10
 )
 }
 \description{

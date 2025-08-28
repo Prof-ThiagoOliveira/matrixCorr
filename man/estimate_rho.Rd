@@ -16,7 +16,10 @@ estimate_rho(
   rho_hi = 0.95,
   max_iter = 100,
   tol = 1e-06,
-  conf_level = 0.95
+  conf_level = 0.95,
+  include_subj_method = TRUE,
+  include_subj_time = TRUE,
+  sb_zero_tol = 1e-10
 )
 }
 \description{

@@ -45,8 +45,8 @@ ar1_precision_from_time <- function(time_codes, rho) {
     .Call(`_matrixCorr_ar1_precision_from_time`, time_codes, rho)
 }
 
-ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, Lr = NULL, auxDr = NULL, Zr = NULL, use_ar1 = FALSE, ar1_rho = 0.0) {
-    .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr, Zr, use_ar1, ar1_rho)
+ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, Lr = NULL, auxDr = NULL, Zr = NULL, use_ar1 = FALSE, ar1_rho = 0.0, include_sab = TRUE, include_sag = TRUE, sb_zero_tol = 1e-10) {
+    .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr, Zr, use_ar1, ar1_rho, include_sab, include_sag, sb_zero_tol)
 }
 
 ccc_cpp <- function(X) {

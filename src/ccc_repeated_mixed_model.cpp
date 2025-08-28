@@ -474,7 +474,10 @@ Rcpp::List ccc_vc_cpp(
     Rcpp::Nullable<Rcpp::NumericMatrix> auxDr = R_NilValue,
     Rcpp::Nullable<Rcpp::NumericMatrix> Zr = R_NilValue,
     bool use_ar1 = false,
-    double ar1_rho = 0.0
+    double ar1_rho = 0.0,
+    bool include_sab = true,
+    bool include_sag = true,
+    double sb_zero_tol = 1e-10
 ) {
 
 #ifdef _OPENMP
@@ -518,10 +521,14 @@ Rcpp::List ccc_vc_cpp(
   reindex_subject(subject, subj_idx, m);
   BySubj S = index_by_subject(subj_idx, method, time, m);
 
+  // -------- switches for random-effect design sizes
+  const int nm_re = include_sab ? nm : 0;
+  const int nt_re = include_sag ? nt : 0;
+
   // EM init
   double sa  = 1.0;
-  double sab = (nm>0 ? 0.5 : 0.0);
-  double sag = (nt>0 ? 0.5 : 0.0);
+  double sab = (nm_re>0 ? 0.5 : 0.0);
+  double sag = (nt_re>0 ? 0.5 : 0.0);
   double se  = 1.0;
   arma::vec tau2;     // length qZ if has_extra
   if (has_extra) tau2 = arma::vec(qZ, arma::fill::value(0.5));
@@ -530,7 +537,7 @@ Rcpp::List ccc_vc_cpp(
   arma::vec beta(p, arma::fill::zeros);
 
   // workspace sizes
-  const int r = 1 + (nm>0?nm:0) + (nt>0?nt:0);
+  const int r = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
 
   // -------------------- precompute per-subject invariants --------------------
   std::vector<Cache> C(m);
@@ -542,15 +549,15 @@ Rcpp::List ccc_vc_cpp(
     C[i].n_i = n_i;
 
     C[i].UtU.set_size(r,r);
-    make_UtU(met, tim, n_i, nm, nt, C[i].UtU);
+    make_UtU(met, tim, n_i, nm_re, nt_re, C[i].UtU);
 
     C[i].Uty.set_size(r);
-    accum_Ut_vec(rows, met, tim, nm, nt, [&](int idx){ return y[idx]; }, C[i].Uty);
+    accum_Ut_vec(rows, met, tim, nm_re, nt_re, [&](int idx){ return y[idx]; }, C[i].Uty);
 
     C[i].Utx.set_size(r, p);
     for (int k=0;k<p;++k) {
       arma::vec tmp(r, arma::fill::zeros);
-      accum_Ut_vec(rows, met, tim, nm, nt, [&](int idx){ return X(idx,k); }, tmp);
+      accum_Ut_vec(rows, met, tim, nm_re, nt_re, [&](int idx){ return X(idx,k); }, tmp);
       C[i].Utx.col(k) = tmp;
     }
 
@@ -629,7 +636,7 @@ Rcpp::List ccc_vc_cpp(
     for (int k = 0; k < n_i; ++k) {
       const int ok = ord[k];
       tim_ord[k] = tim_i[ ok ];
-      if (nm > 0) met_ord[k] = met_i[ ok ];
+      if (nm_re > 0) met_ord[k] = met_i[ ok ];
     }
 
 #ifndef NDEBUG
@@ -637,8 +644,8 @@ Rcpp::List ccc_vc_cpp(
     if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
 #endif
 
-    const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-    build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+    const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
+    build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
 
     if (has_extra) {
       rows_take_to(Z, rows_i, Zi);
@@ -654,7 +661,7 @@ Rcpp::List ccc_vc_cpp(
     if (has_extra) Ueff.cols(r_base, r_eff-1) = Zi;
 
     Cinv.zeros(n_i, n_i);
-    if (use_ar1 && nt > 0) make_ar1_Cinv(tim_ord, ar1_rho, Cinv);
+    if (use_ar1 && nt > 0) make_ar1_Cinv(tim_ord, ar1_rho, Cinv); // note: uses nt (data), not nt_re
     else Cinv.eye(n_i, n_i);
     Rinv = (1.0 / std::max(se, eps)) * Cinv;
 
@@ -669,8 +676,8 @@ Rcpp::List ccc_vc_cpp(
     M.zeros(r_eff, r_eff);
     M(0,0) = 1.0 / std::max(sa,  eps);
     int off = 1;
-    if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm; }
-    if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); off += nt; }
+    if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+    if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); off += nt_re; }
     if (has_extra) {
       for (int j = 0; j < qZ; ++j)
         M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
@@ -731,11 +738,11 @@ for (int i=0; i<m; ++i) {
   for (int k = 0; k < n_i; ++k) {
     const int ok = ord[k];
     tim_ord[k] = tim_i[ ok ];
-    if (nm > 0) met_ord[k] = met_i[ ok ];
+    if (nm_re > 0) met_ord[k] = met_i[ ok ];
   }
 
-  const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-  build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+  const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
+  build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
 
   if (has_extra) {
     rows_take_to(Z, rows_i, Zi);
@@ -766,8 +773,8 @@ for (int i=0; i<m; ++i) {
   M.zeros(r_eff, r_eff);
   M(0,0) = 1.0 / std::max(sa,  eps);
   int off = 1;
-  if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm; }
-  if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); off += nt; }
+  if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+  if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); off += nt_re; }
   if (has_extra) {
     for (int j = 0; j < qZ; ++j)
       M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
@@ -813,8 +820,8 @@ for (int i=0; i<m; ++i) {
     M.zeros();
     M(0,0) = 1.0 / std::max(sa,  eps);
     int off = 1;
-    if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm; }
-    if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
+    if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+    if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
     M += inv_se * Ci.UtU;
 
     A.col(0)    = Ci.Uty;
@@ -844,8 +851,8 @@ for (int i=0; i<m; ++i) {
   M.zeros();
   M(0,0) = 1.0 / std::max(sa,  eps);
   int off = 1;
-  if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm; }
-  if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
+  if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+  if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
   M += inv_se * Ci.UtU;
 
   A.col(0)    = Ci.Uty;
@@ -946,7 +953,7 @@ for (int i=0; i<m; ++i) {
     for (int k = 0; k < n_i; ++k) {
       const int ok = ord[k];
       tim_ord[k] = tim_i[ ok ];
-      if (nm > 0) met_ord[k] = met_i[ ok ];
+      if (nm_re > 0) met_ord[k] = met_i[ ok ];
     }
 
 #ifndef NDEBUG
@@ -954,8 +961,8 @@ for (int i=0; i<m; ++i) {
     if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
 #endif
 
-    const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-    build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+    const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
+    build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
 
     if (has_extra) {
       rows_take_to(Z, rows_i, Zi);
@@ -978,8 +985,8 @@ for (int i=0; i<m; ++i) {
     M.zeros(r_eff, r_eff);
     M(0,0) = 1.0 / std::max(sa,  eps);
     int off = 1;
-    if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-    if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
+    if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+    if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt_re; }
     if (has_extra) {
       for (int j = 0; j < qZ; ++j)
         M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
@@ -1004,8 +1011,8 @@ for (int i=0; i<m; ++i) {
     se_term[i] = se * (quad + trce) / std::max(1, n_i);
     sa_tls[tid] += b_i[0]*b_i[0] + Minv(0,0);
     int pos = 1;
-    if (nm>0) { for (int l=0; l<nm; ++l) sab_tls[tid] += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos+l); pos += nm; }
-    if (nt>0) { for (int t=0; t<nt; ++t) sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t,pos+t); pos += nt; }
+    if (nm_re>0) { for (int l=0; l<nm_re; ++l) sab_tls[tid] += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos+l); pos += nm_re; }
+    if (nt_re>0) { for (int t=0; t<nt_re; ++t) sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t,pos+t); pos += nt_re; }
     if (has_extra) {
       for (int j = 0; j < qZ; ++j)
         tau2_tls[tid][j] += b_i[pos + j]*b_i[pos + j] + Minv(pos + j, pos + j);
@@ -1013,16 +1020,16 @@ for (int i=0; i<m; ++i) {
 
     // delta-method storage
     sa_term[i] = b_i[0]*b_i[0] + Minv(0,0);
-    if (nm > 0) {
+    if (nm_re > 0) {
       double acc_m = 0.0;
-      for (int l = 0; l < nm; ++l) acc_m += b_i[1 + l]*b_i[1 + l] + Minv(1 + l, 1 + l);
-      sab_term[i] = acc_m / (double)nm;
+      for (int l = 0; l < nm_re; ++l) acc_m += b_i[1 + l]*b_i[1 + l] + Minv(1 + l, 1 + l);
+      sab_term[i] = acc_m / (double)nm_re;
     } else sab_term[i] = 0.0;
-    if (nt > 0) {
-      int base = 1 + (nm>0?nm:0);
+    if (nt_re > 0) {
+      int base = 1 + (nm_re>0?nm_re:0);
       double acc_t = 0.0;
-      for (int t = 0; t < nt; ++t) acc_t += b_i[base + t]*b_i[base + t] + Minv(base + t, base + t);
-      sag_term[i] = acc_t / (double)nt;
+      for (int t = 0; t < nt_re; ++t) acc_t += b_i[base + t]*b_i[base + t] + Minv(base + t, base + t);
+      sag_term[i] = acc_t / (double)nt_re;
     } else sag_term[i] = 0.0;
   }
 }
@@ -1071,7 +1078,7 @@ for (int i=0; i<m; ++i) {
   for (int k = 0; k < n_i; ++k) {
     const int ok = ord[k];
     tim_ord[k] = tim_i[ ok ];
-    if (nm > 0) met_ord[k] = met_i[ ok ];
+    if (nm_re > 0) met_ord[k] = met_i[ ok ];
   }
 
 #ifndef NDEBUG
@@ -1079,8 +1086,8 @@ for (int i=0; i<m; ++i) {
   if ((int)tim_ord.size() != n_i) Rcpp::stop("tim_ord size mismatch");
 #endif
 
-  const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-  build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+  const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
+  build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
 
   if (has_extra) {
     rows_take_to(Z, rows_i, Zi);
@@ -1103,8 +1110,8 @@ for (int i=0; i<m; ++i) {
   M.zeros(r_eff, r_eff);
   M(0,0) = 1.0 / std::max(sa,  eps);
   int off = 1;
-  if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-  if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
+  if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+  if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt_re; }
   if (has_extra) {
     for (int j = 0; j < qZ; ++j)
       M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
@@ -1129,8 +1136,8 @@ for (int i=0; i<m; ++i) {
 
   sa_acc += b_i[0]*b_i[0] + Minv(0,0);
   int pos = 1;
-  if (nm>0) { for (int l=0; l<nm; ++l) sab_acc += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos+l); pos += nm; }
-  if (nt>0) { for (int t=0; t<nt; ++t) sag_acc += b_i[pos+t]*b_i[pos+t] + Minv(pos+t,pos+t); pos += nt; }
+  if (nm_re>0) { for (int l=0; l<nm_re; ++l) sab_acc += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos:l); pos += nm_re; }
+  if (nt_re>0) { for (int t=0; t<nt_re; ++t) sag_acc += b_i[pos+t]*b_i[pos+t] + Minv(pos+t,pos+t); pos += nt_re; }
   if (has_extra) {
     for (int j = 0; j < qZ; ++j)
       tau2_acc[j] += b_i[pos + j]*b_i[pos + j] + Minv(pos + j, pos + j);
@@ -1138,16 +1145,16 @@ for (int i=0; i<m; ++i) {
 
   // delta-method storage
   sa_term[i] = b_i[0]*b_i[0] + Minv(0,0);
-  if (nm > 0) {
+  if (nm_re > 0) {
     double acc_m = 0.0;
-    for (int l = 0; l < nm; ++l) acc_m += b_i[1 + l]*b_i[1 + l] + Minv(1 + l, 1 + l);
-    sab_term[i] = acc_m / (double)nm;
+    for (int l = 0; l < nm_re; ++l) acc_m += b_i[1 + l]*b_i[1 + l] + Minv(1 + l, 1 + l);
+    sab_term[i] = acc_m / (double)nm_re;
   } else sab_term[i] = 0.0;
-  if (nt > 0) {
-    int base = 1 + (nm>0?nm:0);
+  if (nt_re > 0) {
+    int base = 1 + (nm_re>0?nm_re:0);
     double acc_t = 0.0;
-    for (int t = 0; t < nt; ++t) acc_t += b_i[base + t]*b_i[base + t] + Minv(base + t, base + t);
-    sag_term[i] = acc_t / (double)nt;
+    for (int t = 0; t < nt_re; ++t) acc_t += b_i[base + t]*b_i[base + t] + Minv(base + t, base + t);
+    sag_term[i] = acc_t / (double)nt_re;
   } else sag_term[i] = 0.0;
 }
 #endif
@@ -1177,8 +1184,8 @@ for (int i=0; i<m; ++i) {
     M.zeros();
     M(0,0) = 1.0 / std::max(sa, eps);
     int off = 1;
-    if (nm>0) { for (int l=0;l<nm;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-    if (nt>0) { for (int t=0;t<nt;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+    if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+    if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
     M += (1.0/std::max(se,eps)) * Ci.UtU;
 
     Utr = Ci.Uty - Ci.Utx * beta;
@@ -1189,7 +1196,7 @@ for (int i=0; i<m; ++i) {
     for (int t=0; t<n_i; ++t) r_i[t] = r_global[ rows_i[t] ];
 
     arma::vec Ub(n_i, arma::fill::zeros);
-    add_U_times(rows_i, met_i, tim_i, nm, nt, b_i, Ub);
+    add_U_times(rows_i, met_i, tim_i, nm_re, nt_re, b_i, Ub);
 
     double ss = 0.0;
     for (int t=0; t<n_i; ++t) { double e = r_i[t] - Ub[t]; ss += e*e; }
@@ -1199,8 +1206,8 @@ for (int i=0; i<m; ++i) {
     se_term[i] = (ss + trce) / std::max(1, n_i);
     sa_tls[tid] += b_i[0]*b_i[0] + Minv(0,0);
     int pos = 1;
-    if (nm>0) { for (int l=0;l<nm;++l) sab_tls[tid] += b_i[pos+l]*b_i[pos+l] + Minv(pos+l, pos+l); pos += nm; }
-    if (nt>0) { for (int t=0;t<nt;++t)  sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t, pos+t); }
+    if (nm_re>0) { for (int l=0;l<nm_re;++l) sab_tls[tid] += b_i[pos+l]*b_i[pos+l] + Minv(pos+l, pos+l); pos += nm_re; }
+    if (nt_re>0) { for (int t=0;t<nt_re;++t)  sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t, pos+t); }
   }
 }
 arma::vec tau2_acc(qZ, arma::fill::zeros);
@@ -1226,8 +1233,8 @@ for (int i=0; i<m; ++i) {
   M.zeros();
   M(0,0) = 1.0 / std::max(sa, eps);
   int off = 1;
-  if (nm>0) { for (int l=0;l<nm;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-  if (nt>0) { for (int t=0;t<nt;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+  if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+  if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
   M += (1.0/std::max(se,eps)) * Ci.UtU;
 
   Utr = Ci.Uty - Ci.Utx * beta;
@@ -1238,7 +1245,7 @@ for (int i=0; i<m; ++i) {
   for (int t=0; t<n_i; ++t) r_i[t] = r_global[ rows_i[t] ];
 
   arma::vec Ub(n_i, arma::fill::zeros);
-  add_U_times(rows_i, met_i, tim_i, nm, nt, b_i, Ub);
+  add_U_times(rows_i, met_i, tim_i, nm_re, nt_re, b_i, Ub);
 
   double ss = 0.0; for (int t=0;t<n_i;++t) { double e = r_i[t] - Ub[t]; ss += e*e; }
   se_sumsq += ss;
@@ -1246,16 +1253,16 @@ for (int i=0; i<m; ++i) {
 
   sa_acc += b_i[0]*b_i[0] + Minv(0,0);
   int pos = 1;
-  if (nm>0) { for (int l=0;l<nm;++l) sab_acc += b_i[pos+l]*b_i[pos+l] + Minv(pos+l, pos+l); pos += nm; }
-  if (nt>0) { for (int t=0;t<nt;++t)  sag_acc += b_i[pos+t]*b_i[pos+t] + Minv(pos+t, pos+t); }
+  if (nm_re>0) { for (int l=0;l<nm_re;++l) sab_acc += b_i[pos+l]*b_i[pos+l] + Minv(pos+l, pos+l); pos += nm_re; }
+  if (nt_re>0) { for (int t=0;t<nt_re;++t)  sag_acc += b_i[pos+t]*b_i[pos+t] + Minv(pos+t, pos+t); }
 }
 #endif
     }
 
     // ---- updates ----
     double sa_new   = std::max(sa_acc  / (double)m, eps);
-    double sab_new  = (nm>0 ? std::max(sab_acc / (double)(m*nm), eps) : 0.0);
-    double sag_new  = (nt>0 ? std::max(sag_acc / (double)(m*nt), eps) : 0.0);
+    double sab_new  = (nm_re>0 ? std::max(sab_acc / (double)(m*nm_re), eps) : 0.0);
+    double sag_new  = (nt_re>0 ? std::max(sag_acc / (double)(m*nt_re), eps) : 0.0);
     arma::vec tau2_new = tau2;
     if (has_extra) {
       for (int j = 0; j < qZ; ++j)
@@ -1321,11 +1328,11 @@ for (int i=0; i<m; ++i) {
     for (int k = 0; k < n_i; ++k) {
       const int ok = ord[k];
       tim_ord[k] = tim_i[ ok ];
-      if (nm > 0) met_ord[k] = met_i[ ok ];
+      if (nm_re > 0) met_ord[k] = met_i[ ok ];
     }
 
-    const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-    build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+    const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
+    build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
 
     if (has_extra) {
       rows_take_to(Z, rows_i, Zi);
@@ -1348,8 +1355,8 @@ for (int i=0; i<m; ++i) {
     M.zeros(r_eff, r_eff);
     M(0,0) = 1.0 / std::max(sa, eps);
     int off = 1;
-    if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-    if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
+    if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+    if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt_re; }
     if (has_extra) {
       for (int j = 0; j < qZ; ++j)
         M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
@@ -1400,11 +1407,11 @@ for (int i=0; i<m; ++i) {
   for (int k = 0; k < n_i; ++k) {
     const int ok = ord[k];
     tim_ord[k] = tim_i[ ok ];
-    if (nm > 0) met_ord[k] = met_i[ ok ];
+    if (nm_re > 0) met_ord[k] = met_i[ ok ];
   }
 
-  const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-  build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+  const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
+  build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
 
   if (has_extra) {
     rows_take_to(Z, rows_i, Zi);
@@ -1427,8 +1434,8 @@ for (int i=0; i<m; ++i) {
   M.zeros(r_eff, r_eff);
   M(0,0) = 1.0 / std::max(sa, eps);
   int off = 1;
-  if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-  if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt; }
+  if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+  if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag,eps); off += nt_re; }
   if (has_extra) {
     for (int j = 0; j < qZ; ++j)
       M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
@@ -1463,8 +1470,8 @@ for (int i=0; i<m; ++i) {
     M.zeros();
     M(0,0) = 1.0 / std::max(sa, eps);
     int off = 1;
-    if (nm>0) { for (int l=0;l<nm;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-    if (nt>0) { for (int t=0;t<nt;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+    if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+    if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
     M += inv_se_final * Ci.UtU;
     Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
     for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
@@ -1482,8 +1489,8 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     M.zeros();
     M(0,0) = 1.0 / std::max(sa, eps);
     int off = 1;
-    if (nm>0) { for (int l=0;l<nm;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm; }
-    if (nt>0) { for (int t=0;t<nt;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+    if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+    if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
     M += inv_se_final * Ci.UtU;
     Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
     for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
@@ -1522,6 +1529,10 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     if (!std::isfinite(varSB) || varSB < 0.0) varSB = 0.0;
   }
 
+  // Robust SB: pin at zero in delta step if numerically zero/ill-defined
+  bool sb_fixed_zero = (!std::isfinite(SB) || SB <= sb_zero_tol);
+  if (sb_fixed_zero) { SB = 0.0; varSB = 0.0; }
+
   // ---- kappa factors for time-averaged CCC ----
   // for subject by time variance (sag)
   double kappa_g_bar = 1.0;
@@ -1540,7 +1551,6 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
       if (nm > 0) {
         // per-(subject,method) blocks
         for (int l = 0; l < nm; ++l) {
-          // count observed times for this (i,l)
           int T = 0;
           for (size_t k = 0; k < tim_i.size(); ++k) {
             if (met_i[k] == l && tim_i[k] >= 0) ++T;
@@ -1553,7 +1563,6 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
           ++units;
         }
       } else {
-        // no method factor: one block per subject
         int T = 0;
         for (size_t k = 0; k < tim_i.size(); ++k) {
           if (tim_i[k] >= 0) ++T;
@@ -1571,45 +1580,46 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
       kappa_g_bar /= static_cast<double>(units);
       kappa_e_bar /= static_cast<double>(units);
     } else {
-      // no usable time info despite nt>0
       kappa_g_bar = 1.0;
       kappa_e_bar = 1.0;
     }
 
-    // numerical guard (helps when |rho| ~ 1 and T is large)
     kappa_e_bar = std::min(1.0, std::max(kappa_e_bar, 1e-12));
   } else {
-    // no time factor -> no averaging shrinkage (sag==0), residual unchanged
     kappa_g_bar = 0.0; // unused because sag==0
     kappa_e_bar = 1.0;
   }
 
+  // Effective inclusions for CCC
+  const double sab_eff = include_sab ? sab : 0.0;
+  const double sag_eff = include_sag ? sag : 0.0;
+
   // Effective (averaged) time-varying components
-  const double sag_bar = (nt > 0 ? kappa_g_bar * sag : 0.0);
+  const double sag_bar = (nt > 0 ? kappa_g_bar * sag_eff : 0.0);
   const double se_bar  = kappa_e_bar * se;
 
   // ---- CCC of the time-averaged measurement ----
-  const double ccc = (sa + sag_bar) / (sa + sab + sag_bar + SB + se_bar);
+  const double ccc = (sa + sag_bar) / (sa + sab_eff + sag_bar + SB + se_bar);
 
   // ---------------- delta-method SE & CI for CCC ----------------
   double Nnum = sa + sag_bar;
-  double Dden = sa + sab + sag_bar + SB + se_bar;
+  double Dden = sa + sab_eff + sag_bar + SB + se_bar;
   if (Dden < 1e-14) Dden = 1e-14;
 
-  const double d_sa  = (sab + SB + se_bar) / (Dden * Dden);
-  const double d_sab = -Nnum / (Dden * Dden);
-  const double d_sag =  kappa_g_bar * (sab + SB + se_bar) / (Dden * Dden);
+  const double d_sa  = (sab_eff + SB + se_bar) / (Dden * Dden);
+  const double d_sab = include_sab ? (-Nnum / (Dden * Dden)) : 0.0;
+  const double d_sag = include_sag ? (kappa_g_bar * (sab_eff + SB + se_bar) / (Dden * Dden)) : 0.0;
   const double d_se  = -kappa_e_bar * Nnum / (Dden * Dden);
-  const double d_SB  = -Nnum / (Dden * Dden);
+  const double d_SB  = sb_fixed_zero ? 0.0 : (-Nnum / (Dden * Dden));
 
   arma::mat Zdm;
-  if (nm > 0 && nt > 0) {
+  if (include_sab && include_sag) {
     Zdm.set_size(m, 3);
     for (int i = 0; i < m; ++i) { Zdm(i,0)=sa_term[i]; Zdm(i,1)=sab_term[i]; Zdm(i,2)=sag_term[i]; }
-  } else if (nm > 0 && nt == 0) {
+  } else if (include_sab && !include_sag) {
     Zdm.set_size(m, 2);
     for (int i = 0; i < m; ++i) { Zdm(i,0)=sa_term[i]; Zdm(i,1)=sab_term[i]; }
-  } else if (nm == 0 && nt > 0) {
+  } else if (!include_sab && include_sag) {
     Zdm.set_size(m, 2);
     for (int i = 0; i < m; ++i) { Zdm(i,0)=sa_term[i]; Zdm(i,1)=sag_term[i]; }
   } else {
@@ -1618,10 +1628,8 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   }
   arma::mat Sigma_vc;
   if (m < 2) {
-    // with only one subject, treat the variance of the mean as 0 to avoid NaNs
     Sigma_vc.zeros(Zdm.n_cols, Zdm.n_cols);
   } else {
-    // variance of the mean across subjects
     if (Zdm.n_cols == 1u) {
       Sigma_vc.set_size(1,1);
       Sigma_vc(0,0) = sample_var(Zdm.col(0)) / (double)m;
@@ -1642,15 +1650,15 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   double var_sehat = sample_var(se_vec) * w2sum;
 
   double var_ccc = 0.0;
-  if (nm > 0 && nt > 0) {
-    arma::vec g3(3); g3[0]=d_sa; g3[1]=d_sab; g3[2]=d_sag;
-    var_ccc += arma::as_scalar(g3.t() * Sigma_vc * g3);
-  } else if (nm > 0 && nt == 0) {
-    arma::vec g2(2); g2[0]=d_sa; g2[1]=d_sab;
-    var_ccc += arma::as_scalar(g2.t() * Sigma_vc * g2);
-  } else if (nm == 0 && nt > 0) {
-    arma::vec g2(2); g2[0]=d_sa; g2[1]=d_sag;
-    var_ccc += arma::as_scalar(g2.t() * Sigma_vc * g2);
+  if (include_sab && include_sag) {
+    arma::vec g(3); g[0]=d_sa; g[1]=d_sab; g[2]=d_sag;
+    var_ccc += arma::as_scalar(g.t() * Sigma_vc * g);
+  } else if (include_sab && !include_sag) {
+    arma::vec g(2); g[0]=d_sa; g[1]=d_sab;
+    var_ccc += arma::as_scalar(g.t() * Sigma_vc * g);
+  } else if (!include_sab && include_sag) {
+    arma::vec g(2); g[0]=d_sa; g[1]=d_sag;
+    var_ccc += arma::as_scalar(g.t() * Sigma_vc * g);
   } else {
     var_ccc += d_sa * d_sa * Sigma_vc(0,0);
   }
@@ -1665,26 +1673,24 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   double upr = std::min(1.0, std::max(0.0, ccc + z * se_ccc));
 
   // ---------------- REML log-likelihood at final estimates (robust) ----------------
-  // We need: sum_i log|V_i|, log|X' V^{-1} X|, and y' P y.
-  // Using |V_i| = |R_i| * |G| * |M_i| and P = V^{-1} - V^{-1}X (X'V^{-1}X)^{-1} X'V^{-1}.
   const double two_pi = 2.0 * std::acos(-1.0);  // portable PI
 
-  // log|G| (diagonal G; same for every subject)
-  const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
+  // log|G| (diagonal), using INCLUDED random blocks
+  const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
   const int r_eff  = r_base + (has_extra ? qZ : 0);
   const double lg_sa  = std::log(std::max(sa,  eps));
-  const double lg_sab = (nm>0 ? std::log(std::max(sab, eps)) : 0.0);
-  const double lg_sag = (nt>0 ? std::log(std::max(sag, eps)) : 0.0);
+  const double lg_sab = (nm_re>0 ? std::log(std::max(sab, eps)) : 0.0);
+  const double lg_sag = (nt_re>0 ? std::log(std::max(sag, eps)) : 0.0);
   double sum_lg_tau = 0.0;
   if (has_extra) {
     for (int j = 0; j < qZ; ++j)
       sum_lg_tau += std::log(std::max(tau2[j], eps));
   }
 
-  double logdetG_one = 0.0;
+  double      logdetG_one = 0.0;
   logdetG_one += lg_sa;
-  if (nm>0) logdetG_one += nm * lg_sab;
-  if (nt>0) logdetG_one += nt * lg_sag;
+  if (nm_re>0) logdetG_one += nm_re * lg_sab;
+  if (nt_re>0) logdetG_one += nt_re * lg_sag;
   logdetG_one += sum_lg_tau;
 
   double      sum_logdetR  = 0.0;
@@ -1704,7 +1710,6 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
       const int n_i = (int)rows_i.size();
       if (n_i == 0) continue;
 
-      // order rows by time only if nt>0; otherwise keep identity order
       std::vector<int> ord(n_i);
       std::iota(ord.begin(), ord.end(), 0);
       if (nt > 0) {
@@ -1717,7 +1722,6 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
         });
       }
 
-      // gather X_i, y_i in 'ord' order
       X_i.set_size(n_i, p);
       y_i.set_size(n_i);
       for (int k=0; k<n_i; ++k) {
@@ -1726,19 +1730,16 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
         y_i[k]     = y[g];
       }
 
-      // build ordered codes; for nt==0 fill -1
       std::vector<int> tim_ord(n_i, -1);
       std::vector<int> met_ord(n_i, -1);
       for (int k=0; k<n_i; ++k) {
         const int ok = ord[k];
         if (nt > 0) tim_ord[k] = tim_i[ ok ];
-        if (nm > 0) met_ord[k] = met_i[ ok ];
+        if (nm_re > 0) met_ord[k] = met_i[ ok ];
       }
 
-      // base U
-      build_U_base_matrix(met_ord, tim_ord, nm, nt, Ubase);
+      build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
 
-      // optional extra Z, re-ordered
       if (has_extra) {
         rows_take_to(Z, rows_i, Zi);
         arma::uvec ord_u = arma::conv_to<arma::uvec>::from(ord);
@@ -1747,12 +1748,10 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
         Zi.reset();
       }
 
-      // effective design [U | Z]
       Ueff.set_size(n_i, r_eff);
       Ueff.cols(0, r_base-1) = Ubase;
       if (has_extra) Ueff.cols(r_base, r_eff-1) = Zi;
 
-      // R^{-1} and log|R|
       if (use_ar1 && nt > 0) {
         make_ar1_Cinv(tim_ord, ar1_rho, Cinv);
         Rinv = (1.0 / std::max(se, eps)) * Cinv;
@@ -1763,12 +1762,11 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
         sum_logdetR += n_i * std::log(std::max(se, eps));
       }
 
-      // M_i = G^{-1} + U' R^{-1} U
       M.zeros(r_eff, r_eff);
       M(0,0) = 1.0 / std::max(sa,  eps);
       int off = 1;
-      if (nm>0) { for (int l=0; l<nm; ++l) M(off+l, off+l) = 1.0/std::max(sab, eps); off += nm; }
-      if (nt>0) { for (int t=0; t<nt; ++t) M(off+t, off+t) = 1.0/std::max(sag, eps); off += nt; }
+      if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab, eps); off += nm_re; }
+      if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag, eps); off += nt_re; }
       if (has_extra) {
         for (int j = 0; j < qZ; ++j)
           M(off + j, off + j) = 1.0 / std::max(tau2[j], eps);
@@ -1777,7 +1775,6 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
 
       sum_logdetM += logdet_spd_safe(M);
 
-      // y' V^{-1} y = y'R^{-1}y - S_uy' M^{-1} S_uy
       Riny = Rinv * y_i;
       double yTRiny = arma::as_scalar(y_i.t() * Riny);
       S_uy = Ueff.t() * Riny;
@@ -1785,7 +1782,6 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
       double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
       yTRVY_final += (yTRiny - corr);
 
-      // X' V^{-1} y = XtRiny - S_ux' M^{-1} S_uy
       S_ux = Ueff.t() * (Rinv * X_i);  // r_eff x p
       tmpv = X_i.t() * Riny;           // p
       XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
@@ -1798,7 +1794,6 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   // y' P y = y' V^{-1} y - (X' V^{-1} y)' (X' V^{-1} X)^{-1} (X' V^{-1} y)
   double yPy = yTRVY_final - arma::as_scalar( XtViy_final.t() * (VarFix * XtViy_final) );
 
-  // Assemble REML loglik (constant term included; harmless for profiling ρ)
   double reml_loglik = -0.5 * (
     ((double)n - (double)p) * std::log(two_pi)
     + sum_logdetR
@@ -1808,6 +1803,110 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   + yPy
   );
 
+  double ar1_rho_mom = NA_REAL;
+  double ar1_pval     = NA_REAL;
+  int    ar1_pairs    = 0;
+  bool   ar1_recommend = false;
+
+  if (!use_ar1 && nt > 0) {
+    arma::mat Ubase, Ueff, Zi, M;
+    arma::mat X_i;
+    arma::vec y_i, r_i, Utr, b_i, e;
+
+    double num = 0.0, den1 = 0.0, den2 = 0.0;
+
+    for (int i = 0; i < m; ++i) {
+      const auto& rows_i = S.rows[i];
+      const auto& met_i  = S.met[i];
+      const auto& tim_i  = S.tim[i];
+      const int   n_i    = (int)rows_i.size();
+      if (n_i <= 1) continue;
+
+      std::vector<int> ord(n_i);
+      std::iota(ord.begin(), ord.end(), 0);
+      std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){
+        int ta = tim_i[a], tb = tim_i[b];
+        if (ta < 0 && tb < 0) return a < b;
+        if (ta < 0) return false;
+        if (tb < 0) return true;
+        return ta < tb;
+      });
+
+      X_i.set_size(n_i, p);
+      y_i.set_size(n_i);
+      for (int k = 0; k < n_i; ++k) {
+        int g = rows_i[ ord[k] ];
+        X_i.row(k) = X.row(g);
+        y_i[k]     = y[g];
+      }
+      std::vector<int> tim_ord(n_i), met_ord(n_i, -1);
+      for (int k = 0; k < n_i; ++k) {
+        int ok = ord[k];
+        tim_ord[k] = tim_i[ ok ];
+        if (nm_re > 0) met_ord[k] = met_i[ ok ];
+      }
+
+      const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
+      build_U_base_matrix(met_ord, tim_ord, nm_re, nt_re, Ubase);
+
+      if (has_extra) {
+        rows_take_to(Z, rows_i, Zi);
+        arma::uvec ord_u = arma::conv_to<arma::uvec>::from(ord);
+        Zi = Zi.rows(ord_u);
+      } else {
+        Zi.reset();
+      }
+
+      const int r_eff = r_base + (has_extra ? qZ : 0);
+      Ueff.set_size(n_i, r_eff);
+      Ueff.cols(0, r_base-1) = Ubase;
+      if (has_extra) Ueff.cols(r_base, r_eff-1) = Zi;
+
+      r_i = y_i - X_i * beta;
+      M.zeros(r_eff, r_eff);
+      M(0,0) = 1.0 / std::max(sa,  eps);
+      int off = 1;
+      if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+      if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); off += nt_re; }
+      if (has_extra) { for (int j=0; j<qZ; ++j) M(off+j, off+j) = 1.0 / std::max(tau2[j], eps); }
+
+      const double inv_se = 1.0 / std::max(se, eps);
+      M += inv_se * (Ueff.t() * Ueff);
+
+      Utr = inv_se * (Ueff.t() * r_i);
+      b_i = solve_sympd_safe(M, Utr);
+
+      e = r_i - Ueff * b_i;
+
+      int s = 0;
+      while (s < n_i) {
+        if (tim_ord[s] < 0) { ++s; continue; }
+        int eidx = s;
+        while (eidx + 1 < n_i && tim_ord[eidx + 1] >= 0) ++eidx;
+        for (int t = s; t < eidx; ++t) {
+          const double a = e[t], b = e[t+1];
+          num  += a * b;
+          den1 += a * a;
+          den2 += b * b;
+          ++ar1_pairs;
+        }
+        s = eidx + 1;
+      }
+    } // subjects
+
+    if (ar1_pairs >= 3 && den1 > 0.0 && den2 > 0.0) {
+      ar1_rho_mom = num / std::sqrt(den1 * den2);
+      const double z = ar1_rho_mom * std::sqrt((double)ar1_pairs);
+      ar1_pval = 2.0 * R::pnorm(-std::fabs(z), 0.0, 1.0, 1, 0);
+      ar1_recommend = (std::fabs(ar1_rho_mom) >= 0.05 && ar1_pval < 0.05);
+    } else {
+      ar1_rho_mom = NA_REAL;
+      ar1_pval     = NA_REAL;
+      ar1_recommend= false;
+    }
+  }
+
+  // Output
   SEXP sigma2_extra = R_NilValue;
   if (has_extra) {
     sigma2_extra = Rcpp::NumericVector(tau2.begin(), tau2.end());
@@ -1827,6 +1926,13 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     _["upr"]                   = upr,
     _["se_ccc"]                = se_ccc,
     _["conf_level"]            = conf_level,
-    _["reml_loglik"]           = reml_loglik
+    _["reml_loglik"]           = reml_loglik,
+    _["ar1_rho_mom"]           = ar1_rho_mom,
+    _["ar1_pairs"]             = ar1_pairs,
+    _["ar1_pval"]              = ar1_pval,
+    _["ar1_recommend"]         = ar1_recommend,
+    _["include_sab"]           = include_sab,
+    _["include_sag"]           = include_sag,
+    _["sb_fixed_zero"]         = sb_fixed_zero
   );
 }

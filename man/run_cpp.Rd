@@ -16,7 +16,10 @@ run_cpp(
   ar1_rho,
   max_iter,
   tol,
-  conf_level
+  conf_level,
+  include_subj_method = TRUE,
+  include_subj_time = TRUE,
+  sb_zero_tol = 1e-10
 )
 }
 \description{

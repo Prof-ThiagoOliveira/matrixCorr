@@ -181,8 +181,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // ccc_vc_cpp
-Rcpp::List ccc_vc_cpp(Rcpp::NumericMatrix Xr, Rcpp::NumericVector yr, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int nm, int nt, int max_iter, double tol, double conf_level, Rcpp::Nullable<Rcpp::NumericMatrix> Lr, Rcpp::Nullable<Rcpp::NumericMatrix> auxDr, Rcpp::Nullable<Rcpp::NumericMatrix> Zr, bool use_ar1, double ar1_rho);
-RcppExport SEXP _matrixCorr_ccc_vc_cpp(SEXP XrSEXP, SEXP yrSEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP nmSEXP, SEXP ntSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP LrSEXP, SEXP auxDrSEXP, SEXP ZrSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP) {
+Rcpp::List ccc_vc_cpp(Rcpp::NumericMatrix Xr, Rcpp::NumericVector yr, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int nm, int nt, int max_iter, double tol, double conf_level, Rcpp::Nullable<Rcpp::NumericMatrix> Lr, Rcpp::Nullable<Rcpp::NumericMatrix> auxDr, Rcpp::Nullable<Rcpp::NumericMatrix> Zr, bool use_ar1, double ar1_rho, bool include_sab, bool include_sag, double sb_zero_tol);
+RcppExport SEXP _matrixCorr_ccc_vc_cpp(SEXP XrSEXP, SEXP yrSEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP nmSEXP, SEXP ntSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP LrSEXP, SEXP auxDrSEXP, SEXP ZrSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP include_sabSEXP, SEXP include_sagSEXP, SEXP sb_zero_tolSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -201,7 +201,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type Zr(ZrSEXP);
     Rcpp::traits::input_parameter< bool >::type use_ar1(use_ar1SEXP);
     Rcpp::traits::input_parameter< double >::type ar1_rho(ar1_rhoSEXP);
-    rcpp_result_gen = Rcpp::wrap(ccc_vc_cpp(Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr, Zr, use_ar1, ar1_rho));
+    Rcpp::traits::input_parameter< bool >::type include_sab(include_sabSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_sag(include_sagSEXP);
+    Rcpp::traits::input_parameter< double >::type sb_zero_tol(sb_zero_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(ccc_vc_cpp(Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr, Zr, use_ar1, ar1_rho, include_sab, include_sag, sb_zero_tol));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -383,7 +386,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_build_L_Dm_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_cpp, 7},
     {"_matrixCorr_build_L_Dm_Z_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_Z_cpp, 11},
     {"_matrixCorr_ar1_precision_from_time", (DL_FUNC) &_matrixCorr_ar1_precision_from_time, 2},
-    {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 15},
+    {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 18},
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
