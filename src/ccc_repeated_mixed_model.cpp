@@ -475,8 +475,8 @@ Rcpp::List ccc_vc_cpp(
     Rcpp::Nullable<Rcpp::NumericMatrix> Zr = R_NilValue,
     bool use_ar1 = false,
     double ar1_rho = 0.0,
-    bool include_sab = true,
-    bool include_sag = true,
+    bool include_subj_method = true,
+    bool include_subj_time = true,
     double sb_zero_tol = 1e-10
 ) {
 
@@ -522,8 +522,8 @@ Rcpp::List ccc_vc_cpp(
   BySubj S = index_by_subject(subj_idx, method, time, m);
 
   // -------- switches for random-effect design sizes
-  const int nm_re = include_sab ? nm : 0;
-  const int nt_re = include_sag ? nt : 0;
+  const int nm_re = include_subj_method ? nm : 0;
+  const int nt_re = include_subj_time ? nt : 0;
 
   // EM init
   double sa  = 1.0;
@@ -1591,8 +1591,8 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   }
 
   // Effective inclusions for CCC
-  const double sab_eff = include_sab ? sab : 0.0;
-  const double sag_eff = include_sag ? sag : 0.0;
+  const double sab_eff = include_subj_method ? sab : 0.0;
+  const double sag_eff = include_subj_time ? sag : 0.0;
 
   // Effective (averaged) time-varying components
   const double sag_bar = (nt > 0 ? kappa_g_bar * sag_eff : 0.0);
@@ -1607,19 +1607,19 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   if (Dden < 1e-14) Dden = 1e-14;
 
   const double d_sa  = (sab_eff + SB + se_bar) / (Dden * Dden);
-  const double d_sab = include_sab ? (-Nnum / (Dden * Dden)) : 0.0;
-  const double d_sag = include_sag ? (kappa_g_bar * (sab_eff + SB + se_bar) / (Dden * Dden)) : 0.0;
+  const double d_sab = include_subj_method ? (-Nnum / (Dden * Dden)) : 0.0;
+  const double d_sag = include_subj_time ? (kappa_g_bar * (sab_eff + SB + se_bar) / (Dden * Dden)) : 0.0;
   const double d_se  = -kappa_e_bar * Nnum / (Dden * Dden);
   const double d_SB  = sb_fixed_zero ? 0.0 : (-Nnum / (Dden * Dden));
 
   arma::mat Zdm;
-  if (include_sab && include_sag) {
+  if (include_subj_method && include_subj_time) {
     Zdm.set_size(m, 3);
     for (int i = 0; i < m; ++i) { Zdm(i,0)=sa_term[i]; Zdm(i,1)=sab_term[i]; Zdm(i,2)=sag_term[i]; }
-  } else if (include_sab && !include_sag) {
+  } else if (include_subj_method && !include_subj_time) {
     Zdm.set_size(m, 2);
     for (int i = 0; i < m; ++i) { Zdm(i,0)=sa_term[i]; Zdm(i,1)=sab_term[i]; }
-  } else if (!include_sab && include_sag) {
+  } else if (!include_subj_method && include_subj_time) {
     Zdm.set_size(m, 2);
     for (int i = 0; i < m; ++i) { Zdm(i,0)=sa_term[i]; Zdm(i,1)=sag_term[i]; }
   } else {
@@ -1650,13 +1650,13 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
   double var_sehat = sample_var(se_vec) * w2sum;
 
   double var_ccc = 0.0;
-  if (include_sab && include_sag) {
+  if (include_subj_method && include_subj_time) {
     arma::vec g(3); g[0]=d_sa; g[1]=d_sab; g[2]=d_sag;
     var_ccc += arma::as_scalar(g.t() * Sigma_vc * g);
-  } else if (include_sab && !include_sag) {
+  } else if (include_subj_method && !include_subj_time) {
     arma::vec g(2); g[0]=d_sa; g[1]=d_sab;
     var_ccc += arma::as_scalar(g.t() * Sigma_vc * g);
-  } else if (!include_sab && include_sag) {
+  } else if (!include_subj_method && include_subj_time) {
     arma::vec g(2); g[0]=d_sa; g[1]=d_sag;
     var_ccc += arma::as_scalar(g.t() * Sigma_vc * g);
   } else {
@@ -1931,8 +1931,8 @@ for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
     _["ar1_pairs"]             = ar1_pairs,
     _["ar1_pval"]              = ar1_pval,
     _["ar1_recommend"]         = ar1_recommend,
-    _["include_sab"]           = include_sab,
-    _["include_sag"]           = include_sag,
+    _["include_subj_method"]           = include_subj_method,
+    _["include_subj_time"]           = include_subj_time,
     _["sb_fixed_zero"]         = sb_fixed_zero
   );
 }
