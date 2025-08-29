@@ -90,6 +90,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// bland_altman_cpp
+List bland_altman_cpp(NumericVector group1, NumericVector group2, double two, int mode, double conf_level);
+RcppExport SEXP _matrixCorr_bland_altman_cpp(SEXP group1SEXP, SEXP group2SEXP, SEXP twoSEXP, SEXP modeSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type group1(group1SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type group2(group2SEXP);
+    Rcpp::traits::input_parameter< double >::type two(twoSEXP);
+    Rcpp::traits::input_parameter< int >::type mode(modeSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(bland_altman_cpp(group1, group2, two, mode, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ba_openmp_threads
+int ba_openmp_threads();
+RcppExport SEXP _matrixCorr_ba_openmp_threads() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(ba_openmp_threads());
+    return rcpp_result_gen;
+END_RCPP
+}
 // cccUst_rcpp
 List cccUst_rcpp(NumericVector y_vec, IntegerVector met_vec, IntegerVector time_vec, int nmet0, int nmet1, int ntime, int ns, NumericMatrix Dmat, double delta, double cl);
 RcppExport SEXP _matrixCorr_cccUst_rcpp(SEXP y_vecSEXP, SEXP met_vecSEXP, SEXP time_vecSEXP, SEXP nmet0SEXP, SEXP nmet1SEXP, SEXP ntimeSEXP, SEXP nsSEXP, SEXP DmatSEXP, SEXP deltaSEXP, SEXP clSEXP) {
@@ -380,6 +405,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bicor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_pairwise_cpp, 6},
     {"_matrixCorr_bicor_matrix_weighted_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_cpp, 6},
     {"_matrixCorr_bicor_matrix_weighted_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_pairwise_cpp, 7},
+    {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 5},
+    {"_matrixCorr_ba_openmp_threads", (DL_FUNC) &_matrixCorr_ba_openmp_threads, 0},
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 10},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},

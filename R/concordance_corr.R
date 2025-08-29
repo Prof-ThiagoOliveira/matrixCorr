@@ -6,6 +6,17 @@
 #' precision (Pearson correlation) and accuracy (closeness to the 45-degree line).
 #' This function is backed by a high-performance 'C++' implementation.
 #'
+#' Lin's CCC quantifies the concordance between a new test/measurement
+#' and a gold-standard for the same variable. Like a correlation, CCC
+#' ranges from -1 to 1 with perfect agreement at 1, and it cannot exceed the
+#' absolute value of the Pearson correlation between variables. It can be
+#' legitimately computed even with small samples (e.g., 10 observations),
+#' and results are often similar to intraclass correlation coefficients.
+#' CCC provides a single summary of agreement, but it may not capture
+#' systematic bias; a Bland–Altman plot (differences vs. means) is recommended
+#' to visualize bias, proportional trends, and heteroscedasticity (see
+#' \code{\link{bland_altman}}).
+#'
 #' @details
 #' Lin's CCC is defined as:
 #' \deqn{
@@ -43,7 +54,8 @@
 #'         If \code{ci = TRUE}, returns a list with elements: \code{est},
 #'         \code{lwr.ci}, \code{upr.ci}.
 #'
-#' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}}
+#' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}},
+#' \code{\link{bland_altman}}
 #'
 #' @examples
 #' # Example with multivariate normal data
