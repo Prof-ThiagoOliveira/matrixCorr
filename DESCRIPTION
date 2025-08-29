@@ -1,7 +1,7 @@
 Package: matrixCorr
 Type: Package
 Title: Collection of Correlation and Association Estimators
-Version: 0.4.1
+Version: 0.4.2
 Authors@R: person(given = "Thiago de Paula", family = "Oliveira", 
     email = "toliveira@abacusbio.com", role = c("aut", "cre"), 
     comment = c(ORCID = "0000-0002-4555-2584"))

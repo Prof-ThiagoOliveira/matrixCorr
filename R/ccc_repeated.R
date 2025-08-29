@@ -1128,6 +1128,7 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
 }
 
 #' @keywords internal
+#' @importFrom stats pchisq
 p_half_chisq1 <- function(lrt) 0.5 * pchisq(lrt, df = 1, lower.tail = FALSE)
 
 #' @keywords internal
