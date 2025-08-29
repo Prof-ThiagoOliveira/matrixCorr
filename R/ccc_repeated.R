@@ -12,10 +12,10 @@
 #' transformation
 #'
 #' @param data A data frame containing the repeated-measures dataset.
-#' @param ry Character. Name of the numeric outcome column.
-#' @param rmet Character. Name of the method column (factor with L
+#' @param response Character. Name of the numeric outcome column.
+#' @param method Character. Name of the method column (factor with L
 #' \eqn{\geq} 2 levels).
-#' @param rtime Character or NULL. Name of the time/repetition column. If NULL,
+#' @param time Character or NULL. Name of the time/repetition column. If NULL,
 #' one time point is assumed.
 #' @param Dmat Optional numeric weight matrix (T \eqn{\times} T) for
 #' timepoints. Defaults to identity.
@@ -129,13 +129,13 @@
 #' df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
 #'
 #' # CCC matrix (no CIs)
-#' ccc1 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time")
+#' ccc1 <- ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time")
 #' print(ccc1)
 #' summary(ccc1)
 #' plot(ccc1)
 #'
 #' # With confidence intervals
-#' ccc2 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", ci = TRUE)
+#' ccc2 <- ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", ci = TRUE)
 #' print(ccc2)
 #' summary(ccc2)
 #' plot(ccc2)
@@ -144,20 +144,20 @@
 #' # Choosing delta based on distance sensitivity
 #' #------------------------------------------------------------------------
 #' # Absolute distance (L1 norm) - robust
-#' ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 1)
+#' ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 1)
 #'
 #' # Squared distance (L2 norm) - amplifies large deviations
-#' ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 2)
+#' ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 2)
 #'
 #' # Presence/absence of disagreement (like kappa)
-#' ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 0)
+#' ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 0)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export
 ccc_pairwise_u_stat <- function(data,
-                        ry,
-                        rmet,
-                        rtime = NULL,
+                        response,
+                        method,
+                        time = NULL,
                         Dmat = NULL,
                         delta = 1,
                         ci = FALSE,
@@ -165,19 +165,19 @@ ccc_pairwise_u_stat <- function(data,
                         n_threads = getOption("matrixCorr.threads", 1L),
                         verbose = FALSE) {
   df <- as.data.frame(data)
-  df[[rmet]] <- factor(df[[rmet]])
-  method_levels <- levels(df[[rmet]])
+  df[[method]] <- factor(df[[method]])
+  method_levels <- levels(df[[method]])
   L <- length(method_levels)
 
-  if (L < 2) stop("Need at least two methods (levels in rmet)")
+  if (L < 2) stop("Need at least two methods (levels in method)")
 
-  if (is.null(rtime)) {
+  if (is.null(time)) {
     df$time_i <- 0
     ntime <- 1
   } else {
-    df[[rtime]] <- factor(df[[rtime]])
-    df$time_i <- as.integer(df[[rtime]]) - 1
-    ntime <- length(levels(df[[rtime]]))
+    df[[time]] <- factor(df[[time]])
+    df$time_i <- as.integer(df[[time]]) - 1
+    ntime <- length(levels(df[[time]]))
   }
 
   if (is.null(Dmat)) {
@@ -201,14 +201,14 @@ ccc_pairwise_u_stat <- function(data,
       m1 <- method_levels[i]
       m2 <- method_levels[j]
 
-      df_sub <- df[df[[rmet]] %in% c(m1, m2), , drop = FALSE]
-      df_sub$met_i <- as.integer(factor(df_sub[[rmet]], levels = c(m1, m2))) - 1
+      df_sub <- df[df[[method]] %in% c(m1, m2), , drop = FALSE]
+      df_sub$met_i <- as.integer(factor(df_sub[[method]], levels = c(m1, m2))) - 1
 
       ns <- nrow(df_sub) / (2 * ntime)
       if (ns != floor(ns))
         stop(sprintf("Data inconsistent for method pair %s vs %s", m1, m2))
 
-      res <- cccUst_rcpp(df_sub[[ry]],
+      res <- cccUst_rcpp(df_sub[[response]],
                          df_sub$met_i,
                          df_sub$time_i,
                          0, 1,
@@ -257,11 +257,11 @@ ccc_pairwise_u_stat <- function(data,
 #' the factor levels are \emph{ignored} (adjacent observed visits are treated as lag-1).
 #'
 #' @param data A data frame.
-#' @param ry Character. Response variable name.
+#' @param response Character. Response variable name.
 #' @param rind Character. Subject ID variable name (random intercept).
-#' @param rmet Character or \code{NULL}. Optional column name of method factor
+#' @param method Character or \code{NULL}. Optional column name of method factor
 #'   (added to fixed effects).
-#' @param rtime Character or \code{NULL}. Optional column name of time factor
+#' @param time Character or \code{NULL}. Optional column name of time factor
 #'   (added to fixed effects).
 #' @param interaction Logical. Include \code{method:time} interaction?
 #'   (default \code{FALSE}).
@@ -413,8 +413,8 @@ ccc_pairwise_u_stat <- function(data,
 #'         (random slope), where each \emph{column} has its own variance
 #'         \eqn{\sigma_{Z,j}^2} and columns are uncorrelated.
 #' }
-#' The fixed-effects design is \code{~ 1 + rmet + rtime} and, if
-#' \code{interaction=TRUE}, \code{+ rmet:rtime}.
+#' The fixed-effects design is \code{~ 1 + method + time} and, if
+#' \code{interaction=TRUE}, \code{+ method:time}.
 #'
 #' \strong{Residual correlation \eqn{R} (regular, equally spaced time).}
 #' Write \eqn{R_i=\sigma_E^2\,C_i(\rho)}. With \code{ar="none"}, \eqn{C_i=I}.
@@ -718,12 +718,12 @@ ccc_pairwise_u_stat <- function(data,
 #'          u + 0.2 + rnorm(n_subj, 0, sqrt(sigE)))
 #' dat <- data.frame(y, id, method = meth)
 #'
-#' ccc_rm1 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
+#' ccc_rm1 <- ccc_lmm_reml(dat, response = "y", rind = "id", method = "method")
 #' print(ccc_rm1)
 #' summary(ccc_rm1)
 #'
 #' # 95% CI container
-#' ccc_rm2 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
+#' ccc_rm2 <- ccc_lmm_reml(dat, response = "y", rind = "id", method = "method", ci = TRUE)
 #' ccc_rm2
 #'
 #' # ====================================================================
@@ -765,7 +765,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_both <- data.frame(y, id, method, time)
 #'
 #' # Both sigma2_subject_method and sigma2_subject_time are identifiable here
-#' fit_both <- ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+#' fit_both <- ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'                          vc_select = "auto", verbose = TRUE)
 #' summary(fit_both)
 #'
@@ -792,7 +792,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_sag <- data.frame(y, id, method, time)
 #'
 #' # sigma_AT should be retained; sigma_AM may be dropped (since w_{i,m}=0)
-#' fit_sag <- ccc_lmm_reml(dat_sag, "y", "id", rmet = "method", rtime = "time",
+#' fit_sag <- ccc_lmm_reml(dat_sag, "y", "id", method = "method", time = "time",
 #'                         vc_select = "auto", verbose = TRUE)
 #' summary(fit_sag)
 #'
@@ -822,13 +822,13 @@ ccc_pairwise_u_stat <- function(data,
 #' y   <- (method == "B") * biasB + u + w + g + rnorm(length(id), 0, sqrt(sigE))
 #' dat_both <- data.frame(y, id, method, time)
 #'
-#' fit_both <- ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+#' fit_both <- ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'                          vc_select = "auto", verbose = TRUE, ci = TRUE)
 #' summary(fit_both)
 #'
 #' # If you want to force-include both VCs (skip testing):
 #' fit_both_forced <-
-#'  ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+#'  ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'               vc_select = "none", include_subj_method  = TRUE,
 #'               include_subj_time  = TRUE, verbose = TRUE)
 #' summary(fit_both_forced)
@@ -837,12 +837,12 @@ ccc_pairwise_u_stat <- function(data,
 #' # 5) D_m choices: time-averaged (default) vs typical visit
 #' # ====================================================================
 #' # Time-average
-#' ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+#' ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'              vc_select = "none", include_subj_method  = TRUE,
 #'              include_subj_time  = TRUE, Dmat_type = "time-avg")
 #'
 #' # Typical visit
-#' ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+#' ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'              vc_select = "none", include_subj_method  = TRUE,
 #'              include_subj_time  = TRUE, Dmat_type = "typical-visit")
 #'
@@ -885,7 +885,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_ar4 <- data.frame(y = y, id = id, method = method, time = time)
 #'
 #' ccc_lmm_reml(dat_ar4,
-#'              ry = "y", rind = "id", rmet = "method", rtime = "time",
+#'              response = "y", rind = "id", method = "method", time = "time",
 #'              ar = "ar1", ar_rho = 0.6, verbose = TRUE)
 #' }
 #'
@@ -909,7 +909,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_s <- data.frame(y, id, method, time = tim)
 #' dat_s$t_num <- as.integer(dat_s$time)
 #' dat_s$t_c   <- ave(dat_s$t_num, dat_s$id, FUN = function(v) v - mean(v))
-#' ccc_lmm_reml(dat_s, "y", "id", rmet = "method", rtime = "time",
+#' ccc_lmm_reml(dat_s, "y", "id", method = "method", time = "time",
 #'              slope = "subject", slope_var = "t_c", verbose = TRUE)
 #'
 #' ## By METHOD
@@ -926,7 +926,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_m <- data.frame(y, id, method, time = tim)
 #' dat_m$t_num <- as.integer(dat_m$time)
 #' dat_m$t_c   <- ave(dat_m$t_num, dat_m$id, FUN = function(v) v - mean(v))
-#' ccc_lmm_reml(dat_m, "y", "id", rmet = "method", rtime = "time",
+#' ccc_lmm_reml(dat_m, "y", "id", method = "method", time = "time",
 #'              slope = "method", slope_var = "t_c", verbose = TRUE)
 #'
 #' ## SUBJECT + METHOD random slopes (custom Z)
@@ -951,15 +951,15 @@ ccc_pairwise_u_stat <- function(data,
 #'   subj_slope = dat_bothRS$t_c,
 #'   MM * dat_bothRS$t_c
 #' )
-#' ccc_lmm_reml(dat_bothRS, "y", "id", rmet = "method", rtime = "time",
+#' ccc_lmm_reml(dat_bothRS, "y", "id", method = "method", time = "time",
 #'              slope = "custom", slope_Z = Z_custom, verbose = TRUE)
 #' }
 #'
 #' @author Thiago de Paula Oliveira
 #' @importFrom stats as.formula model.matrix setNames qnorm optimize
 #' @export
-ccc_lmm_reml <- function(data, ry, rind,
-                         rmet = NULL, rtime = NULL, interaction = FALSE,
+ccc_lmm_reml <- function(data, response, rind,
+                         method = NULL, time = NULL, interaction = FALSE,
                          max_iter = 100, tol = 1e-6,
                          Dmat = NULL,
                          Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
@@ -992,16 +992,16 @@ ccc_lmm_reml <- function(data, ry, rind,
   }
 
   df <- as.data.frame(data)
-  df[[ry]]   <- as.numeric(df[[ry]])
+  df[[response]]   <- as.numeric(df[[response]])
   df[[rind]] <- factor(df[[rind]])
-  if (!is.null(rmet))  df[[rmet]]  <- factor(df[[rmet]])
-  if (!is.null(rtime)) df[[rtime]] <- factor(df[[rtime]])
-  all_time_lvls <- if (!is.null(rtime)) levels(df[[rtime]]) else character(0)
+  if (!is.null(method))  df[[method]]  <- factor(df[[method]])
+  if (!is.null(time)) df[[time]] <- factor(df[[time]])
+  all_time_lvls <- if (!is.null(time)) levels(df[[time]]) else character(0)
 
   rhs <- "1"
-  if (!is.null(rmet))  rhs <- paste(rhs, "+", rmet)
-  if (!is.null(rtime)) rhs <- paste(rhs, "+", rtime)
-  if (!is.null(rmet) && !is.null(rtime) && interaction) rhs <- paste(rhs, "+", paste0(rmet, ":", rtime))
+  if (!is.null(method))  rhs <- paste(rhs, "+", method)
+  if (!is.null(time)) rhs <- paste(rhs, "+", time)
+  if (!is.null(method) && !is.null(time) && interaction) rhs <- paste(rhs, "+", paste0(method, ":", time))
   fml <- as.formula(paste("~", rhs))
 
   extra_label <- switch(slope,
@@ -1010,8 +1010,8 @@ ccc_lmm_reml <- function(data, ry, rind,
                         "custom"  = "custom random effect",
                         NULL)
 
-  if (is.null(rmet) || nlevels(df[[rmet]]) < 2L) {
-    return(ccc_lmm_reml_overall(df, fml, ry, rind, rmet, rtime,
+  if (is.null(method) || nlevels(df[[method]]) < 2L) {
+    return(ccc_lmm_reml_overall(df, fml, response, rind, method, time,
                                 slope, slope_var, slope_Z, drop_zero_cols,
                                 Dmat, ar, ar_rho, max_iter, tol,
                                 conf_level, verbose, digits, use_message,
@@ -1020,7 +1020,7 @@ ccc_lmm_reml <- function(data, ry, rind,
                                 Dmat_weights = Dmat_weights,
                                 Dmat_rescale = Dmat_rescale))
   } else {
-    return(ccc_lmm_reml_pairwise(df, fml, ry, rind, rmet, rtime,
+    return(ccc_lmm_reml_pairwise(df, fml, response, rind, method, time,
                                  slope, slope_var, slope_Z, drop_zero_cols,
                                  Dmat, ar, ar_rho, max_iter, tol,
                                  conf_level, verbose, digits, use_message,
@@ -1120,30 +1120,30 @@ num_or_na_vec <- function(x) {
 #' @description Internal helper to construct L, Dm, and Z matrices for random effects.
 #' @keywords internal
 build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub,
-                      rmet_name, rtime_name, slope, interaction, slope_var,
+                      method_name, time_name, slope, interaction, slope_var,
                       drop_zero_cols) {
   slope_mode_cpp <- switch(slope, none = "none", subject = "subject", method = "method", custom = "none")
   if (!identical(slope, "custom")) {
     build_L_Dm_Z_cpp(
       colnames_X      = colnames_X,
-      rmet_name       = if (is.null(rmet_name)) NULL else rmet_name,
-      rtime_name      = if (is.null(rtime_name)) NULL else rtime_name,
-      method_levels   = if (is.null(rmet_name)) character(0) else method_levels,
-      time_levels     = if (is.null(rtime_name)) character(0) else time_levels,
+      rmet_name       = if (is.null(method_name)) NULL else method_name,
+      rtime_name      = if (is.null(time_name)) NULL else time_name,
+      method_levels   = if (is.null(method_name)) character(0) else method_levels,
+      time_levels     = if (is.null(time_name)) character(0) else time_levels,
       has_interaction = interaction,
       Dmat_global     = Dsub,
       slope_mode      = slope_mode_cpp,
       slope_var       = if (!is.null(slope_var)) df_sub[[slope_var]] else NULL,
-      method_codes    = if (!is.null(rmet_name)) as.integer(df_sub[[rmet_name]]) else NULL,
+      method_codes    = if (!is.null(method_name)) as.integer(df_sub[[method_name]]) else NULL,
       drop_zero_cols  = drop_zero_cols
     )
   } else {
     build_L_Dm_cpp(
       colnames_X      = colnames_X,
-      rmet_name       = if (is.null(rmet_name)) NULL else rmet_name,
-      rtime_name      = if (is.null(rtime_name)) NULL else rtime_name,
-      method_levels   = if (is.null(rmet_name)) character(0) else method_levels,
-      time_levels     = if (is.null(rtime_name)) character(0) else time_levels,
+      rmet_name       = if (is.null(method_name)) NULL else method_name,
+      rtime_name      = if (is.null(time_name)) NULL else time_name,
+      method_levels   = if (is.null(method_name)) character(0) else method_levels,
+      time_levels     = if (is.null(time_name)) character(0) else time_levels,
       has_interaction = interaction,
       Dmat_global     = Dsub
     )
@@ -1269,12 +1269,12 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
 }
 
 #' @title ccc_lmm_reml_overall
-#' @description Internal function to handle overall CCC estimation when `rmet` is NULL or has < 2 levels.
+#' @description Internal function to handle overall CCC estimation when `method` is NULL or has < 2 levels.
 #' @keywords internal
 #' @title ccc_lmm_reml_overall
-#' @description Internal function to handle overall CCC estimation when `rmet` is NULL or has < 2 levels.
+#' @description Internal function to handle overall CCC estimation when `method` is NULL or has < 2 levels.
 #' @keywords internal
-ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
+ccc_lmm_reml_overall <- function(df, fml, response, rind, method, time,
                                  slope, slope_var, slope_Z, drop_zero_cols,
                                  Dmat, ar, ar_rho, max_iter, tol,
                                  conf_level, verbose, digits, use_message,
@@ -1296,10 +1296,10 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
   X <- model.matrix(fml, data = df)
 
   ## Determine present time levels in this (overall) fit
-  lev_time_sub <- if (!is.null(rtime)) levels(df[[rtime]]) else character(0)
+  lev_time_sub <- if (!is.null(time)) levels(df[[time]]) else character(0)
 
   ## Build/subset the time kernel Dsub only when there are ≥ 2 time levels
-  if (!is.null(rtime) && length(lev_time_sub) >= 2L) {
+  if (!is.null(time) && length(lev_time_sub) >= 2L) {
     if (!is.null(Dmat)) {
       Dfull <- as.matrix(Dmat)
       ## In overall fits lev_time_sub are the global time levels; require conformity
@@ -1327,20 +1327,20 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
 
   Laux <- build_LDZ(
     colnames_X    = colnames(X),
-    method_levels = if (is.null(rmet)) character(0) else levels(df[[rmet]]),
-    time_levels   = if (is.null(rtime)) character(0) else levels(df[[rtime]]),
+    method_levels = if (is.null(method)) character(0) else levels(df[[method]]),
+    time_levels   = if (is.null(time)) character(0) else levels(df[[time]]),
     Dsub          = Dsub,
     df_sub        = df,
-    rmet_name     = rmet,
-    rtime_name    = rtime,
+    method_name     = method,
+    time_name    = time,
     slope         = slope,
     interaction   = has_interaction,
     slope_var     = slope_var,
     drop_zero_cols= drop_zero_cols
   )
 
-  method_int <- if (!is.null(rmet)  && nlevels(df[[rmet]])  >= 2L) as.integer(df[[rmet]])  else integer(0)
-  time_int   <- if (!is.null(rtime) && nlevels(df[[rtime]]) >= 2L) as.integer(df[[rtime]]) else integer(0)
+  method_int <- if (!is.null(method)  && nlevels(df[[method]])  >= 2L) as.integer(df[[method]])  else integer(0)
+  time_int   <- if (!is.null(time) && nlevels(df[[time]]) >= 2L) as.integer(df[[time]]) else integer(0)
   Z_overall  <- if (!identical(slope, "custom")) Laux$Z else {
     if (is.null(slope_Z)) NULL else as.matrix(slope_Z)
   }
@@ -1356,7 +1356,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
 
   if (is.null(inc0) && (Laux$nm > 0 || Laux$nt > 0) && identical(vc_select, "auto")) {
     ## Automatic, boundary-aware REML LRT selection; rho profiled appropriately inside
-    sel <- reml_lrt_select(X, df[[ry]], as.integer(df[[rind]]),
+    sel <- reml_lrt_select(X, df[[response]], as.integer(df[[rind]]),
                            method_int, time_int, Laux, Z_overall,
                            ar = ar, ar_rho = ar_rho,
                            max_iter = max_iter, tol = tol, conf_level = conf_level,
@@ -1368,7 +1368,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
 
     ## For reporting attributes, compute rho used (only if AR1 with unknown rho)
     rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
-      er <- estimate_rho(X, df[[ry]], as.integer(df[[rind]]),
+      er <- estimate_rho(X, df[[response]], as.integer(df[[rind]]),
                          method_int, time_int, Laux, Z_overall,
                          max_iter = max_iter, tol = tol, conf_level = conf_level,
                          include_subj_method = inc_subj_method_eff, include_subj_time = inc_subj_time_eff,
@@ -1383,7 +1383,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
 
     ## Estimate rho for these inclusions if needed
     rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
-      er <- estimate_rho(X, df[[ry]], as.integer(df[[rind]]),
+      er <- estimate_rho(X, df[[response]], as.integer(df[[rind]]),
                          method_int, time_int, Laux, Z_overall,
                          max_iter = max_iter, tol = tol, conf_level = conf_level,
                          include_subj_method = inc_subj_method_eff, include_subj_time = inc_subj_time_eff,
@@ -1392,7 +1392,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
     } else ar_rho
 
     ans <- tryCatch(
-      run_cpp(X, df[[ry]], as.integer(df[[rind]]),
+      run_cpp(X, df[[response]], as.integer(df[[rind]]),
               method_int, time_int, Laux, Z_overall,
               use_ar1 = identical(ar, "ar1"),
               ar1_rho = if (identical(ar, "ar1")) rho_used else 0,
@@ -1490,7 +1490,7 @@ ccc_lmm_reml_overall <- function(df, fml, ry, rind, rmet, rtime,
 #' @title ccc_lmm_reml_pairwise
 #' @description Internal function to handle pairwise CCC estimation for each method pair.
 #' @keywords internal
-ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
+ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
                                   slope, slope_var, slope_Z, drop_zero_cols,
                                   Dmat, ar, ar_rho, max_iter, tol,
                                   conf_level, verbose, digits, use_message,
@@ -1509,8 +1509,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
   vc_select <- match.arg(vc_select)
   vc_test_order <- match.arg(vc_test_order, several.ok = TRUE)
 
-  df[[rmet]] <- droplevels(df[[rmet]])
-  method_levels <- levels(df[[rmet]])
+  df[[method]] <- droplevels(df[[method]])
+  method_levels <- levels(df[[method]])
   Lm <- length(method_levels)
 
   est_mat <- matrix(1,  Lm, Lm, dimnames = list(method_levels, method_levels))
@@ -1542,11 +1542,11 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
     for (j in (i + 1L):Lm) {
       m1 <- method_levels[i]; m2 <- method_levels[j]
 
-      idx <- which(df[[rmet]] %in% c(m1, m2))
+      idx <- which(df[[method]] %in% c(m1, m2))
       subj_int   <- as.integer(df[[rind]][idx])
-      y_sub      <- df[[ry]][idx]
-      met_fac    <- droplevels(df[[rmet]][idx])        # exactly 2 levels
-      time_fac   <- if (!is.null(rtime)) droplevels(df[[rtime]][idx]) else NULL
+      y_sub      <- df[[response]][idx]
+      met_fac    <- droplevels(df[[method]][idx])        # exactly 2 levels
+      time_fac   <- if (!is.null(time)) droplevels(df[[time]][idx]) else NULL
 
       Xp <- model.matrix(fml, data = df[idx, , drop = FALSE])
 
@@ -1554,7 +1554,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
       lev_time_sub <- if (!is.null(time_fac)) levels(time_fac) else character(0)
 
       # Build/subset Dmat for this pair (only if ≥ 2 time levels)
-      if (!is.null(rtime) && length(lev_time_sub) >= 2L) {
+      if (!is.null(time) && length(lev_time_sub) >= 2L) {
         if (!is.null(Dmat)) {
           Dfull <- as.matrix(Dmat)
           if (!is.null(all_time_lvls) && nrow(Dfull) == length(all_time_lvls) && ncol(Dfull) == length(all_time_lvls)) {
@@ -1592,8 +1592,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, ry, rind, rmet, rtime,
         time_levels   = lev_time_sub,
         Dsub          = Dsub,
         df_sub        = df_sub,
-        rmet_name     = rmet,
-        rtime_name    = rtime,
+        method_name     = method,
+        time_name    = time,
         slope         = slope,
         interaction   = has_interaction,
         slope_var     = slope_var,

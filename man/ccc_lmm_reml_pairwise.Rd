@@ -7,10 +7,10 @@
 ccc_lmm_reml_pairwise(
   df,
   fml,
-  ry,
+  response,
   rind,
-  rmet,
-  rtime,
+  method,
+  time,
   slope,
   slope_var,
   slope_Z,

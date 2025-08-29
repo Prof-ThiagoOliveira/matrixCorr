@@ -6,9 +6,9 @@
 \usage{
 ccc_pairwise_u_stat(
   data,
-  ry,
-  rmet,
-  rtime = NULL,
+  response,
+  method,
+  time = NULL,
   Dmat = NULL,
   delta = 1,
   ci = FALSE,
@@ -20,12 +20,12 @@ ccc_pairwise_u_stat(
 \arguments{
 \item{data}{A data frame containing the repeated-measures dataset.}
 
-\item{ry}{Character. Name of the numeric outcome column.}
+\item{response}{Character. Name of the numeric outcome column.}
 
-\item{rmet}{Character. Name of the method column (factor with L
+\item{method}{Character. Name of the method column (factor with L
 \eqn{\geq} 2 levels).}
 
-\item{rtime}{Character or NULL. Name of the time/repetition column. If NULL,
+\item{time}{Character or NULL. Name of the time/repetition column. If NULL,
 one time point is assumed.}
 
 \item{Dmat}{Optional numeric weight matrix (T \eqn{\times} T) for
@@ -147,13 +147,13 @@ df <- expand.grid(subject = 1:10,
 df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
 
 # CCC matrix (no CIs)
-ccc1 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time")
+ccc1 <- ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time")
 print(ccc1)
 summary(ccc1)
 plot(ccc1)
 
 # With confidence intervals
-ccc2 <- ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", ci = TRUE)
+ccc2 <- ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", ci = TRUE)
 print(ccc2)
 summary(ccc2)
 plot(ccc2)
@@ -162,13 +162,13 @@ plot(ccc2)
 # Choosing delta based on distance sensitivity
 #------------------------------------------------------------------------
 # Absolute distance (L1 norm) - robust
-ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 1)
+ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 1)
 
 # Squared distance (L2 norm) - amplifies large deviations
-ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 2)
+ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 2)
 
 # Presence/absence of disagreement (like kappa)
-ccc_pairwise_u_stat(df, ry = "y", rmet = "method", rtime = "time", delta = 0)
+ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 0)
 
 }
 \references{
