@@ -1,17 +1,17 @@
-#' @title Bland–Altman statistics with confidence intervals
+#' @title Bland-Altman statistics with confidence intervals
 #'
 #' @description
-#' Computes Bland–Altman mean difference and limits of agreement (LoA)
+#' Computes Bland-Altman mean difference and limits of agreement (LoA)
 #' between two numeric measurement vectors, including t-based confidence
 #' intervals for the mean difference and for each LoA using 'C++' backend.
 #'
 #' Note: Lin's concordance correlation coefficient (CCC) is a complementary,
 #' single-number summary of agreement (precision + accuracy). It is useful for
 #' quick screening or reporting an overall CI, but may miss systematic or
-#' magnitude-dependent bias; consider reporting CCC alongside Bland–Altman.
+#' magnitude-dependent bias; consider reporting CCC alongside Bland-Altman.
 #'
 #' @details
-#' Given paired measurements \eqn{(x_i, y_i)}, Bland–Altman analysis uses
+#' Given paired measurements \eqn{(x_i, y_i)}, Bland-Altman analysis uses
 #' \eqn{d_i = x_i - y_i} (or \eqn{y_i - x_i} if \code{mode = 2}) and
 #' \eqn{m_i = (x_i + y_i)/2}. The mean difference \eqn{\bar d} estimates bias.
 #' The limits of agreement (LoA) are \eqn{\bar d \pm z \cdot s_d}, where
@@ -63,10 +63,10 @@
 #'
 #' @references
 #' Bland JM, Altman DG (1986). Statistical methods for assessing agreement
-#' between two methods of clinical measurement. *The Lancet*, 307–310.
+#' between two methods of clinical measurement. *The Lancet*, 307-310.
 #' @references
 #' Bland JM, Altman DG (1999). Measuring agreement in method comparison studies.
-#' *Statistical Methods in Medical Research*, 8(2), 135–160.
+#' *Statistical Methods in Medical Research*, 8(2), 135-160.
 #'
 #' @author Thiago de Paula Oliveira
 #'
@@ -97,7 +97,7 @@ bland_altman <- function(group1,
   # -- compute in C++ ---------------------------------------------------------
   ba_out <- bland_altman_cpp(group1, group2, two, mode, conf_level)
 
-  attr(ba_out, "method")      <- "Bland–Altman"
+  attr(ba_out, "method")      <- "Bland-Altman"
   attr(ba_out, "description") <- "Mean difference and limits of agreement with CIs"
   attr(ba_out, "package")     <- "matrixCorr"
   attr(ba_out, "conf.level")  <- conf_level
@@ -138,9 +138,9 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
 
   # header
   if (is.finite(cl)) {
-    cat(sprintf("Bland–Altman (n = %d) — LoA = mean ± %.3g·SD, %g%% CI\n\n", n, two, 100*cl))
+    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD, %g%% CI\n\n", n, two, 100*cl))
   } else {
-    cat(sprintf("Bland–Altman (n = %d) — LoA = mean ± %.3g·SD\n\n", n, two))
+    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD\n\n", n, two))
   }
 
   # nicely aligned three-row table
@@ -178,9 +178,10 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
 #' @param symmetrize_y Logical; if TRUE, y-axis centered at mean difference
 #' with symmetric limits.
 #' @param ... Passed to \code{ggplot2::theme()} (ggplot path) or \code{plot()}.
+#' @importFrom graphics abline lines par rect
 #' @export
 plot.ba <- function(x,
-                    title = "Bland–Altman Plot",
+                    title = "Bland-Altman Plot",
                     subtitle = NULL,
                     point_alpha = 0.7,
                     point_size  = 2.2,
@@ -208,10 +209,10 @@ plot.ba <- function(x,
 
   if (is.null(subtitle)) {
     subtitle <- if (is.finite(cl)) {
-      sprintf("n = %d · mean diff = %.2f · LoA = [%.2f, %.2f] · %g%% CI shown",
+      sprintf("n = %d  *  mean diff = %.2f  *  LoA = [%.2f, %.2f]  *  %g%% CI shown",
               n, md, loaL, loaU, 100*cl)
     } else {
-      sprintf("n = %d · mean diff = %.2f · LoA = [%.2f, %.2f]",
+      sprintf("n = %d  *  mean diff = %.2f  *  LoA = [%.2f, %.2f]",
               n, md, loaL, loaU)
     }
   }

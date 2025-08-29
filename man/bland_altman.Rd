@@ -4,7 +4,7 @@
 \alias{bland_altman}
 \alias{print.ba}
 \alias{plot.ba}
-\title{Bland–Altman statistics with confidence intervals}
+\title{Bland-Altman statistics with confidence intervals}
 \usage{
 bland_altman(
   group1,
@@ -19,7 +19,7 @@ bland_altman(
 
 \method{plot}{ba}(
   x,
-  title = "Bland–Altman Plot",
+  title = "Bland-Altman Plot",
   subtitle = NULL,
   point_alpha = 0.7,
   point_size = 2.2,
@@ -48,7 +48,7 @@ bland_altman(
 
 \item{ci_digits}{Number of digits for CI bounds (default 3).}
 
-\item{...}{Passed to \code{ggplot2::theme()} (ggplot path) or \code{plot()} (base path).}
+\item{...}{Passed to \code{ggplot2::theme()} (ggplot path) or \code{plot()}.}
 
 \item{title}{Plot title.}
 
@@ -60,13 +60,15 @@ bland_altman(
 
 \item{line_size}{Line width for mean/LoA.}
 
-\item{shade_ci}{Logical; if TRUE, draw shaded CI bands instead of 6 dashed lines.}
+\item{shade_ci}{Logical; if TRUE, draw shaded CI bands instead of 6 dashed
+lines.}
 
 \item{shade_alpha}{Transparency of CI bands.}
 
 \item{smoother}{One of "none", "loess", "lm" to visualize proportional bias.}
 
-\item{symmetrize_y}{Logical; if TRUE, y-axis centered at mean difference with symmetric limits.}
+\item{symmetrize_y}{Logical; if TRUE, y-axis centered at mean difference
+with symmetric limits.}
 }
 \value{
 An object of class \code{"ba"} (list) with elements:
@@ -81,17 +83,17 @@ An object of class \code{"ba"} (list) with elements:
 }
 }
 \description{
-Computes Bland–Altman mean difference and limits of agreement (LoA)
+Computes Bland-Altman mean difference and limits of agreement (LoA)
 between two numeric measurement vectors, including t-based confidence
 intervals for the mean difference and for each LoA using 'C++' backend.
 
 Note: Lin's concordance correlation coefficient (CCC) is a complementary,
 single-number summary of agreement (precision + accuracy). It is useful for
 quick screening or reporting an overall CI, but may miss systematic or
-magnitude-dependent bias; consider reporting CCC alongside Bland–Altman.
+magnitude-dependent bias; consider reporting CCC alongside Bland-Altman.
 }
 \details{
-Given paired measurements \eqn{(x_i, y_i)}, Bland–Altman analysis uses
+Given paired measurements \eqn{(x_i, y_i)}, Bland-Altman analysis uses
 \eqn{d_i = x_i - y_i} (or \eqn{y_i - x_i} if \code{mode = 2}) and
 \eqn{m_i = (x_i + y_i)/2}. The mean difference \eqn{\bar d} estimates bias.
 The limits of agreement (LoA) are \eqn{\bar d \pm z \cdot s_d}, where
@@ -123,10 +125,10 @@ plot(ba)
 }
 \references{
 Bland JM, Altman DG (1986). Statistical methods for assessing agreement
-between two methods of clinical measurement. \emph{The Lancet}, 307–310.
+between two methods of clinical measurement. \emph{The Lancet}, 307-310.
 
 Bland JM, Altman DG (1999). Measuring agreement in method comparison studies.
-\emph{Statistical Methods in Medical Research}, 8(2), 135–160.
+\emph{Statistical Methods in Medical Research}, 8(2), 135-160.
 }
 \seealso{
 \code{\link{print.bland_altman}}, \code{\link{plot.bland_altman}},
