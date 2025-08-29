@@ -49,7 +49,7 @@
 #'   \item \code{two}, \code{critical.diff}
 #' }
 #'
-#' @seealso \code{\link{print.bland_altman}}, \code{\link{plot.bland_altman}},
+#' @seealso \code{\link{print.ba}}, \code{\link{plot.ba}},
 #'  \code{\link{ccc}},\code{\link{ccc_pairwise_u_stat}},
 #'  \code{\link{ccc_lmm_reml}}
 #'

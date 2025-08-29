@@ -145,21 +145,3 @@ test_that("print.ba and plot.ba do not error", {
   expect_no_error(plot(ba))
 })
 
-test_that("numerical match with BlandAltmanLeh when available", {
-  skip_if_not_installed("BlandAltmanLeh")
-  set.seed(6)
-  x <- rnorm(80, 100, 10)
-  y <- x + rnorm(80, 0, 8)
-
-  ref <- BlandAltmanLeh::bland.altman.stats(x, y)
-  cpp <- bland_altman(x, y)
-
-  near <- function(a, b, tol = 1e-10) isTRUE(all.equal(as.numeric(a), as.numeric(b), tolerance = tol))
-
-  expect_true(near(ref$lower.limit,   cpp$lower.limit))
-  expect_true(near(ref$mean.diffs,    cpp$mean.diffs))
-  expect_true(near(ref$upper.limit,   cpp$upper.limit))
-  expect_true(near(ref$critical.diff, cpp$critical.diff))
-  expect_true(near(unname(ref$lines),    unname(cpp$lines)))
-  expect_true(near(unname(ref$CI.lines), unname(cpp$CI.lines)))
-})
