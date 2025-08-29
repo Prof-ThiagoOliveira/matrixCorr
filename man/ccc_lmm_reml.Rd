@@ -495,9 +495,9 @@ introduce correlations.
 }
 
 \examples{
-#--------------------------------------------------------------------
-## Two methods (no time)
-#--------------------------------------------------------------------
+# ====================================================================
+# 1) Two methods (no time): baseline CCC
+# ====================================================================
 set.seed(1)
 n_subj <- 30
 meth   <- factor(rep(c("A","B"), each = n_subj))
@@ -507,6 +507,7 @@ u  <- rnorm(n_subj, 0, sqrt(sigA))
 y  <- c(u + rnorm(n_subj, 0, sqrt(sigE)),
          u + 0.2 + rnorm(n_subj, 0, sqrt(sigE)))
 dat <- data.frame(y, id, method = meth)
+
 ccc_rm1 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method")
 print(ccc_rm1)
 summary(ccc_rm1)
@@ -515,97 +516,174 @@ summary(ccc_rm1)
 ccc_rm2 <- ccc_lmm_reml(dat, ry = "y", rind = "id", rmet = "method", ci = TRUE)
 ccc_rm2
 
-#--------------------------------------------------------------------
-## Two methods x time (balanced 2x2), with and without interaction
-#--------------------------------------------------------------------
-dat$time <- factor(rep(rep(c("t1","t2"), each = n_subj/2), times = 2))
-ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-             interaction = FALSE)
-ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-             interaction = TRUE, verbose = TRUE)
+# ====================================================================
+# 2) Subject x METHOD variance present, no time
+#     y_{i,m} = mu + b_m + u_i + w_{i,m} + e_{i,m}
+#     with u_i ~ N(0, s_A^2), w_{i,m} ~ N(0, s_{AxM}^2)
+# ====================================================================
+set.seed(102)
+n_subj <- 60
+n_time <- 8
 
-#--------------------------------------------------------------------
-## Random slope by subject; AR(1) with rho estimated
-#--------------------------------------------------------------------
-dat$t_num <- as.integer(dat$time)
-dat$t_c   <- ave(dat$t_num, dat$id, FUN = function(v) v - mean(v))
-ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-             slope = "subject", slope_var = "t_c",
-             ar = "ar1", ar_rho = NA_real_, verbose = TRUE)
+id     <- factor(rep(seq_len(n_subj), each = 2 * n_time))
+time   <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+method <- factor(rep(rep(c("A","B"),    each  = n_time), times = n_subj))
 
-#--------------------------------------------------------------------
-## D_m choices: time-averaged (default) vs typical visit
-#--------------------------------------------------------------------
-ccc_timeavg   <- ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-                              Dmat_type = "time-avg")
-ccc_typical   <- ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-                              Dmat_type = "typical-visit")
+sigA  <- 0.6   # subject
+sigAM <- 0.3   # subject × method
+sigAT <- 0.5   # subject × time
+sigE  <- 0.4   # residual
+# Expected estimate S_B = 0.2^2 = 0.04
+biasB <- 0.2   # fixed method bias
 
-# Weighted time-averaging (named weights aligned to time levels)
-w <- c(t1 = 0.25, t2 = 0.75)
-ccc_wavg <- ccc_lmm_reml(dat, "y", "id", rmet = "method", rtime = "time",
-                         Dmat_type = "weighted-avg", Dmat_weights = w)
+# random effects
+u_i <- rnorm(n_subj, 0, sqrt(sigA))
+u   <- u_i[as.integer(id)]
 
-# ------------------------------------------------------------------
-# AR(1) residual correlation with fixed rho
-# ------------------------------------------------------------------
+sm      <- interaction(id, method, drop = TRUE)
+w_im_lv <- rnorm(nlevels(sm), 0, sqrt(sigAM))
+w_im    <- w_im_lv[as.integer(sm)]
+
+st      <- interaction(id, time, drop = TRUE)
+g_it_lv <- rnorm(nlevels(st), 0, sqrt(sigAT))
+g_it    <- g_it_lv[as.integer(st)]
+
+# residuals & response
+e <- rnorm(length(id), 0, sqrt(sigE))
+y <- (method == "B") * biasB + u + w_im + g_it + e
+
+dat_both <- data.frame(y, id, method, time)
+
+# Both sigma2_subject_method and sigma2_subject_time are identifiable here
+fit_both <- ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+                         vc_select = "auto", verbose = TRUE)
+summary(fit_both)
+
+# ====================================================================
+# 3) Subject x TIME variance present (sag > 0) with two methods
+#     y_{i,m,t} = mu + b_m + u_i + g_{i,t} + e_{i,m,t}
+#     where g_{i,t} ~ N(0, s_{AxT}^2) shared across methods at time t
+# ====================================================================
+set.seed(202)
+n_subj <- 60; n_time <- 14
+id     <- factor(rep(seq_len(n_subj), each = 2 * n_time))
+method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+time   <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+
+sigA  <- 0.7
+sigAT <- 0.5
+sigE  <- 0.5
+biasB <- 0.25
+
+u   <- rnorm(n_subj, 0, sqrt(sigA))[as.integer(id)]
+gIT <- rnorm(n_subj * n_time, 0, sqrt(sigAT))
+g   <- gIT[ (as.integer(id) - 1L) * n_time + as.integer(time) ]
+y   <- (method == "B") * biasB + u + g + rnorm(length(id), 0, sqrt(sigE))
+dat_sag <- data.frame(y, id, method, time)
+
+# sigma_AT should be retained; sigma_AM may be dropped (since w_{i,m}=0)
+fit_sag <- ccc_lmm_reml(dat_sag, "y", "id", rmet = "method", rtime = "time",
+                        vc_select = "auto", verbose = TRUE)
+summary(fit_sag)
+
+# ====================================================================
+# 4) BOTH components present: sab > 0 and sag > 0 (2 methods x T times)
+#     y_{i,m,t} = mu + b_m + u_i + w_{i,m} + g_{i,t} + e_{i,m,t}
+# ====================================================================
+set.seed(303)
+n_subj <- 60; n_time <- 4
+id     <- factor(rep(seq_len(n_subj), each = 2 * n_time))
+method <- factor(rep(rep(c("A","B"), each = n_time), times = n_subj))
+time   <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
+
+sigA  <- 0.8
+sigAM <- 0.3
+sigAT <- 0.4
+sigE  <- 0.5
+biasB <- 0.2
+
+u   <- rnorm(n_subj, 0, sqrt(sigA))[as.integer(id)]
+# (subject, method) random deviations: repeat per (i,m) across its times
+wIM <- rnorm(n_subj * 2, 0, sqrt(sigAM))
+w   <- wIM[ (as.integer(id) - 1L) * 2 + as.integer(method) ]
+# (subject, time) random deviations: shared across methods at time t
+gIT <- rnorm(n_subj * n_time, 0, sqrt(sigAT))
+g   <- gIT[ (as.integer(id) - 1L) * n_time + as.integer(time) ]
+y   <- (method == "B") * biasB + u + w + g + rnorm(length(id), 0, sqrt(sigE))
+dat_both <- data.frame(y, id, method, time)
+
+fit_both <- ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+                         vc_select = "auto", verbose = TRUE, ci = TRUE)
+summary(fit_both)
+
+# If you want to force-include both VCs (skip testing):
+fit_both_forced <-
+ ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+              vc_select = "none", include_subj_method  = TRUE,
+              include_subj_time  = TRUE, verbose = TRUE)
+summary(fit_both_forced)
+
+# ====================================================================
+# 5) D_m choices: time-averaged (default) vs typical visit
+# ====================================================================
+# Time-average
+ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+             vc_select = "none", include_subj_method  = TRUE,
+             include_subj_time  = TRUE, Dmat_type = "time-avg")
+
+# Typical visit
+ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+             vc_select = "none", include_subj_method  = TRUE,
+             include_subj_time  = TRUE, Dmat_type = "typical-visit")
+
+# ====================================================================
+# 6) AR(1) residual correlation with fixed rho (larger example)
+# ====================================================================
+\donttest{
 set.seed(10)
 n_subj   <- 40
 n_time   <- 10
-methods  <- c("A", "B", "C", "D")        # four methods
+methods  <- c("A", "B", "C", "D")
 nm       <- length(methods)
-# Factors: subject, method, time (balanced design: every subject has
-# all methods x times)
 id     <- factor(rep(seq_len(n_subj), each = n_time * nm))
 method <- factor(rep(rep(methods, each = n_time), times = n_subj),
                  levels = methods)
 time   <- factor(rep(rep(seq_len(n_time), times = nm), times = n_subj))
 
-# True effects/parameters
 beta0    <- 0
-# common linear time trend
 beta_t   <- 0.2
-# method biases (fixed effect)
 bias_met <- c(A = 0.00, B = 0.30, C = -0.15, D = 0.05)
-# between-subject variance (random intercept)
 sigA     <- 1.0
-# AR(1) correlation within subj x method
 rho_true <- 0.6
-# residual SD
 sigE     <- 0.7
 
-# Build mean structure
 t_num <- as.integer(time)
-t_c   <- t_num - mean(seq_len(n_time))    # centered visit index
+t_c   <- t_num - mean(seq_len(n_time))
 mu    <- beta0 + beta_t * t_c + bias_met[as.character(method)]
 
-# Between-subject random intercepts
-u_subj <- rnorm(n_subj, mean = 0, sd = sqrt(sigA))
+u_subj <- rnorm(n_subj, 0, sqrt(sigA))
 u      <- u_subj[as.integer(id)]
 
-# AR(1) residuals generated per subject x method run of length n_time
 e <- numeric(length(id))
 for (s in seq_len(n_subj)) {
- for (m in methods) {
-  idx <- which(id == levels(id)[s] & method == m)
-  e[idx] <- stats::arima.sim(list(ar = rho_true), n = n_time, sd = sigE)
- }
+  for (m in methods) {
+    idx <- which(id == levels(id)[s] & method == m)
+    e[idx] <- stats::arima.sim(list(ar = rho_true), n = n_time, sd = sigE)
+  }
 }
-
-# Response
 y <- mu + u + e
-
-# Data frame
 dat_ar4 <- data.frame(y = y, id = id, method = method, time = time)
 
-# Fit CCC LMM with AR(1) residuals (fixed rho = 0.6)
 ccc_lmm_reml(dat_ar4,
              ry = "y", rind = "id", rmet = "method", rtime = "time",
              ar = "ar1", ar_rho = 0.6, verbose = TRUE)
+}
 
-# ------------------------------------------------------------------
-# Random slope by SUBJECT
-# ------------------------------------------------------------------
+# ====================================================================
+# 7) Random slope variants (subject, method, custom Z)
+# ====================================================================
+\donttest{
+## By SUBJECT
 set.seed(2)
 n_subj <- 60; n_time <- 4
 id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
@@ -624,9 +702,7 @@ dat_s$t_c   <- ave(dat_s$t_num, dat_s$id, FUN = function(v) v - mean(v))
 ccc_lmm_reml(dat_s, "y", "id", rmet = "method", rtime = "time",
              slope = "subject", slope_var = "t_c", verbose = TRUE)
 
-# ------------------------------------------------------------------
-# Random slope by METHOD
-# ------------------------------------------------------------------
+## By METHOD
 set.seed(3)
 n_subj <- 60; n_time <- 4
 id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
@@ -643,9 +719,7 @@ dat_m$t_c   <- ave(dat_m$t_num, dat_m$id, FUN = function(v) v - mean(v))
 ccc_lmm_reml(dat_m, "y", "id", rmet = "method", rtime = "time",
              slope = "method", slope_var = "t_c", verbose = TRUE)
 
-# ------------------------------------------------------------------
-# Random slopes for SUBJECT and METHOD (custom Z)
-# ------------------------------------------------------------------
+## SUBJECT + METHOD random slopes (custom Z)
 set.seed(4)
 n_subj <- 50; n_time <- 4
 id  <- factor(rep(seq_len(n_subj), each = 2 * n_time))
@@ -659,16 +733,17 @@ base <- rnorm(n_subj, 0, 1.0)[subj]
 y <- base + 0.3*(method=="B") +
      (slope_subj + slope_B) * (tnum - mean(seq_len(n_time))) +
      rnorm(length(id), 0, 0.5)
-dat_both <- data.frame(y, id, method, time = tim)
-dat_both$t_num <- as.integer(dat_both$time)
-dat_both$t_c   <- ave(dat_both$t_num, dat_both$id, FUN = function(v) v - mean(v))
-MM <- model.matrix(~ 0 + method, data = dat_both)  # one col per method
+dat_bothRS <- data.frame(y, id, method, time = tim)
+dat_bothRS$t_num <- as.integer(dat_bothRS$time)
+dat_bothRS$t_c   <- ave(dat_bothRS$t_num, dat_bothRS$id, FUN = function(v) v - mean(v))
+MM <- model.matrix(~ 0 + method, data = dat_bothRS)
 Z_custom <- cbind(
-  subj_slope   = dat_both$t_c,
-  MM * dat_both$t_c
+  subj_slope = dat_bothRS$t_c,
+  MM * dat_bothRS$t_c
 )
-ccc_lmm_reml(dat_both, "y", "id", rmet = "method", rtime = "time",
+ccc_lmm_reml(dat_bothRS, "y", "id", rmet = "method", rtime = "time",
              slope = "custom", slope_Z = Z_custom, verbose = TRUE)
+}
 
 }
 \references{
