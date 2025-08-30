@@ -551,7 +551,7 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
   lo_l   <- cil("lower.limit.ci.lower"); lo_u <- cil("lower.limit.ci.upper")
   hi_l   <- cil("upper.limit.ci.lower"); hi_u <- cil("upper.limit.ci.upper")
 
-  head <- sprintf("Repeated-measures Bland-Altman (pairs = %d) - LoA = mean \u00B1 %.3g * SD%s\n\n",
+  head <- sprintf("Repeated-measures Bland-Altman (pairs = %d) - LoA = mean \u00B1 %.3g | SD%s\n\n",
                   n, two, if (is.finite(cl)) sprintf(", %g%% CI", 100*cl) else "")
   cat(head)
 
@@ -864,10 +864,10 @@ plot.ba_repeated <- function(x,
 
   if (is.null(subtitle)) {
     subtitle <- if (is.finite(cl)) {
-      sprintf("pairs = %d *  mean diff = %.3g *  LoA = [%.3g, %.3g] *  %g%% CI",
+      sprintf("pairs = %d |  mean diff = %.3g |  LoA = [%.3g, %.3g] |  %g%% CI",
               n, md, loaL, loaU, 100*cl)
     } else {
-      sprintf("pairs = %d *  mean diff = %.3g *  LoA = [%.3g, %.3g]",
+      sprintf("pairs = %d |  mean diff = %.3g |  LoA = [%.3g, %.3g]",
               n, md, loaL, loaU)
     }
   }
