@@ -57,6 +57,9 @@
 #' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}},
 #' \code{\link{bland_altman}}
 #'
+#' @seealso For repeated measurements look at \code{\link{ccc_lmm_reml}},
+#' \code{\link{ccc_pairwise_u_stat}} or \code{\link{bland_altman_repeated}}
+#'
 #' @examples
 #' # Example with multivariate normal data
 #' Sigma <- matrix(c(1, 0.5, 0.3,

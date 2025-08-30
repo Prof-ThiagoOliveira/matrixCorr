@@ -115,6 +115,28 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// bland_altman_repeated_em_ext_cpp
+Rcpp::List bland_altman_repeated_em_ext_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, bool include_slope, bool use_ar1, double ar1_rho, int max_iter, double tol, double conf_level, double two_arg, bool use_cov_su_se);
+RcppExport SEXP _matrixCorr_bland_altman_repeated_em_ext_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP include_slopeSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP two_argSEXP, SEXP use_cov_su_seSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_slope(include_slopeSEXP);
+    Rcpp::traits::input_parameter< bool >::type use_ar1(use_ar1SEXP);
+    Rcpp::traits::input_parameter< double >::type ar1_rho(ar1_rhoSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< double >::type two_arg(two_argSEXP);
+    Rcpp::traits::input_parameter< bool >::type use_cov_su_se(use_cov_su_seSEXP);
+    rcpp_result_gen = Rcpp::wrap(bland_altman_repeated_em_ext_cpp(y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, two_arg, use_cov_su_se));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cccUst_rcpp
 List cccUst_rcpp(NumericVector y_vec, IntegerVector met_vec, IntegerVector time_vec, int nmet0, int nmet1, int ntime, int ns, NumericMatrix Dmat, double delta, double cl);
 RcppExport SEXP _matrixCorr_cccUst_rcpp(SEXP y_vecSEXP, SEXP met_vecSEXP, SEXP time_vecSEXP, SEXP nmet0SEXP, SEXP nmet1SEXP, SEXP ntimeSEXP, SEXP nsSEXP, SEXP DmatSEXP, SEXP deltaSEXP, SEXP clSEXP) {
@@ -407,6 +429,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bicor_matrix_weighted_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_pairwise_cpp, 7},
     {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 5},
     {"_matrixCorr_ba_openmp_threads", (DL_FUNC) &_matrixCorr_ba_openmp_threads, 0},
+    {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 12},
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 10},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},

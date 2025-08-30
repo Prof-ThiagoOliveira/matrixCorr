@@ -152,6 +152,9 @@ between two methods of clinical measurement. The Lancet 327: 307-310.
 \seealso{
 \code{\link{print.ccc}}, \code{\link{plot.ccc}},
 \code{\link{bland_altman}}
+
+For repeated measurements look at \code{\link{ccc_lmm_reml}},
+\code{\link{ccc_pairwise_u_stat}} or \code{\link{bland_altman_repeated}}
 }
 \author{
 Thiago de Paula Oliveira

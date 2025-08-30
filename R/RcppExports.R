@@ -29,6 +29,10 @@ ba_openmp_threads <- function() {
     .Call(`_matrixCorr_ba_openmp_threads`)
 }
 
+bland_altman_repeated_em_ext_cpp <- function(y, subject, method, time, include_slope = FALSE, use_ar1 = FALSE, ar1_rho = NA_real_, max_iter = 200L, tol = 1e-6, conf_level = 0.95, two_arg = NA_real_, use_cov_su_se = TRUE) {
+    .Call(`_matrixCorr_bland_altman_repeated_em_ext_cpp`, y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, two_arg, use_cov_su_se)
+}
+
 cccUst_rcpp <- function(y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl) {
     .Call(`_matrixCorr_cccUst_rcpp`, y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl)
 }

@@ -16,7 +16,8 @@
 #' }
 #'
 #' Note: Lin's concordance correlation coefficient (CCC) is a complementary,
-#' single-number summary of agreement (precision + accuracy). It is useful for
+#' single-number summary of agreement (precision + accuracy) for continuous
+#' variables. It is useful for
 #' quick screening or reporting an overall CI, but may miss systematic or
 #' magnitude-dependent bias; consider reporting CCC alongside Bland-Altman.
 #'
