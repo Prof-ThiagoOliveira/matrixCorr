@@ -14,5 +14,5 @@ utils::globalVariables(c(
   "Var1", "Var2", "Tau", "Rho", "Pearson", "CCC",
   "label", "PCor", "r", "dCor", "bicor", "ci_label",
   "diffs", "hi_l", "hi_u", "lab", "lo_l", "lo_u", "loaL",
-  "loaU", "md", "md_l", "md_u", "means"
+  "loaU", "md", "md_l", "md_u", "means", "j", "k"
 ))

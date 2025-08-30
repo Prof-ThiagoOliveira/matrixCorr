@@ -1,7 +1,7 @@
 #' @title Bland-Altman for repeated measurements
 #' @description
-#' Repeated-measures Bland–Altman (BA) for method comparison based on a
-#' mixed-effects model fitted to **subject–time matched paired differences**.
+#' Repeated-measures Bland-Altman (BA) for method comparison based on a
+#' mixed-effects model fitted to **subject-time matched paired differences**.
 #' A subject-specific random intercept accounts for clustering, and (optionally)
 #' an AR(1) process captures serial correlation across replicates within subject.
 #' The function returns bias (mean difference), limits of agreement (LoA),
@@ -41,7 +41,7 @@
 #'
 #' \strong{If \code{"ba_repeated_matrix"} (N\eqn{\ge}3 methods)}, outputs are:
 #' \itemize{
-#'   \item \code{bias} \eqn{(m \times m)}; estimated mean difference (row − column).
+#'   \item \code{bias} \eqn{(m \times m)}; estimated mean difference (row - column).
 #'          Diagonal is \code{NA}.
 #'   \item \code{sd_loa} \eqn{(m \times m)}; estimated SD of a \emph{single new} paired
 #'         difference for the (row, column) methods, accounting for the random
@@ -49,11 +49,11 @@
 #'   \item \code{loa_lower}, \code{loa_upper} \eqn{(m \times m)}; limits of agreement
 #'         for a single measurement pair, computed as
 #'         \eqn{\mathrm{bias} \pm \mathrm{two}\times \mathrm{sd\_loa}}.
-#'         Signs follow the row − column convention
+#'         Signs follow the row - column convention
 #'         (e.g., \code{loa_lower[j,i] = -loa_upper[i,j]}).
 #'   \item \code{width} \eqn{(m \times m)}; LoA width,
-#'         \code{loa_upper − loa_lower} (= \code{2 * two * sd_loa}).
-#'   \item \code{n} \eqn{(m \times m)}; number of subject–time pairs used in each
+#'         \code{loa_upper - loa_lower} (= \code{2 * two * sd_loa}).
+#'   \item \code{n} \eqn{(m \times m)}; number of subject-time pairs used in each
 #'         pairwise BA (complete cases where both methods are present).
 #'
 #'   \item \strong{CI matrices at nominal \code{conf_level}} (delta method):
@@ -91,7 +91,7 @@
 #'
 #' \strong{If \code{"ba_repeated"} (exactly two methods)}, outputs are:
 #' \itemize{
-#'   \item \code{mean.diffs} \emph{(scalar)}; estimated bias (method 2 − method 1).
+#'   \item \code{mean.diffs} \emph{(scalar)}; estimated bias (method 2 - method 1).
 #'   \item \code{lower.limit}, \code{upper.limit} \emph{(scalars)}; LoA
 #'         \eqn{\mu \pm \mathrm{two}\times \mathrm{SD}} for a single new pair.
 #'   \item \code{critical.diff} \emph{(scalar)}; \code{two * SD}; LoA half-width.
@@ -100,7 +100,7 @@
 #'         (\code{*.ci.lower}, \code{*.ci.upper}) at \code{conf_level}.
 #'   \item \code{means}, \code{diffs} \emph{(vectors)}; per-pair means and differences
 #'         used by plotting helpers.
-#'   \item \code{based.on} \emph{(integer)}; number of subject–time pairs used.
+#'   \item \code{based.on} \emph{(integer)}; number of subject-time pairs used.
 #'   \item \code{include_slope}, \code{beta_slope}; whether a proportional-bias slope
 #'         was estimated and its value (if requested).
 #'   \item \code{sigma2_subject}, \code{sigma2_resid}; variance components as above.
@@ -239,133 +239,169 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
                                   max_iter = 200L, tol = 1e-6,
                                   verbose = FALSE) {
 
-  # ---- resolve columns if 'data' provided and names given ----
+  # --- resolve columns if 'data' provided and names given ---
   if (!is.null(data)) {
     if (!inherits(data, "data.frame"))
       stop("`data` must be a data.frame or data.table.")
-    # helper to pull a column by name
-    get_col <- function(x) {
+    pull <- function(x) {
       if (is.character(x) && length(x) == 1L) {
-        if (!x %in% names(data))
-          stop("Column '", x, "' not found in `data`.")
+        if (!x %in% names(data)) stop("Column '", x, "' not found in `data`.")
         data[[x]]
-      } else {
-        x
-      }
+      } else x
     }
-    response <- get_col(response)
-    subject  <- get_col(subject)
-    method   <- get_col(method)
-    time     <- get_col(time)
+    response <- pull(response)
+    subject  <- pull(subject)
+    method   <- pull(method)
+    time     <- pull(time)
+    mapping <- list(
+      response =
+        if (is.character(substitute(response)) && length(substitute(response)) == 1L &&
+                     is.character(match.call()$response)) as.character(match.call()$response) else ".response",
+      subject  = if (is.character(match.call()$subject)) as.character(match.call()$subject) else ".subject",
+      method   = if (is.character(match.call()$method))  as.character(match.call()$method)  else ".method",
+      time     = if (is.character(match.call()$time))    as.character(match.call()$time)    else ".time"
+    )
+
+    # always use canonical internal names in the stored table
+    data_long <- setNames(
+      data.frame(response, subject, method, time, check.names = FALSE),
+      c(".response", ".subject", ".method", ".time")
+    )
+    mapping <- list(
+      response = ".response",
+      subject  = ".subject",
+      method   = ".method",
+      time     = ".time"
+    )
+  } else {
+    # vectors supplied; build canonical internal columns
+    mapping <- list(
+      response = ".response",
+      subject  = ".subject",
+      method   = ".method",
+      time     = ".time"
+    )
+    data_long <- data.frame(
+      ".response" = response,
+      ".subject"  = subject,
+      ".method"   = method,
+      ".time"     = time,
+      check.names = FALSE
+    )
   }
 
-  # ---- original code (unchanged) ----
-  stopifnot(is.numeric(response), length(response) > 1L)
-  if (!(is.integer(subject) || is.factor(subject) || is.numeric(subject)))
-    stop("'subject' must be integer/factor/numeric.")
-  subject <- as.integer(as.factor(subject))
+  # ---- validate / normalise types (work with local copies) ----
+  y <- data_long[[mapping$response]]
+  s <- data_long[[mapping$subject ]]
+  m <- data_long[[mapping$method  ]]
+  t <- data_long[[mapping$time    ]]
 
-  # normalize method to factor with stable levels
-  if (!is.factor(method)) method <- as.factor(method)
-  method <- droplevels(method)
-  mlev <- levels(method)
-  if (length(mlev) < 2L) stop("Need at least 2 distinct methods in 'method'.")
+  if (!is.numeric(y) || length(y) < 2L) stop("`response` must be numeric with length > 1.")
+  if (!(is.integer(s) || is.factor(s) || is.numeric(s)))
+    stop("`subject` must be integer/factor/numeric.")
+  s <- as.integer(as.factor(s))
+  if (!is.factor(m)) m <- as.factor(m)
+  m <- droplevels(m)
+  mlev <- levels(m)
+  if (length(mlev) < 2L) stop("Need at least 2 distinct methods in `method`.")
+  if (!(is.integer(t) || is.numeric(t))) stop("`time` must be integer/numeric.")
+  t <- as.integer(t)
 
-  if (!(is.integer(time) || is.numeric(time))) stop("'time' must be integer/numeric.")
-  time <- as.integer(time)
-  if (!is.numeric(two) || length(two) != 1L || two <= 0) stop("'two' must be a positive scalar.")
+  if (!is.numeric(two) || length(two) != 1L || two <= 0) stop("`two` must be a positive scalar.")
   if (!(is.numeric(conf_level) && length(conf_level) == 1L && conf_level > 0 && conf_level < 1))
-    stop("'conf_level' must be in (0,1).")
+    stop("`conf_level` must be in (0,1).")
   if (isTRUE(use_ar1)) {
     if (!is.na(ar1_rho)) {
-      if (!is.finite(ar1_rho)) stop("'ar1_rho' must be finite or NA when use_ar1=TRUE.")
-      if (abs(ar1_rho) >= 0.999) stop("'ar1_rho' must be in (-0.999, 0.999).")
+      if (!is.finite(ar1_rho)) stop("`ar1_rho` must be finite or NA when use_ar1=TRUE.")
+      if (abs(ar1_rho) >= 0.999) stop("`ar1_rho` must be in (-0.999, 0.999).")
     }
   } else {
     ar1_rho <- NA_real_
   }
 
-  # Two-method path
+  # ---- two-method path -------------------------------------------------------
   if (length(mlev) == 2L) {
-    idx <- method %in% mlev
+    idx <- m %in% mlev & is.finite(y) & !is.na(s) & !is.na(t)
     res1 <- .ba_rep_two_methods(
-      response[idx], subject[idx], as.integer(method[idx] == mlev[1L]) + 1L,
-      time[idx], two, conf_level, include_slope, use_ar1, ar1_rho, max_iter, tol
+      response = y[idx],
+      subject  = s[idx],
+      method12 = as.integer(m[idx] == mlev[1L]) + 1L,
+      time     = t[idx],
+      two = two, conf_level = conf_level, include_slope = include_slope,
+      use_ar1 = use_ar1, ar1_rho = ar1_rho, max_iter = max_iter, tol = tol
     )
+    # attach mapping/data_long for downstream plotting
+    res1$data_long <- data_long
+    res1$mapping   <- mapping
+    attr(res1, "conf.level") <- conf_level
     return(res1)
   }
 
-  # N-method pairwise path
-  if (isTRUE(verbose)) cat("Repeated BA (pairwise):", length(mlev), "methods ->",
-                           choose(length(mlev), 2L), "pairs\n")
+  # ---- N-method pairwise path ------------------------------------------------
+  if (isTRUE(verbose)) {
+    cat("Repeated BA (pairwise):", length(mlev), "methods ->",
+        choose(length(mlev), 2L), "pairs\n")
+  }
 
   methods <- mlev
-  m <- length(methods)
-  mk <- function(val = NA_real_, storage = "double") {
-    out <- matrix(val, m, m)
-    dimnames(out) <- list(methods, methods)
-    storage.mode(out) <- storage
-    out
-  }
-  bias         <- mk()
-  sd_loa       <- mk()
-  loa_lower    <- mk()
-  loa_upper    <- mk()
-  width        <- mk()
-  n_mat        <- mk(NA_integer_, storage = "integer")
-  mean_ci_low  <- mk()
-  mean_ci_high <- mk()
-  lo_ci_low    <- mk()
-  lo_ci_high   <- mk()
-  hi_ci_low    <- mk()
-  hi_ci_high   <- mk()
-  slope_mat    <- if (isTRUE(include_slope)) mk() else NULL
-  vc_subject   <- mk()
-  vc_resid     <- mk()
-  ar1_rho_mat   <- if (isTRUE(use_ar1)) mk() else NULL
+  mm <- length(methods)
+
+  bias         <- .make_named_matrix_ba(methods)
+  sd_loa       <- .make_named_matrix_ba(methods)
+  loa_lower    <- .make_named_matrix_ba(methods)
+  loa_upper    <- .make_named_matrix_ba(methods)
+  width        <- .make_named_matrix_ba(methods)
+  n_mat        <- .make_named_matrix_ba(methods, NA_integer_, "integer")
+  mean_ci_low  <- .make_named_matrix_ba(methods)
+  mean_ci_high <- .make_named_matrix_ba(methods)
+  lo_ci_low    <- .make_named_matrix_ba(methods)
+  lo_ci_high   <- .make_named_matrix_ba(methods)
+  hi_ci_low    <- .make_named_matrix_ba(methods)
+  hi_ci_high   <- .make_named_matrix_ba(methods)
+  slope_mat    <- if (isTRUE(include_slope)) .make_named_matrix_ba(methods) else NULL
+  vc_subject   <- .make_named_matrix_ba(methods)
+  vc_resid     <- .make_named_matrix_ba(methods)
+  ar1_rho_mat   <- if (isTRUE(use_ar1)) .make_named_matrix_ba(methods) else NULL
   ar1_estimated <- if (isTRUE(use_ar1)) {
-    mtx <- matrix(NA, m, m, dimnames = list(methods, methods))
-    storage.mode(mtx) <- "logical"
-    mtx
+    z <- matrix(NA, mm, mm, dimnames = list(methods, methods))
+    storage.mode(z) <- "logical"
+    z
   } else NULL
 
-  # helper: from backend object LoA (±two*sd) and CIs at 'two'
   .recompose_pair <- function(fit) {
     list(
-      md = as.numeric(fit$bias_mu0),
-      sd = as.numeric(fit$sd_loa),
-      lo = as.numeric(fit$loa_lower),
-      hi = as.numeric(fit$loa_upper),
-      bias_l = as.numeric(fit$bias_lwr),
-      bias_u = as.numeric(fit$bias_upr),
-      lo_l   = as.numeric(fit$loa_lower_lwr),
-      lo_u   = as.numeric(fit$loa_lower_upr),
-      hi_l   = as.numeric(fit$loa_upper_lwr),
-      hi_u   = as.numeric(fit$loa_upper_upr)
+      md    = as.numeric(fit$bias_mu0),
+      sd    = as.numeric(fit$sd_loa),
+      lo    = as.numeric(fit$loa_lower),
+      hi    = as.numeric(fit$loa_upper),
+      bias_l= as.numeric(fit$bias_lwr),
+      bias_u= as.numeric(fit$bias_upr),
+      lo_l  = as.numeric(fit$loa_lower_lwr),
+      lo_u  = as.numeric(fit$loa_lower_upr),
+      hi_l  = as.numeric(fit$loa_upper_lwr),
+      hi_u  = as.numeric(fit$loa_upper_upr)
     )
   }
 
-  # loop pairs
-  for (j in 1:(m-1)) for (k in (j+1):m) {
+  for (j in 1:(mm - 1L)) for (k in (j + 1L):mm) {
     lev_j <- methods[j]; lev_k <- methods[k]
-    sel <- method %in% c(lev_j, lev_k) & is.finite(response) & !is.na(subject) & !is.na(time)
+    sel <- m %in% c(lev_j, lev_k) & is.finite(y) & !is.na(s) & !is.na(t)
     if (!any(sel)) next
-    m12 <- ifelse(method[sel] == lev_j, 1L, 2L)
+    m12 <- ifelse(m[sel] == lev_j, 1L, 2L)
 
     fit <- bland_altman_repeated_em_ext_cpp(
-      y = response[sel], subject = subject[sel], method = m12, time = time[sel],
+      y = y[sel], subject = s[sel], method = m12, time = t[sel],
       include_slope = include_slope,
       use_ar1 = use_ar1, ar1_rho = ar1_rho,
       max_iter = max_iter, tol = tol, conf_level = conf_level,
       two_arg = two
     )
-
     comp <- .recompose_pair(fit)
 
-    bias[j,k]      <- comp$md;     bias[k,j]      <- -comp$md
-    sd_loa[j,k]    <- comp$sd;     sd_loa[k,j]    <- comp$sd
-    loa_lower[j,k] <- comp$lo;     loa_lower[k,j] <- -comp$hi
-    loa_upper[j,k] <- comp$hi;     loa_upper[k,j] <- -comp$lo
+    bias[j,k]      <- comp$md;  bias[k,j]      <- -comp$md
+    sd_loa[j,k]    <- comp$sd;  sd_loa[k,j]    <-  comp$sd
+    loa_lower[j,k] <- comp$lo;  loa_lower[k,j] <- -comp$hi
+    loa_upper[j,k] <- comp$hi;  loa_upper[k,j] <- -comp$lo
     width[j,k]     <- comp$hi - comp$lo; width[k,j] <- width[j,k]
     n_mat[j,k]     <- as.integer(fit$n_pairs); n_mat[k,j] <- n_mat[j,k]
 
@@ -376,8 +412,8 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     hi_ci_low[j,k]    <- comp$hi_l;   hi_ci_low[k,j]    <- -comp$lo_u
     hi_ci_high[j,k]   <- comp$hi_u;   hi_ci_high[k,j]   <- -comp$lo_l
 
-    vc_subject[j,k]   <- vc_subject[k,j] <- as.numeric(fit$sigma2_subject)
-    vc_resid[j,k]     <- vc_resid[k,j]   <- as.numeric(fit$sigma2_resid)
+    vc_subject[j,k] <- vc_subject[k,j] <- as.numeric(fit$sigma2_subject)
+    vc_resid[j,k]   <- vc_resid[k,j]   <- as.numeric(fit$sigma2_resid)
 
     if (isTRUE(use_ar1)) {
       ar1_rho_used <- as.numeric(fit$ar1_rho)
@@ -387,7 +423,7 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
 
     if (!is.null(slope_mat)) {
       slope <- as.numeric(fit$beta_slope)
-      slope_mat[j,k] <- slope
+      slope_mat[j,k] <-  slope
       slope_mat[k,j] <- -slope
     }
 
@@ -420,15 +456,14 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     sigma2_resid   = vc_resid,
     ar1_rho_pair   = if (use_ar1) ar1_rho_mat else NULL,
     ar1_estimated  = if (use_ar1) ar1_estimated else NULL,
-    data_long      = data.frame(
-      response = response, subject = subject, method = method, time = time,
-      check.names = FALSE
-    )
+    data_long      = data_long,
+    mapping        = mapping
   )
   class(ba_repeated) <- c("ba_repeated_matrix","list")
   attr(ba_repeated, "conf.level") <- conf_level
   ba_repeated
 }
+
 
 
 
@@ -451,7 +486,6 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
   loa_lower <- as.numeric(fit$loa_lower)
   loa_upper <- as.numeric(fit$loa_upper)
 
-  # CI lines straight from the backend
   CI.lines <- c(
     "mean.diff.ci.lower"   = as.numeric(fit$bias_lwr),
     "mean.diff.ci.upper"   = as.numeric(fit$bias_upr),
@@ -467,8 +501,6 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
   ba_repeated <- list(
     means         = means,
     diffs         = diffs,
-    groups        = data.frame(subject = subject[!is.na(response)], time = time[!is.na(response)])[seq_along(means), , drop = FALSE],
-    based_on      = as.integer(fit$n_pairs),  # (kept as-is if you already used 'based.on')
     based.on      = as.integer(fit$n_pairs),
     lower.limit   = loa_lower,
     mean.diffs    = md,
@@ -477,7 +509,6 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     CI.lines      = CI.lines,
     two           = two,
     critical.diff = two * sdL,
-    conf_level    = conf_level,
     include_slope = include_slope,
     beta_slope    = if (include_slope) as.numeric(fit$beta_slope) else NA_real_,
     sigma2_subject= as.numeric(fit$sigma2_subject),
@@ -490,6 +521,8 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
   attr(ba_repeated, "conf.level") <- conf_level
   ba_repeated
 }
+
+
 
 
 # ---------- printers ----------
@@ -518,7 +551,7 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
   lo_l   <- cil("lower.limit.ci.lower"); lo_u <- cil("lower.limit.ci.upper")
   hi_l   <- cil("upper.limit.ci.lower"); hi_u <- cil("upper.limit.ci.upper")
 
-  head <- sprintf("Repeated-measures Bland-Altman (pairs = %d) - LoA = mean +/- %.3g * SD%s\n\n",
+  head <- sprintf("Repeated-measures Bland-Altman (pairs = %d) - LoA = mean \u00B1 %.3g * SD%s\n\n",
                   n, two, if (is.finite(cl)) sprintf(", %g%% CI", 100*cl) else "")
   cat(head)
 
@@ -527,8 +560,7 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
     estimate = c(md, loaL, loaU),
     lwr      = c(bias_l, lo_l, hi_l),
     upr      = c(bias_u, lo_u, hi_u),
-    check.names = FALSE,
-    row.names   = NULL
+    check.names = FALSE
   )
   df$estimate <- formatC(df$estimate, format = "f", digits = digits)
   df$lwr      <- formatC(df$lwr,      format = "f", digits = ci_digits)
@@ -547,7 +579,13 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
   invisible(x)
 }
 
-#' @export
+#' @rdname bland_altman_repeated
+#' @method print ba_repeated_matrix
+#' @param x A \code{"ba_repeated_matrix"} object.
+#' @param digits Number of digits for estimates (default 3).
+#' @param ci_digits Number of digits for CI bounds (default 3).
+#' @param style Show as pairs or matrix format?
+#' @param ... Unused.
 print.ba_repeated_matrix <- function(x,
                                      digits = 3,
                                      ci_digits = 3,
@@ -555,20 +593,26 @@ print.ba_repeated_matrix <- function(x,
                                      ...) {
   stopifnot(inherits(x, "ba_repeated_matrix"))
   style <- match.arg(style)
-
-  # Back-compat: allow old 'show' argument to force matrix view
-  dots <- list(...)
-  if (!is.null(dots$show)) style <- "matrices"
-
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   has_ci <- all(c("mean_ci_low","mean_ci_high",
                   "loa_lower_ci_low","loa_lower_ci_high",
                   "loa_upper_ci_low","loa_upper_ci_high") %in% names(x))
 
   if (style == "matrices") {
-    # old behavior (unchanged)
-    show <- if (is.null(dots$show)) c("bias","width","sd_loa") else dots$show
-    NextMethod("print", x, digits = digits, show = show, ...)
+    if (is.finite(cl)) cat(sprintf("Bland-Altman (pairwise matrices), %g%% CI\n\n", 100*cl))
+    else               cat("Bland-Altman (pairwise matrices)\n\n")
+    mats <- list(
+      bias    = x$bias,
+      sd_loa  = x$sd_loa,
+      loa_low = x$loa_lower,
+      loa_up  = x$loa_upper,
+      width   = x$width,
+      n       = x$n
+    )
+    for (nm in names(mats)) {
+      cat("\n", nm, ":\n", sep = "")
+      print(round(mats[[nm]], if (nm == "n") 0 else digits))
+    }
     return(invisible(x))
   }
 
@@ -578,41 +622,40 @@ print.ba_repeated_matrix <- function(x,
   k <- 0L
   for (i in 1:(m-1)) for (j in (i+1):m) {
     k <- k + 1L
-    bias <- x$bias[i,j]
-    sd   <- x$sd_loa[i,j]
-    lo   <- x$loa_lower[i,j]
-    hi   <- x$loa_upper[i,j]
-    w    <- x$width[i,j]
-
     row <- list(
       method1 = methods[i],
       method2 = methods[j],
-      bias    = round(bias, digits),
-      sd_loa  = round(sd,   digits),
-      loa_low = round(lo,   digits),
-      loa_up  = round(hi,   digits),
-      width   = round(w,    digits),
+      bias    = round(x$bias[i,j],     digits),
+      sd_loa  = round(x$sd_loa[i,j],   digits),
+      loa_low = round(x$loa_lower[i,j],digits),
+      loa_up  = round(x$loa_upper[i,j],digits),
+      width   = round(x$width[i,j],    digits),
       n       = suppressWarnings(as.integer(x$n[i,j]))
     )
-
     if (has_ci && is.finite(cl)) {
-      row$bias_lwr <- round(x$mean_ci_low[i,j],        ci_digits)
-      row$bias_upr <- round(x$mean_ci_high[i,j],       ci_digits)
-      row$lo_lwr   <- round(x$loa_lower_ci_low[i,j],   ci_digits)
-      row$lo_upr   <- round(x$loa_lower_ci_high[i,j],  ci_digits)
-      row$up_lwr   <- round(x$loa_upper_ci_low[i,j],   ci_digits)
-      row$up_upr   <- round(x$loa_upper_ci_high[i,j],  ci_digits)
+      row$bias_lwr <- round(x$mean_ci_low[i,j],       ci_digits)
+      row$bias_upr <- round(x$mean_ci_high[i,j],      ci_digits)
+      row$lo_lwr   <- round(x$loa_lower_ci_low[i,j],  ci_digits)
+      row$lo_upr   <- round(x$loa_lower_ci_high[i,j], ci_digits)
+      row$up_lwr   <- round(x$loa_upper_ci_low[i,j],  ci_digits)
+      row$up_upr   <- round(x$loa_upper_ci_high[i,j], ci_digits)
+    }
+    row$sigma2_subject <- round(x$sigma2_subject[i,j], digits)
+    row$sigma2_resid   <- round(x$sigma2_resid[i,j],   digits)
+    if (isTRUE(x$use_ar1)) {
+      rho_ij <- if (!is.null(x$ar1_rho_pair)) x$ar1_rho_pair[i,j] else NA_real_
+      est_ij <- if (!is.null(x$ar1_estimated)) isTRUE(x$ar1_estimated[i,j]) else NA
+      row$ar1_rho       <- round(rho_ij, digits)
+      row$ar1_estimated <- est_ij
     }
     rows[[k]] <- row
   }
-
   df <- do.call(rbind.data.frame, rows)
-  if (is.finite(cl)) cat(sprintf("Bland–Altman (row − column), %g%% CI\n\n", 100*cl))
-  else               cat("Bland–Altman (row − column)\n\n")
+  if (is.finite(cl)) cat(sprintf("Bland-Altman (row \u2212 column), %g%% CI\n\n", 100*cl))
+  else               cat("Bland-Altman (row \u2212 column)\n\n")
   print(df, row.names = FALSE, right = FALSE)
   invisible(x)
 }
-
 
 #' @method summary ba_repeated
 #' @export
@@ -624,40 +667,41 @@ summary.ba_repeated <- function(object,
   cl <- suppressWarnings(as.numeric(attr(object, "conf.level")))
   n  <- as.integer(object$based.on)
 
-  out <- data.frame(
+  ba_repeated <- data.frame(
     method1   = "method 1",
     method2   = "method 2",
-    bias      = round(num_or_na(object$mean.diffs), digits),
-    sd_loa    = round(num_or_na(object$critical.diff) / num_or_na(object$two), digits),
-    loa_low   = round(num_or_na(object$lower.limit), digits),
-    loa_up    = round(num_or_na(object$upper.limit), digits),
-    width     = round(num_or_na(object$upper.limit - object$lower.limit), digits),
+    bias      = round(num_or_na_ba(object$mean.diffs), digits),
+    sd_loa    = round(num_or_na_ba(object$critical.diff) / num_or_na_ba(object$two), digits),
+    loa_low   = round(num_or_na_ba(object$lower.limit), digits),
+    loa_up    = round(num_or_na_ba(object$upper.limit), digits),
+    width     = round(num_or_na_ba(object$upper.limit - object$lower.limit), digits),
     n         = n,
     stringsAsFactors = FALSE, check.names = FALSE
   )
 
-  cil <- function(nm) num_or_na(object$CI.lines[[nm]])
+  cil <- function(nm) num_or_na_ba(object$CI.lines[[nm]])
   if (!any(is.na(c(cil("mean.diff.ci.lower"), cil("mean.diff.ci.upper"),
                    cil("lower.limit.ci.lower"), cil("lower.limit.ci.upper"),
                    cil("upper.limit.ci.lower"), cil("upper.limit.ci.upper"))))) {
-    out$bias_lwr <- round(cil("mean.diff.ci.lower"), ci_digits)
-    out$bias_upr <- round(cil("mean.diff.ci.upper"), ci_digits)
-    out$lo_lwr   <- round(cil("lower.limit.ci.lower"), ci_digits)
-    out$lo_upr   <- round(cil("lower.limit.ci.upper"), ci_digits)
-    out$up_lwr   <- round(cil("upper.limit.ci.lower"), ci_digits)
-    out$up_upr   <- round(cil("upper.limit.ci.upper"), ci_digits)
+    ba_repeated$bias_lwr <- round(cil("mean.diff.ci.lower"), ci_digits)
+    ba_repeated$bias_upr <- round(cil("mean.diff.ci.upper"), ci_digits)
+    ba_repeated$lo_lwr   <- round(cil("lower.limit.ci.lower"), ci_digits)
+    ba_repeated$lo_upr   <- round(cil("lower.limit.ci.upper"), ci_digits)
+    ba_repeated$up_lwr   <- round(cil("upper.limit.ci.lower"), ci_digits)
+    ba_repeated$up_upr   <- round(cil("upper.limit.ci.upper"), ci_digits)
   }
 
-  out$sigma2_subject <- round(num_or_na(object$sigma2_subject), digits)
-  out$sigma2_resid   <- round(num_or_na(object$sigma2_resid),   digits)
-  out$use_ar1        <- isTRUE(object$use_ar1)
-  out$ar1_rho        <- if (isTRUE(object$use_ar1)) round(num_or_na(object$ar1_rho), digits) else NA_real_
-  out$ar1_estimated  <- if (isTRUE(object$use_ar1)) isTRUE(object$ar1_estimated) else NA
+  ba_repeated$sigma2_subject <- round(num_or_na_ba(object$sigma2_subject), digits)
+  ba_repeated$sigma2_resid   <- round(num_or_na_ba(object$sigma2_resid),   digits)
+  ba_repeated$use_ar1        <- isTRUE(object$use_ar1)
+  ba_repeated$ar1_rho        <- if (isTRUE(object$use_ar1)) round(num_or_na_ba(object$ar1_rho), digits) else NA_real_
+  ba_repeated$ar1_estimated  <- if (isTRUE(object$use_ar1)) isTRUE(object$ar1_estimated) else NA
 
-  attr(out, "conf.level") <- cl
-  class(out) <- c("summary.ba_repeated","data.frame")
-  out
+  attr(ba_repeated, "conf.level") <- cl
+  class(ba_repeated) <- c("summary.ba_repeated","data.frame")
+  ba_repeated
 }
+
 
 #' @method summary ba_repeated_matrix
 #' @export
@@ -686,7 +730,9 @@ summary.ba_repeated_matrix <- function(object,
       loa_low = round(object$loa_lower[i, j], digits),
       loa_up  = round(object$loa_upper[i, j], digits),
       width   = round(object$width[i, j], digits),
-      n       = suppressWarnings(as.integer(object$n[i, j]))
+      n       = suppressWarnings(as.integer(object$n[i, j])),
+      sigma2_subject = round(object$sigma2_subject[i, j], digits),
+      sigma2_resid   = round(object$sigma2_resid[i, j],   digits)
     )
     if (has_ci && is.finite(cl)) {
       row$bias_lwr <- round(object$mean_ci_low[i, j],       ci_digits)
@@ -696,16 +742,12 @@ summary.ba_repeated_matrix <- function(object,
       row$up_lwr   <- round(object$loa_upper_ci_low[i, j],  ci_digits)
       row$up_upr   <- round(object$loa_upper_ci_high[i, j], ci_digits)
     }
-
-    row$sigma2_subject <- round(object$sigma2_subject[i, j], digits)
-    row$sigma2_resid   <- round(object$sigma2_resid[i, j],   digits)
     if (isTRUE(object$use_ar1)) {
       rho_ij <- if (!is.null(object$ar1_rho_pair)) object$ar1_rho_pair[i, j] else NA_real_
       est_ij <- if (!is.null(object$ar1_estimated)) isTRUE(object$ar1_estimated[i, j]) else NA
       row$ar1_rho       <- round(rho_ij, digits)
       row$ar1_estimated <- est_ij
     }
-
     rows[[k]] <- row
   }
   df <- do.call(rbind.data.frame, rows)
@@ -719,8 +761,8 @@ summary.ba_repeated_matrix <- function(object,
 #' @export
 print.summary.ba_repeated <- function(x, ...) {
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (is.finite(cl)) cat(sprintf("Bland–Altman (two methods), %g%% CI\n\n", 100*cl))
-  else               cat("Bland–Altman (two methods)\n\n")
+  if (is.finite(cl)) cat(sprintf("Bland-Altman (two methods), %g%% CI\n\n", 100*cl))
+  else               cat("Bland-Altman (two methods)\n\n")
   print.data.frame(x, row.names = FALSE, right = FALSE, ...)
   invisible(x)
 }
@@ -729,8 +771,8 @@ print.summary.ba_repeated <- function(x, ...) {
 #' @export
 print.summary.ba_repeated_matrix <- function(x, ...) {
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (is.finite(cl)) cat(sprintf("Bland–Altman (pairwise), %g%% CI\n\n", 100*cl))
-  else               cat("Bland–Altman (pairwise)\n\n")
+  if (is.finite(cl)) cat(sprintf("Bland-Altman (pairwise), %g%% CI\n\n", 100*cl))
+  else               cat("Bland-Altman (pairwise)\n\n")
   print.data.frame(x, row.names = FALSE, right = FALSE, ...)
   invisible(x)
 }
@@ -739,16 +781,51 @@ print.summary.ba_repeated_matrix <- function(x, ...) {
 
 #' @rdname bland_altman_repeated
 #' @method plot ba_repeated
-#' @param title Plot title.
-#' @param subtitle Optional subtitle; if NULL, shows n and LoA summary.
-#' @param point_alpha,point_size,line_size,shade_ci,shade_alpha Same semantics
-#' as \code{plot.ba()}.
-#' @param smoother One of "none","loess","lm" to visualize proportional bias
-#' (only if points shown).
-#' @param symmetrize_y Logical; if TRUE, y-axis centered at bias with symmetric
-#' limits.
-#' @param show_points Logical; if FALSE or if no point data stored, draw
-#' bands-only.
+#' @param title Plot title (character scalar). Defaults to
+#'   `"Bland-Altman (repeated measurements)"` for two methods and
+#'   `"Bland-Altman (repeated, pairwise)"` for the faceted matrix plot.
+#' @param subtitle Optional subtitle (character scalar). If `NULL`, a compact
+#'   summary is shown using the fitted object.
+#' @param point_alpha Numeric in `[0, 1]`. Transparency for scatter points
+#'   drawn at (pair mean, pair difference) when point data are available.
+#'   Passed to `ggplot2::geom_point(alpha = ...)`. Default `0.7`.
+#'
+#' @param point_size Positive numeric. Size of scatter points; passed to
+#'   `ggplot2::geom_point(size = ...)`. Default `2.2`.
+#'
+#' @param line_size Positive numeric. Line width for horizontal bands
+#'   (bias and both LoA) and, when requested, the proportional-bias line.
+#'   Passed to `ggplot2::geom_hline(linewidth = ...)` (and `geom_abline`).
+#'   Default `0.8`.
+#'
+#' @param shade_ci Logical. If `TRUE` and confidence intervals are available in
+#'   the object (`CI.lines` for two methods; `*_ci_*` matrices for the pairwise
+#'   case), semi-transparent rectangles are drawn to indicate CI bands for the
+#'   bias and each LoA. If `FALSE`, dashed horizontal CI lines are drawn instead.
+#'   Has no effect if CIs are not present. Default `TRUE`.
+#'
+#' @param shade_alpha Numeric in `[0, 1]`. Opacity of the CI shading
+#'   rectangles when `shade_ci = TRUE`. Passed to `ggplot2::annotate("rect", alpha = ...)`.
+#'   Default `0.08`.
+#'
+#' @param smoother One of `"none"`, `"loess"`, or `"lm"`. Adds an overlaid trend
+#'   for differences vs means when points are drawn, to visualise proportional
+#'   bias. `"lm"` fits a straight line with no SE ribbon; `"loess"` draws a
+#'   locally-smoothed curve (span 0.9) with no SE ribbon; `"none"` draws no
+#'   smoother. Ignored if `show_points = FALSE` or if no point data are available.
+#'
+#' @param symmetrize_y Logical (two-method plot only). If `TRUE`, the y-axis is
+#'   centred at the estimated bias and expanded symmetrically to cover all
+#'   elements used to compute the range (bands, CIs, and points if shown).
+#'   Default `TRUE`.
+#'
+#' @param show_points Logical. If `TRUE`, per-pair points are drawn when present
+#'   in the fitted object (two-method path) or when they can be reconstructed
+#'   from `x$data_long` and `x$mapping` (pairwise path). If `FALSE` or if point
+#'   data are unavailable, only the bands (and optional CI indicators) are drawn.
+#'   Default `TRUE`.
+#' @param ... Additional theme adjustments passed to `ggplot2::theme(...)`
+#'   (e.g., `plot.title.position = "plot"`, `axis.title.x = element_text(size=11)`).
 #' @importFrom graphics abline lines par rect plot
 #' @export
 plot.ba_repeated <- function(x,
@@ -766,12 +843,11 @@ plot.ba_repeated <- function(x,
   stopifnot(inherits(x, "ba_repeated"))
   smoother <- match.arg(smoother)
 
-  # Stored point data (may be absent in some objects)
+  # Prefer pre-computed points if present
   has_pts <- !is.null(x$means) && !is.null(x$diffs)
-  if (!has_pts) show_points <- FALSE
-
   means <- if (has_pts) as.numeric(x$means) else numeric()
   diffs <- if (has_pts) as.numeric(x$diffs) else numeric()
+  if (!has_pts) show_points <- FALSE
 
   # Bands
   md    <- as.numeric(x$mean.diffs)
@@ -779,7 +855,6 @@ plot.ba_repeated <- function(x,
   loaU  <- as.numeric(x$upper.limit)
   two   <- as.numeric(x$two)
   n     <- as.integer(x$based.on)
-  sd_d  <- as.numeric(x$critical.diff) / two
   cl    <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   ci_val <- function(nm) if (!is.null(x$CI.lines)) suppressWarnings(as.numeric(x$CI.lines[[nm]])) else NA_real_
   has_ci <- !is.null(x$CI.lines) &&
@@ -789,15 +864,15 @@ plot.ba_repeated <- function(x,
 
   if (is.null(subtitle)) {
     subtitle <- if (is.finite(cl)) {
-      sprintf("pairs = %d  •  mean diff = %.2f  •  LoA = [%.2f, %.2f]  •  %g%% CI",
+      sprintf("pairs = %d *  mean diff = %.3g *  LoA = [%.3g, %.3g] *  %g%% CI",
               n, md, loaL, loaU, 100*cl)
     } else {
-      sprintf("pairs = %d  •  mean diff = %.2f  •  LoA = [%.2f, %.2f]",
+      sprintf("pairs = %d *  mean diff = %.3g *  LoA = [%.3g, %.3g]",
               n, md, loaL, loaU)
     }
   }
 
-  # Choose y-range: prefer points if present; else from bands/CI
+  # y-range
   y_bits <- c(loaL, loaU, md)
   if (has_ci) {
     y_bits <- c(y_bits,
@@ -811,23 +886,22 @@ plot.ba_repeated <- function(x,
     half <- max(abs(c(y_rng[1] - md, y_rng[2] - md)))
     y_rng <- c(md - half, md + half)
   }
-  # ggplot
-  p <- ggplot()
 
-  # CI shading or dashed bands
+  p <- ggplot2::ggplot()
+
   if (isTRUE(has_ci) && shade_ci) {
     p <- p +
-      annotate("rect", xmin = -Inf, xmax = Inf,
-               ymin = ci_val("mean.diff.ci.lower"), ymax = ci_val("mean.diff.ci.upper"),
-               alpha = shade_alpha) +
-      annotate("rect", xmin = -Inf, xmax = Inf,
-               ymin = ci_val("lower.limit.ci.lower"), ymax = ci_val("lower.limit.ci.upper"),
-               alpha = shade_alpha) +
-      annotate("rect", xmin = -Inf, xmax = Inf,
-               ymin = ci_val("upper.limit.ci.lower"), ymax = ci_val("upper.limit.ci.upper"),
-               alpha = shade_alpha)
+      ggplot2::annotate("rect", xmin = -Inf, xmax = Inf,
+                        ymin = ci_val("mean.diff.ci.lower"), ymax = ci_val("mean.diff.ci.upper"),
+                        alpha = shade_alpha) +
+      ggplot2::annotate("rect", xmin = -Inf, xmax = Inf,
+                        ymin = ci_val("lower.limit.ci.lower"), ymax = ci_val("lower.limit.ci.upper"),
+                        alpha = shade_alpha) +
+      ggplot2::annotate("rect", xmin = -Inf, xmax = Inf,
+                        ymin = ci_val("upper.limit.ci.lower"), ymax = ci_val("upper.limit.ci.upper"),
+                        alpha = shade_alpha)
   } else if (isTRUE(has_ci)) {
-    p <- p + geom_hline(yintercept = c(
+    p <- p + ggplot2::geom_hline(yintercept = c(
       ci_val("mean.diff.ci.lower"),  ci_val("mean.diff.ci.upper"),
       ci_val("lower.limit.ci.lower"),ci_val("lower.limit.ci.upper"),
       ci_val("upper.limit.ci.lower"),ci_val("upper.limit.ci.upper")),
@@ -835,47 +909,54 @@ plot.ba_repeated <- function(x,
     )
   }
 
-  # Zero and BA bands
   p <- p +
-    geom_hline(yintercept = 0, linewidth = 0.4, linetype = "dotted", color = "grey40") +
-    geom_hline(yintercept = md,   linewidth = line_size) +
-    geom_hline(yintercept = loaL, linewidth = line_size) +
-    geom_hline(yintercept = loaU, linewidth = line_size)
+    ggplot2::geom_hline(yintercept = 0, linewidth = 0.4, linetype = "dotted", colour = "grey40") +
+    ggplot2::geom_hline(yintercept = md,   linewidth = line_size) +
+    ggplot2::geom_hline(yintercept = loaL, linewidth = line_size) +
+    ggplot2::geom_hline(yintercept = loaU, linewidth = line_size)
 
-  # Points + optional smoother (only if we have them and user wants)
   if (show_points && length(means) && length(diffs)) {
     df <- data.frame(means = means, diffs = diffs)
-    p <- p + geom_point(data = df, aes(x = means, y = diffs),
-                        alpha = point_alpha, size = point_size)
+    p <- p + ggplot2::geom_point(data = df, ggplot2::aes(x = means, y = diffs),
+                                 alpha = point_alpha, size = point_size)
     if (smoother == "lm") {
-      p <- p + geom_smooth(data = df, aes(x = means, y = diffs),
-                           method = "lm", se = FALSE, linewidth = 0.7)
+      p <- p + ggplot2::geom_smooth(data = df, ggplot2::aes(x = means, y = diffs),
+                                    method = "lm", se = FALSE, linewidth = 0.7)
     } else if (smoother == "loess") {
-      p <- p + geom_smooth(data = df, aes(x = means, y = diffs),
-                           method = "loess", se = FALSE, linewidth = 0.7, span = 0.9)
+      p <- p + ggplot2::geom_smooth(data = df, ggplot2::aes(x = means, y = diffs),
+                                    method = "loess", se = FALSE, linewidth = 0.7, span = 0.9)
     }
-    # Optional proportional-bias line (requires x support)
     if (isTRUE(x$include_slope) && is.finite(x$beta_slope)) {
-      p <- p + geom_abline(intercept = x$mean.diffs, slope = x$beta_slope, linewidth = line_size)
+      p <- p + ggplot2::geom_abline(intercept = x$mean.diffs, slope = x$beta_slope, linewidth = line_size)
     }
   }
 
   p +
-    coord_cartesian(ylim = y_rng, expand = TRUE) +
-    theme_minimal(base_size = 12) +
-    theme(panel.grid = element_blank(), ...) +
-    labs(title = title, subtitle = subtitle,
-         x = if (show_points) "Pair mean" else NULL,
-         y = "Difference (method 2 - method 1)")
+    ggplot2::coord_cartesian(ylim = y_rng, expand = TRUE) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(panel.grid = ggplot2::element_blank(), ...) +
+    ggplot2::labs(title = title, subtitle = subtitle,
+                  x = if (show_points) "Pair mean" else NULL,
+                  y = "Difference (method 2 \u2212 method 1)")
 }
 
-
-#' Faceted Bland-Altman plot for repeated
-#' @param x A "ba_repeated_matrix" from bland_altman_repeated().
-#' @param pairs Optional character vector of "row − column" labels to plot;
-#' default all upper-tri pairs.
-#' @param against Optional single method to plot against all others.
-#' @param facet_scales "free_y" (default) or "fixed".
+#' @rdname bland_altman_repeated
+#' @method plot ba_repeated_matrix
+#' @param pairs (Faceted pairwise plot only.) Optional character vector of
+#'   labels specifying which method contrasts to display. Labels must match the
+#'   "row - column" convention used by `print()`/`summary()` (e.g., `"B - A"`).
+#'   Defaults to all upper-triangle pairs.
+#'
+#' @param against (Faceted pairwise plot only.) Optional single method name.
+#'   If supplied, facets are restricted to contrasts of the chosen method
+#'   against all others. Ignored when `pairs` is provided.
+#'
+#' @param facet_scales (Faceted pairwise plot only.) Either `"free_y"` (default)
+#'   to allow each facet its own y-axis limits, or `"fixed"` for a common scale
+#'   across facets. Passed to `ggplot2::facet_wrap(scales = ...)`.
+#' @importFrom ggplot2 ggplot annotate geom_hline geom_point geom_smooth
+#' @importFrom ggplot2 coord_cartesian theme_minimal theme labs facet_wrap
+#' @importFrom ggplot2 element_blank
 #' @export
 plot.ba_repeated_matrix <- function(
     x,
@@ -895,7 +976,6 @@ plot.ba_repeated_matrix <- function(
   m <- length(methods)
   lab_pair <- function(i,j) paste(methods[i], "\u2212", methods[j])
 
-  ## ---------- build pair list (upper triangle) ----------
   idx_upper <- which(upper.tri(matrix(NA_real_, m, m)), arr.ind = TRUE)
   all_pairs <- data.frame(
     j   = idx_upper[,1],
@@ -913,10 +993,8 @@ plot.ba_repeated_matrix <- function(
     all_pairs <- subset(all_pairs, lab %in% pairs)
     if (!nrow(all_pairs)) stop("None of requested `pairs` matched.")
   }
-
   pairs_order <- all_pairs$lab
 
-  ## ---------- bands per panel from x ----------
   bands <- data.frame(
     pair = lab_pair(idx_upper[,1], idx_upper[,2]),
     md   = as.vector(x$bias[idx_upper]),
@@ -935,34 +1013,19 @@ plot.ba_repeated_matrix <- function(
 
   has_ci <- with(bands, all(is.finite(c(md_l, md_u, lo_l, lo_u, hi_l, hi_u))))
 
-  ## ---------- point data (optional) ----------
+  # Build point data from stored mapping (no hard-coded names)
   pts <- NULL
-  if (isTRUE(show_points) && !is.null(x$data_long)) {
-    df <- as.data.frame(x$data_long, check.names = FALSE)
-
-    # --- robust column detection (y/response) ---
-    subj_col <- "subject"
-    meth_col <- "method"
-    time_col <- "time"
-    if (!all(c(subj_col, meth_col, time_col) %in% names(df))) {
-      stop("`data_long` must contain columns 'subject', 'method', and 'time'.")
-    }
-    y_col <- if ("y" %in% names(df)) {
-      "y"
-    } else if ("response" %in% names(df)) {
-      "response"
-    } else {
-      # last resort: pick the first numeric column not among the keys
-      cand <- setdiff(names(df), c(subj_col, meth_col, time_col))
-      cand_num <- cand[vapply(df[cand], is.numeric, logical(1))]
-      if (length(cand_num) == 0L)
-        stop("Could not find outcome column in `data_long` (expected 'y' or 'response').")
-      cand_num[1]
-    }
+  if (isTRUE(show_points) && !is.null(x$data_long) && !is.null(x$mapping)) {
+    df  <- as.data.frame(x$data_long, check.names = FALSE)
+    map <- x$mapping
+    mY <- .resolve_map_col_ba(df, map, "response")
+    mS <- .resolve_map_col_ba(df, map, "subject")
+    mM <- .resolve_map_col_ba(df, map, "method")
+    mT <- .resolve_map_col_ba(df, map, "time")
 
     build_panel <- function(lev_j, lev_k, lab) {
-      a <- df[df[[meth_col]] == lev_j, c(subj_col, time_col, y_col)]
-      b <- df[df[[meth_col]] == lev_k, c(subj_col, time_col, y_col)]
+      a <- df[df[[mM]] == lev_j, c(mS, mT, mY)]
+      b <- df[df[[mM]] == lev_k, c(mS, mT, mY)]
       names(a) <- c("subject","time","yA"); names(b) <- c("subject","time","yB")
       ab <- merge(a, b, by = c("subject","time"), all = FALSE)
       if (!nrow(ab)) return(NULL)
@@ -982,10 +1045,9 @@ plot.ba_repeated_matrix <- function(
     }
   }
 
-  ## ---------- ggplot ----------
   p <- ggplot2::ggplot() + ggplot2::facet_wrap(~ pair, scales = facet_scales)
 
-  # Ensure y-scale is trained even without points
+  # Ensure y-scale trained even without points
   p <- p +
     ggplot2::geom_blank(data = bands, ggplot2::aes(x = 0, y = md))   +
     ggplot2::geom_blank(data = bands, ggplot2::aes(x = 0, y = loaL)) +
@@ -1011,14 +1073,12 @@ plot.ba_repeated_matrix <- function(
     }
   }
 
-  # Zero and BA bands
   p <- p +
     ggplot2::geom_hline(yintercept = 0, linewidth = 0.35, linetype = "dotted", colour = "grey40") +
     ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = md),   linewidth = line_size) +
     ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = loaL), linewidth = line_size) +
     ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = loaU), linewidth = line_size)
 
-  # Optional points + smoother
   if (!is.null(pts)) {
     p <- p + ggplot2::geom_point(data = pts, ggplot2::aes(x = means, y = diffs),
                                  alpha = point_alpha, size = point_size)
@@ -1034,6 +1094,43 @@ plot.ba_repeated_matrix <- function(
   p +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(panel.grid = ggplot2::element_blank(), ...) +
-    ggplot2::labs(title = title, x = if (!is.null(pts)) "Pair mean" else NULL,
-                  y = "Difference (row - column)")
+    ggplot2::labs(title = title,
+                  x = if (!is.null(pts)) "Pair mean" else NULL,
+                  y = "Difference (row \u2212 column)")
+}
+
+#' @keywords internal
+num_or_na_ba <- function(x) {
+  y <- suppressWarnings(as.numeric(x))
+  y[!is.finite(y)] <- NA_real_
+  y
+}
+
+#' @keywords internal
+.resolve_map_col_ba <- function(df, mapping, key) {
+  candidate <- mapping[[key]] %||% switch(key,
+                                          response = ".response",
+                                          subject  = ".subject",
+                                          method   = ".method",
+                                          time     = ".time"
+  )
+  if (candidate %in% names(df)) return(candidate)
+
+  canonical <- switch(key,
+                      response = ".response",
+                      subject  = ".subject",
+                      method   = ".method",
+                      time     = ".time"
+  )
+  if (canonical %in% names(df)) return(canonical)
+
+  stop("Column for '", key, "' not found in stored data_long.")
+}
+
+#' @keywords internal
+.make_named_matrix_ba <- function(methods, fill = NA_real_, storage = "double") {
+  m <- length(methods)
+  out <- matrix(fill, m, m, dimnames = list(methods, methods))
+  storage.mode(out) <- storage
+  out
 }

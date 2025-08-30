@@ -3,7 +3,9 @@
 \name{bland_altman_repeated}
 \alias{bland_altman_repeated}
 \alias{print.ba_repeated}
+\alias{print.ba_repeated_matrix}
 \alias{plot.ba_repeated}
+\alias{plot.ba_repeated_matrix}
 \title{Bland-Altman for repeated measurements}
 \usage{
 bland_altman_repeated(
@@ -24,6 +26,8 @@ bland_altman_repeated(
 
 \method{print}{ba_repeated}(x, digits = 3, ci_digits = 3, ...)
 
+\method{print}{ba_repeated_matrix}(x, digits = 3, ci_digits = 3, style = c("pairs", "matrices"), ...)
+
 \method{plot}{ba_repeated}(
   x,
   title = "Bland-Altman (repeated measurements)",
@@ -35,6 +39,22 @@ bland_altman_repeated(
   shade_alpha = 0.08,
   smoother = c("none", "loess", "lm"),
   symmetrize_y = TRUE,
+  show_points = TRUE,
+  ...
+)
+
+\method{plot}{ba_repeated_matrix}(
+  x,
+  pairs = NULL,
+  against = NULL,
+  facet_scales = c("free_y", "fixed"),
+  title = "Bland-Altman (repeated, pairwise)",
+  point_alpha = 0.6,
+  point_size = 1.8,
+  line_size = 0.7,
+  shade_ci = TRUE,
+  shade_alpha = 0.08,
+  smoother = c("none", "loess", "lm"),
   show_points = TRUE,
   ...
 )
@@ -68,29 +88,75 @@ a single character string giving the column name in \code{data}.}
 
 \item{verbose}{Logical; print brief progress.}
 
-\item{x}{A \code{"ba_repeated"} object.}
+\item{x}{A \code{"ba_repeated_matrix"} object.}
 
 \item{digits}{Number of digits for estimates (default 3).}
 
 \item{ci_digits}{Number of digits for CI bounds (default 3).}
 
-\item{...}{Unused.}
+\item{...}{Additional theme adjustments passed to \code{ggplot2::theme(...)}
+(e.g., \code{plot.title.position = "plot"}, \code{axis.title.x = element_text(size=11)}).}
 
-\item{title}{Plot title.}
+\item{style}{Show as pairs or matrix format?}
 
-\item{subtitle}{Optional subtitle; if NULL, shows n and LoA summary.}
+\item{title}{Plot title (character scalar). Defaults to
+\code{"Bland-Altman (repeated measurements)"} for two methods and
+\code{"Bland-Altman (repeated, pairwise)"} for the faceted matrix plot.}
 
-\item{point_alpha, point_size, line_size, shade_ci, shade_alpha}{Same semantics
-as \code{plot.ba()}.}
+\item{subtitle}{Optional subtitle (character scalar). If \code{NULL}, a compact
+summary is shown using the fitted object.}
 
-\item{smoother}{One of "none","loess","lm" to visualize proportional bias
-(only if points shown).}
+\item{point_alpha}{Numeric in \verb{[0, 1]}. Transparency for scatter points
+drawn at (pair mean, pair difference) when point data are available.
+Passed to \code{ggplot2::geom_point(alpha = ...)}. Default \code{0.7}.}
 
-\item{symmetrize_y}{Logical; if TRUE, y-axis centered at bias with symmetric
-limits.}
+\item{point_size}{Positive numeric. Size of scatter points; passed to
+\code{ggplot2::geom_point(size = ...)}. Default \code{2.2}.}
 
-\item{show_points}{Logical; if FALSE or if no point data stored, draw
-bands-only.}
+\item{line_size}{Positive numeric. Line width for horizontal bands
+(bias and both LoA) and, when requested, the proportional-bias line.
+Passed to \code{ggplot2::geom_hline(linewidth = ...)} (and \code{geom_abline}).
+Default \code{0.8}.}
+
+\item{shade_ci}{Logical. If \code{TRUE} and confidence intervals are available in
+the object (\code{CI.lines} for two methods; \verb{*_ci_*} matrices for the pairwise
+case), semi-transparent rectangles are drawn to indicate CI bands for the
+bias and each LoA. If \code{FALSE}, dashed horizontal CI lines are drawn instead.
+Has no effect if CIs are not present. Default \code{TRUE}.}
+
+\item{shade_alpha}{Numeric in \verb{[0, 1]}. Opacity of the CI shading
+rectangles when \code{shade_ci = TRUE}. Passed to \code{ggplot2::annotate("rect", alpha = ...)}.
+Default \code{0.08}.}
+
+\item{smoother}{One of \code{"none"}, \code{"loess"}, or \code{"lm"}. Adds an overlaid trend
+for differences vs means when points are drawn, to visualise proportional
+bias. \code{"lm"} fits a straight line with no SE ribbon; \code{"loess"} draws a
+locally-smoothed curve (span 0.9) with no SE ribbon; \code{"none"} draws no
+smoother. Ignored if \code{show_points = FALSE} or if no point data are available.}
+
+\item{symmetrize_y}{Logical (two-method plot only). If \code{TRUE}, the y-axis is
+centred at the estimated bias and expanded symmetrically to cover all
+elements used to compute the range (bands, CIs, and points if shown).
+Default \code{TRUE}.}
+
+\item{show_points}{Logical. If \code{TRUE}, per-pair points are drawn when present
+in the fitted object (two-method path) or when they can be reconstructed
+from \code{x$data_long} and \code{x$mapping} (pairwise path). If \code{FALSE} or if point
+data are unavailable, only the bands (and optional CI indicators) are drawn.
+Default \code{TRUE}.}
+
+\item{pairs}{(Faceted pairwise plot only.) Optional character vector of
+labels specifying which method contrasts to display. Labels must match the
+"row - column" convention used by \code{print()}/\code{summary()} (e.g., \code{"B - A"}).
+Defaults to all upper-triangle pairs.}
+
+\item{against}{(Faceted pairwise plot only.) Optional single method name.
+If supplied, facets are restricted to contrasts of the chosen method
+against all others. Ignored when \code{pairs} is provided.}
+
+\item{facet_scales}{(Faceted pairwise plot only.) Either \code{"free_y"} (default)
+to allow each facet its own y-axis limits, or \code{"fixed"} for a common scale
+across facets. Passed to \code{ggplot2::facet_wrap(scales = ...)}.}
 }
 \value{
 Either a \code{"ba_repeated"} object (exactly two methods) or a
@@ -98,7 +164,7 @@ Either a \code{"ba_repeated"} object (exactly two methods) or a
 
 \strong{If \code{"ba_repeated_matrix"} (N\eqn{\ge}3 methods)}, outputs are:
 \itemize{
-\item \code{bias} \eqn{(m \times m)}; estimated mean difference (row − column).
+\item \code{bias} \eqn{(m \times m)}; estimated mean difference (row - column).
 Diagonal is \code{NA}.
 \item \code{sd_loa} \eqn{(m \times m)}; estimated SD of a \emph{single new} paired
 difference for the (row, column) methods, accounting for the random
@@ -106,11 +172,11 @@ subject intercept and (if enabled) AR(1) correlation.
 \item \code{loa_lower}, \code{loa_upper} \eqn{(m \times m)}; limits of agreement
 for a single measurement pair, computed as
 \eqn{\mathrm{bias} \pm \mathrm{two}\times \mathrm{sd\_loa}}.
-Signs follow the row − column convention
+Signs follow the row - column convention
 (e.g., \code{loa_lower[j,i] = -loa_upper[i,j]}).
 \item \code{width} \eqn{(m \times m)}; LoA width,
-\code{loa_upper − loa_lower} (= \code{2 * two * sd_loa}).
-\item \code{n} \eqn{(m \times m)}; number of subject–time pairs used in each
+\code{loa_upper - loa_lower} (= \code{2 * two * sd_loa}).
+\item \code{n} \eqn{(m \times m)}; number of subject-time pairs used in each
 pairwise BA (complete cases where both methods are present).
 
 \item \strong{CI matrices at nominal \code{conf_level}} (delta method):
@@ -148,7 +214,7 @@ facilitate plotting/reproducibility; not required for summary methods.
 
 \strong{If \code{"ba_repeated"} (exactly two methods)}, outputs are:
 \itemize{
-\item \code{mean.diffs} \emph{(scalar)}; estimated bias (method 2 − method 1).
+\item \code{mean.diffs} \emph{(scalar)}; estimated bias (method 2 - method 1).
 \item \code{lower.limit}, \code{upper.limit} \emph{(scalars)}; LoA
 \eqn{\mu \pm \mathrm{two}\times \mathrm{SD}} for a single new pair.
 \item \code{critical.diff} \emph{(scalar)}; \code{two * SD}; LoA half-width.
@@ -157,7 +223,7 @@ facilitate plotting/reproducibility; not required for summary methods.
 (\code{*.ci.lower}, \code{*.ci.upper}) at \code{conf_level}.
 \item \code{means}, \code{diffs} \emph{(vectors)}; per-pair means and differences
 used by plotting helpers.
-\item \code{based.on} \emph{(integer)}; number of subject–time pairs used.
+\item \code{based.on} \emph{(integer)}; number of subject-time pairs used.
 \item \code{include_slope}, \code{beta_slope}; whether a proportional-bias slope
 was estimated and its value (if requested).
 \item \code{sigma2_subject}, \code{sigma2_resid}; variance components as above.
@@ -166,8 +232,8 @@ as above (scalars for the two-method fit).
 }
 }
 \description{
-Repeated-measures Bland–Altman (BA) for method comparison based on a
-mixed-effects model fitted to \strong{subject–time matched paired differences}.
+Repeated-measures Bland-Altman (BA) for method comparison based on a
+mixed-effects model fitted to \strong{subject-time matched paired differences}.
 A subject-specific random intercept accounts for clustering, and (optionally)
 an AR(1) process captures serial correlation across replicates within subject.
 The function returns bias (mean difference), limits of agreement (LoA),
