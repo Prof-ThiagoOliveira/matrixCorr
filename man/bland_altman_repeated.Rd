@@ -80,13 +80,17 @@ a single character string giving the column name in \code{data}.}
 
 \item{subtitle}{Optional subtitle; if NULL, shows n and LoA summary.}
 
-\item{point_alpha, point_size, line_size, shade_ci, shade_alpha}{Same semantics as \code{plot.ba()}.}
+\item{point_alpha, point_size, line_size, shade_ci, shade_alpha}{Same semantics
+as \code{plot.ba()}.}
 
-\item{smoother}{One of "none","loess","lm" to visualize proportional bias (only if points shown).}
+\item{smoother}{One of "none","loess","lm" to visualize proportional bias
+(only if points shown).}
 
-\item{symmetrize_y}{Logical; if TRUE, y-axis centered at bias with symmetric limits.}
+\item{symmetrize_y}{Logical; if TRUE, y-axis centered at bias with symmetric
+limits.}
 
-\item{show_points}{Logical; if FALSE or if no point data stored, draw bands-only.}
+\item{show_points}{Logical; if FALSE or if no point data stored, draw
+bands-only.}
 }
 \value{
 Either a \code{"ba_repeated"} object (exactly two methods) or a

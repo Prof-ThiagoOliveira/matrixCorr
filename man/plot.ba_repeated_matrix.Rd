@@ -2,7 +2,7 @@
 % Please edit documentation in R/bland_altman_repeated.R
 \name{plot.ba_repeated_matrix}
 \alias{plot.ba_repeated_matrix}
-\title{Faceted Bland-Altman plot for repeated (pairwise, NO external data)}
+\title{Faceted Bland-Altman plot for repeated}
 \usage{
 \method{plot}{ba_repeated_matrix}(
   x,
@@ -23,12 +23,13 @@
 \arguments{
 \item{x}{A "ba_repeated_matrix" from bland_altman_repeated().}
 
-\item{pairs}{Optional character vector of "row − column" labels to plot; default all upper-tri pairs.}
+\item{pairs}{Optional character vector of "row − column" labels to plot;
+default all upper-tri pairs.}
 
 \item{against}{Optional single method to plot against all others.}
 
 \item{facet_scales}{"free_y" (default) or "fixed".}
 }
 \description{
-Faceted Bland-Altman plot for repeated (pairwise, NO external data)
+Faceted Bland-Altman plot for repeated
 }

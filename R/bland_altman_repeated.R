@@ -741,10 +741,14 @@ print.summary.ba_repeated_matrix <- function(x, ...) {
 #' @method plot ba_repeated
 #' @param title Plot title.
 #' @param subtitle Optional subtitle; if NULL, shows n and LoA summary.
-#' @param point_alpha,point_size,line_size,shade_ci,shade_alpha Same semantics as \code{plot.ba()}.
-#' @param smoother One of "none","loess","lm" to visualize proportional bias (only if points shown).
-#' @param symmetrize_y Logical; if TRUE, y-axis centered at bias with symmetric limits.
-#' @param show_points Logical; if FALSE or if no point data stored, draw bands-only.
+#' @param point_alpha,point_size,line_size,shade_ci,shade_alpha Same semantics
+#' as \code{plot.ba()}.
+#' @param smoother One of "none","loess","lm" to visualize proportional bias
+#' (only if points shown).
+#' @param symmetrize_y Logical; if TRUE, y-axis centered at bias with symmetric
+#' limits.
+#' @param show_points Logical; if FALSE or if no point data stored, draw
+#' bands-only.
 #' @importFrom graphics abline lines par rect plot
 #' @export
 plot.ba_repeated <- function(x,
@@ -866,15 +870,10 @@ plot.ba_repeated <- function(x,
 }
 
 
-#' Faceted Bland-Altman plot for repeated (pairwise, NO external data)
+#' Faceted Bland-Altman plot for repeated
 #' @param x A "ba_repeated_matrix" from bland_altman_repeated().
-#' @param pairs Optional character vector of "row − column" labels to plot; default all upper-tri pairs.
-#' @param against Optional single method to plot against all others.
-#' @param facet_scales "free_y" (default) or "fixed".
-#' @export
-#' Faceted Bland-Altman plot for repeated (pairwise, NO external data)
-#' @param x A "ba_repeated_matrix" from bland_altman_repeated().
-#' @param pairs Optional character vector of "row − column" labels to plot; default all upper-tri pairs.
+#' @param pairs Optional character vector of "row − column" labels to plot;
+#' default all upper-tri pairs.
 #' @param against Optional single method to plot against all others.
 #' @param facet_scales "free_y" (default) or "fixed".
 #' @export
