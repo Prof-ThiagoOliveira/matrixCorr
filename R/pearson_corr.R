@@ -95,7 +95,7 @@
 #' @useDynLib matrixCorr, .registration = TRUE
 #' @importFrom Rcpp evalCpp
 #' @seealso \code{\link{print.pearson_corr}}, \code{\link{plot.pearson_corr}}
-#' @author Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
+#' @author Thiago de Paula Oliveira
 #' @export
 pearson_corr <- function(data) {
   numeric_data <- validate_corr_input(data)

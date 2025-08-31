@@ -75,7 +75,7 @@
 #'
 #' @seealso \code{\link{print.kendall_matrix}},
 #' \code{\link{print.kendall_matrix}}
-#' @author Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
+#' @author Thiago de Paula Oliveira
 #' @export
 kendall_tau <- function(data) {
   numeric_data <- validate_corr_input(data)

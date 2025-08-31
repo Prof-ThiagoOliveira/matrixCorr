@@ -53,7 +53,7 @@ Useful links:
 \code{\link[=pearson_corr]{pearson_corr()}}, \code{\link[=spearman_rho]{spearman_rho()}}, \code{\link[=kendall_tau]{kendall_tau()}}
 }
 \author{
-\strong{Maintainer}: Thiago de Paula Oliveira \email{toliveira@abacusbio.com} (\href{https://orcid.org/0000-0002-4555-2584}{ORCID})
+\strong{Maintainer}: Thiago de Paula Oliveira \email{thiago.paula.oliveira@gmail.com} (\href{https://orcid.org/0000-0002-4555-2584}{ORCID})
 
 
 Thiago de Paula Oliveira

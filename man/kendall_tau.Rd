@@ -139,7 +139,5 @@ Kendall, M. G. (1938). A New Measure of Rank Correlation. Biometrika,
 \code{\link{print.kendall_matrix}}
 }
 \author{
-Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
-
 Thiago de Paula Oliveira
 }

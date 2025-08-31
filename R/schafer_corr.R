@@ -72,7 +72,7 @@
 #'
 #' @seealso \code{\link{print.schafer_corr}}, \code{\link{plot.schafer_corr}},
 #'   \code{\link{pearson_corr}}
-#' @author Thiago de Paula Oliveira \email{toliveira@@abacusbio.com}
+#' @author Thiago de Paula Oliveira
 #' @export
 schafer_corr <- function(data) {
   numeric_data <- validate_corr_input(data)

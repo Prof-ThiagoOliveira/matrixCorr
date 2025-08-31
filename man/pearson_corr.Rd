@@ -156,7 +156,5 @@ two parents". Proceedings of the Royal Society of London, 58, 240–242.
 \code{\link{print.pearson_corr}}, \code{\link{plot.pearson_corr}}
 }
 \author{
-Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
-
 Thiago de Paula Oliveira
 }

@@ -143,5 +143,5 @@ covariance matrix estimation and implications for functional genomics.
 \code{\link{pearson_corr}}
 }
 \author{
-Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
+Thiago de Paula Oliveira
 }

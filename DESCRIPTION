@@ -3,7 +3,7 @@ Type: Package
 Title: Collection of Correlation and Association Estimators
 Version: 0.4.3
 Authors@R: person(given = "Thiago de Paula", family = "Oliveira", 
-    email = "toliveira@abacusbio.com", role = c("aut", "cre"), 
+    email = "thiago.paula.oliveira@gmail.com", role = c("aut", "cre"), 
     comment = c(ORCID = "0000-0002-4555-2584"))
 Description: Compute correlation and other association matrices from
     small to high-dimensional datasets with relative simple functions and

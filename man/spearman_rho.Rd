@@ -198,5 +198,5 @@ two things. International Journal of Epidemiology, 39(5), 1137-1150.
 \code{\link{print.spearman_rho}}, \code{\link{plot.spearman_rho}}
 }
 \author{
-Thiago de Paula Oliveira \email{toliveira@abacusbio.com}
+Thiago de Paula Oliveira
 }

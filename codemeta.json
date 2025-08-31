@@ -2,22 +2,30 @@
   "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
   "@type": "SoftwareSourceCode",
   "identifier": "matrixCorr",
-  "description": "Provides fast and scalable computation of correlation matrices using optimized C++ routines. Supports both rank-based and parametric methods, including efficient implementations of Kendall's tau (tau-a and tau-b), with extensibility for Spearman, Pearson, and other correlation metrics. Designed for high-performance statistical computing in applications such as genomics, finance, and machine learning, especially in high-dimensional settings.",
-  "name": "matrixCorr: Fast Correlation Estimation in R and C++",
+  "description": "Compute correlation and other association matrices from small to high-dimensional datasets with relative simple functions and sensible defaults. Includes options for shrinkage and robustness to improve results in noisy or high-dimensional settings (p >= n), plus convenient print/plot methods for inspection. Implemented with optimised C++ backends using BLAS/OpenMP and memory-aware symmetric updates. Works with base matrices and data frames, returning standard R objects via a consistent S3 interface. Useful across genomics, agriculture, and machine-learning workflows. Supports Pearson, Spearman, Kendall, distance correlation, partial correlation, and robust biweight mid-correlation; Bland–Altman analyses and Lin's concordance correlation coefficient (including repeated-measures extensions). Methods based on Ledoit and Wolf (2004) <doi:10.1016/S0047-259X(03)00096-4>; Schäfer and Strimmer (2005) <doi:10.2202/1544-6115.1175>; Lin (1989) <doi:10.2307/2532051>.",
+  "name": "matrixCorr: Collection of Correlation and Association Estimators",
+  "codeRepository": "https://github.com/Prof-ThiagoOliveira/matrixCorr",
+  "issueTracker": "https://github.com/Prof-ThiagoOliveira/matrixCorr/issues",
   "license": "https://spdx.org/licenses/MIT",
-  "version": "0.1.0",
+  "version": "0.4.3",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "R",
     "url": "https://r-project.org"
   },
   "runtimePlatform": "R version 4.4.3 (2025-02-28 ucrt)",
+  "provider": {
+    "@id": "https://cran.r-project.org",
+    "@type": "Organization",
+    "name": "Comprehensive R Archive Network (CRAN)",
+    "url": "https://cran.r-project.org"
+  },
   "author": [
     {
       "@type": "Person",
       "givenName": "Thiago de Paula",
       "familyName": "Oliveira",
-      "email": "toliveira@abacusbio.com",
+      "email": "thiago.paula.oliveira@gmail.com",
       "@id": "https://orcid.org/0000-0002-4555-2584"
     }
   ],
@@ -26,7 +34,7 @@
       "@type": "Person",
       "givenName": "Thiago de Paula",
       "familyName": "Oliveira",
-      "email": "toliveira@abacusbio.com",
+      "email": "thiago.paula.oliveira@gmail.com",
       "@id": "https://orcid.org/0000-0002-4555-2584"
     }
   ],
@@ -66,6 +74,30 @@
         "url": "https://cran.r-project.org"
       },
       "sameAs": "https://CRAN.R-project.org/package=testthat"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "MASS",
+      "name": "MASS",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=MASS"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "viridisLite",
+      "name": "viridisLite",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=viridisLite"
     }
   ],
   "softwareRequirements": {
@@ -73,6 +105,7 @@
       "@type": "SoftwareApplication",
       "identifier": "Rcpp",
       "name": "Rcpp",
+      "version": ">= 1.1.0",
       "provider": {
         "@id": "https://cran.r-project.org",
         "@type": "Organization",
@@ -94,9 +127,23 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=ggplot2"
     },
+    "3": {
+      "@type": "SoftwareApplication",
+      "identifier": "Matrix",
+      "name": "Matrix",
+      "version": ">= 1.7.2",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=Matrix"
+    },
     "SystemRequirements": null
   },
-  "fileSize": "30.064KB",
-  "codeRepository": "https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr",
-  "readme": "https://github.com/Prof-ThiagoOliveira/kendall_tau_rank_corr/blob/main/README.md"
+  "fileSize": "55696.68KB",
+  "readme": "https://github.com/Prof-ThiagoOliveira/matrixCorr/blob/main/README.md",
+  "contIntegration": ["https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/R-CMD-check.yaml", "https://app.codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr"],
+  "keywords": ["correlation", "correlation-analysis", "correlation-coefficient", "cpp"]
 }
