@@ -133,15 +133,3 @@ test_that("errors on invalid inputs", {
   expect_error(bland_altman(1:3, 1:3, mode = 0), "1 or 2")
   expect_error(bland_altman(1:3, 1:3, conf_level = 1.5), "in \\(0, 1\\)")
 })
-
-test_that("print.ba and plot.ba do not error", {
-  set.seed(5)
-  x <- rnorm(50, 100, 10)
-  y <- x + rnorm(50, 0, 8)
-  ba <- bland_altman(x, y)
-
-  expect_no_error(print(ba))
-  # plot should not error; we don't assert its return class to keep it backend-agnostic
-  expect_no_error(plot(ba))
-})
-

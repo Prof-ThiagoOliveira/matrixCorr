@@ -53,8 +53,9 @@ test_that("spearman_rho is invariant to strictly monotone transformations", {
   base_cor <- cor(X, method = "spearman")
   fast_cor <- spearman_rho(X_mono)
 
-  attributes(fast_cor) <- NULL
-  expect_equal(fast_cor, base_cor, tolerance = 1e-8)
+  expect_equal(as.numeric(fast_cor),
+               as.numeric(unname(base_cor)),
+               tolerance = 1e-12)
 })
 
 test_that("spearman_rho returns NA when a column is constant", {
@@ -73,8 +74,9 @@ test_that("spearman_rho agrees with base::cor on known values (small matrix)", {
   base_cor <- cor(X, method = "spearman")
   fast_cor <- spearman_rho(X)
 
-  attributes(fast_cor) <- NULL
-  expect_equal(fast_cor, base_cor, tolerance = 1e-12)
+  expect_equal(as.numeric(fast_cor),
+               as.numeric(unname(base_cor)),
+               tolerance = 1e-12)
 })
 
 test_that("theoretical BVN formula for Spearman holds approximately", {

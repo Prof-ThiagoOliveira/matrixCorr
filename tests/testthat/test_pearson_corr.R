@@ -20,19 +20,20 @@ test_that("pearson_corr matches base::cor(..., method = 'pearson')", {
   }
 })
 
-test_that("pearson_corr is invariant to affine transformations", {
+test_that("pearson_corr matches stats::cor on transformed data", {
   set.seed(123)
   X <- matrix(rnorm(200), ncol = 2)
-  # Apply positive scaling + translation
+
   X_affine <- X
-  X_affine[,1] <- 3 * X_affine[,1] + 5
+  X_affine[,1] <-  3 * X_affine[,1] + 5
   X_affine[,2] <- -2 * X_affine[,2] + 7
 
-  base_cor <- cor(X, method = "pearson")
-  fast_cor <- pearson_corr(X_affine)
+  base <- unname(cor(X_affine, method = "pearson"))
+  fast <- unname(as.matrix(unclass(pearson_corr(X_affine))))
 
-  attributes(fast_cor) <- NULL
-  expect_equal(fast_cor, base_cor, tolerance = 1e-12)
+  expect_equal(as.numeric(fast),
+               as.numeric(unname(base)),
+               tolerance = 1e-12)
 })
 
 test_that("pearson_corr returns NA when a column is constant", {
@@ -50,9 +51,9 @@ test_that("pearson_corr matches base::cor on a known toy dataset", {
 
   base_cor <- cor(X, method = "pearson")
   fast_cor <- pearson_corr(X)
-
-  attributes(fast_cor) <- NULL
-  expect_equal(fast_cor, base_cor, tolerance = 1e-12)
+  expect_equal(as.numeric(fast_cor),
+               as.numeric(unname(base_cor)),
+               tolerance = 1e-12)
 })
 
 test_that("pearson_corr recovers true correlation in large MVN sample", {
