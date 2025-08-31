@@ -3,14 +3,12 @@
 \name{bland_altman}
 \alias{bland_altman}
 \alias{print.ba}
-\alias{print.ba_matrix}
 \alias{plot.ba}
-\alias{plot.ba_matrix}
 \title{Bland-Altman statistics with confidence intervals}
 \usage{
 bland_altman(
   group1,
-  group2 = NULL,
+  group2,
   two = 1.96,
   mode = 1L,
   conf_level = 0.95,
@@ -18,8 +16,6 @@ bland_altman(
 )
 
 \method{print}{ba}(x, digits = 3, ci_digits = 3, ...)
-
-\method{print}{ba_matrix}(x, digits = 3, show = c("bias", "width", "sd_diff"), ...)
 
 \method{plot}{ba}(
   x,
@@ -34,63 +30,25 @@ bland_altman(
   symmetrize_y = TRUE,
   ...
 )
-
-\method{plot}{ba_matrix}(
-  x,
-  data = NULL,
-  pairs = NULL,
-  against = NULL,
-  facet_scales = c("free_y", "fixed"),
-  title = "Bland-Altman (pairwise, faceted)",
-  point_alpha = 0.6,
-  point_size = 1.8,
-  line_size = 0.7,
-  shade_ci = TRUE,
-  shade_alpha = 0.08,
-  smoother = c("none", "loess", "lm"),
-  ...
-)
 }
 \arguments{
-\item{group1}{Numeric vector; or a numeric data.frame/data.table/matrix
-(columns = methods) when \code{group2 = NULL}.}
-
-\item{group2}{Optional numeric vector. If provided, the function performs a
-two-vector Bland-Altman comparison against \code{group1}.}
+\item{group1, group2}{Numeric vectors of equal length.}
 
 \item{two}{Positive scalar; the multiple of SD for the LoA (default 1.96).}
 
-\item{mode}{Integer.
-When both \code{group1} and \code{group2} are numeric vectors,
-\code{mode = 1} computes \code{group1 - group2} and
-\code{mode = 2} computes \code{group2 - group1}.
-When \code{group2 = NULL} and \code{group1} is multi-column
-(matrix/data.frame; multi-method mode), \code{mode} is ignored and
-pairwise results are reported in a fixed \emph{row - column}
-orientation in the returned matrices.}
+\item{mode}{Integer; 1 uses \code{group1 - group2}, 2 uses \code{group2 - group1}.}
 
 \item{conf_level}{Confidence level for CIs (default 0.95).}
 
 \item{verbose}{Logical; if TRUE, prints how many OpenMP threads are used.}
 
-\item{x}{A \code{"ba_matrix"} object returned by \code{bland_altman()}
-when called with \code{group2 = NULL}.}
+\item{x}{A \code{"ba"} object.}
 
 \item{digits}{Number of digits for estimates (default 3).}
 
 \item{ci_digits}{Number of digits for CI bounds (default 3).}
 
-\item{...}{Additional theme tweaks passed to \code{ggplot2::theme()}
-(e.g., \code{panel.grid = ggplot2::element_blank()}). Not forwarded to
-geoms.}
-
-\item{show}{Character vector indicating which matrices to print for a
-\code{"ba_matrix"} object. Allowed values are \code{"bias"},
-\code{"width"}, and \code{"sd_diff"}. \code{"bias"} prints the matrix of
-mean differences (row - column); \code{"width"} prints the matrix of limits
-of agreement widths (upper - lower); \code{"sd_diff"} prints the matrix of
-standard deviations of the pairwise differences. May include one or more
-of these values in any order. Defaults to \code{c("bias","width","sd_diff")}.}
+\item{...}{Passed to \code{ggplot2::theme()} (ggplot path) or \code{plot()}.}
 
 \item{title}{Plot title.}
 
@@ -111,30 +69,9 @@ lines.}
 
 \item{symmetrize_y}{Logical; if TRUE, y-axis centered at mean difference
 with symmetric limits.}
-
-\item{data}{Optional wide numeric \code{data.frame}/matrix containing the
-original method columns used to build \code{x}. Required if \code{x} does
-not carry \code{attr(x, "data")}. The column names must match
-\code{x$methods}. This is used to compute point-level means and
-differences for each pairwise panel; the summaries stored in \code{x}
-(bias/LoA) are insufficient to draw the scatter without the raw data.}
-
-\item{pairs}{Optional character vector of pair labels to display. Labels
-must follow the internal convention \emph{row - column}, e.g.
-\code{"MethodA - MethodB"}. If \code{NULL} (default), all
-upper-triangular pairs are shown.}
-
-\item{against}{Optional single method name. If supplied, that method is
-plotted against every other method (one facet per pair). Takes precedence
-over \code{pairs} when both are provided.}
-
-\item{facet_scales}{Facet scaling behaviour. Use \code{"free_y"} (default)
-to allow each panel its own y-axis (useful when LoA differ markedly across
-pairs), or \code{"fixed"} for a common y-axis across panels.}
 }
 \value{
-Either a \code{"ba"} object (two-vector mode) or a
-\code{"ba_matrix"} object containing:
+An object of class \code{"ba"} (list) with elements:
 \itemize{
 \item \code{means}, \code{diffs}: numeric vectors
 \item \code{groups}: data.frame used after NA removal
@@ -149,20 +86,9 @@ Either a \code{"ba"} object (two-vector mode) or a
 Computes Bland-Altman mean difference and limits of agreement (LoA)
 between two numeric measurement vectors, including t-based confidence
 intervals for the mean difference and for each LoA using 'C++' backend.
-Two usage modes:
-\itemize{
-\item \strong{Two-vector mode (default):} If \code{group1} and \code{group2}
-are numeric vectors, computes standard Bland-Altman statistics with CIs
-and returns a \code{"ba"} object.
-\item \strong{Multi-method mode:} If \code{group2 = NULL} and \code{group1}
-is a numeric \code{data.frame}/\code{data.table}/matrix with one column
-per method, computes the full pairwise Bland-Altman matrix across all
-columns and returns a \code{"ba_matrix"} object.
-}
 
 Note: Lin's concordance correlation coefficient (CCC) is a complementary,
-single-number summary of agreement (precision + accuracy) for continuous
-variables. It is useful for
+single-number summary of agreement (precision + accuracy). It is useful for
 quick screening or reporting an overall CI, but may miss systematic or
 magnitude-dependent bias; consider reporting CCC alongside Bland-Altman.
 }
@@ -195,30 +121,6 @@ y <- x + rnorm(100, 0, 8)
 ba <- bland_altman(x, y)
 print(ba)
 plot(ba)
-
-# ---- Multi-method example (matrix/data.frame input) -----------------------
-set.seed(42)
-n <- 120
-true <- rnorm(n, 50, 7)
-A <- true + rnorm(n, 0, 3)           # baseline method
-B <- true + 2 + rnorm(n, 0, 3)       # constant +2 bias
-C <- 1.10 * true + rnorm(n, 0, 4)    # proportional bias, larger SD
-D <- true + rnorm(n, 0, 6)           # higher random error
-X <- data.frame(MethodA = A, MethodB = B, MethodC = C, MethodD = D)
-
-# group2 = NULL and multi-column group1 -> returns a "ba_matrix" object
-baM <- bland_altman(X)
-
-# Summaries (orientation: row - column)
-print(baM, show = c("bias", "width"))
-round(baM$bias, 2)    # mean differences (row - column)
-round(baM$width, 2)   # LoA widths (upper - lower)
-
-# Plot - faceted BA scatter by pair
-plot(baM, data = X, smoother = "lm")
-
-# Focus on a reference method versus all others
-plot(baM, data = X, against = "MethodA", facet_scales = "free_y")
 
 }
 \references{

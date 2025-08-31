@@ -250,6 +250,151 @@ both methods are present for the same \code{subject} and \code{time}
 contribute to a given pairwise BA.
 }
 }
+\details{
+The function implements a repeated-measures Bland–Altman (BA) analysis for
+two or more methods using a linear mixed model fitted to
+\emph{subject–time matched paired differences}. For any selected pair of
+methods \eqn{(a,b)}, let
+\deqn{d_{it} = y_{itb} - y_{ita}, \qquad m_{it} = \tfrac{1}{2}(y_{itb} + y_{ita}),}
+where \eqn{i} indexes subjects and \eqn{t} indexes replicates/time within
+subject. Only records with both methods present at the same \code{subject}
+and \code{time} contribute to that pair.
+
+The fitted per-pair model is
+\deqn{d_{it} = \beta_0 + \beta_1\, m_{it} + u_i + \varepsilon_{it},}
+with random intercept \eqn{u_i \sim \mathcal{N}(0, \sigma_u^2)} and
+within-subject residual vector \eqn{\varepsilon_i} having covariance
+\eqn{\operatorname{Cov}(\varepsilon_i) = \sigma_e^2\, \mathbf{R}_i}.
+When \code{use_ar1 = FALSE}, \eqn{\mathbf{R}_i = \mathbf{I}_{n_i}} (i.i.d.).
+When \code{use_ar1 = TRUE}, \eqn{\mathbf{R}_i = \mathbf{C}_i^{-1}} and
+\eqn{\mathbf{C}_i} encodes an AR(1) \emph{precision} structure over time
+(see below). Setting \code{include_slope = FALSE} drops the regressor
+\eqn{m_{it}} (i.e., \eqn{\beta_1 = 0}).
+
+\subsection{AR(1) within-subject correlation}{
+For each subject, observations are first ordered by \code{time}. Contiguous
+blocks satisfy \eqn{t_{k+1} = t_k + 1}; non-contiguous gaps and any
+negative/NA times are treated as singletons (i.i.d.).
+
+For a contiguous block of length \eqn{L} and AR(1) parameter \eqn{\rho}
+(clipped to \eqn{(-0.999, 0.999)}), the blockwise \emph{precision} matrix
+\eqn{\mathbf{C}} has entries
+\deqn{\mathbf{C} = \frac{1}{1-\rho^2}\,\begin{bmatrix}
+1 & -\rho &       &        &  \\
+-\rho & 1+\rho^2 & -\rho  &        &  \\
+      & \ddots   & \ddots & \ddots &  \\
+      &          & -\rho  & 1+\rho^2 & -\rho \\
+      &          &        & -\rho    & 1
+\end{bmatrix}.}
+The full \eqn{\mathbf{C}_i} is block-diagonal over contiguous segments, with
+a small ridge added to the diagonal for numerical stability. Residual
+covariance is \eqn{\sigma_e^2 \mathbf{R}_i = \sigma_e^2 \mathbf{C}_i^{-1}}.
+
+If \code{use_ar1 = TRUE} and \code{ar1_rho} is \code{NA}, \eqn{\rho} is
+estimated in two passes (i) fit the i.i.d. model; (ii) compute detrended
+residuals within each contiguous block (remove block-specific intercept and
+linear time), form lag-1 correlations, apply a small-sample bias adjustment
+\eqn{(1-\rho^2)/L}, pool with Fisher's \eqn{z} (weights \eqn{\approx L-3}),
+and refit with the pooled \eqn{\hat\rho}.
+}
+
+\subsection{Estimation by stabilised EM/GLS}{
+Let \eqn{\mathbf{X}_i} be the fixed-effects design for subject \eqn{i}
+(intercept, and optionally the pair mean). Internally, the pair mean
+regressor is centred and scaled before fitting to stabilise the slope;
+estimates are back-transformed to the original units afterwards.
+
+Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the marginal precision of
+\eqn{d_i} integrates \eqn{u_i} via a Woodbury/Sherman–Morrison identity:
+\deqn{\mathbf{V}_i^{-1} \;=\; \sigma_e^{-2}\mathbf{C}_i \;-\;
+\sigma_e^{-2}\mathbf{C}_i \mathbf{1}\,
+\Big(\sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big)^{-1}
+\mathbf{1}^\top \mathbf{C}_i \sigma_e^{-2}.}
+The GLS update is
+\deqn{\hat\beta \;=\; \Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} \mathbf{X}_i\Big)^{-1}
+\Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} d_i\Big).}
+Writing \eqn{r_i = d_i - \mathbf{X}_i\hat\beta}, the E-step gives the BLUP of
+the random intercept and its conditional second moment:
+\deqn{M_i \;=\; \sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1},\qquad
+\tilde u_i \;=\; M_i^{-1}\,\sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i r_i,\qquad
+\mathbb{E}[u_i^2\mid y] \;=\; \tilde u_i^2 + M_i^{-1}.}
+The M-step updates the variance components by
+\deqn{\hat\sigma_u^2 \;=\; \frac{1}{m}\sum_i \mathbb{E}[u_i^2\mid y], \qquad
+\hat\sigma_e^2 \;=\; \frac{1}{n}\sum_i \Big\{(r_i - \mathbf{1}\tilde u_i)^\top
+\mathbf{C}_i (r_i - \mathbf{1}\tilde u_i) + M_i^{-1}\,\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big\}.}
+The algorithm employs positive-definite inverses with ridge fallback,
+trust-region damping of variance updates (ratio-bounded), and clipping of
+parameters to prevent degeneracy.
+}
+
+\subsection{Point estimates reported}{
+The reported BA \emph{bias} is the \emph{subject-equal} mean of the paired
+differences,
+\deqn{\mu_0 \;=\; \frac{1}{m}\sum_{i=1}^m \bar d_i,\qquad
+\bar d_i = \frac{1}{n_i}\sum_{t=1}^{n_i} d_{it},}
+which is robust to unbalanced replicate counts (\eqn{n_i}) and coincides with
+the GLS intercept when subjects contribute equally. If \code{include_slope =
+TRUE}, the proportional-bias slope is estimated against the pair mean
+\eqn{m_{it}}; internally \eqn{m_{it}} is centred and scaled and the slope is
+returned on the original scale.
+}
+
+\subsection{Limits of Agreement (LoA)}{
+A \emph{single new paired measurement} for a random subject has variance
+\deqn{\mathrm{Var}(d^\star) \;=\; \sigma_u^2 + \sigma_e^2,}
+so the LoA are
+\deqn{\mathrm{LoA} \;=\; \mu_0 \;\pm\; \texttt{two}\,\sqrt{\sigma_u^2 + \sigma_e^2}.}
+The argument \code{two} is the SD multiplier (default \eqn{z_{1-\alpha/2}}
+implied by \code{conf_level}, e.g., \eqn{1.96} at \eqn{95\%}).
+}
+
+\subsection{Wald/Delta confidence intervals}{
+CIs for \emph{bias} and each LoA use a delta method around the EM estimates.
+The standard error of \eqn{\mu_0} is based on the dispersion of subject
+means \eqn{\mathrm{Var}(\mu_0) \approx \mathrm{Var}(\bar d_i)/m}. For
+\eqn{\mathrm{sd}_{\mathrm{LoA}} = \sqrt{V}} with \eqn{V=\sigma_u^2+\sigma_e^2},
+we can define
+\deqn{\mathrm{Var}(\mathrm{sd}) \;\approx\; \frac{\mathrm{Var}(V)}{4V}, \quad
+\mathrm{Var}(V) \;\approx\; \mathrm{Var}(\hat\sigma_u^2) + \mathrm{Var}(\hat\sigma_e^2)
++ 2\,\mathrm{Cov}(\hat\sigma_u^2,\hat\sigma_e^2).}
+The per-subject contributions used to approximate these terms are:
+\eqn{A_i=\mathbb{E}[u_i^2\mid y]} and
+\eqn{B_i=\{(r_i-\mathbf{1}\tilde u_i)^\top\mathbf{C}_i(r_i-\mathbf{1}\tilde u_i)
++ M_i^{-1}\mathbf{1}^\top\mathbf{C}_i\mathbf{1}\}/n_i}. Empirical variances
+of \eqn{A_i} and \eqn{B_i} (with replicate-size weighting for \eqn{B_i}) and
+their covariance yield \eqn{\mathrm{Var}(\hat\sigma_u^2)},
+\eqn{\mathrm{Var}(\hat\sigma_e^2)} and \eqn{\mathrm{Cov}(\hat\sigma_u^2,\hat\sigma_e^2)}.
+For a LoA bound \eqn{L_\pm = \mu_0 \pm \texttt{two}\cdot \mathrm{sd}}, the
+working variance is
+\deqn{\mathrm{Var}(L_\pm) \;\approx\; \mathrm{Var}(\mu_0) + \texttt{two}^2\,\mathrm{Var}(\mathrm{sd}),}
+and Wald CIs use the normal quantile at \code{conf_level}. These are
+large-sample approximations; with very small \eqn{m} they may be conservative.
+}
+
+\subsection{Three or more methods}{
+When \eqn{\ge 3} methods are supplied, the routine performs the above fit for
+each unordered pair \eqn{(j,k)} and reassembles matrices. Specifically,
+\itemize{
+\item \emph{Orientation} is defined to be \emph{row minus column}, i.e.,
+\eqn{\texttt{bias}[j,k]} estimates \eqn{\mathbb{E}(y_k - y_j)}.
+\item \eqn{\texttt{bias}} is antisymmetric
+(\eqn{b_{jk} = -b_{kj}}); \eqn{\texttt{sd\_loa}} and \eqn{\texttt{width}}
+are symmetric; LoA obey \eqn{\texttt{loa\_lower}[j,k] = -\texttt{loa\_upper}[k,j]}.
+\item \eqn{\texttt{n}[j,k]} is the number of subject–time pairs
+used for that contrast (complete cases where both methods are present).
+}
+}
+
+\subsection{Missingness, time irregularity, and safeguards}{
+Pairs are formed only where both methods are observed at the same
+\code{subject} and \code{time}; other records do not influence that pair.
+AR(1) structure is applied only over contiguous time sequences within
+subject; gaps break contiguity and revert those positions to i.i.d.
+Numerically, inverses use a positive-definite solver with adaptive ridge and
+pseudo-inverse fallback; variance updates are clamped and ratio-damped;
+\eqn{\rho} is clipped to \eqn{(-0.999,0.999)}.
+}
+}
 \examples{
 # -------- Simulate repeated-measures data --------
 set.seed(1)
