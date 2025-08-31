@@ -30,25 +30,11 @@
 #' @param two Positive scalar; LoA multiple of SD (default 1.96).
 #' @param conf_level Confidence level for CIs (default 0.95).
 #' @param include_slope Logical. If \code{TRUE}, the model includes the pair mean
-#'   \eqn{m_{it} = \tfrac{1}{2}(y_{itb}+y_{ita})} as a fixed effect and estimates a
-#'   proportional-bias slope \eqn{\beta_1} via
-#'   \eqn{d_{it} = \beta_0 + \beta_1 m_{it} + u_i + \varepsilon_{it}}.
-#'   Internally \eqn{m_{it}} is centred and scaled for numerical stability; the
-#'   reported \code{beta_slope} (and intercept) are back-transformed to the
-#'   original scale. \eqn{\beta_1 \neq 0} suggests level-dependent (proportional)
-#'   bias, where the difference between methods changes with the overall measurement level.
-#'   The Bland–Altman limits of agreement reported by this function remain the
-#'   conventional, \emph{horizontal} bands centred at the subject-equal mean bias
-#'   \eqn{\mu_0}; they are not regression-adjusted LoA. The regressor \eqn{m_{it}} contains
-#'   measurement error from both methods. Consequently, \eqn{\hat\beta_1} is subject
-#'   to attenuation and can be non-zero purely because the two methods have unequal
-#'   precisions. Treat \eqn{\beta_1} as a diagnostic extra analysis.
-#'
-#'   \strong{Recommendation}. Fit both with and without the slope. If \eqn{\beta_1} is
+#'  as a fixed effect and estimates a proportional-bias slope.
+#'   Look at details for deeper information. We recommend fit both with and without the slope. If \eqn{\beta_1} is
 #'   materially non-zero over a wide level range, consider a scale transformation
-#'   (e.g., log or percent-logit) and re-fit without the slope, or present a separate
-#'   regression-based LoA analysis (not computed here). Default \code{FALSE} for
-#'   interpretability and robustness.
+#'   (e.g., log or percent-logit) and re-fit without the slope.
+#'
 #' @param use_ar1 Logical; AR(1) within-subject residual correlation.
 #' @param ar1_rho AR(1) parameter (|rho|<1).
 #' @param max_iter,tol EM control for the backend (defaults 200, 1e-6).
@@ -133,9 +119,12 @@
 #' \emph{subject–time matched paired differences}. For any selected pair of
 #' methods \eqn{(a,b)}, let
 #' \deqn{d_{it} = y_{itb} - y_{ita}, \qquad m_{it} = \tfrac{1}{2}(y_{itb} + y_{ita}),}
-#' where \eqn{i} indexes subjects and \eqn{t} indexes replicates/time within
-#' subject. Only records with both methods present at the same \code{subject}
-#' and \code{time} contribute to that pair.
+#' where \eqn{y_{itm}} denotes the observed value from method \eqn{m\in\{a,b\}} on
+#' subject \eqn{i} at replicate/time \eqn{t}; \eqn{d_{it}} is the paired difference
+#' (method \eqn{b} minus method \eqn{a}); and \eqn{m_{it}} is the corresponding pair mean.
+#' Here \eqn{i=1,\ldots,S} indexes subjects and \eqn{t} indexes replicates/time within subject.
+#' Only records with both methods present at the same \code{subject} and \code{time}
+#' contribute to that pair.
 #'
 #' The fitted per-pair model is
 #' \deqn{d_{it} = \beta_0 + \beta_1\, m_{it} + u_i + \varepsilon_{it},}
@@ -182,7 +171,7 @@
 #' estimates are back-transformed to the original units afterwards.
 #'
 #' Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the marginal precision of
-#' \eqn{d_i} integrates \eqn{u_i} via a Woodbury/Sherman–Morrison identity:
+#' \eqn{d_i} integrates \eqn{u_i} via a Woodbury/Sherman-Morrison identity:
 #' \deqn{\mathbf{V}_i^{-1} \;=\; \sigma_e^{-2}\mathbf{C}_i \;-\;
 #' \sigma_e^{-2}\mathbf{C}_i \mathbf{1}\,
 #' \Big(\sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big)^{-1}
@@ -214,6 +203,33 @@
 #' TRUE}, the proportional-bias slope is estimated against the pair mean
 #' \eqn{m_{it}}; internally \eqn{m_{it}} is centred and scaled and the slope is
 #' returned on the original scale.
+#' }
+#'
+#' \subsection{Proportional bias slope (\code{include_slope})}{
+#' When \code{include_slope = TRUE}, the model augments the mean difference with
+#' the pair mean \eqn{m_{it} = \tfrac{1}{2}(y_{itb}+y_{ita})}:
+#' \deqn{d_{it} = \beta_0 + \beta_1 m_{it} + u_i + \varepsilon_{it}.}
+#' Internally \eqn{m_{it}} is centred and scaled for numerical stability; the
+#' reported \code{beta_slope} and intercept are back-transformed to the original scale.
+#'
+#' \eqn{\beta_1 \neq 0} indicates level-dependent (proportional)
+#' bias, where the difference between methods changes with the overall measurement level.
+#' The Bland–Altman limits of agreement produced by this function remain the
+#' conventional, \emph{horizontal} bands centred at the subject-equal bias \eqn{\mu_0};
+#' they are not regression-adjusted LoA.
+#'
+#' On an appropriate scale and when
+#' the two methods have comparable within-subject variances, the null expectation is
+#' \eqn{\beta_1 \approx 0}. However, because \eqn{m_{it}} contains measurement error
+#' from both methods, unequal precisions can produce a spurious slope even if there is
+#' no true proportional bias. Under a simple no-bias data-generating model
+#' \eqn{y_{itm}=\theta_{it}+c_m+e_{itm}} with independent errors of variances
+#' \eqn{\sigma_a^2,\sigma_b^2}, the expected OLS slope is approximately
+#' \deqn{\mathbb{E}[\hat\beta_1] \;\approx\;
+#' \dfrac{\tfrac{1}{2}(\sigma_b^2-\sigma_a^2)}
+#'       {\mathrm{Var}(\theta_{it}) + \tfrac{1}{4}(\sigma_a^2+\sigma_b^2)},}
+#' showing zero expectation when \eqn{\sigma_a^2=\sigma_b^2} and attenuation as the
+#' level variability \eqn{\mathrm{Var}(\theta_{it})} increases.
 #' }
 #'
 #' \subsection{Limits of Agreement (LoA)}{
@@ -257,7 +273,7 @@
 #' \item \eqn{\texttt{bias}} is antisymmetric
 #'       (\eqn{b_{jk} = -b_{kj}}); \eqn{\texttt{sd\_loa}} and \eqn{\texttt{width}}
 #'       are symmetric; LoA obey \eqn{\texttt{loa\_lower}[j,k] = -\texttt{loa\_upper}[k,j]}.
-#' \item \eqn{\texttt{n}[j,k]} is the number of subject–time pairs
+#' \item \eqn{\texttt{n}[j,k]} is the number of subject-time pairs
 #'       used for that contrast (complete cases where both methods are present).
 #' }
 #' }
@@ -375,12 +391,13 @@
 #' baN <- bland_altman_repeated(
 #'   response = data$y, subject = data$subject, method = data$method, time = data$time,
 #'   two = 1.96, conf_level = 0.95,
-#'   include_slope = TRUE,         # estimate proportional bias per pair
+#'   include_slope = FALSE,         # estimate proportional bias per pair
 #'   use_ar1 = TRUE # model AR(1) within-subject
 #' )
 #'
 #' # Matrices (row - column orientation)
 #' print(baN)
+#' summary(baN)
 #'
 #' # Faceted BA scatter by pair
 #' plot(baN, smoother = "lm", facet_scales = "free_y")
@@ -390,7 +407,7 @@
 #' baAB <- bland_altman_repeated(
 #'   response = data_AB$y, subject = data_AB$subject,
 #'   method = droplevels(data_AB$method), time = data_AB$time,
-#'   include_slope = TRUE, use_ar1 = TRUE, ar1_rho = 0.4
+#'   include_slope = FALSE, use_ar1 = TRUE, ar1_rho = 0.4
 #' )
 #' print(baAB)
 #' plot(baAB)
@@ -751,6 +768,7 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
 #' @param ci_digits Number of digits for CI bounds (default 3).
 #' @param style Show as pairs or matrix format?
 #' @param ... Unused.
+#' @export
 print.ba_repeated_matrix <- function(x,
                                      digits = 3,
                                      ci_digits = 3,
@@ -844,6 +862,10 @@ summary.ba_repeated <- function(object,
     stringsAsFactors = FALSE, check.names = FALSE
   )
 
+  if (isTRUE(object$include_slope) && is.finite(num_or_na_ba(object$beta_slope))) {
+    ba_repeated$slope <- round(num_or_na_ba(object$beta_slope), digits)
+  }
+
   cil <- function(nm) num_or_na_ba(object$CI.lines[[nm]])
   if (!any(is.na(c(cil("mean.diff.ci.lower"), cil("mean.diff.ci.upper"),
                    cil("lower.limit.ci.lower"), cil("lower.limit.ci.upper"),
@@ -866,7 +888,6 @@ summary.ba_repeated <- function(object,
   class(ba_repeated) <- c("summary.ba_repeated","data.frame")
   ba_repeated
 }
-
 
 #' @method summary ba_repeated_matrix
 #' @export
@@ -899,6 +920,11 @@ summary.ba_repeated_matrix <- function(object,
       sigma2_subject = round(object$sigma2_subject[i, j], digits),
       sigma2_resid   = round(object$sigma2_resid[i, j],   digits)
     )
+
+    if (!is.null(object$slope)) {
+      row$slope <- round(object$slope[i, j], digits)
+    }
+
     if (has_ci && is.finite(cl)) {
       row$bias_lwr <- round(object$mean_ci_low[i, j],       ci_digits)
       row$bias_upr <- round(object$mean_ci_high[i, j],      ci_digits)
