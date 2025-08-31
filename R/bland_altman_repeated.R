@@ -29,7 +29,26 @@
 #'   a single character string giving the column name in `data`.
 #' @param two Positive scalar; LoA multiple of SD (default 1.96).
 #' @param conf_level Confidence level for CIs (default 0.95).
-#' @param include_slope Logical; if TRUE, estimates proportional bias per pair.
+#' @param include_slope Logical. If \code{TRUE}, the model includes the pair mean
+#'   \eqn{m_{it} = \tfrac{1}{2}(y_{itb}+y_{ita})} as a fixed effect and estimates a
+#'   proportional-bias slope \eqn{\beta_1} via
+#'   \eqn{d_{it} = \beta_0 + \beta_1 m_{it} + u_i + \varepsilon_{it}}.
+#'   Internally \eqn{m_{it}} is centred and scaled for numerical stability; the
+#'   reported \code{beta_slope} (and intercept) are back-transformed to the
+#'   original scale. \eqn{\beta_1 \neq 0} suggests level-dependent (proportional)
+#'   bias, where the difference between methods changes with the overall measurement level.
+#'   The Bland–Altman limits of agreement reported by this function remain the
+#'   conventional, \emph{horizontal} bands centred at the subject-equal mean bias
+#'   \eqn{\mu_0}; they are not regression-adjusted LoA. The regressor \eqn{m_{it}} contains
+#'   measurement error from both methods. Consequently, \eqn{\hat\beta_1} is subject
+#'   to attenuation and can be non-zero purely because the two methods have unequal
+#'   precisions. Treat \eqn{\beta_1} as a diagnostic extra analysis.
+#'
+#'   \strong{Recommendation}. Fit both with and without the slope. If \eqn{\beta_1} is
+#'   materially non-zero over a wide level range, consider a scale transformation
+#'   (e.g., log or percent-logit) and re-fit without the slope, or present a separate
+#'   regression-based LoA analysis (not computed here). Default \code{FALSE} for
+#'   interpretability and robustness.
 #' @param use_ar1 Logical; AR(1) within-subject residual correlation.
 #' @param ar1_rho AR(1) parameter (|rho|<1).
 #' @param max_iter,tol EM control for the backend (defaults 200, 1e-6).
