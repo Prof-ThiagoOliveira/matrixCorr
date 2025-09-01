@@ -278,38 +278,3 @@ Rcpp::List build_L_Dm_Z_cpp(
                                                             _["Z"]  = (Z.ncol() == 0 ? R_NilValue : Rcpp::wrap(Z))
   );
 }
-
-// [[Rcpp::export]]
-arma::mat ar1_precision_from_time(Rcpp::IntegerVector time_codes, double rho) {
-  const int n = time_codes.size();
-  arma::mat Cinv(n, n, arma::fill::zeros);
-  if (n == 0) return Cinv;
-  if (std::fabs(rho) >= 0.999) stop("rho must be in (-0.999, 0.999)");
-  const double r2 = rho * rho;
-  const double denom = std::max(1.0 - r2, 1e-12);
-
-  auto is_na_or_neg = [](int v){ return v == NA_INTEGER || v < 0; };
-
-  int s = 0;
-  while (s < n) {
-    if (is_na_or_neg(time_codes[s])) { Cinv(s,s) += 1.0; ++s; continue; }
-    int e = s;
-    while (e + 1 < n && !is_na_or_neg(time_codes[e+1])) ++e;
-
-    const int L = e - s + 1;
-    if (L == 1) {
-      Cinv(s,s) += 1.0 / denom;
-    } else {
-      Cinv(s,s) += 1.0 / denom;
-      Cinv(e,e) += 1.0 / denom;
-      for (int t = s + 1; t <= e - 1; ++t) Cinv(t,t) += (1.0 + r2) / denom;
-      for (int t = s; t <= e - 1; ++t) {
-        Cinv(t, t+1) += -rho / denom;
-        Cinv(t+1, t) += -rho / denom;
-      }
-    }
-    s = e + 1;
-  }
-  return Cinv;
-}
-

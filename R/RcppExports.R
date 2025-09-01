@@ -53,10 +53,6 @@ build_L_Dm_Z_cpp <- function(colnames_X, rmet_name, rtime_name, method_levels, t
     .Call(`_matrixCorr_build_L_Dm_Z_cpp`, colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global, slope_mode, slope_var, method_codes, drop_zero_cols)
 }
 
-ar1_precision_from_time <- function(time_codes, rho) {
-    .Call(`_matrixCorr_ar1_precision_from_time`, time_codes, rho)
-}
-
 ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, Lr = NULL, auxDr = NULL, Zr = NULL, use_ar1 = FALSE, ar1_rho = 0.0, include_subj_method = TRUE, include_subj_time = TRUE, sb_zero_tol = 1e-10) {
     .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, Lr, auxDr, Zr, use_ar1, ar1_rho, include_subj_method, include_subj_time, sb_zero_tol)
 }

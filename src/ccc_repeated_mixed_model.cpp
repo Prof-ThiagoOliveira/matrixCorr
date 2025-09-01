@@ -83,7 +83,7 @@ inline void harden_omp_runtime_once() {
 #endif // _OPENMP
 
 // ---------- safety & math helpers  ----------
-static inline mat solve_sympd_safe(const mat& A, const mat& B) {
+static inline mat solve_sympd_safe_ccc(const mat& A, const mat& B) {
   mat Ai;
   if (inv_sympd(Ai, A)) return Ai * B;
   double base = 1.0;
@@ -657,7 +657,7 @@ Rcpp::List ccc_vc_cpp(
         arma::mat A(r_eff, 1+p);
         A.col(0)      = inv_se * PG[i].UTCy;
         A.cols(1, p)  = inv_se * PG[i].UTCX;
-        arma::mat Zsol = solve_sympd_safe(M, A);
+        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1, p);
@@ -685,7 +685,7 @@ Rcpp::List ccc_vc_cpp(
         arma::mat A(r_eff, 1+p);
         A.col(0)      = inv_se * PG[i].UTCy;
         A.cols(1, p)  = inv_se * PG[i].UTCX;
-        arma::mat Zsol = solve_sympd_safe(M, A);
+        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1, p);
@@ -726,7 +726,7 @@ Rcpp::List ccc_vc_cpp(
         arma::mat A(r, 1+p);
         A.col(0)    = Ci.Uty * inv_se;
         A.cols(1,p) = Ci.Utx * inv_se;
-        arma::mat Zsol = solve_sympd_safe(M, A);
+        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1,p);
@@ -756,7 +756,7 @@ Rcpp::List ccc_vc_cpp(
         arma::mat A(r, 1+p);
         A.col(0)    = Ci.Uty * inv_se;
         A.cols(1,p) = Ci.Utx * inv_se;
-        arma::mat Zsol = solve_sympd_safe(M, A);
+        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1,p);
@@ -831,7 +831,7 @@ Rcpp::List ccc_vc_cpp(
         M += inv_se * PG[i].UCU;
 
         arma::vec Utr = inv_se * ( PG[i].Ueff.t() * (PG[i].Cinv * r_i) );
-        arma::vec b_i = solve_sympd_safe(M, Utr);
+        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
 
         arma::mat Minv;
         inv_sympd_safe(Minv, M);
@@ -885,7 +885,7 @@ Rcpp::List ccc_vc_cpp(
         M += inv_se * PG[i].UCU;
 
         arma::vec Utr = inv_se * ( PG[i].Ueff.t() * (PG[i].Cinv * r_i) );
-        arma::vec b_i = solve_sympd_safe(M, Utr);
+        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
         arma::mat Minv; inv_sympd_safe(Minv, M);
 
         arma::vec e = r_i - PG[i].Ueff * b_i;
@@ -937,7 +937,7 @@ Rcpp::List ccc_vc_cpp(
         M += (1.0/std::max(se,eps)) * Ci.UtU;
 
         arma::vec Utr = (Ci.Uty - Ci.Utx * beta) / std::max(se,eps);
-        arma::vec b_i = solve_sympd_safe(M, Utr);
+        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
         arma::mat Minv; inv_sympd_safe(Minv, M);
 
         arma::vec r_i(Ci.n_i);
@@ -975,7 +975,7 @@ Rcpp::List ccc_vc_cpp(
         M += (1.0/std::max(se,eps)) * Ci.UtU;
 
         arma::vec Utr = (Ci.Uty - Ci.Utx * beta) / std::max(se,eps);
-        arma::vec b_i = solve_sympd_safe(M, Utr);
+        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
         arma::mat Minv; inv_sympd_safe(Minv, M);
 
         arma::vec r_i(Ci.n_i);
@@ -1042,7 +1042,7 @@ Rcpp::List ccc_vc_cpp(
       M += inv_se * PG[i].UCU;
 
       arma::mat S_ux = inv_se * PG[i].UTCX;     // r_eff x p
-      arma::mat Zx   = solve_sympd_safe(M, S_ux);
+      arma::mat Zx   = solve_sympd_safe_ccc(M, S_ux);
       arma::mat XTRinvX = inv_se * PG[i].XTCX;
 
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
@@ -1059,7 +1059,7 @@ Rcpp::List ccc_vc_cpp(
       M += inv_se * PG[i].UCU;
 
       arma::mat S_ux = inv_se * PG[i].UTCX;
-      arma::mat Zx   = solve_sympd_safe(M, S_ux);
+      arma::mat Zx   = solve_sympd_safe_ccc(M, S_ux);
       arma::mat XTRinvX = inv_se * PG[i].XTCX;
 
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
@@ -1084,7 +1084,7 @@ Rcpp::List ccc_vc_cpp(
       if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
       if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
       M += inv_se_final * Ci.UtU;
-      arma::mat Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
+      arma::mat Zx = solve_sympd_safe_ccc(M, Ci.Utx * inv_se_final);
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
         double val = inv_se_final * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Zx.col(l)));
         XtViX_tls2[tid](k,l) += val; if (l!=k) XtViX_tls2[tid](l,k) += val;
@@ -1101,7 +1101,7 @@ Rcpp::List ccc_vc_cpp(
       if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
       if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
       M += inv_se_final * Ci.UtU;
-      arma::mat Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
+      arma::mat Zx = solve_sympd_safe_ccc(M, Ci.Utx * inv_se_final);
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
         double val = inv_se_final * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Zx.col(l)));
         XtViX_final(k,l) += val; if (l!=k) XtViX_final(l,k) += val;
@@ -1414,7 +1414,7 @@ Rcpp::List ccc_vc_cpp(
 
       r_i = y_i - X_i * beta;
       Utr = (1.0 / std::max(se, 1e-12)) * (Ueff.t() * r_i);
-      b_i = solve_sympd_safe(M, Utr);
+      b_i = solve_sympd_safe_ccc(M, Utr);
       e   = r_i - Ueff * b_i;
 
       for (int l = 0; l < nm; ++l) {

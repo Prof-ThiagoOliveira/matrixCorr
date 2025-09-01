@@ -34,7 +34,7 @@ static inline bool inv_sympd_safe_ba(mat& out, const mat& A) {
   out = arma::pinv(A);
   return out.is_finite();
 }
-static inline mat solve_sympd_safe(const mat& A, const mat& B) {
+static inline mat solve_sympd_safe_ba(const mat& A, const mat& B) {
   mat Ai;
   if (inv_sympd_safe_ba(Ai, A)) return Ai * B;
   return arma::solve(A, B, arma::solve_opts::fast);
@@ -65,7 +65,7 @@ static inline bool all_finite(const arma::vec& v) {
 static inline double logit_clip(double r) { return clamp(r, -0.999, 0.999); }
 
 // ---- AR(1) block precision (strict contiguity: t_{k+1} = t_k + 1) ----
-static inline void ar1_precision_from_time(const std::vector<int>& tim, double rho, mat& Cinv) {
+static inline void ar1_precision_from_time_ba(const std::vector<int>& tim, double rho, mat& Cinv) {
   const int n = (int)tim.size();
   Cinv.zeros(n, n);
   if (n == 0) return;
@@ -216,7 +216,7 @@ static std::vector<Precomp> precompute_blocks(const mat& X, const vec& y,
     P.X_i.set_size(n_i,p); P.y_i.set_size(n_i);
     std::vector<int> tim_ord(n_i,-1);
     for (int k=0;k<n_i;++k) { int g = rows[k]; P.X_i.row(k)=X.row(g); P.y_i[k]=y[g]; tim_ord[k]=tim[k]; }
-    if (use_ar1) ar1_precision_from_time(tim_ord, rho, P.Cinv);
+    if (use_ar1) ar1_precision_from_time_ba(tim_ord, rho, P.Cinv);
     else P.Cinv.eye(n_i, n_i);
 
     vec ones(n_i, fill::ones);
@@ -453,7 +453,7 @@ static double estimate_rho_moments(const FitOut& fit,
         arma::mat Z(L, 2); Z.col(0).ones(); Z.col(1) = t - arma::mean(t);
         arma::mat ZZ = Z.t() * Z;
         arma::vec Zy = Z.t() * r;
-        arma::vec b  = solve_sympd_safe(ZZ, Zy);
+        arma::vec b  = solve_sympd_safe_ba(ZZ, Zy);
         arma::vec u  = r - Z * b;
 
         if (L <= 3) { s = e + 1; continue; } // need at least 4 after detrend to be stable

@@ -215,18 +215,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// ar1_precision_from_time
-arma::mat ar1_precision_from_time(Rcpp::IntegerVector time_codes, double rho);
-RcppExport SEXP _matrixCorr_ar1_precision_from_time(SEXP time_codesSEXP, SEXP rhoSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type time_codes(time_codesSEXP);
-    Rcpp::traits::input_parameter< double >::type rho(rhoSEXP);
-    rcpp_result_gen = Rcpp::wrap(ar1_precision_from_time(time_codes, rho));
-    return rcpp_result_gen;
-END_RCPP
-}
 // ccc_vc_cpp
 Rcpp::List ccc_vc_cpp(Rcpp::NumericMatrix Xr, Rcpp::NumericVector yr, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int nm, int nt, int max_iter, double tol, double conf_level, Rcpp::Nullable<Rcpp::NumericMatrix> Lr, Rcpp::Nullable<Rcpp::NumericMatrix> auxDr, Rcpp::Nullable<Rcpp::NumericMatrix> Zr, bool use_ar1, double ar1_rho, bool include_subj_method, bool include_subj_time, double sb_zero_tol);
 RcppExport SEXP _matrixCorr_ccc_vc_cpp(SEXP XrSEXP, SEXP yrSEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP nmSEXP, SEXP ntSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP LrSEXP, SEXP auxDrSEXP, SEXP ZrSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP include_subj_methodSEXP, SEXP include_subj_timeSEXP, SEXP sb_zero_tolSEXP) {
@@ -435,7 +423,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},
     {"_matrixCorr_build_L_Dm_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_cpp, 7},
     {"_matrixCorr_build_L_Dm_Z_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_Z_cpp, 11},
-    {"_matrixCorr_ar1_precision_from_time", (DL_FUNC) &_matrixCorr_ar1_precision_from_time, 2},
     {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 18},
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
