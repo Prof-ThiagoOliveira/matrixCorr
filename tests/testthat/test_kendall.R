@@ -45,7 +45,7 @@ test_that("kendall_tau handles ties correctly and matches base::cor", {
 })
 
 test_that("kendall_tau numerics match stats::cor(Kendall)", {
-  withr::local_seed(123)
+  set.seed(123)
 
   X <- matrix(rnorm(200), ncol = 2)
   X_mono <- cbind(exp(X[,1]), log1p(exp(X[,2])))  # strictly monotone ↑
