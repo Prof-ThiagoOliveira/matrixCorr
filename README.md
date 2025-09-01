@@ -6,8 +6,7 @@
 <!-- badges: start -->
 
 [![R-CMD-check.yaml](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/R-CMD-check.yaml)
-[![Codecov test
-coverage](https://codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr/graph/badge.svg)](https://app.codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr)
+[![test-coverage.yaml](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/test-coverage.yaml)
 <!-- badges: end -->
 
 `matrixCorr` computes correlation and related association matrices from
