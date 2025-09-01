@@ -41,7 +41,9 @@ correlation coefficient (including repeated-measures LMM/REML extensions).
 - Distance correlation (`distance_corr()`)
 - Partial correlation (`partial_correlation()`)
 - Shrinkage for $p >> n$ (`schafer_corr()`)
-- Agreement metrics: Bland–Altman (two-method `bland_altman()` and repeated-measures `bland_altman_repeated()`), and Lin’s concordance correlation coefficient (pairwise `ccc_pairwise_u_stat()` and repeated-measures LMM/REML `ccc_lmm_reml()`)
+- Agreement metrics
+    * Bland–Altman (two-method `bland_altman()` and repeated-measures `bland_altman_repeated()`), 
+    * Lin’s concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_lmm_reml()` and non-parametric `ccc_pairwise_u_stat()`)
 
 ## Installation
 
