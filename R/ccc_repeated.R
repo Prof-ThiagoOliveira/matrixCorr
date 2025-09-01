@@ -1363,8 +1363,8 @@ ccc_lmm_reml_overall <- function(df, fml, response, rind, method, time,
                            alpha = vc_alpha, test_order = vc_test_order,
                            sb_zero_tol = sb_zero_tol)
     ans <- sel$fit
-    inc_subj_method_eff <- sel$include_subj_method
-    inc_subj_time_eff <- sel$include_subj_time
+    inc_subj_method_eff <- isTRUE(sel$include_subj_method)
+    inc_subj_time_eff   <- isTRUE(sel$include_subj_time)
 
     ## For reporting attributes, compute rho used (only if AR1 with unknown rho)
     rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
@@ -1840,7 +1840,7 @@ print.matrixCorr_ccc <- function(x,
   if (is_ci_obj) {
     est <- as.matrix(x$est)
     lwr <- as.matrix(x$lwr.ci)
-    upr <- as.matrix(x$lwr.ci); upr[,] <- x$upr.ci
+    upr <- as.matrix(x$upr.ci)
   } else if (is.matrix(x)) {
     est <- as.matrix(x)
     lwr <- matrix(NA_real_, nrow(est), ncol(est), dimnames = dimnames(est))

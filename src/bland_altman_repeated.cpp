@@ -17,7 +17,7 @@ static inline double clamp(double x, double lo, double hi) {
   return std::max(lo, std::min(hi, x));
 }
 
-static inline bool inv_sympd_safe(mat& out, const mat& A) {
+static inline bool inv_sympd_safe_ba(mat& out, const mat& A) {
   if (arma::inv_sympd(out, A)) return true;
   mat Aj = A;
   double base = 1.0;
@@ -36,10 +36,10 @@ static inline bool inv_sympd_safe(mat& out, const mat& A) {
 }
 static inline mat solve_sympd_safe(const mat& A, const mat& B) {
   mat Ai;
-  if (inv_sympd_safe(Ai, A)) return Ai * B;
+  if (inv_sympd_safe_ba(Ai, A)) return Ai * B;
   return arma::solve(A, B, arma::solve_opts::fast);
 }
-static inline double sample_var(const arma::vec& v) {
+static inline double sample_var_ba(const arma::vec& v) {
   const arma::uword n = v.n_elem;
   if (n < 2u) return 0.0;
   double mu = arma::mean(v);
@@ -140,7 +140,7 @@ static PairData make_pairs(const NumericVector& y,
 }
 
 // reindex subjects to 0..m-1
-static inline void reindex_subjects(const std::vector<int>& subj_raw,
+static inline void reindex_subjects_ba(const std::vector<int>& subj_raw,
                                     std::vector<int>& subj_idx,
                                     int& m) {
   std::unordered_map<int,int> M;
@@ -155,14 +155,14 @@ static inline void reindex_subjects(const std::vector<int>& subj_raw,
 }
 
 // group rows by subject, sorted by time (NA/negative at end)
-struct BySubj {
+struct BySubjBA {
   std::vector< std::vector<int> > rows;
   std::vector< std::vector<int> > tim;
 };
-static BySubj index_by_subject(const std::vector<int>& subj_idx,
+static BySubjBA index_by_subject_ba(const std::vector<int>& subj_idx,
                                const std::vector<int>& time) {
   const int m = *std::max_element(subj_idx.begin(), subj_idx.end()) + 1;
-  BySubj S; S.rows.assign(m,{}); S.tim.assign(m,{});
+  BySubjBA S; S.rows.assign(m,{}); S.tim.assign(m,{});
   for (size_t i=0;i<subj_idx.size();++i) {
     int j = subj_idx[i];
     S.rows[j].push_back((int)i);
@@ -201,7 +201,7 @@ struct Precomp {
 };
 
 static std::vector<Precomp> precompute_blocks(const mat& X, const vec& y,
-                                              const BySubj& S,
+                                              const BySubjBA& S,
                                               bool use_ar1, double rho) {
   const int p = X.n_cols;
   const int m = (int)S.rows.size();
@@ -247,7 +247,7 @@ struct FitOut {
 };
 
 static FitOut fit_diff_em(const mat& X, const vec& y,
-                          const BySubj& S,
+                          const BySubjBA& S,
                           const std::vector<Precomp>& PC,
                           int max_iter, double tol) {
   const int p = X.n_cols;
@@ -323,7 +323,7 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
 
     // (2) GLS beta
     mat XtViX_inv;
-    if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) { ok=false; break; }
+    if (!inv_sympd_safe_ba(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) { ok=false; break; }
     beta = XtViX_inv * XtViy;
     if (!all_finite(beta)) { ok=false; break; }
 
@@ -424,7 +424,7 @@ static inline double bias_subject_equal_weight(const std::vector<double>& d,
 static double estimate_rho_moments(const FitOut& fit,
                                    const arma::mat& X,
                                    const arma::vec& y,
-                                   const BySubj& S,
+                                   const BySubjBA& S,
                                    const std::vector<Precomp>& /*unused*/) {
   const arma::vec beta = fit.beta;
   const double EPS = 1e-12;
@@ -507,8 +507,8 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
 
   // 2) Subject indexing over PAIRS (not raw rows)
   std::vector<int> subj_idx; int m=0;
-  reindex_subjects(P.subj, subj_idx, m);
-  BySubj S = index_by_subject(subj_idx, P.time);
+  reindex_subjects_ba(P.subj, subj_idx, m);
+  BySubjBA S = index_by_subject_ba(subj_idx, P.time);
 
   // 3) Fixed-effects design: [Intercept, (optional) scaled pair mean]
   const int p = include_slope ? 2 : 1;
@@ -592,10 +592,10 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   arma::vec subj_means_used(m_used);
   for (int i = 0, k = 0; i < m; ++i) if (!S.rows[i].empty()) subj_means_used[k++] = subj_means[i];
 
-  double var_mu0 = (m_used >= 2 ? sample_var(subj_means_used) / std::max(1, m_used) : 0.0);
+  double var_mu0 = (m_used >= 2 ? sample_var_ba(subj_means_used) / std::max(1, m_used) : 0.0);
 
   // Var(su2_hat) = Var(su_term)/m ; Var(se2_hat) via weighted subject sizes
-  double var_su = sample_var(fit.su_term) / std::max(1, m);
+  double var_su = sample_var_ba(fit.su_term) / std::max(1, m);
 
   arma::vec se_contrib = fit.se_term;                 // per-subject num_i / n_i
   // weights ~ n_i / n_total  -> sum w^2 factor
@@ -605,7 +605,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     double wi = ((double)S.rows[i].size()) / std::max(1.0, n_total);
     w2sum += wi*wi;
   }
-  double var_se = sample_var(se_contrib) * w2sum;
+  double var_se = sample_var_ba(se_contrib) * w2sum;
 
   double cov_su_se = 0.0;
   if (use_cov_su_se) {

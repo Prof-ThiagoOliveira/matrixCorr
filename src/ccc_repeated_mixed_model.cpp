@@ -185,16 +185,16 @@ static inline void reindex_subject(const IntegerVector& subject,
   }
   m_out = next;
 }
-struct BySubj {
+struct BySubjCCC {
   std::vector< std::vector<int> > rows;
   std::vector< std::vector<int> > met;
   std::vector< std::vector<int> > tim;
 };
-static inline BySubj index_by_subject(const std::vector<int>& subj_idx,
+static inline BySubjCCC index_by_subject_ccc(const std::vector<int>& subj_idx,
                                       const IntegerVector& method,
                                       const IntegerVector& time,
                                       int m) {
-  BySubj S;
+  BySubjCCC S;
   S.rows.assign(m, {});
   S.met.assign(m, {});
   S.tim.assign(m, {});
@@ -353,12 +353,16 @@ static inline void build_U_base_matrix(const std::vector<int>& met_i,
     for (int t=0; t<n_i; ++t) { int tt = tim_i[t]; if (tt >= 0) U(t, col + tt) = 1.0; }
   }
 }
-static inline void rows_take_to(const arma::mat& M, const std::vector<int>& rows, arma::mat& out) {
+static inline void rows_take_to(const arma::mat& M,
+                                const std::vector<int>& rows,
+                                arma::mat& out) {
   const int n_i = (int)rows.size();
-  const int q = M.n_cols;
+  const int q   = (int)M.n_cols;
   out.set_size(n_i, q);
+  if (q == 0) return;
   for (int k=0; k<n_i; ++k) out.row(k) = M.row(rows[k]);
 }
+
 static inline void add_Uextra_times(const arma::mat& Uextra, const arma::vec& a_extra, arma::vec& out) {
   if (Uextra.n_rows == 0 || Uextra.n_cols == 0) return;
   out += Uextra * a_extra;
@@ -396,7 +400,7 @@ struct PrecompGen {
 static std::vector<PrecompGen>
   precompute_general_blocks(const arma::mat& X,
                             const arma::vec& y,
-                            const BySubj& S,
+                            const BySubjCCC& S,
                             const arma::mat& Z, bool has_extra, int qZ,
                             int nm_re, int nt_re, int nm_full, int nt_full,
                             bool use_ar1, double ar1_rho,
@@ -508,8 +512,11 @@ Rcpp::List ccc_vc_cpp(
     double sb_zero_tol = 1e-10
 ) {
 #ifdef _OPENMP
+  // #define MATRIXCORR_NO_BLAS_GUARD
+#ifndef MATRIXCORR_NO_BLAS_GUARD
   detail_blas_guard::harden_omp_runtime_once();
   detail_blas_guard::BLASThreadGuard _guard_one_thread_blas(1);
+#endif
 #endif
 
   const int n = yr.size();
@@ -541,7 +548,7 @@ Rcpp::List ccc_vc_cpp(
   // subject indexing
   std::vector<int> subj_idx; int m = 0;
   reindex_subject(subject, subj_idx, m);
-  BySubj S = index_by_subject(subj_idx, method, time, m);
+  BySubjCCC S = index_by_subject_ccc(subj_idx, method, time, m);
 
   // Included random blocks
   const int nm_re = include_subj_method ? nm : 0;
