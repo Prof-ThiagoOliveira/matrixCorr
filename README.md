@@ -10,26 +10,33 @@
 coverage](https://codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr/graph/badge.svg)](https://app.codecov.io/gh/Prof-ThiagoOliveira/kendall_tau_rank_corr)
 <!-- badges: end -->
 
-`matrixCorr` is a lightweight, high-performance package for computing
-correlation matrices in `R`. Numerically robust estimates for:
+`matrixCorr` computes correlation and related association matrices from
+small to high-dimensional data using simple, consistent functions and
+sensible defaults. It includes shrinkage and robust options for noisy or
+**p ≥ n** settings, plus convenient print/plot methods.
+Performance-critical paths are implemented in C++ with BLAS/OpenMP and
+memory-aware symmetric updates. The API accepts base matrices and data
+frames and returns standard R objects via a consistent S3 interface.
 
-- **Kendall’s tau** with automatic **tau-a / tau-b** selection (stable
-  tie handling using merge-sort inversion counting + Fenwick trees),
-- **Spearman’s rho** (rank + Pearson on ranks with average-tie ranking),
-- **Pearson’s r** (single-pass, variance-checked).
-
-Designed for large matrices and tie-heavy data, `matrixCorr` accepts
-matrices or data frames, returns symmetric correlation matrices with
-metadata, and includes convenient `print()` and `plot()` methods for
-quick inspection.
+Supported measures include Pearson, Spearman, Kendall, distance
+correlation, partial correlation, and robust biweight mid-correlation;
+agreement tools cover Bland–Altman (two-method and repeated-measures)
+and Lin’s concordance correlation coefficient (including
+repeated-measures LMM/REML extensions).
 
 ## Features
 
 - High-performance C++ backend using `Rcpp`
-- Support for tied data via Kendall’s tau-b
-- Easy-to-use `kendall_tau()` function for matrices and data frames
-- ggplot2-based heatmap visualization
-- Designed for large-scale, high-dimensional data
+- General correlations such as `pearson_corr()`, `spearman_rho()`,
+  `kendall_tau()`
+- Robust correlation metrics (`biweight_mid_corr()`)
+- Distance correlation (`distance_corr()`)
+- Partial correlation (`partial_correlation()`)
+- Shrinkage for $p >> n$ (`schafer_corr()`)
+- Agreement metrics: Bland–Altman (two-method `bland_altman()` and
+  repeated-measures `bland_altman_repeated()`), and Lin’s concordance
+  correlation coefficient (pairwise `ccc_pairwise_u_stat()` and
+  repeated-measures LMM/REML `ccc_lmm_reml()`)
 
 ## Installation
 
@@ -41,74 +48,128 @@ devtools::install_github("Prof-ThiagoOliveira/matrixCorr")
 
 ## Example
 
-### **Kendall’s Tau Example**
+### Correlation matrices (Pearson, Spearman, Kendall)
 
 ``` r
 library(matrixCorr)
 
-# Simulated data
-set.seed(42)
-mat <- cbind(A = rnorm(100), B = rnorm(100), C = rnorm(100))
+set.seed(1)
+X <- as.data.frame(matrix(rnorm(300 * 6), ncol = 6))
+names(X) <- paste0("V", 1:6)
 
-# Compute Kendall's tau correlation matrix
-ktau <- kendall_tau(mat)
+R_pear <- pearson_corr(X)
+R_spr  <- spearman_rho(X)
+R_ken  <- kendall_tau(X)
 
-# Print matrix
-print(ktau)
-
-# Visualize with ggplot2
-plot(ktau)
+print(R_pear, digits = 2)
+plot(R_spr)   # heatmap
 ```
 
-------------------------------------------------------------------------
-
-### **Spearman’s Rho Example**
+### Robust correlation (biweight mid-correlation)
 
 ``` r
-library(matrixCorr)
+set.seed(2)
+Y <- X
+# inject outliers
+Y$V1[sample.int(nrow(Y), 8)] <- Y$V1[sample.int(nrow(Y), 8)] + 8
 
-# Simulated data with some ties
-set.seed(123)
-mat <- cbind(
-  A = sample(1:10, 100, replace = TRUE),
-  B = sample(1:10, 100, replace = TRUE),
-  C = rnorm(100)
+R_bicor <- biweight_mid_corr(Y)
+print(R_bicor, digits = 2)
+```
+
+### High-dimensional shrinkage correlation ($p >> n$)
+
+``` r
+set.seed(3)
+n <- 60; p <- 200
+Xd <- matrix(rnorm(n * p), n, p)
+colnames(Xd) <- paste0("G", seq_len(p))
+
+R_shr <- schafer_corr(Xd)
+print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
+```
+
+### Partial correlation matrix
+
+``` r
+R_part <- partial_correlation(X)
+print(R_part, digits = 2)
+```
+
+### Distance correlation matrix
+
+``` r
+R_dcor <- distance_corr(X)
+print(R_dcor, digits = 2)
+```
+
+## Agreement analyses
+
+### Two-method Bland–Altman
+
+``` r
+set.seed(4)
+x <- rnorm(120, 100, 10)
+y <- x + 0.5 + rnorm(120, 0, 8)
+
+ba <- bland_altman(x, y)
+print(ba)
+plot(ba)
+```
+
+### Repeated-measures Bland–Altman (pairwise matrix)
+
+``` r
+set.seed(5)
+S <- 20; Tm <- 6
+subj  <- rep(seq_len(S), each = Tm)
+time  <- rep(seq_len(Tm), times = S)
+
+true  <- rnorm(S, 50, 6)[subj] + (time - mean(time)) * 0.4
+mA    <- true + rnorm(length(true), 0, 2)
+mB    <- true + 1.0 + rnorm(length(true), 0, 2.2)
+mC    <- 0.95 * true + rnorm(length(true), 0, 2.5)
+
+dat <- rbind(
+  data.frame(y = mA, subject = subj, method = "A", time = time),
+  data.frame(y = mB, subject = subj, method = "B", time = time),
+  data.frame(y = mC, subject = subj, method = "C", time = time)
 )
+dat$method <- factor(dat$method, levels = c("A","B","C"))
 
-# Compute Spearman's rho correlation matrix
-spearman <- spearman_rho(mat)
-
-# Print matrix
-print(spearman)
-
-# Visualize with ggplot2
-plot(spearman)
+ba_rep <- bland_altman_repeated(
+  data = dat, response = "y", subject = "subject",
+  method = "method", time = "time",
+  include_slope = FALSE, use_ar1 = FALSE
+)
+summary(ba_rep)
+# plot(ba_rep)  # faceted BA scatter by pair
 ```
 
-------------------------------------------------------------------------
-
-### **Pearson Correlation Example**
+### Lin’s concordance correlation coefficient (repeated-measures LMM/REML)
 
 ``` r
-library(matrixCorr)
+set.seed(6)
+S <- 30; Tm <- 8
+id     <- factor(rep(seq_len(S), each = 2 * Tm))
+method <- factor(rep(rep(c("A","B"), each = Tm), times = S))
+time   <- rep(rep(seq_len(Tm), times = 2), times = S)
 
-# Simulated continuous data
-set.seed(999)
-mat <- cbind(
-  A = rnorm(100),
-  B = 0.5 * rnorm(100) + 0.5,
-  C = runif(100)
-)
+u  <- rnorm(S, 0, 0.8)[as.integer(id)]
+g  <- rnorm(S * Tm, 0, 0.5)
+g  <- g[ (as.integer(id) - 1L) * Tm + as.integer(time) ]
+y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
 
-# Compute Pearson correlation matrix
-pcorr <- pearson_corr(mat)
-
-# Print matrix
-print(pcorr)
-
-# Visualize with ggplot2
-plot(pcorr)
+dat_ccc <- data.frame(y, id, method, time)
+fit_ccc <- ccc_lmm_reml(dat_ccc, response = "y", rind = "id",
+                        method = "method", time = "time")
+summary(fit_ccc)  # overall CCC, variance components, SEs/CI
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. Please see `CONTRIBUTING.md` for
+guidelines and `cran-comments.md`/`DESCRIPTION` for package metadata.
 
 ## License
 
