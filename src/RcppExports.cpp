@@ -299,52 +299,52 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// kendall_tau_auto_cpp
-double kendall_tau_auto_cpp(NumericVector x, NumericVector y, double scale);
-RcppExport SEXP _matrixCorr_kendall_tau_auto_cpp(SEXP xSEXP, SEXP ySEXP, SEXP scaleSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
-    rcpp_result_gen = Rcpp::wrap(kendall_tau_auto_cpp(x, y, scale));
-    return rcpp_result_gen;
-END_RCPP
-}
 // kendall_tau_a_cpp
-double kendall_tau_a_cpp(Rcpp::NumericVector x, Rcpp::NumericVector y, double scale);
-RcppExport SEXP _matrixCorr_kendall_tau_a_cpp(SEXP xSEXP, SEXP ySEXP, SEXP scaleSEXP) {
+double kendall_tau_a_cpp(Rcpp::NumericVector xr, Rcpp::NumericVector yr, double scale);
+RcppExport SEXP _matrixCorr_kendall_tau_a_cpp(SEXP xrSEXP, SEXP yrSEXP, SEXP scaleSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type xr(xrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type yr(yrSEXP);
     Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
-    rcpp_result_gen = Rcpp::wrap(kendall_tau_a_cpp(x, y, scale));
+    rcpp_result_gen = Rcpp::wrap(kendall_tau_a_cpp(xr, yr, scale));
     return rcpp_result_gen;
 END_RCPP
 }
 // kendall_tau_b_cpp
-double kendall_tau_b_cpp(Rcpp::NumericVector x, Rcpp::NumericVector y, double scale);
-RcppExport SEXP _matrixCorr_kendall_tau_b_cpp(SEXP xSEXP, SEXP ySEXP, SEXP scaleSEXP) {
+double kendall_tau_b_cpp(Rcpp::NumericVector xr, Rcpp::NumericVector yr, double scale);
+RcppExport SEXP _matrixCorr_kendall_tau_b_cpp(SEXP xrSEXP, SEXP yrSEXP, SEXP scaleSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type xr(xrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type yr(yrSEXP);
     Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
-    rcpp_result_gen = Rcpp::wrap(kendall_tau_b_cpp(x, y, scale));
+    rcpp_result_gen = Rcpp::wrap(kendall_tau_b_cpp(xr, yr, scale));
+    return rcpp_result_gen;
+END_RCPP
+}
+// kendall_tau_auto_cpp
+double kendall_tau_auto_cpp(Rcpp::NumericVector xr, Rcpp::NumericVector yr, double scale);
+RcppExport SEXP _matrixCorr_kendall_tau_auto_cpp(SEXP xrSEXP, SEXP yrSEXP, SEXP scaleSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type xr(xrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type yr(yrSEXP);
+    Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
+    rcpp_result_gen = Rcpp::wrap(kendall_tau_auto_cpp(xr, yr, scale));
     return rcpp_result_gen;
 END_RCPP
 }
 // kendall_matrix_cpp
-NumericMatrix kendall_matrix_cpp(NumericMatrix mat);
+Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat);
 RcppExport SEXP _matrixCorr_kendall_matrix_cpp(SEXP matSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type mat(matSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type mat(matSEXP);
     rcpp_result_gen = Rcpp::wrap(kendall_matrix_cpp(mat));
     return rcpp_result_gen;
 END_RCPP
@@ -396,6 +396,66 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// matrixCorr_tetrachoric_mle_cpp
+double matrixCorr_tetrachoric_mle_cpp(NumericMatrix tab, double correct);
+RcppExport SEXP _matrixCorr_matrixCorr_tetrachoric_mle_cpp(SEXP tabSEXP, SEXP correctSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< double >::type correct(correctSEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_tetrachoric_mle_cpp(tab, correct));
+    return rcpp_result_gen;
+END_RCPP
+}
+// matrixCorr_polychoric_mle_cpp
+double matrixCorr_polychoric_mle_cpp(NumericMatrix tab, double correct);
+RcppExport SEXP _matrixCorr_matrixCorr_polychoric_mle_cpp(SEXP tabSEXP, SEXP correctSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< double >::type correct(correctSEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_polychoric_mle_cpp(tab, correct));
+    return rcpp_result_gen;
+END_RCPP
+}
+// matrixCorr_biserial_latent_cpp
+double matrixCorr_biserial_latent_cpp(NumericVector x, LogicalVector y);
+RcppExport SEXP _matrixCorr_matrixCorr_biserial_latent_cpp(SEXP xSEXP, SEXP ySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type y(ySEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_biserial_latent_cpp(x, y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// matrixCorr_polyserial_mle_cpp
+double matrixCorr_polyserial_mle_cpp(NumericVector x, IntegerVector y);
+RcppExport SEXP _matrixCorr_matrixCorr_polyserial_mle_cpp(SEXP xSEXP, SEXP ySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_polyserial_mle_cpp(x, y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// matrixCorr_polydi_mle_cpp
+double matrixCorr_polydi_mle_cpp(NumericMatrix tab, double correct);
+RcppExport SEXP _matrixCorr_matrixCorr_polydi_mle_cpp(SEXP tabSEXP, SEXP correctSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< double >::type correct(correctSEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_polydi_mle_cpp(tab, correct));
+    return rcpp_result_gen;
+END_RCPP
+}
 // validate_corr_input_cpp
 Rcpp::NumericMatrix validate_corr_input_cpp(SEXP data, bool check_na);
 RcppExport SEXP _matrixCorr_validate_corr_input_cpp(SEXP dataSEXP, SEXP check_naSEXP) {
@@ -429,14 +489,19 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
     {"_matrixCorr_ustat_dcor", (DL_FUNC) &_matrixCorr_ustat_dcor, 2},
     {"_matrixCorr_ustat_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_cpp, 1},
-    {"_matrixCorr_kendall_tau_auto_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_auto_cpp, 3},
     {"_matrixCorr_kendall_tau_a_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_a_cpp, 3},
     {"_matrixCorr_kendall_tau_b_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_b_cpp, 3},
+    {"_matrixCorr_kendall_tau_auto_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_auto_cpp, 3},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
     {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 4},
     {"_matrixCorr_pearson_matrix_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_cpp, 1},
     {"_matrixCorr_sss_cor_cpp", (DL_FUNC) &_matrixCorr_sss_cor_cpp, 1},
     {"_matrixCorr_spearman_matrix_cpp", (DL_FUNC) &_matrixCorr_spearman_matrix_cpp, 1},
+    {"_matrixCorr_matrixCorr_tetrachoric_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_tetrachoric_mle_cpp, 2},
+    {"_matrixCorr_matrixCorr_polychoric_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polychoric_mle_cpp, 2},
+    {"_matrixCorr_matrixCorr_biserial_latent_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_biserial_latent_cpp, 2},
+    {"_matrixCorr_matrixCorr_polyserial_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polyserial_mle_cpp, 2},
+    {"_matrixCorr_matrixCorr_polydi_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polydi_mle_cpp, 2},
     {"_matrixCorr_validate_corr_input_cpp", (DL_FUNC) &_matrixCorr_validate_corr_input_cpp, 2},
     {NULL, NULL, 0}
 };

@@ -13,7 +13,7 @@ using namespace Rcpp;
 using namespace arma;
 
 // ----------  helpers ----------
-static inline double clamp(double x, double lo, double hi) {
+static inline double clamp_ba(double x, double lo, double hi) {
   return std::max(lo, std::min(hi, x));
 }
 
@@ -62,7 +62,7 @@ static inline bool all_finite(const arma::vec& v) {
   for (arma::uword i = 0; i < v.n_elem; ++i) if (!std::isfinite(v[i])) return false;
   return true;
 }
-static inline double logit_clip(double r) { return clamp(r, -0.999, 0.999); }
+static inline double logit_clip(double r) { return clamp_ba(r, -0.999, 0.999); }
 
 // ---- AR(1) block precision (strict contiguity: t_{k+1} = t_k + 1) ----
 static inline void ar1_precision_from_time_ba(const std::vector<int>& tim, double rho, mat& Cinv) {
@@ -276,14 +276,14 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   }
   double se2_init = (den_w > 0.5 ? num_w / den_w : std::max(0.0, vref * 0.5));
   double su2_init = std::max(0.0, var_mu - se2_init / std::max(1.0, arma::mean(arma::conv_to<arma::vec>::from(cnt_s))));
-  se2_init = clamp(se2_init, EPS, MAXV);
-  su2_init = clamp(su2_init, 0.0, MAXV);
+  se2_init = clamp_ba(se2_init, EPS, MAXV);
+  su2_init = clamp_ba(su2_init, 0.0, MAXV);
 
   auto damp_to_ratio = [](double oldv, double newv, double rmax){
     if (!std::isfinite(newv)) return oldv;
-    if (oldv <= 0.0) return clamp(newv, 1e-12, rmax);
+    if (oldv <= 0.0) return clamp_ba(newv, 1e-12, rmax);
     double lo = oldv / rmax, hi = oldv * rmax;
-    return clamp(newv, std::min(lo, hi), std::max(lo, hi));
+    return clamp_ba(newv, std::min(lo, hi), std::max(lo, hi));
   };
 
   double su2 = su2_init, se2 = se2_init;
@@ -372,9 +372,9 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
     su2_new = damp_to_ratio(su2, su2_new, 3.0);
     se2_new = damp_to_ratio(se2, se2_new, 3.0);
 
-    // clamp to sane range
-    su2_new = clamp(su2_new, 0.0, MAXV);
-    se2_new = clamp(se2_new, EPS, MAXV);
+    // clamp_ba to sane range
+    su2_new = clamp_ba(su2_new, 0.0, MAXV);
+    se2_new = clamp_ba(se2_new, EPS, MAXV);
 
     if (!std::isfinite(su2_new) || !std::isfinite(se2_new)) { ok=false; break; }
 
@@ -396,8 +396,8 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   if (!ok) {
     out.warn = "EM did not converge cleanly; stabilized updates applied.";
     if (!std::isfinite(out.su2) || !std::isfinite(out.se2)) {
-      out.su2 = clamp(std::max(0.0, 0.1 * vref), 0.0, MAXV);
-      out.se2 = clamp(std::max(0.0, 0.9 * vref), 1e-12, MAXV);
+      out.su2 = clamp_ba(std::max(0.0, 0.1 * vref), 0.0, MAXV);
+      out.se2 = clamp_ba(std::max(0.0, 0.9 * vref), 1e-12, MAXV);
     }
   }
   return out;
@@ -464,11 +464,11 @@ static double estimate_rho_moments(const FitOut& fit,
         double den = arma::dot(u1, u1);
         if (den <= EPS) { s = e + 1; continue; }
         double rho = arma::dot(u1, u2) / den;
-        rho = clamp(rho, -0.999, 0.999);
+        rho = clamp_ba(rho, -0.999, 0.999);
 
         // small-sample adjustment
         double adj = (1.0 - rho * rho) / std::max(3, L);
-        double rho_bc = clamp(rho + adj, -0.999, 0.999);
+        double rho_bc = clamp_ba(rho + adj, -0.999, 0.999);
 
         // Fisher-z pool; effective weight approx. L - 3
         double w = std::max(1.0, (double)L - 3.0);
@@ -479,7 +479,7 @@ static double estimate_rho_moments(const FitOut& fit,
     }
   }
   if (w_sum <= 0.0) return 0.0;
-  return clamp(std::tanh(z_sum / w_sum), -0.999, 0.999);
+  return clamp_ba(std::tanh(z_sum / w_sum), -0.999, 0.999);
 }
 
 
@@ -548,7 +548,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     fit = fit_diff_em(X, ydiff, S, PC_ar1, max_iter, tol);
 
   } else {
-    if (use_ar1) rho_used = clamp(ar1_rho, -0.999, 0.999);
+    if (use_ar1) rho_used = clamp_ba(ar1_rho, -0.999, 0.999);
     std::vector<Precomp> PC = precompute_blocks(X, ydiff, S, use_ar1, (use_ar1 ? rho_used : 0.0));
     fit = fit_diff_em(X, ydiff, S, PC, max_iter, tol);
   }
@@ -580,7 +580,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     two = z;
   }
 
-  const double V_loa = clamp(su2 + se2, 0.0, 1e12);
+  const double V_loa = clamp_ba(su2 + se2, 0.0, 1e12);
   const double sd_loa = std::sqrt(V_loa);
   const double loa_lower = mu0 - two * sd_loa;
   const double loa_upper = mu0 + two * sd_loa;

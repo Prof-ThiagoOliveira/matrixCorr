@@ -77,16 +77,16 @@ ustat_dcor_matrix_cpp <- function(X) {
     .Call(`_matrixCorr_ustat_dcor_matrix_cpp`, X)
 }
 
-kendall_tau_auto_cpp <- function(x, y, scale = 1e8) {
-    .Call(`_matrixCorr_kendall_tau_auto_cpp`, x, y, scale)
+kendall_tau_a_cpp <- function(xr, yr, scale = 1e8) {
+    .Call(`_matrixCorr_kendall_tau_a_cpp`, xr, yr, scale)
 }
 
-kendall_tau_a_cpp <- function(x, y, scale = 1e8) {
-    .Call(`_matrixCorr_kendall_tau_a_cpp`, x, y, scale)
+kendall_tau_b_cpp <- function(xr, yr, scale = 1e8) {
+    .Call(`_matrixCorr_kendall_tau_b_cpp`, xr, yr, scale)
 }
 
-kendall_tau_b_cpp <- function(x, y, scale = 1e8) {
-    .Call(`_matrixCorr_kendall_tau_b_cpp`, x, y, scale)
+kendall_tau_auto_cpp <- function(xr, yr, scale = 1e8) {
+    .Call(`_matrixCorr_kendall_tau_auto_cpp`, xr, yr, scale)
 }
 
 kendall_matrix_cpp <- function(mat) {
@@ -116,6 +116,26 @@ sss_cor_cpp <- function(X_) {
 
 spearman_matrix_cpp <- function(X_) {
     .Call(`_matrixCorr_spearman_matrix_cpp`, X_)
+}
+
+matrixCorr_tetrachoric_mle_cpp <- function(tab, correct = 0.5) {
+    .Call(`_matrixCorr_matrixCorr_tetrachoric_mle_cpp`, tab, correct)
+}
+
+matrixCorr_polychoric_mle_cpp <- function(tab, correct = 0.5) {
+    .Call(`_matrixCorr_matrixCorr_polychoric_mle_cpp`, tab, correct)
+}
+
+matrixCorr_biserial_latent_cpp <- function(x, y) {
+    .Call(`_matrixCorr_matrixCorr_biserial_latent_cpp`, x, y)
+}
+
+matrixCorr_polyserial_mle_cpp <- function(x, y) {
+    .Call(`_matrixCorr_matrixCorr_polyserial_mle_cpp`, x, y)
+}
+
+matrixCorr_polydi_mle_cpp <- function(tab, correct = 0.5) {
+    .Call(`_matrixCorr_matrixCorr_polydi_mle_cpp`, tab, correct)
 }
 
 validate_corr_input_cpp <- function(data, check_na = TRUE) {
