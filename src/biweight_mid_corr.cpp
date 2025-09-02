@@ -10,272 +10,14 @@
 #include <omp.h>
 #endif
 
+// only what we use from matrixCorr_detail
+#include "matrixCorr_detail.h"
+using namespace matrixCorr_detail;
+using matrixCorr_detail::standardise_bicor::standardise_bicor_column;
+using matrixCorr_detail::standardise_bicor::standardise_bicor_column_weighted;
+
 using namespace Rcpp;
 using namespace arma;
-
-// ---------- helpers: weighted quantile/median on (optionally) sorted inputs ----------
-
-// Weighted quantile for sorted values 's'
-// If not sorted, sort both together before calling this function.
-inline double weighted_quantile_sorted(const arma::vec &s, const arma::vec &ws, double p) {
-  const std::size_t n = s.n_elem;
-  if (n == 0) return std::numeric_limits<double>::quiet_NaN();
-  if (p <= 0.0) return s.front();
-  if (p >= 1.0) return s.back();
-  const double W = arma::accu(ws);
-  if (!(W > 0.0)) return std::numeric_limits<double>::quiet_NaN();
-
-  // cumulative weight target
-  const double target = p * W;
-  double csum = 0.0;
-  for (std::size_t i = 0; i < n; ++i) {
-    csum += ws[i];
-    if (csum >= target) {
-      // Optional linear interpolation to the previous point
-      if (i == 0) return s[0];
-      const double csum_prev = csum - ws[i];
-      const double wgap = ws[i];
-      if (wgap <= 0.0) return s[i];
-      const double frac = (target - csum_prev) / wgap; // in [0,1]
-      return s[i-1] + frac * (s[i] - s[i-1]);
-    }
-  }
-  return s.back();
-}
-
-inline double weighted_median(const arma::vec &x, const arma::vec &w) {
-  arma::uvec ord = arma::stable_sort_index(x);       // stable to keep determinism
-  arma::vec xs = x.elem(ord), ws = w.elem(ord);
-  return weighted_quantile_sorted(xs, ws, 0.5);
-}
-
-inline double weighted_mad(const arma::vec &x, const arma::vec &w, double med) {
-  arma::vec dev = arma::abs(x - med);
-  return weighted_median(dev, w);
-}
-
-// Standardise one column with *weights* (no NA, already subset if needed).
-static void standardise_bicor_column_weighted(const arma::vec &x,
-                                              const arma::vec &wobs,
-                                              arma::vec &z,
-                                              int pearson_fallback_mode,
-                                              double c_const,
-                                              double maxPOutliers,
-                                              bool &col_is_valid) {
-  const std::size_t n = x.n_elem;
-  z.zeros();
-  col_is_valid = false;
-
-  if (n == 0) { z.fill(arma::datum::nan); return; }
-
-  // If all observation weights are zero → degenerate
-  const double Wtot = arma::accu(wobs);
-  if (!(Wtot > 0.0)) { z.fill(arma::datum::nan); return; }
-
-  if (pearson_fallback_mode == 2) {
-    const double mu = arma::dot(x, wobs) / Wtot;
-    arma::vec centered = x - mu;
-    const double denom2 = arma::dot(centered % wobs, centered % wobs);
-    if (denom2 > 0.0) {
-      z = (centered % wobs) / std::sqrt(denom2);
-      col_is_valid = true;
-    } else {
-      z.fill(arma::datum::nan);
-    }
-    return;
-  }
-
-  // Weighted median and MAD
-  const double med = weighted_median(x, wobs);
-  const double mad = weighted_mad(x, wobs, med);
-
-  if (!(mad > 0.0)) {
-    if (pearson_fallback_mode == 0) { z.fill(arma::datum::nan); return; }
-    // Pearson fallback with observation weights: mean as weighted mean
-    const double mu = arma::dot(x, wobs) / Wtot;
-    arma::vec centered = x - mu;
-    // Use weight in norm
-    double denom2 = arma::dot(centered % wobs, centered % wobs);
-    if (!(denom2 > 0.0)) { z.fill(arma::datum::nan); return; }
-    z = (centered % wobs) / std::sqrt(denom2);
-    col_is_valid = true;
-    return;
-  }
-
-  // Weighted side-cap quantiles
-  double scale_neg = 1.0, scale_pos = 1.0;
-  if (maxPOutliers < 1.0) {
-    arma::uvec ord = arma::stable_sort_index(x);
-    arma::vec xs = x.elem(ord), ws = wobs.elem(ord);
-    const double qL = weighted_quantile_sorted(xs, ws, maxPOutliers);
-    const double qU = weighted_quantile_sorted(xs, ws, 1.0 - maxPOutliers);
-    const double uL = (qL - med) / (c_const * mad);
-    const double uU = (qU - med) / (c_const * mad);
-    if (std::abs(uL) > 1.0) scale_neg = std::abs(uL);
-    if (std::abs(uU) > 1.0) scale_pos = std::abs(uU);
-  }
-
-  arma::vec xm = x - med;
-  arma::vec u  = xm / (c_const * mad);
-  if (maxPOutliers < 1.0 && (scale_neg > 1.0 || scale_pos > 1.0)) {
-    for (std::size_t i = 0; i < n; ++i) {
-      if (xm[i] < 0.0) u[i] /= scale_neg;
-      else if (xm[i] > 0.0) u[i] /= scale_pos;
-    }
-  }
-
-  arma::vec wt(n, arma::fill::zeros);
-  for (std::size_t i = 0; i < n; ++i) {
-    const double a = u[i];
-    if (std::abs(a) < 1.0) {
-      const double t = (1.0 - a*a);
-      wt[i] = t * t;
-    }
-  }
-  // Multiply Tukey weights by observation weights
-  wt %= wobs;
-
-  arma::vec r = xm % wt;
-  const double denom2 = arma::dot(r, r);
-  if (!(denom2 > 0.0)) {
-    if (pearson_fallback_mode >= 1) {
-      // Weighted Pearson fallback
-      const double mu = arma::dot(x, wobs) / Wtot;
-      arma::vec centered = x - mu;
-      double d2 = arma::dot((centered % wobs), (centered % wobs));
-      if (d2 > 0.0) {
-        z = (centered % wobs) / std::sqrt(d2);
-        col_is_valid = true;
-        return;
-      }
-    }
-    z.fill(arma::datum::nan);
-    return;
-  }
-  z = r / std::sqrt(denom2);
-  col_is_valid = true;
-}
-
-// Linear interpolation for quantiles on a sorted vector (p in [0,1]).
-inline double quantile_sorted(const arma::vec &s, double p) {
-  const std::size_t n = s.n_elem;
-  if (n == 0) return std::numeric_limits<double>::quiet_NaN();
-  if (p <= 0.0) return s.front();
-  if (p >= 1.0) return s.back();
-  double pos = p * (n - 1);
-  std::size_t lo = static_cast<std::size_t>(std::floor(pos));
-  std::size_t hi = static_cast<std::size_t>(std::ceil(pos));
-  double frac = pos - lo;
-  return (1.0 - frac) * s[lo] + frac * s[hi];
-}
-
-// Implements bicor's weighting
-// 0 = robust, 1 = pearson fallback, -1 = degenerate (all NaN)
-// Requirements is no NA/Inf in x.
-static void standardise_bicor_column(const arma::vec &x,
-                                     arma::vec &z,
-                                     // 0=none(NA), 1=individual, 2=all
-                                     int pearson_fallback_mode,
-                                     double c_const,
-                                     double maxPOutliers,
-                                     bool &col_is_valid,
-                                     int n_threads_unused=1) {
-  const std::size_t n = x.n_elem;
-  col_is_valid = false;
-  z.zeros();
-
-  if (pearson_fallback_mode == 2) {
-    const double mu = arma::mean(x);
-    arma::vec centered = x - mu;
-    const double denom2 = arma::dot(centered, centered);
-    if (denom2 > 0.0) {
-      z = centered / std::sqrt(denom2);
-      col_is_valid = true;
-    } else {
-      z.fill(arma::datum::nan);
-    }
-    return;
-  }
-
-  // Median and MAD
-  arma::vec xc = x;
-  xc = arma::sort(xc);
-  const double med = arma::median(xc);
-  arma::vec absdev = arma::abs(x - med);
-  const double mad = arma::median(arma::sort(absdev));
-
-  // If MAD == 0, decide Pearson fallback or mark degenerate.
-  if (!(mad > 0.0)) {
-    if (pearson_fallback_mode == 0) { // none -> NA column
-      z.fill(arma::datum::nan);
-      return;
-    }
-    // Pearson standardisation for this column
-    const double mu = arma::mean(x);
-    arma::vec centered = x - mu;
-    double denom2 = arma::dot(centered, centered);
-    if (!(denom2 > 0.0)) { // constant column -> NA
-      z.fill(arma::datum::nan);
-      return;
-    }
-    z = centered / std::sqrt(denom2);
-    col_is_valid = true;
-    return;
-  }
-
-  // rescale u on each side so that the chosen quantiles
-  // just reach |u| = 1 if they would otherwise be >= 1 (Langfelder & Horvath).
-  double scale_neg = 1.0, scale_pos = 1.0;
-  if (maxPOutliers < 1.0) {
-    const double qL = quantile_sorted(xc, maxPOutliers);
-    const double qU = quantile_sorted(xc, 1.0 - maxPOutliers);
-    const double uL = (qL - med) / (c_const * mad);
-    const double uU = (qU - med) / (c_const * mad);
-    if (std::abs(uL) > 1.0) scale_neg = std::abs(uL);
-    if (std::abs(uU) > 1.0) scale_pos = std::abs(uU);
-  }
-
-  // Compute weighted, centred vector r_i = (x_i - med) * w_i.
-  arma::vec xm = x - med;
-  arma::vec u = xm / (c_const * mad);
-  // Side-specific rescaling when requested
-  if (maxPOutliers < 1.0 && (scale_neg > 1.0 || scale_pos > 1.0)) {
-    for (std::size_t i = 0; i < n; ++i) {
-      if (xm[i] < 0.0) u[i] /= scale_neg;
-      else if (xm[i] > 0.0) u[i] /= scale_pos;
-    }
-  }
-
-  arma::vec w(n, fill::zeros);
-  for (std::size_t i = 0; i < n; ++i) {
-    double a = u[i];
-    if (std::abs(a) < 1.0) {
-      double t = (1.0 - a*a);
-      w[i] = t * t;
-    } // else 0
-  }
-  arma::vec r = xm % w;
-
-  // L2 norm of r
-  double denom2 = arma::dot(r, r);
-  if (!(denom2 > 0.0)) {
-    if (pearson_fallback_mode >= 1) {
-      const double mu = arma::mean(x);
-      arma::vec centered = x - mu;
-      double d2 = arma::dot(centered, centered);
-      if (d2 > 0.0) {
-        z = centered / std::sqrt(d2);
-        col_is_valid = true;
-        return;
-      }
-    }
-    z.fill(arma::datum::nan);
-    return;
-  }
-
-  z = r / std::sqrt(denom2);
-  col_is_valid = true;
-}
 
 // Biweight mid-correlation matrix
 //
@@ -286,7 +28,7 @@ static void standardise_bicor_column(const arma::vec &x,
 // X Numeric matrix (rows = observations, cols = variables).
 // c_const Tuning constant multiplying raw MAD (default 9.0).
 // maxPOutliers Maximum proportion of low *and* high outliers to permit (>0 to cap).
-// If < 1, columns are side-rescaled so that these quantiles (if beyond |u|>=1) map to |u|=1.
+// If < 1, columns are side-rescaled so that these quantiles (if beyond |u>=1) map to |u|=1.
 // pearson_fallback 0 = never (returns NA for MAD==0); 1 = individual fallback when needed;
 // 2 = force Pearson for all columns (i.e., ordinary Pearson).
 // n_threads Number of OpenMP threads (>=1).
@@ -307,10 +49,10 @@ arma::mat bicor_matrix_cpp(const arma::mat &X,
   std::vector<bool> col_valid(p, false);
 
   // Standardise each column in parallel
-  #ifdef _OPENMP
+#ifdef _OPENMP
   omp_set_num_threads(std::max(1, n_threads));
-  #pragma omp parallel for schedule(static)
-  #endif
+#pragma omp parallel for schedule(static)
+#endif
   for (std::ptrdiff_t j = 0; j < static_cast<std::ptrdiff_t>(p); ++j) {
     bool ok = false;
     arma::vec zcol(n, fill::zeros);
@@ -322,9 +64,9 @@ arma::mat bicor_matrix_cpp(const arma::mat &X,
   // Correlation matrix R = Z'Z
   arma::mat R(p, p, fill::zeros);
 
-  #ifdef _OPENMP
-  #pragma omp parallel for schedule(dynamic)
-  #endif
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic)
+#endif
   for (std::ptrdiff_t j = 0; j < static_cast<std::ptrdiff_t>(p); ++j) {
     for (std::size_t k = static_cast<std::size_t>(j); k < p; ++k) {
       double val = arma::dot(Z.col(j), Z.col(k));
@@ -534,4 +276,3 @@ arma::mat bicor_matrix_weighted_pairwise_cpp(const arma::mat &X,
   for (std::size_t j = 0; j < p; ++j) R(j,j) = 1.0;
   return R;
 }
-

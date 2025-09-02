@@ -93,15 +93,6 @@ kendall_matrix_cpp <- function(mat) {
     .Call(`_matrixCorr_kendall_matrix_cpp`, mat)
 }
 
-#' Partial correlation matrix with sample / ridge / OAS covariance
-#'
-#' @param X_ Numeric double matrix (n x p). No NAs.
-#' @param method One of "sample", "ridge", "oas". Default "oas" (recommended for p >> n).
-#' @param lambda Ridge penalty for "ridge" method (added to diagonal). Ignored otherwise.
-#' @param return_cov_precision If TRUE, return covariance and precision matrices.
-#' @return A list with elements: \code{pcor}, and optionally \code{cov}, \code{precision},
-#'         \code{method}, \code{lambda}, \code{rho} (for OAS).
-#' @export
 partial_correlation_cpp <- function(X_, method = "oas", lambda = 1e-3, return_cov_precision = TRUE) {
     .Call(`_matrixCorr_partial_correlation_cpp`, X_, method, lambda, return_cov_precision)
 }
