@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 #include <functional>
+#include <vector>
+#include <limits>
 
 namespace matrixCorr_detail {
 
@@ -11,11 +13,11 @@ namespace matrixCorr_detail {
 //------------------------------------------------------------------------------
 namespace clamp_policy {
 // NaN-preserving (comparisons with NaN are false -> returns x i.e., NaN)
-inline double nan_preserve(double x, double lo, double hi){
+inline double nan_preserve(double x, double lo, double hi) noexcept {
   return (x < lo) ? lo : (x > hi) ? hi : x;
 }
 // Saturate NaN to midpoint of [lo, hi] (alternative behavior)
-inline double saturate_nan(double x, double lo, double hi){
+inline double saturate_nan(double x, double lo, double hi) noexcept {
   if (std::isnan(x)) return 0.5 * (lo + hi);
   return (x < lo) ? lo : (x > hi) ? hi : x;
 }
@@ -35,69 +37,73 @@ inline double qnorm01(double p) { return R::qnorm(p, 0.0, 1.0, 1, 0); }
 namespace brent {
 
 template<class F>
-inline double optimize(F&& f,
-                       double a, double b,
-                       double tol = 1e-6, int max_iter = 100) {
-  const F& func = f;                 // bind once (works for lambdas)
-  const double golden = 0.3819660;
-  double x = a + golden * (b - a), w = x, v = x;
-  double fx = func(x), fw = fx, fv = fx;
-  double d = 0.0, e = 0.0;
+inline double optimize(F&& f, double a, double b,
+                       double tol = 1e-8, int max_iter = 100)
+  noexcept(noexcept(std::declval<F&>()(std::declval<double>())))
+  {
+    auto&& func = f; // non-const reference to the callable
+    using std::abs;
+    constexpr double golden = 0.3819660112501051; // more precise
+    const double eps = std::numeric_limits<double>::epsilon();
 
-  for (int iter = 0; iter < max_iter; ++iter){
-    double m = 0.5 * (a + b);
-    double tol1 = tol * std::abs(x) + 1e-10;
-    double tol2 = 2.0 * tol1;
+    double x = a + golden * (b - a), w = x, v = x;
+    double fx = func(x), fw = fx, fv = fx;
+    double d = 0.0, e = 0.0;
 
-    if (std::abs(x - m) <= tol2 - 0.5 * (b - a)) break;
+    for (int iter = 0; iter < max_iter; ++iter){
+      double m = 0.5 * (a + b);
+      double tol1 = tol * abs(x) + eps;
+      double tol2 = 2.0 * tol1;
 
-    double p = 0, q = 0, r = 0;
-    if (std::abs(e) > tol1){
-      r = (x - w) * (fx - fv);
-      q = (x - v) * (fx - fw);
-      p = (x - v) * q - (x - w) * r;
-      q = 2.0 * (q - r);
-      if (q > 0) p = -p;
-      q = std::abs(q);
-      double temp = e;
-      e = d;
+      if (abs(x - m) <= tol2 - 0.5 * (b - a)) break;
 
-      if (std::abs(p) >= std::abs(0.5 * q * temp) || p <= q * (a - x) || p >= q * (b - x)){
+      double p = 0, q = 0, r = 0;
+      if (abs(e) > tol1){
+        r = (x - w) * (fx - fv);
+        q = (x - v) * (fx - fw);
+        p = (x - v) * q - (x - w) * r;
+        q = 2.0 * (q - r);
+        if (q > 0) p = -p;
+        q = abs(q);
+        const double etemp = e;
+        e = d;
+
+        if (abs(p) >= abs(0.5 * q * etemp) || p <= q * (a - x) || p >= q * (b - x)){
+          e = (x < m) ? b - x : a - x;
+          d = golden * e;
+        } else {
+          d = p / q;
+          double u = x + d;
+          if (u - a < tol2 || b - u < tol2)
+            d = tol1 * ((m - x >= 0) ? 1 : -1);
+        }
+      } else {
         e = (x < m) ? b - x : a - x;
         d = golden * e;
-      } else {
-        d = p / q;
-        double u = x + d;
-        if (u - a < tol2 || b - u < tol2)
-          d = tol1 * ((m - x >= 0) ? 1 : -1);
       }
-    } else {
-      e = (x < m) ? b - x : a - x;
-      d = golden * e;
-    }
 
-    double u = x + ((std::abs(d) >= tol1) ? d : tol1 * ((d > 0) ? 1 : -1));
-    double fu = func(u);
+      double u = x + ((abs(d) >= tol1) ? d : tol1 * ((d > 0) ? 1 : -1));
+      double fu = func(u);
 
-    if (fu <= fx){
-      if (u < x) b = x; else a = x;
-      v = w; fv = fw;
-      w = x; fw = fx;
-      x = u; fx = fu;
-    } else {
-      if (u < x) a = u; else b = u;
-      if (fu <= fw || w == x){
+      if (fu <= fx){
+        if (u < x) b = x; else a = x;
         v = w; fv = fw;
-        w = u; fw = fu;
-      } else if (fu <= fv || v == x || v == w){
-        v = u; fv = fu;
+        w = x; fw = fx;
+        x = u; fx = fu;
+      } else {
+        if (u < x) a = u; else b = u;
+        if (fu <= fw || w == x){
+          v = w; fv = fw;
+          w = u; fw = fu;
+        } else if (fu <= fv || v == x || v == w){
+          v = u; fv = fu;
+        }
       }
     }
+    return x;
   }
-  return x;
-}
-
 } // namespace brent
+
 
 //------------------------------------------------------------------------------
 // ---------- BVN CDF (adaptive 1D integration) ----------
@@ -118,31 +124,34 @@ inline double bvn_integrand(double t, const BVNParams& P){
 
 template<class F>
 inline double simpson_rec(const F& f, double a, double b,
-                          double fa, double fb, double fm, double S, int depth){
-  double m  = 0.5 * (a + b);
-  double lm = 0.5 * (a + m);
-  double rm = 0.5 * (m + b);
-  double flm = f(lm);
-  double frm = f(rm);
-  double Sleft  = (m - a) * (fa + 4.0 * flm + fm) / 6.0;
-  double Sright = (b - m) * (fm + 4.0 * frm + fb) / 6.0;
-  double S2 = Sleft + Sright;
-  if (depth <= 0 || std::abs(S2 - S) < 1e-9 * (1.0 + std::abs(S2))) return S2;
-  return simpson_rec(f, a, m, fa, fm, flm, Sleft,  depth - 1) +
-    simpson_rec(f, m, b, fm, fb, frm, Sright, depth - 1);
-}
-
+                          double fa, double fb, double fm, double S, int depth)
+  noexcept(noexcept(f(a)))
+  {
+    double m  = 0.5 * (a + b);
+    double lm = 0.5 * (a + m);
+    double rm = 0.5 * (m + b);
+    double flm = f(lm);
+    double frm = f(rm);
+    double Sleft  = (m - a) * (fa + 4.0 * flm + fm) / 6.0;
+    double Sright = (b - m) * (fm + 4.0 * frm + fb) / 6.0;
+    double S2 = Sleft + Sright;
+    if (depth <= 0 || std::abs(S2 - S) < 1e-9 * (1.0 + std::abs(S2))) return S2;
+    return simpson_rec(f, a, m, fa, fm, flm, Sleft,  depth - 1) +
+      simpson_rec(f, m, b, fm, fb, frm, Sright, depth - 1);
+  }
 
 template<class F>
-inline double integrate_adaptive(F&& f, double a, double b){
-  const F& func = f;                           // bind once
-  double fa = func(a), fb = func(b), fm = func(0.5 * (a + b));
-  double S  = (b - a) * (fa + 4.0 * fm + fb) / 6.0;
-  return simpson_rec(func, a, b, fa, fb, fm, S, 20);
-}
+inline double integrate_adaptive(F&& f, double a, double b)
+  noexcept(noexcept(std::declval<F&>()(a)))
+  {
+    const F& func = f;                           // bind once
+    double fa = func(a), fb = func(b), fm = func(0.5 * (a + b));
+    double S  = (b - a) * (fa + 4.0 * fm + fb) / 6.0;
+    return simpson_rec(func, a, b, fa, fb, fm, S, 20);
+  }
 
 inline double Phi2(double a, double b, double rho){
-  using matrixCorr_detail::clamp_policy::nan_preserve; // we’ll clamp rho directly here
+  using matrixCorr_detail::clamp_policy::nan_preserve; // clamp rho here
   if (std::isinf(a) && a < 0) return 0.0;
   if (std::isinf(b) && b < 0) return 0.0;
   if (std::isinf(a) && a > 0 && std::isinf(b) && b > 0) return 1.0;
@@ -172,38 +181,59 @@ inline double rect_prob(double al, double au, double bl, double bu, double rho){
   double p = A - B - C + D;
   return (p <= 0.0) ? 0.0 : p;
 }
-}
+} // namespace bvn_adaptive
+
 //------------------------------------------------------------------------------
 // ---------- ranking utilities ----------
 //------------------------------------------------------------------------------
 namespace ranking {
 
-// Average rank with tie handling
-inline arma::vec rank_vector(const arma::vec& x) {
+// Close-enough comparator: treat a and b as a tie if |a-b| <= abs_eps + rel_eps*max(|a|,|b|)
+inline bool is_close(double a, double b, double abs_eps, double rel_eps) noexcept {
+  const double diff = std::abs(a - b);
+  return diff <= (abs_eps + rel_eps * std::max(std::abs(a), std::abs(b)));
+}
+
+// tolerance-capable ranker (average ranks)
+inline arma::vec rank_vector_eps(const arma::vec& x,
+                                 double abs_eps = 0.0,
+                                 double rel_eps = 0.0,
+                                 bool   stable  = true)
+{
   const arma::uword n = x.n_elem;
-  arma::uvec idx = arma::sort_index(x);
+  // stable sort gives deterministic grouping for near-ties
+  arma::uvec idx = stable ? arma::stable_sort_index(x) : arma::sort_index(x);
+  // precompute sorted values to avoid x(idx[...]) in the loop
+  arma::vec xs   = x.elem(idx);
   arma::vec ranks(n);
 
   arma::uword i = 0;
   while (i < n) {
     arma::uword j = i + 1;
-    const double xi = x(idx[i]);
-    while (j < n && x(idx[j]) == xi) ++j;
-    const double avg_rank = (static_cast<double>(i + j - 1) * 0.5) + 1.0;
+    const double xi = xs[i];
+    while (j < n && is_close(xs[j], xi, abs_eps, rel_eps)) ++j;
+    // 1-based average
+    const double avg_rank = 0.5 * static_cast<double>(i + j - 1) + 1.0;
     for (arma::uword k = i; k < j; ++k) ranks(idx[k]) = avg_rank;
     i = j;
   }
   return ranks;
 }
 
-// Invert standard deviations safely (avoid div by zero)
+// Backwards-compatible wrapper: exact ties only (your original behavior)
+inline arma::vec rank_vector(const arma::vec& x) {
+  return rank_vector_eps(x, /*abs_eps=*/0.0, /*rel_eps=*/0.0, /*stable=*/true);
+}
+
+// Invert standard deviations safely (unchanged)
 inline arma::vec safe_inv_stddev(const arma::vec& s) {
   arma::vec inv_s(s.n_elem, arma::fill::zeros);
   arma::uvec nz = arma::find(s > 0.0);
   inv_s.elem(nz) = 1.0 / s.elem(nz);
   return inv_s;
 }
-}
+
+} // namespace ranking
 //------------------------------------------------------------------------------
 // ---------- order-statistics + pairwise ----------
 //------------------------------------------------------------------------------
@@ -279,6 +309,25 @@ namespace pairwise {
 // Generic pairwise matrix builder for any column-wise metric:
 //   metric(col_i, col_j) -> double
 template <class Metric>
+inline arma::mat apply_ptr(const arma::mat& X, Metric&& metric){
+  const arma::uword p = X.n_cols, n = X.n_rows;
+  arma::mat M(p, p, arma::fill::ones);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+  for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j){
+    const double* cj = X.colptr(static_cast<arma::uword>(j));
+    for (arma::uword k = static_cast<arma::uword>(j) + 1; k < p; ++k){
+      const double* ck = X.colptr(k);
+      const double v = metric(cj, ck, n);
+      M(j,k) = v; M(k,j) = v;
+    }
+  }
+  return M;
+}
+
+// double(const arma::vec&, const arma::vec&)
+template <class Metric>
 inline arma::mat apply(const arma::mat& X, Metric metric){
   const arma::uword p = X.n_cols;
   arma::mat M(p, p, arma::fill::ones);
@@ -290,7 +339,6 @@ inline arma::mat apply(const arma::mat& X, Metric metric){
   }
   return M;
 }
-
 } // namespace pairwise
 
 //------------------------------------------------------------------------------
@@ -344,8 +392,8 @@ inline void subtract_n_outer_mu(arma::mat& M, const arma::rowvec& mu, double n) 
 // Ensure positive definiteness by geometric diagonal jitter until chol succeeds.
 inline void make_pd_inplace(arma::mat& S, double& jitter, const double max_jitter = 1e-2) {
   if (jitter < 0) jitter = 0.0;
+  arma::mat C;
   for (;;) {
-    arma::mat C;
     if (arma::chol(C, S, "upper")) return;
     if (jitter == 0.0) jitter = 1e-8; else jitter *= 10.0;
     if (jitter > max_jitter)
@@ -399,11 +447,12 @@ inline void col_means_vars_pop(const arma::mat& X,
   means.set_size(p);
   vars_pop.set_size(p);
   for (arma::uword j = 0; j < p; ++j) {
-    const arma::vec col = X.col(j);
+    const auto col = X.col(j);
     means[j]    = arma::mean(col);
     vars_pop[j] = arma::var(col) * ((n - 1.0) / n);
   }
 }
+
 
 // Population covariance via manual loop (matches ccc_cpp evaluation route)
 inline double cov_xy_pop_manual(const arma::vec& x, const arma::vec& y,
@@ -463,17 +512,22 @@ inline double ccc_from_stats_via_cov(double mean_x, double mean_y,
 namespace fisherz {
 using matrixCorr_detail::clamp_policy::nan_preserve;
 
-inline double z(double r) {
-  // guard against |r|=1 to avoid ±∞
-  r = nan_preserve(r, -0.999999999, 0.999999999);
-  return 0.5 * std::log((1.0 + r) / (1.0 - r));
+inline double z(double r) noexcept {
+  const double one_minus = std::nextafter(1.0, 0.0);       // < 1.0
+  const double neg_one_plus = std::nextafter(-1.0, 0.0);   // > -1.0
+  r = nan_preserve(r, neg_one_plus, one_minus);
+  return std::atanh(r);
 }
-inline double inv(double z) {
-  const double e2z = std::exp(2.0 * z);
-  return (e2z - 1.0) / (e2z + 1.0);
+inline double inv(double z) noexcept {
+  double r = std::tanh(z);
+  const double one_minus = std::nextafter(1.0, 0.0);
+  if (r >  one_minus) r = one_minus;
+  if (r < -one_minus) r = -one_minus;
+  return r;
 }
+
 inline void ci_from_z(double p, double se_t, double zcrit,
-                      double& lci, double& uci) {
+                      double& lci, double& uci) noexcept {
   const double t   = z(p);
   const double lzt = t - zcrit * se_t;
   const double uzt = t + zcrit * se_t;
@@ -487,8 +541,12 @@ inline void ci_from_z(double p, double se_t, double zcrit,
 //------------------------------------------------------------------------------
 
 namespace ccc_se {
-// Your exact delta-method SE expression, factored.
 inline double se_delta(double r, double p, double u, int n) {
+  if (n <= 2) return std::numeric_limits<double>::quiet_NaN();
+  const double eps = 1e-12;
+  if (!std::isfinite(r) || std::abs(r) < eps)
+    return std::numeric_limits<double>::infinity();
+
   const double r2 = r * r;
   const double p2 = p * p;
   const double term =
@@ -526,13 +584,79 @@ inline void for_upper_pairs(arma::uword p, Body body) {
 namespace covmat {
 
 // Returns population covariance: S = (X'X - n * mu * mu') / n
-inline arma::mat cov_pop(const arma::mat& X, arma::rowvec& mu_out) {
-  const double n = static_cast<double>(X.n_rows);
+// population covariance: S = (X'X - n * mu * mu') / n
+// Default = fast BLAS-3 two-pass path (your current implementation).
+// Optionally: stable_centered=true -> center into a temporary then do SYRK.
+// Optionally: method = "welford" -> one-pass, very stable, BLAS-2; good when p is small/moderate.
+inline arma::mat cov_pop(const arma::mat& X,
+                         arma::rowvec& mu_out,
+                         bool stable_centered = false)
+{
+  const arma::uword n_rows = X.n_rows;
+  const arma::uword p      = X.n_cols;
+
+  if (n_rows == 0) {
+    mu_out.set_size(p); mu_out.fill(arma::datum::nan);
+    arma::mat out(p, p);
+    out.fill(arma::datum::nan);
+    return out;
+  }
+
+  const double n = static_cast<double>(n_rows);
   mu_out = arma::mean(X, 0);
-  arma::mat XtX = linalg::crossprod_no_copy(X); // X'X
-  linalg::subtract_n_outer_mu(XtX, mu_out, n);  // XtX := XtX - n * mu mu'
-  XtX /= n;                                     // population scaling
+
+  if (stable_centered) {
+    // More numerically stable when |mu| is large relative to the spread:
+    // compute S = (Xc'Xc)/n with Xc = X - 1*mu. Costs one p-by-n copy.
+    arma::mat Xc = X.each_row() - mu_out;
+    arma::mat XtXc = linalg::crossprod_no_copy(Xc);   // (X - mu)'(X - mu)
+    XtXc /= n;
+    return XtXc;
+  }
+
+  // Fast two-pass (your original): BLAS SYRK on X, then subtract n * mu * mu'
+  arma::mat XtX = linalg::crossprod_no_copy(X);       // X'X
+  linalg::subtract_n_outer_mu(XtX, mu_out, n);        // XtX -= n * mu * mu'
+  XtX /= n;                                           // population scaling
   return XtX;
+}
+
+// One-pass Welford/Chan-Golub-LeVeque style population covariance.
+// Very stable; updates mean and M2 with each row. Complexity O(n p^2).
+// Prefer when p is small/medium.
+inline arma::mat cov_pop_welford(const arma::mat& X, arma::rowvec& mu_out)
+{
+  const arma::uword n_rows = X.n_rows;
+  const arma::uword p      = X.n_cols;
+
+  if (n_rows == 0) {
+    mu_out.set_size(p); mu_out.fill(arma::datum::nan);
+    arma::mat out(p, p);
+    out.fill(arma::datum::nan);
+    return out;
+  }
+
+  arma::rowvec mean(p, arma::fill::zeros);
+  arma::mat    M2(p, p, arma::fill::zeros);
+
+  double k = 0.0;
+  for (arma::uword i = 0; i < n_rows; ++i) {
+    const arma::rowvec xi = X.row(i);
+    const arma::rowvec delta  = xi - mean;
+    k += 1.0;
+    const arma::rowvec delta2 = delta / k;
+    mean += delta2;
+    // rank-1 update: M2 += (xi - mean_old)' * (xi - mean_new)
+    // which equals (delta)' * (xi - mean) after the mean update.
+    M2  += arma::trans(delta) * (xi - mean);
+  }
+
+  mu_out = mean;
+  // population covariance
+  M2 /= k;
+  // enforce exact symmetry (accumulated FP noise)
+  M2 = arma::symmatu(M2);
+  return M2;
 }
 
 } // namespace covmat
