@@ -33,12 +33,15 @@ inline double qnorm01(double p) { return R::qnorm(p, 0.0, 1.0, 1, 0); }
 // ---------- Brent minimizer (scalar 1D) ----------
 //------------------------------------------------------------------------------
 namespace brent {
-inline double optimize(std::function<double(double)> f,
+
+template<class F>
+inline double optimize(F&& f,
                        double a, double b,
-                       double tol = 1e-6, int max_iter = 100){
+                       double tol = 1e-6, int max_iter = 100) {
+  const F& func = f;                 // bind once (works for lambdas)
   const double golden = 0.3819660;
   double x = a + golden * (b - a), w = x, v = x;
-  double fx = f(x), fw = fx, fv = fx;
+  double fx = func(x), fw = fx, fv = fx;
   double d = 0.0, e = 0.0;
 
   for (int iter = 0; iter < max_iter; ++iter){
@@ -74,7 +77,7 @@ inline double optimize(std::function<double(double)> f,
     }
 
     double u = x + ((std::abs(d) >= tol1) ? d : tol1 * ((d > 0) ? 1 : -1));
-    double fu = f(u);
+    double fu = func(u);
 
     if (fu <= fx){
       if (u < x) b = x; else a = x;
@@ -93,7 +96,9 @@ inline double optimize(std::function<double(double)> f,
   }
   return x;
 }
-}
+
+} // namespace brent
+
 //------------------------------------------------------------------------------
 // ---------- BVN CDF (adaptive 1D integration) ----------
 //------------------------------------------------------------------------------
@@ -111,9 +116,10 @@ inline double bvn_integrand(double t, const BVNParams& P){
   return Phi(arg);
 }
 
-inline double simpson_rec(std::function<double(double)> f, double a, double b,
+template<class F>
+inline double simpson_rec(const F& f, double a, double b,
                           double fa, double fb, double fm, double S, int depth){
-  double m = 0.5 * (a + b);
+  double m  = 0.5 * (a + b);
   double lm = 0.5 * (a + m);
   double rm = 0.5 * (m + b);
   double flm = f(lm);
@@ -126,10 +132,13 @@ inline double simpson_rec(std::function<double(double)> f, double a, double b,
     simpson_rec(f, m, b, fm, fb, frm, Sright, depth - 1);
 }
 
-inline double integrate_adaptive(std::function<double(double)> f, double a, double b){
-  double fa = f(a), fb = f(b), fm = f(0.5 * (a + b));
+
+template<class F>
+inline double integrate_adaptive(F&& f, double a, double b){
+  const F& func = f;                           // bind once
+  double fa = func(a), fb = func(b), fm = func(0.5 * (a + b));
   double S  = (b - a) * (fa + 4.0 * fm + fb) / 6.0;
-  return simpson_rec(f, a, b, fa, fb, fm, S, 20);
+  return simpson_rec(func, a, b, fa, fb, fm, S, 20);
 }
 
 inline double Phi2(double a, double b, double rho){
