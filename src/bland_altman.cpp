@@ -6,23 +6,15 @@ using namespace Rcpp;
 // [[Rcpp::plugins(openmp)]]
 // [[Rcpp::depends(RcppArmadillo)]]
 
-inline double mean_(const std::vector<double>& x) {
+#include "matrixCorr_detail.h"
+using matrixCorr_detail::moments::sample_var;
+
+inline double mean_ba(const std::vector<double>& x) {
   const size_t n = x.size();
   if (n == 0) return NA_REAL;
   long double s = 0.0L;
   for (double v : x) s += v;
   return static_cast<double>(s / n);
-}
-
-inline double sd_sample_(const std::vector<double>& x, double mu) {
-  const size_t n = x.size();
-  if (n < 2) return NA_REAL;
-  long double ss = 0.0L;
-  for (double v : x) {
-    long double d = v - mu;
-    ss += d * d;
-  }
-  return static_cast<double>(std::sqrt(ss / (n - 1)));
 }
 
 // [[Rcpp::export]]
@@ -33,7 +25,6 @@ List bland_altman_cpp(NumericVector group1,
                       double conf_level = 0.95) {
   if (group1.size() != group2.size())
     stop("Error in bland.altman.stats: groups differ in length.");
-  // type checks not needed here; signature already fixes type.
   if (two <= 0.0)
     stop("Error in bland.altman.stats: improper value of 'two'.");
   if (mode != 1 && mode != 2)
@@ -66,18 +57,24 @@ List bland_altman_cpp(NumericVector group1,
   }
 
   // -- summary stats -----------------------------------------------------------
-  std::vector<double> diffs_std(diffs.begin(), diffs.end()); // sample sd (n-1)
-  const double mean_diffs = mean_(diffs_std);
-  const double sd_diffs   = sd_sample_(diffs_std, mean_diffs);
+  std::vector<double> diffs_std(diffs.begin(), diffs.end());
+  const double mean_diffs = mean_ba(diffs_std);
+
+  double sd_diffs = NA_REAL;
+  if (n >= 2) {
+    arma::vec diffs_view(diffs_std.data(), static_cast<arma::uword>(diffs_std.size()), /*copy_aux_mem*/ false);
+    sd_diffs = std::sqrt(sample_var(diffs_view));
+  }
+
   const double critical   = two * sd_diffs;
   const double lower      = mean_diffs - critical;
   const double upper      = mean_diffs + critical;
 
-  // -- t quantiles for CIs (match BlandAltmanLeh) ------------------------------
+  // -- t quantiles for CIs ------------------------------
   const double t1 = R::qt((1.0 - conf_level) / 2.0, n - 1, /*lower_tail*/1, /*log_p*/0);
   const double t2 = R::qt((conf_level + 1.0) / 2.0,       n - 1, /*lower_tail*/1, /*log_p*/0);
 
-  // SEs per Bland & Altman 1986 / as in BlandAltmanLeh
+  // SEs per Bland & Altman 1986
   const double se_limit = sd_diffs * std::sqrt(3.0 / n);
   const double se_mean  = sd_diffs / std::sqrt(static_cast<double>(n));
 
