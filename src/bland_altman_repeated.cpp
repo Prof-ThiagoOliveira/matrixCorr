@@ -9,62 +9,27 @@
 #include <numeric>
 #include <algorithm>
 
+// bring in your helpers
+#include "matrixCorr_detail.h"
+
 using namespace Rcpp;
 using namespace arma;
 
-// ----------  helpers ----------
-static inline double clamp_ba(double x, double lo, double hi) {
-  return std::max(lo, std::min(hi, x));
-}
+// ---- use selected helpers from matrixCorr_detail ----
+using matrixCorr_detail::clamp_policy::nan_preserve;
+using matrixCorr_detail::linalg::inv_sympd_safe;
+using matrixCorr_detail::linalg::solve_sympd_safe;
+using matrixCorr_detail::moments::sample_var;
+using matrixCorr_detail::moments::sample_cov;
+using matrixCorr_detail::indexing::reindex;
 
-static inline bool inv_sympd_safe_ba(mat& out, const mat& A) {
-  if (arma::inv_sympd(out, A)) return true;
-  mat Aj = A;
-  double base = 1.0;
-  if (A.n_rows > 0) {
-    double tr = arma::trace(A);
-    if (std::isfinite(tr) && tr > 0.0) base = std::max(1.0, tr / A.n_rows);
-  }
-  double lam = std::max(1e-12, 1e-8 * base);
-  for (int k=0; k<6; ++k) {
-    Aj = A; Aj.diag() += lam;
-    if (arma::inv_sympd(out, Aj)) return true;
-    lam *= 10.0;
-  }
-  out = arma::pinv(A);
-  return out.is_finite();
-}
-static inline mat solve_sympd_safe_ba(const mat& A, const mat& B) {
-  mat Ai;
-  if (inv_sympd_safe_ba(Ai, A)) return Ai * B;
-  return arma::solve(A, B, arma::solve_opts::fast);
-}
-static inline double sample_var_ba(const arma::vec& v) {
-  const arma::uword n = v.n_elem;
-  if (n < 2u) return 0.0;
-  double mu = arma::mean(v);
-  double acc = 0.0;
-  for (arma::uword i=0; i<n; ++i) { double d = v[i]-mu; acc += d*d; }
-  return acc / (double)(n-1);
-}
-
-static inline double sample_cov(const arma::vec& a, const arma::vec& b) {
-  const arma::uword n = std::min(a.n_elem, b.n_elem);
-  if (n < 2u) return 0.0;
-  const double ma = arma::mean(a);
-  const double mb = arma::mean(b);
-  double acc = 0.0;
-  for (arma::uword i = 0; i < n; ++i) acc += (a[i] - ma) * (b[i] - mb);
-  return acc / (double)(n - 1);
-}
-
+// ---------- local helpers ----------
 static inline bool all_finite(const arma::vec& v) {
   for (arma::uword i = 0; i < v.n_elem; ++i) if (!std::isfinite(v[i])) return false;
   return true;
 }
-static inline double logit_clip(double r) { return clamp_ba(r, -0.999, 0.999); }
 
-// ---- AR(1) block precision (strict contiguity: t_{k+1} = t_k + 1) ----
+// ---- AR(1) block precision (STRICT contiguity: t_{k+1} = t_k + 1) ----
 static inline void ar1_precision_from_time_ba(const std::vector<int>& tim, double rho, mat& Cinv) {
   const int n = (int)tim.size();
   Cinv.zeros(n, n);
@@ -75,7 +40,7 @@ static inline void ar1_precision_from_time_ba(const std::vector<int>& tim, doubl
   while (s < n) {
     if (tim[s] < 0) { Cinv(s,s) += 1.0; ++s; continue; }  // singleton/NA -> iid
     int e = s;
-    while (e + 1 < n && tim[e+1] >= 0 && tim[e+1] == tim[e] + 1) ++e; // contiguous
+    while (e + 1 < n && tim[e+1] >= 0 && tim[e+1] == tim[e] + 1) ++e; // contiguous only
     const int L = e - s + 1;
     if (L == 1) {
       Cinv(s,s) += 1.0;
@@ -139,28 +104,13 @@ static PairData make_pairs(const NumericVector& y,
   return P;
 }
 
-// reindex subjects to 0..m-1
-static inline void reindex_subjects_ba(const std::vector<int>& subj_raw,
-                                    std::vector<int>& subj_idx,
-                                    int& m) {
-  std::unordered_map<int,int> M;
-  subj_idx.resize(subj_raw.size());
-  m = 0;
-  for (size_t i=0;i<subj_raw.size();++i) {
-    int s = subj_raw[i];
-    auto it = M.find(s);
-    if (it==M.end()) { M.emplace(s, m); subj_idx[i]=m; ++m; }
-    else subj_idx[i] = it->second;
-  }
-}
-
 // group rows by subject, sorted by time (NA/negative at end)
 struct BySubjBA {
   std::vector< std::vector<int> > rows;
   std::vector< std::vector<int> > tim;
 };
 static BySubjBA index_by_subject_ba(const std::vector<int>& subj_idx,
-                               const std::vector<int>& time) {
+                                    const std::vector<int>& time) {
   const int m = *std::max_element(subj_idx.begin(), subj_idx.end()) + 1;
   BySubjBA S; S.rows.assign(m,{}); S.tim.assign(m,{});
   for (size_t i=0;i<subj_idx.size();++i) {
@@ -276,14 +226,14 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   }
   double se2_init = (den_w > 0.5 ? num_w / den_w : std::max(0.0, vref * 0.5));
   double su2_init = std::max(0.0, var_mu - se2_init / std::max(1.0, arma::mean(arma::conv_to<arma::vec>::from(cnt_s))));
-  se2_init = clamp_ba(se2_init, EPS, MAXV);
-  su2_init = clamp_ba(su2_init, 0.0, MAXV);
+  se2_init = nan_preserve(se2_init, EPS, MAXV);
+  su2_init = nan_preserve(su2_init, 0.0, MAXV);
 
   auto damp_to_ratio = [](double oldv, double newv, double rmax){
     if (!std::isfinite(newv)) return oldv;
-    if (oldv <= 0.0) return clamp_ba(newv, 1e-12, rmax);
+    if (oldv <= 0.0) return nan_preserve(newv, 1e-12, rmax);
     double lo = oldv / rmax, hi = oldv * rmax;
-    return clamp_ba(newv, std::min(lo, hi), std::max(lo, hi));
+    return nan_preserve(newv, std::min(lo, hi), std::max(lo, hi));
   };
 
   double su2 = su2_init, se2 = se2_init;
@@ -323,7 +273,7 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
 
     // (2) GLS beta
     mat XtViX_inv;
-    if (!inv_sympd_safe_ba(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) { ok=false; break; }
+    if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) { ok=false; break; }
     beta = XtViX_inv * XtViy;
     if (!all_finite(beta)) { ok=false; break; }
 
@@ -372,9 +322,9 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
     su2_new = damp_to_ratio(su2, su2_new, 3.0);
     se2_new = damp_to_ratio(se2, se2_new, 3.0);
 
-    // clamp_ba to sane range
-    su2_new = clamp_ba(su2_new, 0.0, MAXV);
-    se2_new = clamp_ba(se2_new, EPS, MAXV);
+    // clamp to sane range
+    su2_new = nan_preserve(su2_new, 0.0, MAXV);
+    se2_new = nan_preserve(se2_new, EPS, MAXV);
 
     if (!std::isfinite(su2_new) || !std::isfinite(se2_new)) { ok=false; break; }
 
@@ -396,8 +346,8 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   if (!ok) {
     out.warn = "EM did not converge cleanly; stabilized updates applied.";
     if (!std::isfinite(out.su2) || !std::isfinite(out.se2)) {
-      out.su2 = clamp_ba(std::max(0.0, 0.1 * vref), 0.0, MAXV);
-      out.se2 = clamp_ba(std::max(0.0, 0.9 * vref), 1e-12, MAXV);
+      out.su2 = nan_preserve(std::max(0.0, 0.1 * vref), 0.0, MAXV);
+      out.se2 = nan_preserve(std::max(0.0, 0.9 * vref), 1e-12, MAXV);
     }
   }
   return out;
@@ -453,7 +403,7 @@ static double estimate_rho_moments(const FitOut& fit,
         arma::mat Z(L, 2); Z.col(0).ones(); Z.col(1) = t - arma::mean(t);
         arma::mat ZZ = Z.t() * Z;
         arma::vec Zy = Z.t() * r;
-        arma::vec b  = solve_sympd_safe_ba(ZZ, Zy);
+        arma::vec b  = solve_sympd_safe(ZZ, Zy);
         arma::vec u  = r - Z * b;
 
         if (L <= 3) { s = e + 1; continue; } // need at least 4 after detrend to be stable
@@ -464,11 +414,11 @@ static double estimate_rho_moments(const FitOut& fit,
         double den = arma::dot(u1, u1);
         if (den <= EPS) { s = e + 1; continue; }
         double rho = arma::dot(u1, u2) / den;
-        rho = clamp_ba(rho, -0.999, 0.999);
+        rho = nan_preserve(rho, -0.999, 0.999);
 
         // small-sample adjustment
         double adj = (1.0 - rho * rho) / std::max(3, L);
-        double rho_bc = clamp_ba(rho + adj, -0.999, 0.999);
+        double rho_bc = nan_preserve(rho + adj, -0.999, 0.999);
 
         // Fisher-z pool; effective weight approx. L - 3
         double w = std::max(1.0, (double)L - 3.0);
@@ -479,7 +429,7 @@ static double estimate_rho_moments(const FitOut& fit,
     }
   }
   if (w_sum <= 0.0) return 0.0;
-  return clamp_ba(std::tanh(z_sum / w_sum), -0.999, 0.999);
+  return nan_preserve(std::tanh(z_sum / w_sum), -0.999, 0.999);
 }
 
 
@@ -507,7 +457,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
 
   // 2) Subject indexing over PAIRS (not raw rows)
   std::vector<int> subj_idx; int m=0;
-  reindex_subjects_ba(P.subj, subj_idx, m);
+  reindex(P.subj, subj_idx, m);              // (replaces reindex_subjects_ba)
   BySubjBA S = index_by_subject_ba(subj_idx, P.time);
 
   // 3) Fixed-effects design: [Intercept, (optional) scaled pair mean]
@@ -548,7 +498,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     fit = fit_diff_em(X, ydiff, S, PC_ar1, max_iter, tol);
 
   } else {
-    if (use_ar1) rho_used = clamp_ba(ar1_rho, -0.999, 0.999);
+    if (use_ar1) rho_used = nan_preserve(ar1_rho, -0.999, 0.999);
     std::vector<Precomp> PC = precompute_blocks(X, ydiff, S, use_ar1, (use_ar1 ? rho_used : 0.0));
     fit = fit_diff_em(X, ydiff, S, PC, max_iter, tol);
   }
@@ -580,7 +530,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     two = z;
   }
 
-  const double V_loa = clamp_ba(su2 + se2, 0.0, 1e12);
+  const double V_loa = nan_preserve(su2 + se2, 0.0, 1e12);
   const double sd_loa = std::sqrt(V_loa);
   const double loa_lower = mu0 - two * sd_loa;
   const double loa_upper = mu0 + two * sd_loa;
@@ -592,10 +542,10 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   arma::vec subj_means_used(m_used);
   for (int i = 0, k = 0; i < m; ++i) if (!S.rows[i].empty()) subj_means_used[k++] = subj_means[i];
 
-  double var_mu0 = (m_used >= 2 ? sample_var_ba(subj_means_used) / std::max(1, m_used) : 0.0);
+  double var_mu0 = (m_used >= 2 ? sample_var(subj_means_used) / std::max(1, m_used) : 0.0);
 
   // Var(su2_hat) = Var(su_term)/m ; Var(se2_hat) via weighted subject sizes
-  double var_su = sample_var_ba(fit.su_term) / std::max(1, m);
+  double var_su = sample_var(fit.su_term) / std::max(1, m);
 
   arma::vec se_contrib = fit.se_term;                 // per-subject num_i / n_i
   // weights ~ n_i / n_total  -> sum w^2 factor
@@ -605,7 +555,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     double wi = ((double)S.rows[i].size()) / std::max(1.0, n_total);
     w2sum += wi*wi;
   }
-  double var_se = sample_var_ba(se_contrib) * w2sum;
+  double var_se = sample_var(se_contrib) * w2sum;
 
   double cov_su_se = 0.0;
   if (use_cov_su_se) {
@@ -618,7 +568,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
         ++k;
       }
     }
-    // Cov( su_hat , se_hat ) ≈ (1/m_used) * Cov(A_i, B_i)
+    // Cov( su_hat , se_hat ) approx (1/m_used) * Cov(A_i, B_i)
     cov_su_se = sample_cov(A_used, B_used) / std::max(1, m_used);
   }
 
@@ -673,3 +623,4 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     _["warn"]        = fit.warn
   );
 }
+

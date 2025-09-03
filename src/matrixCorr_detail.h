@@ -402,6 +402,97 @@ inline void make_pd_inplace(arma::mat& S, double& jitter, const double max_jitte
   }
 }
 
+// Robust inverse of SPD/SPSD with geometric diagonal jitter; SVD fallback.
+// Returns true if a numerically finite inverse is obtained.
+inline bool inv_sympd_safe(arma::mat& out,
+                           const arma::mat& A,
+                           double init_jitter = 1e-8,
+                           double max_jitter  = 1e-2)
+{
+  if (arma::inv_sympd(out, A)) return true;
+
+  arma::mat Aj = A;
+  double base = 1.0;
+  if (A.n_rows > 0) {
+    const double tr = arma::trace(A);
+    if (std::isfinite(tr) && tr > 0.0) base = std::max(1.0, tr / A.n_rows);
+  }
+  double lam = std::max(1e-12, init_jitter * base);
+
+  for (; lam <= max_jitter; lam *= 10.0) {
+    Aj = A; Aj.diag() += lam;
+    if (arma::inv_sympd(out, Aj)) return true;
+  }
+  out = arma::pinv(A);
+  return out.is_finite();
+}
+
+// Solve A * X = B for SPD/SPSD A with the same jitter/SVD strategy.
+inline arma::mat solve_sympd_safe(const arma::mat& A,
+                                  const arma::mat& B,
+                                  double init_jitter = 1e-8,
+                                  double max_jitter  = 1e-2)
+{
+  arma::mat X;
+  // Fast path: try Cholesky/solve first
+  {
+    arma::mat L;
+    if (arma::chol(L, A, "lower")) {
+      X = arma::solve(arma::trimatl(L), B, arma::solve_opts::fast);
+      X = arma::solve(arma::trimatu(L.t()), X, arma::solve_opts::fast);
+      return X;
+    }
+  }
+  // Fallback via inv_sympd_safe
+  arma::mat Ai;
+  if (!inv_sympd_safe(Ai, A, init_jitter, max_jitter)) {
+    // As a last resort, pseudo-inverse
+    Ai = arma::pinv(A);
+  }
+  return Ai * B;
+}
+
+// Log|A| for SPD/SPSD with jitter; SVD fallback (sums log positive singulars).
+inline double logdet_spd_safe(const arma::mat& A,
+                              double init_jitter = 1e-8,
+                              double max_jitter  = 1e-2)
+{
+  arma::mat L;
+  if (arma::chol(L, A, "lower"))
+    return 2.0 * arma::sum(arma::log(L.diag()));
+
+  arma::mat Aj = A;
+  double base = 1.0;
+  if (A.n_rows > 0) {
+    const double tr = arma::trace(A);
+    if (std::isfinite(tr) && tr > 0.0) base = std::max(1.0, tr / A.n_rows);
+  }
+  double lam = std::max(1e-12, init_jitter * base);
+
+  for (; lam <= max_jitter; lam *= 10.0) {
+    Aj = A; Aj.diag() += lam;
+    if (arma::chol(L, Aj, "lower"))
+      return 2.0 * arma::sum(arma::log(L.diag()));
+  }
+  arma::vec s;
+  arma::mat U, V;
+  arma::svd(U, s, V, A);
+  double acc = 0.0;
+  for (arma::uword i = 0; i < s.n_elem; ++i) if (s[i] > 0.0) acc += std::log(s[i]);
+  return acc;
+}
+
+// Copy a subset of rows (by integer indices) into 'out'
+inline void rows_take_to(const arma::mat& M,
+                         const std::vector<int>& rows,
+                         arma::mat& out)
+{
+  const int n_i = static_cast<int>(rows.size());
+  const int q   = static_cast<int>(M.n_cols);
+  out.set_size(n_i, q);
+  for (int k = 0; k < n_i; ++k) out.row(k) = M.row(rows[k]);
+}
+
 } // namespace linalg
 
 //------------------------------------------------------------------------------
@@ -473,6 +564,26 @@ inline double cov_xy_pop_arma(const arma::vec& x, const arma::vec& y) {
 inline double corr_from_covvar(double cov_xy, double var_x, double var_y) {
   const double denom = std::sqrt(var_x * var_y);
   return (denom > 0.0) ? (cov_xy / denom) : std::numeric_limits<double>::quiet_NaN();
+}
+
+// Unbiased sample variance (n-1 denominator); returns 0 for n<2 (as a safe default).
+inline double sample_var(const arma::vec& v) {
+  const arma::uword n = v.n_elem;
+  if (n < 2u) return 0.0;
+  const double mu = arma::mean(v);
+  double acc = 0.0;
+  for (arma::uword i = 0; i < n; ++i) { const double d = v[i] - mu; acc += d*d; }
+  return acc / static_cast<double>(n - 1u);
+}
+
+inline double sample_cov(const arma::vec& a, const arma::vec& b) {
+  const arma::uword n = std::min(a.n_elem, b.n_elem);
+  if (n < 2u) return 0.0;
+  const double ma = arma::mean(a);
+  const double mb = arma::mean(b);
+  double acc = 0.0;
+  for (arma::uword i = 0; i < n; ++i) acc += (a[i] - ma) * (b[i] - mb);
+  return acc / (double)(n - 1);
 }
 
 } // namespace moments
@@ -937,4 +1048,280 @@ inline void standardise_bicor_column(const arma::vec& x,
 
 } // namespace standardise_bicor
 
+namespace timeseries {
+namespace ar1 {
+
+// κ_T = mean of all entries of the TxT AR(1) correlation matrix (used for time-averaged factors)
+inline double kappa_T(double rho, int T) {
+  if (T <= 1) return 1.0;
+  const double r = rho;
+  double acc = static_cast<double>(T);
+  double rpow = r;
+  for (int k = 1; k <= T - 1; ++k) { acc += 2.0 * static_cast<double>(T - k) * rpow; rpow *= r; }
+  const double TT = static_cast<double>(T) * static_cast<double>(T);
+  return std::max(acc / TT, 1e-12);
+}
+
+// Log|R| when residuals are block-diagonal AR(1) sequences separated by negatives in tim_i.
+// se = σ_e, so log|Σ| = log|R| + n_i*log(se^2) = log|R| + 2*n_i*log(se) (we return the latter form).
+inline double logdet_R_blocks(const std::vector<int>& tim_i,
+                              double rho,
+                              double se,
+                              double eps = 1e-12)
+{
+  const int n_i = static_cast<int>(tim_i.size());
+  const double lg_se = std::log(std::max(se, eps));
+  const double lg_one_minus_r2 = std::log(std::max(1.0 - rho*rho, 1e-12));
+  double out = 0.0;
+  int s = 0;
+  while (s < n_i) {
+    if (tim_i[s] < 0) { out += lg_se; ++s; continue; }
+    int e = s; while (e + 1 < n_i && tim_i[e + 1] >= 0) ++e;
+    const int L = e - s + 1;
+    out += L * lg_se;
+    if (L >= 2) out += (L - 1) * lg_one_minus_r2;
+    s = e + 1;
+  }
+  return out;
+}
+
+// Build the block-tri-diagonal R^{-1} for AR(1) sequences separated by negatives in tim_i.
+// The matrix returned is symmetric and slightly jittered on the diagonal for safety.
+inline void make_Cinv(const std::vector<int>& tim_i,
+                      double rho,
+                      arma::mat& Cinv)
+{
+  const int n_i = static_cast<int>(tim_i.size());
+  Cinv.zeros(n_i, n_i);
+  if (n_i == 0) return;
+
+  const double r2 = rho * rho;
+  const double denom = std::max(1.0 - r2, 1e-12);
+
+  int s = 0;
+  while (s < n_i) {
+    if (tim_i[s] < 0) { Cinv(s, s) += 1.0; ++s; continue; }
+    int e = s;
+    while (e + 1 < n_i && tim_i[e + 1] >= 0) ++e;
+    const int L = e - s + 1;
+
+    if (L == 1) {
+      Cinv(s, s) += 1.0;
+    } else {
+      Cinv(s, s) += 1.0 / denom;
+      Cinv(e, e) += 1.0 / denom;
+      for (int t = s + 1; t <= e - 1; ++t) Cinv(t, t) += (1.0 + r2) / denom;
+      for (int t = s; t <= e - 1; ++t) {
+        Cinv(t, t + 1) += -rho / denom;
+        Cinv(t + 1, t) += -rho / denom;
+      }
+    }
+    s = e + 1;
+  }
+  Cinv.diag() += 1e-10;
+}
+
+} // namespace matrixCorr_detail::timeseries::ar1
+} // namespace matrixCorr_detail::timeseries
+
+namespace indexing {
+
+struct BySubject {
+  std::vector<std::vector<int>> rows; // row indices per subject
+  std::vector<std::vector<int>> met;  // method codes per row (−1 if missing)
+  std::vector<std::vector<int>> tim;  // time   codes per row (−1 if missing)
+};
+
+// Reindex an integer label vector to 0..(m-1). NA handling optional.
+// For Rcpp::IntegerVector pass na_value = NA_INTEGER; otherwise choose a sentinel (e.g., INT_MIN).
+template <class IntVec>
+inline void reindex(const IntVec& ids,
+                    std::vector<int>& out_idx,
+                    int& m_out,
+                    int na_value = std::numeric_limits<int>::min())
+{
+  const int n = static_cast<int>(ids.size());
+  out_idx.resize(n);
+  std::unordered_map<int,int> map;
+  map.reserve(static_cast<size_t>(n));
+  int next = 0;
+
+  for (int i = 0; i < n; ++i) {
+    const int s = ids[i];
+    if (s == na_value) Rcpp::stop("reindex(): input contains NA/sentinel");
+    auto it = map.find(s);
+    if (it == map.end()) { map.emplace(s, next); out_idx[i] = next; ++next; }
+    else out_idx[i] = it->second;
+  }
+  m_out = next;
+}
+
+// Group rows by subject (already reindexed 0..m-1). Method/time may be empty vectors.
+template <class MethodVec, class TimeVec>
+inline BySubject group_by_subject(const std::vector<int>& subj_idx,
+                                  const MethodVec& method,
+                                  const TimeVec&  time,
+                                  int m)
+{
+  BySubject S;
+  S.rows.assign(m, {});
+  S.met.assign(m, {});
+  S.tim.assign(m, {});
+  const int n = static_cast<int>(subj_idx.size());
+
+  for (int i = 0; i < n; ++i) {
+    const int j = subj_idx[i];
+    S.rows[j].push_back(i);
+    if (static_cast<int>(method.size()) > 0) {
+      const int v = method[i];
+      S.met[j].push_back(v == NA_INTEGER ? -1 : (v - 1));
+    }
+    if (static_cast<int>(time.size()) > 0) {
+      const int v = time[i];
+      S.tim[j].push_back(v == NA_INTEGER ? -1 : (v - 1));
+    }
+  }
+  return S;
+}
+
+} // namespace matrixCorr_detail::indexing
+
+namespace design {
+
+// Build the "base" subject-level design U = [1 | method dummies | time dummies]
+inline void build_U_base(const std::vector<int>& met_i,   // size n_i, −1 allowed
+                         const std::vector<int>& tim_i,   // size n_i, −1 allowed
+                         int nm,                          // #method levels used in U
+                         int nt,                          // #time   levels used in U
+                         arma::mat& U)                    // n_i x r_base
+{
+  const int n_i   = static_cast<int>(tim_i.size());
+  const int rbase = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
+  U.zeros(n_i, rbase);
+
+  for (int t = 0; t < n_i; ++t) U(t, 0) = 1.0;
+
+  int col = 1;
+  if (nm > 0) {
+    for (int t = 0; t < n_i; ++t) { const int l = met_i[t]; if (l >= 0) U(t, col + l) = 1.0; }
+    col += nm;
+  }
+  if (nt > 0) {
+    for (int t = 0; t < n_i; ++t) { const int tt = tim_i[t]; if (tt >= 0) U(t, col + tt) = 1.0; }
+  }
+}
+
+// Gram matrix UtU for U = [1 | method dummies | time dummies]
+inline void gram_UtU(const std::vector<int>& met_i,
+                     const std::vector<int>& tim_i,
+                     int n_i, int nm, int nt,
+                     arma::mat& UtU)                      // r x r
+{
+  const int r = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
+  UtU.zeros(r, r);
+  UtU(0, 0) = n_i;
+
+  if (nm > 0) {
+    arma::vec cm(nm, arma::fill::zeros);
+    for (int v : met_i) if (v >= 0) cm[v] += 1.0;
+    for (int l = 0; l < nm; ++l) {
+      UtU(0, 1 + l) = UtU(1 + l, 0) = cm[l];
+      UtU(1 + l, 1 + l) = cm[l];
+    }
+    if (nt > 0) {
+      arma::vec ct(nt, arma::fill::zeros);
+      for (int v : tim_i) if (v >= 0) ct[v] += 1.0;
+      for (int t = 0; t < nt; ++t) {
+        const int jt = 1 + nm + t;
+        UtU(0, jt) = UtU(jt, 0) = ct[t];
+        UtU(jt, jt) = ct[t];
+      }
+      arma::mat cmt(nm, nt, arma::fill::zeros);
+      for (int k = 0; k < n_i; ++k) {
+        const int l = met_i[k], t = tim_i[k];
+        if (l >= 0 && t >= 0) cmt(l, t) += 1.0;
+      }
+      for (int l = 0; l < nm; ++l)
+        for (int t = 0; t < nt; ++t) {
+          const int il = 1 + l;
+          const int jt = 1 + nm + t;
+          UtU(il, jt) = UtU(jt, il) = cmt(l, t);
+        }
+    }
+  } else if (nt > 0) {
+    arma::vec ct(nt, arma::fill::zeros);
+    for (int v : tim_i) if (v >= 0) ct[v] += 1.0;
+    for (int t = 0; t < nt; ++t) {
+      const int jt = 1 + t;
+      UtU(0, jt) = UtU(jt, 0) = ct[t];
+      UtU(jt, jt) = ct[t];
+    }
+  }
+}
+
+// Accumulate U^T * v where v is accessed via a callable v(row_index).
+template <class Accessor>
+inline void accumulate_Ut_vec(const std::vector<int>& rows_i,
+                              const std::vector<int>& met_i,
+                              const std::vector<int>& tim_i,
+                              int nm, int nt,
+                              Accessor v, arma::vec& Utv)         // length r
+{
+  const int n_i = static_cast<int>(rows_i.size());
+  const int r_expected = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
+  Utv.zeros(r_expected);
+
+  double s0 = 0.0;
+  for (int ridx : rows_i) s0 += v(ridx);
+  Utv[0] = s0;
+
+  if (nm > 0) {
+    for (int l = 0; l < nm; ++l) {
+      double sm = 0.0;
+      for (int k = 0; k < n_i; ++k) if (met_i[k] == l) sm += v(rows_i[k]);
+      Utv[1 + l] = sm;
+    }
+  }
+  if (nt > 0) {
+    const int off = 1 + (nm > 0 ? nm : 0);
+    for (int t = 0; t < nt; ++t) {
+      double st = 0.0;
+      for (int k = 0; k < n_i; ++k) if (tim_i[k] == t) st += v(rows_i[k]);
+      Utv[off + t] = st;
+    }
+  }
+}
+
+// out += U * a (U as base design with optional method/time columns)
+inline void add_U_times(const std::vector<int>& rows_i,
+                        const std::vector<int>& met_i,
+                        const std::vector<int>& tim_i,
+                        int nm, int nt,
+                        const arma::vec& a, arma::vec& out)        // out length n_i
+{
+  const int n_i = static_cast<int>(rows_i.size());
+  const double a0 = a[0];
+
+  std::vector<double> am(nm > 0 ? nm : 0), at(nt > 0 ? nt : 0);
+  if (nm > 0) for (int l = 0; l < nm; ++l) am[l] = a[1 + l];
+  if (nt > 0) for (int t = 0; t < nt; ++t) at[t] = a[1 + (nm > 0 ? nm : 0) + t];
+
+  for (int k = 0; k < n_i; ++k) {
+    double val = a0;
+    if (nm > 0 && met_i[k] >= 0) val += am[ met_i[k] ];
+    if (nt > 0 && tim_i[k] >= 0) val += at[ tim_i[k] ];
+    out[k] += val;
+  }
+}
+
+// out += Uextra * a_extra (no-op if empty)
+inline void add_extra_times(const arma::mat& Uextra,
+                            const arma::vec& a_extra,
+                            arma::vec& out)
+{
+  if (Uextra.n_rows == 0 || Uextra.n_cols == 0) return;
+  out += Uextra * a_extra;
+}
+
+} // namespace matrixCorr_detail::design
 } // namespace matrixCorr_detail

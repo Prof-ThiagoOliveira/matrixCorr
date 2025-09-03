@@ -14,13 +14,31 @@
 #endif
 #endif
 
+#include "matrixCorr_detail.h"
+
 using namespace Rcpp;
 using namespace arma;
 
-// =========================
-// ==  helpers          ====
-// =========================
+// ---- use helpers from matrixCorr_detail ----
+using matrixCorr_detail::linalg::inv_sympd_safe;
+using matrixCorr_detail::linalg::solve_sympd_safe;
+using matrixCorr_detail::linalg::logdet_spd_safe;
+using matrixCorr_detail::timeseries::ar1::kappa_T;
+using matrixCorr_detail::timeseries::ar1::logdet_R_blocks;
+using matrixCorr_detail::timeseries::ar1::make_Cinv;
+using matrixCorr_detail::indexing::BySubject;
+using matrixCorr_detail::indexing::reindex;
+using matrixCorr_detail::indexing::group_by_subject;
+using matrixCorr_detail::design::build_U_base;
+using matrixCorr_detail::design::gram_UtU;
+using matrixCorr_detail::design::accumulate_Ut_vec;
+using matrixCorr_detail::design::add_U_times;
+using matrixCorr_detail::linalg::rows_take_to;
+using matrixCorr_detail::moments::sample_var;
 
+// =========================
+// ==  helpers (thread guard)
+// =========================
 #ifdef _OPENMP
 namespace detail_blas_guard {
 struct BLASThreadGuard {
@@ -82,291 +100,7 @@ inline void harden_omp_runtime_once() {
 } // namespace detail_blas_guard
 #endif // _OPENMP
 
-// ---------- safety & math helpers  ----------
-static inline mat solve_sympd_safe_ccc(const mat& A, const mat& B) {
-  mat Ai;
-  if (inv_sympd(Ai, A)) return Ai * B;
-  double base = 1.0;
-  if (A.n_rows > 0) {
-    double tr = trace(A);
-    if (std::isfinite(tr) && tr > 0.0) base = std::max(1.0, tr / A.n_rows);
-  }
-  double lam = std::max(1e-12, 1e-8 * base);
-  for (int k = 0; k < 6; ++k) {
-    mat Aj = A; Aj.diag() += lam;
-    if (inv_sympd(Ai, Aj)) return Ai * B;
-    lam *= 10.0;
-  }
-  return pinv(A) * B;
-}
-static inline bool inv_sympd_safe(mat& out, const mat& A) {
-  if (inv_sympd(out, A)) return true;
-  mat Aj = A;
-  double jitter = 1e-8;
-  if (A.n_rows > 0) {
-    double tr = trace(A);
-    if (std::isfinite(tr) && tr > 0.0) jitter = std::max(1e-12, 1e-8 * tr / A.n_rows);
-  }
-  Aj.diag() += jitter;
-  if (inv_sympd(out, Aj)) return true;
-  out = pinv(A);
-  return out.is_finite();
-}
-static inline double sample_var(const arma::vec& v) {
-  const arma::uword n = v.n_elem;
-  if (n < 2u) return 0.0;
-  const double mu = arma::mean(v);
-  double acc = 0.0;
-  for (arma::uword i=0;i<n;++i) { double d = v[i]-mu; acc += d*d; }
-  return acc / (double)(n-1);
-}
-static inline double ar1_kappa_T(double rho, int T) {
-  if (T <= 1) return 1.0;
-  const double r = rho;
-  double acc = (double)T;
-  double rpow = r;
-  for (int k = 1; k <= T-1; ++k) { acc += 2.0 * (double)(T - k) * rpow; rpow *= r; }
-  double TT = (double)T * (double)T;
-  double kappa = acc / TT;
-  return std::max(kappa, 1e-12);
-}
-static inline double logdet_spd_safe(const arma::mat& A) {
-  arma::mat L;
-  if (arma::chol(L, A, "lower"))
-    return 2.0 * arma::sum(arma::log(L.diag()));
-  arma::mat Aj = A;
-  double base = 1.0;
-  if (A.n_rows > 0) {
-    double tr = arma::trace(A);
-    if (std::isfinite(tr) && tr > 0.0) base = std::max(1.0, tr / A.n_rows);
-  }
-  double lam = std::max(1e-12, 1e-8 * base);
-  for (int k = 0; k < 6; ++k) {
-    Aj = A; Aj.diag() += lam;
-    if (arma::chol(L, Aj, "lower"))
-      return 2.0 * arma::sum(arma::log(L.diag()));
-    lam *= 10.0;
-  }
-  arma::vec s; arma::mat U, V;
-  arma::svd(U, s, V, A);
-  double acc = 0.0;
-  for (arma::uword i=0;i<s.n_elem;++i) if (s[i] > 0) acc += std::log(s[i]);
-  return acc;
-}
-static inline double ar1_logdet_R_blocks(const std::vector<int>& tim_i, double rho, double se, double eps=1e-12) {
-  const int n_i = (int)tim_i.size();
-  const double lg_se = std::log(std::max(se, eps));
-  const double lg_one_minus_r2 = std::log(std::max(1.0 - rho*rho, 1e-12));
-  double out = 0.0;
-  int s = 0;
-  while (s < n_i) {
-    if (tim_i[s] < 0) { out += lg_se; ++s; continue; }
-    int e = s; while (e+1 < n_i && tim_i[e+1] >= 0) ++e;
-    const int L = e - s + 1;
-    out += L * lg_se;
-    if (L >= 2) out += (L - 1) * lg_one_minus_r2;
-    s = e + 1;
-  }
-  return out;
-}
-static inline void reindex_subject(const IntegerVector& subject,
-                                   std::vector<int>& subj_idx,
-                                   int& m_out) {
-  subj_idx.resize(subject.size());
-  std::unordered_map<int,int> map;
-  map.reserve(subject.size());
-  int next = 0;
-  for (int i = 0; i < subject.size(); ++i) {
-    int s = subject[i];
-    if (s == NA_INTEGER) stop("subject contains NA");
-    auto it = map.find(s);
-    if (it == map.end()) { map.emplace(s,next); subj_idx[i]=next; ++next; }
-    else subj_idx[i] = it->second;
-  }
-  m_out = next;
-}
-struct BySubjCCC {
-  std::vector< std::vector<int> > rows;
-  std::vector< std::vector<int> > met;
-  std::vector< std::vector<int> > tim;
-};
-static inline BySubjCCC index_by_subject_ccc(const std::vector<int>& subj_idx,
-                                      const IntegerVector& method,
-                                      const IntegerVector& time,
-                                      int m) {
-  BySubjCCC S;
-  S.rows.assign(m, {});
-  S.met.assign(m, {});
-  S.tim.assign(m, {});
-  const int n = subj_idx.size();
-  for (int i = 0; i < n; ++i) {
-    int j = subj_idx[i];
-    S.rows[j].push_back(i);
-    if (method.size() > 0) {
-      int v = method[i];
-      S.met[j].push_back(v == NA_INTEGER ? -1 : (v - 1));
-    }
-    if (time.size() > 0) {
-      int v = time[i];
-      S.tim[j].push_back(v == NA_INTEGER ? -1 : (v - 1));
-    }
-  }
-  return S;
-}
-static inline void make_UtU(const std::vector<int>& met_i,
-                            const std::vector<int>& tim_i,
-                            int n_i, int nm, int nt,
-                            mat& UtU) {
-  const int r = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-  UtU.zeros(r,r);
-  UtU(0,0) = n_i;
-  if (nm > 0) {
-    vec cm(nm, fill::zeros);
-    for (int v : met_i) if (v >= 0) cm[v] += 1.0;
-    for (int l=0; l<nm; ++l) {
-      UtU(0,1+l) = UtU(1+l,0) = cm[l];
-      UtU(1+l,1+l) = cm[l];
-    }
-    if (nt > 0) {
-      vec ct(nt, fill::zeros);
-      for (int v : tim_i) if (v >= 0) ct[v] += 1.0;
-      for (int t=0; t<nt; ++t) {
-        int jt = 1 + nm + t;
-        UtU(0,jt) = UtU(jt,0) = ct[t];
-        UtU(jt,jt) = ct[t];
-      }
-      mat cmt(nm, nt, fill::zeros);
-      const int n_i_rows = (int)met_i.size();
-      for (int k=0; k<n_i_rows; ++k) {
-        int l = met_i[k], t = tim_i[k];
-        if (l>=0 && t>=0) cmt(l,t) += 1.0;
-      }
-      for (int l=0; l<nm; ++l) for (int t=0; t<nt; ++t) {
-        int il = 1 + l;
-        int jt = 1 + nm + t;
-        UtU(il,jt) = UtU(jt,il) = cmt(l,t);
-      }
-    }
-  } else if (nt > 0) {
-    vec ct(nt, fill::zeros);
-    for (int v : tim_i) if (v >= 0) ct[v] += 1.0;
-    for (int t=0; t<nt; ++t) {
-      int jt = 1 + t;
-      UtU(0,jt) = UtU(jt,0) = ct[t];
-      UtU(jt,jt) = ct[t];
-    }
-  }
-}
-template <typename Accessor>
-static inline void accum_Ut_vec(const std::vector<int>& rows_i,
-                                const std::vector<int>& met_i,
-                                const std::vector<int>& tim_i,
-                                int nm, int nt,
-                                Accessor v, vec& Utv) {
-  Utv.zeros();
-  double s0 = 0.0;
-  for (int ridx : rows_i) s0 += v(ridx);
-  Utv[0] = s0;
-  if (nm > 0) {
-    for (int l = 0; l < nm; ++l) {
-      double sm = 0.0;
-      for (size_t k = 0; k < rows_i.size(); ++k) {
-        if (met_i[k] == l) sm += v(rows_i[k]);
-      }
-      Utv[1 + l] = sm;
-    }
-  }
-  if (nt > 0) {
-    for (int t = 0; t < nt; ++t) {
-      double st = 0.0;
-      for (size_t k = 0; k < rows_i.size(); ++k) {
-        if (tim_i[k] == t) st += v(rows_i[k]);
-      }
-      int jt = 1 + (nm > 0 ? nm : 0) + t;
-      Utv[jt] = st;
-    }
-  }
-  const int r_expected = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
-  if ((int)Utv.n_rows != r_expected)
-    Rcpp::stop("accum_Ut_vec: Utv length mismatch (got %d, expected %d)",
-               (int)Utv.n_rows, r_expected);
-}
-static inline void add_U_times(const std::vector<int>& rows_i,
-                               const std::vector<int>& met_i,
-                               const std::vector<int>& tim_i,
-                               int nm, int nt,
-                               const vec& a, vec& out) {
-  const int n_i = (int)rows_i.size();
-  const double a0 = a[0];
-  std::vector<double> am(nm>0?nm:0), at(nt>0?nt:0);
-  if (nm>0) for (int l=0;l<nm;++l) am[l] = a[1+l];
-  if (nt>0) for (int t=0;t<nt;++t) at[t] = a[1 + (nm>0?nm:0) + t];
-  for (int k=0; k<n_i; ++k) {
-    double val = a0;
-    if (nm>0 && met_i[k] >= 0) val += am[ met_i[k] ];
-    if (nt>0 && tim_i[k] >= 0) val += at[ tim_i[k] ];
-    out[k] += val;
-  }
-}
-static inline void make_ar1_Cinv(const std::vector<int>& tim_i, double rho, arma::mat& Cinv) {
-  const int n_i = (int)tim_i.size();
-  Cinv.zeros(n_i, n_i);
-  if (n_i == 0) return;
-  const double r2 = rho * rho;
-  const double denom = std::max(1.0 - r2, 1e-12);
-  int s = 0;
-  while (s < n_i) {
-    if (tim_i[s] < 0) { Cinv(s,s) += 1.0; ++s; continue; }
-    int e = s;
-    while (e + 1 < n_i && tim_i[e+1] >= 0) ++e;
-    const int L = e - s + 1;
-    if (L == 1) {
-      Cinv(s,s) += 1.0;
-    } else {
-      Cinv(s,s)         += 1.0 / denom;
-      Cinv(e,e)         += 1.0 / denom;
-      for (int t = s + 1; t <= e - 1; ++t)
-        Cinv(t,t) += (1.0 + r2) / denom;
-      for (int t = s; t <= e - 1; ++t) {
-        Cinv(t, t+1) += -rho / denom;
-        Cinv(t+1, t) += -rho / denom;
-      }
-    }
-    s = e + 1;
-  }
-  Cinv.diag() += 1e-10;
-}
-static inline void build_U_base_matrix(const std::vector<int>& met_i,
-                                       const std::vector<int>& tim_i,
-                                       int nm, int nt,
-                                       arma::mat& U) {
-  const int n_i = (int)tim_i.size();
-  const int r_base = 1 + (nm>0?nm:0) + (nt>0?nt:0);
-  U.zeros(n_i, r_base);
-  for (int t=0; t<n_i; ++t) U(t,0) = 1.0;
-  int col = 1;
-  if (nm > 0) {
-    for (int t=0; t<n_i; ++t) { int l = met_i[t]; if (l >= 0) U(t, col + l) = 1.0; }
-    col += nm;
-  }
-  if (nt > 0) {
-    for (int t=0; t<n_i; ++t) { int tt = tim_i[t]; if (tt >= 0) U(t, col + tt) = 1.0; }
-  }
-}
-static inline void rows_take_to(const arma::mat& M,
-                                const std::vector<int>& rows,
-                                arma::mat& out) {
-  const int n_i = (int)rows.size();
-  const int q   = (int)M.n_cols;
-  out.set_size(n_i, q);
-  if (q == 0) return;
-  for (int k=0; k<n_i; ++k) out.row(k) = M.row(rows[k]);
-}
-
-static inline void add_Uextra_times(const arma::mat& Uextra, const arma::vec& a_extra, arma::vec& out) {
-  if (Uextra.n_rows == 0 || Uextra.n_cols == 0) return;
-  out += Uextra * a_extra;
-}
+// -------- local structs for caching --------
 struct Cache {
   arma::mat UtU;   // r x r
   arma::vec Uty;   // r
@@ -376,9 +110,6 @@ struct Cache {
   int n_i;
 };
 
-// =======================================================
-// ==== precompute block for general path (AR1/Z) =====
-// =======================================================
 struct PrecompGen {
   int n_i = 0;
   std::vector<int> rows_ord;     // subject's rows, ordered by time
@@ -396,16 +127,16 @@ struct PrecompGen {
   arma::mat UCU;    // r_eff x r_eff
 };
 
-// Build per-subject blocks once
+// Build per-subject blocks once (AR1 and/or extra Z)
 static std::vector<PrecompGen>
   precompute_general_blocks(const arma::mat& X,
                             const arma::vec& y,
-                            const BySubjCCC& S,
+                            const BySubject& S,
                             const arma::mat& Z, bool has_extra, int qZ,
                             int nm_re, int nt_re, int nm_full, int nt_full,
                             bool use_ar1, double ar1_rho,
-                            double eps) {
-    const int m = (int)S.rows.size();
+                            double /*eps*/) {
+    const int m = static_cast<int>(S.rows.size());
     const int p = X.n_cols;
     const int r_base = 1 + (nm_re>0?nm_re:0) + (nt_re>0?nt_re:0);
     const int r_eff  = r_base + (has_extra ? qZ : 0);
@@ -418,7 +149,7 @@ static std::vector<PrecompGen>
       const auto& rows_i = S.rows[i];
       const auto& met_i  = S.met[i];
       const auto& tim_i  = S.tim[i];
-      const int n_i = (int)rows_i.size();
+      const int n_i = static_cast<int>(rows_i.size());
       if (n_i == 0) continue;
 
       // order by time (NA last), stable within NA
@@ -451,7 +182,7 @@ static std::vector<PrecompGen>
 
       // Ueff = [1 | method dummies (nm_re) | time dummies (nt_re) | Zi?]
       arma::mat Ubase;
-      build_U_base_matrix(P.met_ord, P.tim_ord, nm_re, nt_re, Ubase);
+      build_U_base(P.met_ord, P.tim_ord, nm_re, nt_re, Ubase);
       if (has_extra) {
         arma::mat Zi;
         rows_take_to(Z, rows_i, Zi);
@@ -468,18 +199,16 @@ static std::vector<PrecompGen>
       // Cinv (AR1 or I), independent of se
       P.Cinv.zeros(n_i, n_i);
       if (use_ar1 && nt_full > 0) {
-        make_ar1_Cinv(P.tim_ord, ar1_rho, P.Cinv);
+        make_Cinv(P.tim_ord, ar1_rho, P.Cinv);
       } else {
         P.Cinv.eye(n_i, n_i);
       }
 
       // Precompute with Cinv
-      // XTCX, XTCy
       arma::mat CX = P.Cinv * P.X_i;
       P.XTCX = P.X_i.t() * CX;
       P.XTCy = P.X_i.t() * (P.Cinv * P.y_i);
 
-      // U^T C X, U^T C y, U^T C U
       arma::mat CU = P.Cinv * P.Ueff;
       P.UTCX = P.Ueff.t() * (P.Cinv * P.X_i);      // or P.Ueff.t()*CX
       P.UTCy = P.Ueff.t() * (P.Cinv * P.y_i);
@@ -512,7 +241,6 @@ Rcpp::List ccc_vc_cpp(
     double sb_zero_tol = 1e-10
 ) {
 #ifdef _OPENMP
-  // #define MATRIXCORR_NO_BLAS_GUARD
 #ifndef MATRIXCORR_NO_BLAS_GUARD
   detail_blas_guard::harden_omp_runtime_once();
   detail_blas_guard::BLASThreadGuard _guard_one_thread_blas(1);
@@ -547,8 +275,8 @@ Rcpp::List ccc_vc_cpp(
 
   // subject indexing
   std::vector<int> subj_idx; int m = 0;
-  reindex_subject(subject, subj_idx, m);
-  BySubjCCC S = index_by_subject_ccc(subj_idx, method, time, m);
+  reindex(subject, subj_idx, m, NA_INTEGER);
+  BySubject S = group_by_subject(subj_idx, method, time, m);
 
   // Included random blocks
   const int nm_re = include_subj_method ? nm : 0;
@@ -579,15 +307,15 @@ Rcpp::List ccc_vc_cpp(
       C_iid[i].n_i = n_i;
 
       C_iid[i].UtU.set_size(r,r);
-      make_UtU(met, tim, n_i, nm_re, nt_re, C_iid[i].UtU);
+      gram_UtU(met, tim, n_i, nm_re, nt_re, C_iid[i].UtU);
 
       C_iid[i].Uty.set_size(r);
-      accum_Ut_vec(rows, met, tim, nm_re, nt_re, [&](int idx){ return y[idx]; }, C_iid[i].Uty);
+      accumulate_Ut_vec(rows, met, tim, nm_re, nt_re, [&](int idx){ return y[idx]; }, C_iid[i].Uty);
 
       C_iid[i].Utx.set_size(r, p);
       for (int k=0;k<p;++k) {
         arma::vec tmp(r, arma::fill::zeros);
-        accum_Ut_vec(rows, met, tim, nm_re, nt_re, [&](int idx){ return X(idx,k); }, tmp);
+        accumulate_Ut_vec(rows, met, tim, nm_re, nt_re, [&](int idx){ return X(idx,k); }, tmp);
         C_iid[i].Utx.col(k) = tmp;
       }
 
@@ -607,7 +335,7 @@ Rcpp::List ccc_vc_cpp(
     }
   }
 
-  // General path cache: AR(1) and/or extra Z (new)
+  // General path cache: AR(1) and/or extra Z
   std::vector<PrecompGen> PG;
   if (use_ar1 || has_extra) {
     PG = precompute_general_blocks(X, y, S, Z, has_extra, qZ,
@@ -631,7 +359,6 @@ Rcpp::List ccc_vc_cpp(
     if (use_ar1 || has_extra) {
       const double inv_se = 1.0 / std::max(se, eps);
 
-      // prior precisions vector for diag(M)
       arma::vec prior_prec(r_eff, fill::zeros);
       {
         int pos = 0;
@@ -653,11 +380,10 @@ Rcpp::List ccc_vc_cpp(
         M.diag() = prior_prec;
         M += inv_se * PG[i].UCU;
 
-        // Solve against [S_uy | S_ux], where S_uy = inv_se * UTCy, S_ux = inv_se * UTCX
         arma::mat A(r_eff, 1+p);
         A.col(0)      = inv_se * PG[i].UTCy;
         A.cols(1, p)  = inv_se * PG[i].UTCX;
-        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
+        arma::mat Zsol = solve_sympd_safe(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1, p);
@@ -685,7 +411,7 @@ Rcpp::List ccc_vc_cpp(
         arma::mat A(r_eff, 1+p);
         A.col(0)      = inv_se * PG[i].UTCy;
         A.cols(1, p)  = inv_se * PG[i].UTCX;
-        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
+        arma::mat Zsol = solve_sympd_safe(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1, p);
@@ -726,7 +452,7 @@ Rcpp::List ccc_vc_cpp(
         arma::mat A(r, 1+p);
         A.col(0)    = Ci.Uty * inv_se;
         A.cols(1,p) = Ci.Utx * inv_se;
-        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
+        arma::mat Zsol = solve_sympd_safe(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1,p);
@@ -756,7 +482,7 @@ Rcpp::List ccc_vc_cpp(
         arma::mat A(r, 1+p);
         A.col(0)    = Ci.Uty * inv_se;
         A.cols(1,p) = Ci.Utx * inv_se;
-        arma::mat Zsol = solve_sympd_safe_ccc(M, A);
+        arma::mat Zsol = solve_sympd_safe(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1,p);
@@ -822,7 +548,6 @@ Rcpp::List ccc_vc_cpp(
         if (PG[i].n_i == 0) continue;
         int tid = omp_get_thread_num();
 
-        // r_i in subject order
         arma::vec r_i(PG[i].n_i);
         for (int t=0; t<PG[i].n_i; ++t) r_i[t] = r_global[ PG[i].rows_ord[t] ];
 
@@ -831,7 +556,7 @@ Rcpp::List ccc_vc_cpp(
         M += inv_se * PG[i].UCU;
 
         arma::vec Utr = inv_se * ( PG[i].Ueff.t() * (PG[i].Cinv * r_i) );
-        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
+        arma::vec b_i = solve_sympd_safe(M, Utr);
 
         arma::mat Minv;
         inv_sympd_safe(Minv, M);
@@ -851,7 +576,6 @@ Rcpp::List ccc_vc_cpp(
         if (nt_re>0) { for (int t=0; t<nt_re; ++t) { sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t,pos+t); } pos += nt_re; }
         if (has_extra) for (int j=0; j<qZ; ++j) tau2_tls[tid][j] += b_i[pos+j]*b_i[pos+j] + Minv(pos+j,pos+j);
 
-        // delta-method storage
         sa_term[i] = b_i[0]*b_i[0] + Minv(0,0);
         if (nm_re > 0) {
           double acc_m = 0.0;
@@ -885,7 +609,7 @@ Rcpp::List ccc_vc_cpp(
         M += inv_se * PG[i].UCU;
 
         arma::vec Utr = inv_se * ( PG[i].Ueff.t() * (PG[i].Cinv * r_i) );
-        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
+        arma::vec b_i = solve_sympd_safe(M, Utr);
         arma::mat Minv; inv_sympd_safe(Minv, M);
 
         arma::vec e = r_i - PG[i].Ueff * b_i;
@@ -937,7 +661,7 @@ Rcpp::List ccc_vc_cpp(
         M += (1.0/std::max(se,eps)) * Ci.UtU;
 
         arma::vec Utr = (Ci.Uty - Ci.Utx * beta) / std::max(se,eps);
-        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
+        arma::vec b_i = solve_sympd_safe(M, Utr);
         arma::mat Minv; inv_sympd_safe(Minv, M);
 
         arma::vec r_i(Ci.n_i);
@@ -955,7 +679,7 @@ Rcpp::List ccc_vc_cpp(
 
         sa_tls[tid] += b_i[0]*b_i[0] + Minv(0,0);
         int pos = 1;
-        if (nm_re>0) { for (int l=0;l<nm_re;++l) sa_tls[tid] += 0.0, sab_tls[tid] += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos+l); pos += nm_re; }
+        if (nm_re>0) { for (int l=0;l<nm_re;++l) sab_tls[tid] += b_i[pos+l]*b_i[pos+l] + Minv(pos+l,pos+l); pos += nm_re; }
         if (nt_re>0) { for (int t=0;t<nt_re;++t) sag_tls[tid] += b_i[pos+t]*b_i[pos+t] + Minv(pos+t, pos+t); }
       }
       for (int t=0;t<nthreads2;++t) {
@@ -975,7 +699,7 @@ Rcpp::List ccc_vc_cpp(
         M += (1.0/std::max(se,eps)) * Ci.UtU;
 
         arma::vec Utr = (Ci.Uty - Ci.Utx * beta) / std::max(se,eps);
-        arma::vec b_i = solve_sympd_safe_ccc(M, Utr);
+        arma::vec b_i = solve_sympd_safe(M, Utr);
         arma::mat Minv; inv_sympd_safe(Minv, M);
 
         arma::vec r_i(Ci.n_i);
@@ -1006,7 +730,7 @@ Rcpp::List ccc_vc_cpp(
     double se_new = std::max(
       (use_ar1 || has_extra)
       ? se * (se_sumsq + se_trace) / (double)n
-    :        (se_sumsq + se_trace) / (double)n,
+    : (se_sumsq + se_trace) / (double)n,
     eps
     );
 
@@ -1042,7 +766,7 @@ Rcpp::List ccc_vc_cpp(
       M += inv_se * PG[i].UCU;
 
       arma::mat S_ux = inv_se * PG[i].UTCX;     // r_eff x p
-      arma::mat Zx   = solve_sympd_safe_ccc(M, S_ux);
+      arma::mat Zx   = solve_sympd_safe(M, S_ux);
       arma::mat XTRinvX = inv_se * PG[i].XTCX;
 
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
@@ -1059,7 +783,7 @@ Rcpp::List ccc_vc_cpp(
       M += inv_se * PG[i].UCU;
 
       arma::mat S_ux = inv_se * PG[i].UTCX;
-      arma::mat Zx   = solve_sympd_safe_ccc(M, S_ux);
+      arma::mat Zx   = solve_sympd_safe(M, S_ux);
       arma::mat XTRinvX = inv_se * PG[i].XTCX;
 
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
@@ -1084,7 +808,7 @@ Rcpp::List ccc_vc_cpp(
       if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
       if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
       M += inv_se_final * Ci.UtU;
-      arma::mat Zx = solve_sympd_safe_ccc(M, Ci.Utx * inv_se_final);
+      arma::mat Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
         double val = inv_se_final * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Zx.col(l)));
         XtViX_tls2[tid](k,l) += val; if (l!=k) XtViX_tls2[tid](l,k) += val;
@@ -1101,7 +825,7 @@ Rcpp::List ccc_vc_cpp(
       if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
       if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
       M += inv_se_final * Ci.UtU;
-      arma::mat Zx = solve_sympd_safe_ccc(M, Ci.Utx * inv_se_final);
+      arma::mat Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
       for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
         double val = inv_se_final * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Zx.col(l)));
         XtViX_final(k,l) += val; if (l!=k) XtViX_final(l,k) += val;
@@ -1155,7 +879,7 @@ Rcpp::List ccc_vc_cpp(
           for (size_t k = 0; k < tim_i.size(); ++k) if (met_i[k] == l && tim_i[k] >= 0) ++T;
           if (T <= 0) continue;
           kappa_g_bar += 1.0 / (double)T;
-          kappa_e_bar += use_ar1 ? ar1_kappa_T(ar1_rho, T) : 1.0 / (double)T;
+          kappa_e_bar += use_ar1 ? kappa_T(ar1_rho, T) : 1.0 / (double)T;
           ++units;
         }
       } else {
@@ -1163,7 +887,7 @@ Rcpp::List ccc_vc_cpp(
         for (size_t k = 0; k < tim_i.size(); ++k) if (tim_i[k] >= 0) ++T;
         if (T <= 0) continue;
         kappa_g_bar += 1.0 / (double)T;
-        kappa_e_bar += use_ar1 ? ar1_kappa_T(ar1_rho, T) : 1.0 / (double)T;
+        kappa_e_bar += use_ar1 ? kappa_T(ar1_rho, T) : 1.0 / (double)T;
         ++units;
       }
     }
@@ -1283,7 +1007,7 @@ Rcpp::List ccc_vc_cpp(
       if (PG[i].n_i == 0) continue;
 
       if (use_ar1 && nt > 0) {
-        sum_logdetR += ar1_logdet_R_blocks(PG[i].tim_ord, ar1_rho, se, eps);
+        sum_logdetR += logdet_R_blocks(PG[i].tim_ord, ar1_rho, se, eps);
       } else {
         sum_logdetR += PG[i].n_i * std::log(std::max(se, eps));
       }
@@ -1305,7 +1029,6 @@ Rcpp::List ccc_vc_cpp(
       XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
     }
   } else {
-    // fall back to original (iid) computation
     for (int i=0; i<m; ++i) {
       const Cache& Ci = C_iid[i];
       if (Ci.n_i == 0) continue;
@@ -1323,10 +1046,8 @@ Rcpp::List ccc_vc_cpp(
 
       arma::mat Minv; inv_sympd_safe(Minv, M);
 
-      // S_uy = U^T R^{-1} y  (here R^{-1} = I / se)
       arma::vec S_uy = (1.0/std::max(se, eps)) * (Ci.Uty);
 
-      // yTRiny = y^T R^{-1} y  with per-subject rows
       double y2 = 0.0;
       for (int idx : S.rows[i]) { const double yi = y[idx]; y2 += yi * yi; }
       double yTRiny = (1.0/std::max(se, eps)) * y2;
@@ -1351,7 +1072,7 @@ Rcpp::List ccc_vc_cpp(
   + yPy
   );
 
-  // AR(1) diagnostic
+  // AR(1) diagnostic (moments)
   double ar1_rho_mom = NA_REAL;
   double ar1_pval     = NA_REAL;
   int    ar1_pairs    = 0;
@@ -1414,7 +1135,7 @@ Rcpp::List ccc_vc_cpp(
 
       r_i = y_i - X_i * beta;
       Utr = (1.0 / std::max(se, 1e-12)) * (Ueff.t() * r_i);
-      b_i = solve_sympd_safe_ccc(M, Utr);
+      b_i = solve_sympd_safe(M, Utr);
       e   = r_i - Ueff * b_i;
 
       for (int l = 0; l < nm; ++l) {
@@ -1434,14 +1155,13 @@ Rcpp::List ccc_vc_cpp(
           }
       }
     }
-    double num_pool = 0.0, den1_pool = 0.0, den2_pool = 0.0; int pairs_pool = 0, have_methods = 0;
+    double num_pool = 0.0, den1_pool = 0.0, den2_pool = 0.0; int pairs_pool = 0;
     for (int l = 0; l < nm; ++l) {
       if (pairs_m[l] >= 3 && den1_m[l] > 0.0 && den2_m[l] > 0.0) {
         num_pool   += num_m[l];
         den1_pool  += den1_m[l];
         den2_pool  += den2_m[l];
         pairs_pool += pairs_m[l];
-        ++have_methods;
       }
     }
     if (pairs_pool >= 3 && den1_pool > 0.0 && den2_pool > 0.0) {
