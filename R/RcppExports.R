@@ -77,20 +77,12 @@ ustat_dcor_matrix_cpp <- function(X) {
     .Call(`_matrixCorr_ustat_dcor_matrix_cpp`, X)
 }
 
-kendall_tau_a_cpp <- function(xr, yr, scale = 1e8) {
-    .Call(`_matrixCorr_kendall_tau_a_cpp`, xr, yr, scale)
-}
-
-kendall_tau_b_cpp <- function(xr, yr, scale = 1e8) {
-    .Call(`_matrixCorr_kendall_tau_b_cpp`, xr, yr, scale)
-}
-
-kendall_tau_auto_cpp <- function(xr, yr, scale = 1e8) {
-    .Call(`_matrixCorr_kendall_tau_auto_cpp`, xr, yr, scale)
-}
-
 kendall_matrix_cpp <- function(mat) {
     .Call(`_matrixCorr_kendall_matrix_cpp`, mat)
+}
+
+kendall_tau2_cpp <- function(x, y) {
+    .Call(`_matrixCorr_kendall_tau2_cpp`, x, y)
 }
 
 partial_correlation_cpp <- function(X_, method = "oas", lambda = 1e-3, return_cov_precision = TRUE) {

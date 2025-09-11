@@ -299,45 +299,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// kendall_tau_a_cpp
-double kendall_tau_a_cpp(Rcpp::NumericVector xr, Rcpp::NumericVector yr, double scale);
-RcppExport SEXP _matrixCorr_kendall_tau_a_cpp(SEXP xrSEXP, SEXP yrSEXP, SEXP scaleSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type xr(xrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type yr(yrSEXP);
-    Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
-    rcpp_result_gen = Rcpp::wrap(kendall_tau_a_cpp(xr, yr, scale));
-    return rcpp_result_gen;
-END_RCPP
-}
-// kendall_tau_b_cpp
-double kendall_tau_b_cpp(Rcpp::NumericVector xr, Rcpp::NumericVector yr, double scale);
-RcppExport SEXP _matrixCorr_kendall_tau_b_cpp(SEXP xrSEXP, SEXP yrSEXP, SEXP scaleSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type xr(xrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type yr(yrSEXP);
-    Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
-    rcpp_result_gen = Rcpp::wrap(kendall_tau_b_cpp(xr, yr, scale));
-    return rcpp_result_gen;
-END_RCPP
-}
-// kendall_tau_auto_cpp
-double kendall_tau_auto_cpp(Rcpp::NumericVector xr, Rcpp::NumericVector yr, double scale);
-RcppExport SEXP _matrixCorr_kendall_tau_auto_cpp(SEXP xrSEXP, SEXP yrSEXP, SEXP scaleSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type xr(xrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type yr(yrSEXP);
-    Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
-    rcpp_result_gen = Rcpp::wrap(kendall_tau_auto_cpp(xr, yr, scale));
-    return rcpp_result_gen;
-END_RCPP
-}
 // kendall_matrix_cpp
 Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat);
 RcppExport SEXP _matrixCorr_kendall_matrix_cpp(SEXP matSEXP) {
@@ -346,6 +307,18 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type mat(matSEXP);
     rcpp_result_gen = Rcpp::wrap(kendall_matrix_cpp(mat));
+    return rcpp_result_gen;
+END_RCPP
+}
+// kendall_tau2_cpp
+double kendall_tau2_cpp(Rcpp::NumericVector x, Rcpp::NumericVector y);
+RcppExport SEXP _matrixCorr_kendall_tau2_cpp(SEXP xSEXP, SEXP ySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    rcpp_result_gen = Rcpp::wrap(kendall_tau2_cpp(x, y));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -489,10 +462,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
     {"_matrixCorr_ustat_dcor", (DL_FUNC) &_matrixCorr_ustat_dcor, 2},
     {"_matrixCorr_ustat_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_cpp, 1},
-    {"_matrixCorr_kendall_tau_a_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_a_cpp, 3},
-    {"_matrixCorr_kendall_tau_b_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_b_cpp, 3},
-    {"_matrixCorr_kendall_tau_auto_cpp", (DL_FUNC) &_matrixCorr_kendall_tau_auto_cpp, 3},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
+    {"_matrixCorr_kendall_tau2_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_cpp, 2},
     {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 4},
     {"_matrixCorr_pearson_matrix_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_cpp, 1},
     {"_matrixCorr_sss_cor_cpp", (DL_FUNC) &_matrixCorr_sss_cor_cpp, 1},

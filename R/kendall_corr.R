@@ -1,24 +1,35 @@
-#' @title Pairwise Kendall's Tau Rank Correlation
+#' @title Pairwise (or Two-Vector) Kendall's Tau Rank Correlation
 #'
 #' @description
-#' Computes all pairwise Kendall's tau rank correlation coefficients for the
-#' numeric columns of a matrix or data frame using a high-performance
-#' 'C++'.
+#' Computes Kendall's tau rank correlation either for
+#' **all pairs of numeric columns** in a matrix/data frame, or
+#' for **two numeric vectors** directly (scalar path).
 #'
-#' This function uses a fast and scalable algorithm implemented in 'C++'
-#' to compute both Kendall's tau-a (when no ties are present) and tau-b
-#' (when ties are detected), making it suitable for large datasets. It follows
-#' the Knight (1966) \eqn{O(n \log n)} scheme, where a single sort on one
-#' variable, in-block sorting of the paired variable within tie groups, and a
-#' global merge-sort–based inversion count with closed-form tie corrections.
+#' This function uses a scalable algorithm implemented in C++ to
+#' compute Kendall's tau-b (tie-robust). When there are no ties, tau-b reduces
+#' to tau-a. The implementation follows the Knight (1966) \eqn{O(n \log n)}
+#' scheme: a single sort on one variable, in-block sorting of the paired
+#' variable within tie groups, and a global merge-sort–based inversion count
+#' with closed-form tie corrections.
 #'
-#' @param data A numeric matrix or a data frame with at least two numeric
-#' columns. All non-numeric columns will be excluded. Each column must have
-#' at least two non-missing values and contain no NAs.
+#' @param data
+#' For matrix/data frame, it is expected a numeric matrix or a data frame with at
+#' least two numeric columns. All non-numeric columns will be excluded.
+#' For two-vector mode, a numeric vector \code{x}.
 #'
-#' @return A symmetric numeric matrix where the \code{(i, j)}-th element is
-#' the Kendall's tau correlation between the \code{i}-th and \code{j}-th
-#' numeric columns of the input.
+#' @param y Optional numeric vector \code{y} of the same length as \code{data}
+#' when \code{data} is a vector. If supplied, the function computes the
+#' Kendall correlation \emph{between \code{data} and \code{y}} using a
+#' low-overhead scalar path and returns a single number.
+#'
+#' @return
+#' \itemize{
+#'   \item If \code{y} is \code{NULL} and \code{data} is a matrix/data frame: a
+#'   symmetric numeric matrix where entry \code{(i, j)} is the Kendall's tau
+#'   correlation between the \code{i}-th and \code{j}-th numeric columns.
+#'   \item If \code{y} is provided (two-vector mode): a single numeric scalar,
+#'   the Kendall's tau correlation between \code{data} and \code{y}.
+#' }
 #'
 #' @details
 #' Kendall's tau is a rank-based measure of association between two variables.
@@ -29,24 +40,23 @@
 #' be the numbers of tied pairs within \eqn{X} and within \eqn{Y}, respectively,
 #' where \eqn{t_g} and \eqn{u_h} are tie-group sizes in \eqn{X} and \eqn{Y}.
 #'
-#' The tie-robust Kendall's tau-b is defined as:
+#' The tie-robust Kendall's tau-b is:
 #' \deqn{ \tau_b = \frac{C - D}{\sqrt{(n_0 - T_x)\,(n_0 - T_y)}}. }
-#'
-#' When there are no ties, the function computes the faster \emph{tau-a}
-#' version:
+#' When there are no ties (\eqn{T_x = T_y = 0}), this reduces to tau-a:
 #' \deqn{ \tau_a = \frac{C - D}{n(n-1)/2}. }
 #'
-#' Note that if \eqn{T_{xy}} denotes the number of pairs tied on both
-#' variables, then pairs partition as \eqn{C + D + T_x + T_y + T_{xy} = n_0}.
+#' The function automatically handles ties. In degenerate cases where a
+#' variable is constant (\eqn{n_0 = T_x} or \eqn{n_0 = T_y}), the tau-b
+#' denominator is zero and the correlation is undefined (returned as \code{NA}).
 #'
-#' The function automatically selects \emph{tau-a} or \emph{tau-b} depending on
-#' the presence of ties. In degenerate cases where a variable is constant
-#' (so \eqn{n_0 = T_x} or \eqn{n_0 = T_y}), the tau-b denominator is zero and
-#' the correlation is undefined (returned as \code{NA}).
-#'
-#' Performance is maximised by computing correlations in 'C++' directly from
-#' the matrix columns using the Knight \eqn{O(n \log n)} procedure; columns are
-#' discretised once and pairwise computations are parallelised where available.
+#' \strong{Performance:}
+#' \itemize{
+#'   \item In the \strong{two-vector mode} (\code{y} supplied), the C++ backend uses a
+#'   raw-double path (no intermediate 2\eqn{\times}2 matrix, no discretisation).
+#'   \item In the \strong{matrix/data-frame mode}, columns are discretised once and all
+#'   pairwise correlations are computed via the Knight \eqn{O(n \log n)}
+#'   procedure; where available, pairs are evaluated in parallel.
+#' }
 #'
 #' @note Missing values are not allowed. Columns with fewer than two
 #' observations are excluded.
@@ -66,6 +76,10 @@
 #' print(kt)
 #' plot(kt)
 #'
+#' # Two-vector mode (scalar path)
+#' x <- rnorm(1000); y <- 0.5 * x + rnorm(1000)
+#' kendall_tau(x, y)
+#'
 #' # With a large data frame
 #' df <- data.frame(x = rnorm(1e4), y = rnorm(1e4), z = rnorm(1e4))
 #' kendall_tau(df)
@@ -80,11 +94,18 @@
 #' print(kt)
 #' plot(kt)
 #'
-#' @seealso \code{\link{print.kendall_matrix}},
-#' \code{\link{print.kendall_matrix}}
+#' @seealso \code{\link{print.kendall_matrix}}, \code{\link{plot.kendall_matrix}}
 #' @author Thiago de Paula Oliveira
 #' @export
-kendall_tau <- function(data) {
+kendall_tau <- function(data, y = NULL) {
+  # Two-vector path (scalar return)
+  if (!is.null(y)) {
+    x <- data
+    stopifnot(is.numeric(x), is.numeric(y), length(x) == length(y))
+    return(kendall_tau2_cpp(x, y))
+  }
+
+  # Matrix/data.frame path (matrix return)
   numeric_data <- validate_corr_input(data)
   colnames_data <- colnames(numeric_data)
   result <- kendall_matrix_cpp(numeric_data)
@@ -94,7 +115,7 @@ kendall_tau <- function(data) {
     "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
   attr(result, "package") <- "matrixCorr"
   class(result) <- c("kendall_matrix", "matrix")
-  return(result)
+  result
 }
 
 
