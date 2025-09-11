@@ -284,20 +284,18 @@ static inline long long insertion_count(std::vector<int>& a, int L, int R){
 }
 
 // sorts 'a' and returns inversion count; O(n log n)
+// (kept for tau-a path over int ranks)
 inline long long inversion_count(std::vector<int>& a){
   const int n = (int)a.size();
   if (n < 2) return 0;
   std::vector<int> buf(n);
   long long inv = 0;
-  const int TH = 96; // insertion sort threshold
+  const int TH = 96;
 
-  // sort small blocks first
   for (int L = 0; L < n; L += TH){
     int R = std::min(L + TH - 1, n - 1);
     inv += insertion_count(a, L, R);
   }
-
-  // bottom-up merging
   for (int width = TH; width < n; width <<= 1){
     for (int L = 0; L < n; L += 2 * width){
       int M = std::min(L + width, n);
@@ -319,7 +317,7 @@ inline std::vector<long long> discretise(const arma::vec& x, double scale){
   const arma::uword n = x.n_elem;
   std::vector<long long> out(n);
   for (arma::uword i = 0; i < n; ++i)
-    out[i] = (long long) std::floor(x[i] * scale);
+    out[i] = static_cast<long long>(std::floor(x[i] * scale));
   return out;
 }
 
@@ -332,6 +330,7 @@ inline long long getMs_ll(const long long* dat, int len) noexcept {
   if (tie) Ms += tie * (tie + 1) / 2;
   return Ms;
 }
+
 } // namespace order_stats
 
 
