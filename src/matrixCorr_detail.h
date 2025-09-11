@@ -289,7 +289,7 @@ inline long long inversion_count(std::vector<int>& a){
   if (n < 2) return 0;
   std::vector<int> buf(n);
   long long inv = 0;
-  const int TH = 32; // insertion sort threshold
+  const int TH = 96; // insertion sort threshold
 
   // sort small blocks first
   for (int L = 0; L < n; L += TH){
@@ -314,12 +314,23 @@ inline long long inversion_count(std::vector<int>& a){
   }
   return inv;
 }
+
 inline std::vector<long long> discretise(const arma::vec& x, double scale){
   const arma::uword n = x.n_elem;
   std::vector<long long> out(n);
   for (arma::uword i = 0; i < n; ++i)
     out[i] = (long long) std::floor(x[i] * scale);
   return out;
+}
+
+inline long long getMs_ll(const long long* dat, int len) noexcept {
+  long long Ms = 0, tie = 0;
+  for (int i = 1; i < len; ++i) {
+    if (dat[i] == dat[i-1]) ++tie;
+    else if (tie) { Ms += tie * (tie + 1) / 2; tie = 0; }
+  }
+  if (tie) Ms += tie * (tie + 1) / 2;
+  return Ms;
 }
 } // namespace order_stats
 

@@ -192,65 +192,54 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
   // Helper to compute tau-b from two discretised columns (Knight path)
   auto tau_from_discretised = [&](const std::vector<long long>& x,
                                   const std::vector<long long>& y) -> double {
-                                    const int n = (int)x.size();
-                                    if ((int)y.size() != n || n < 2) return NA_REAL;
+                                    const int n = static_cast<int>(x.size());
+                                    if (static_cast<int>(y.size()) != n || n < 2) return NA_REAL;
 
-                                    // order by x
-                                    std::vector<int> ord(n);
+                                    // Per-thread reusable workspaces to avoid allocations in hot path
+                                    thread_local std::vector<int>           ord;
+                                    thread_local std::vector<long long>     ybuf;   // y reordered by x
+                                    thread_local std::vector<long long>     mrg;    // merge buffer
+
+                                    ord.resize(n);
+                                    ybuf.resize(n);
+                                    mrg.resize(n);
+
+                                    // order by x (indices only)
                                     std::iota(ord.begin(), ord.end(), 0);
-                                    std::sort(ord.begin(), ord.end(), [&](int a, int b){ return x[a] < x[b]; });
+                                    std::sort(ord.begin(), ord.end(),
+                                              [&](int a, int b){ return x[a] < x[b]; });
 
-                                    std::vector<long long> xs(n), ys(n);
-                                    for (int i = 0; i < n; ++i) { xs[i] = x[ord[i]]; ys[i] = y[ord[i]]; }
+                                    // y in x-sorted order (into workspace buffer)
+                                    for (int i = 0; i < n; ++i) ybuf[i] = y[ord[i]];
 
-                                    auto getMs_ll = [](const long long* dat, int len) -> long long {
-                                      long long Ms = 0, tie = 0;
-                                      for (int i = 1; i < len; ++i) {
-                                        if (dat[i] == dat[i-1]) ++tie;
-                                        else if (tie) { Ms += tie * (tie + 1) / 2; tie = 0; }
-                                      }
-                                      if (tie) Ms += tie * (tie + 1) / 2;
-                                      return Ms;
-                                    };
-
-                                    long long m1 = 0, s_acc = 0;
-                                    for (int i = 0; i < n; ) {
-                                      int j = i + 1;
-                                      while (j < n && xs[j] == xs[i]) ++j;
-                                      const int L = j - i;
-                                      if (L > 1) {
-                                        m1 += 1LL * L * (L - 1) / 2;
-                                        std::sort(ys.begin() + i, ys.begin() + j);
-                                        s_acc += getMs_ll(ys.data() + i, L);
-                                      }
-                                      i = j;
-                                    }
-
-                                    // inversion count + m2
-                                    std::vector<long long> yy = ys;
-                                    // local inversion_count for long long
-                                    auto inv_count = [&](std::vector<long long>& a) -> long long {
-                                      const int n = (int)a.size();
-                                      if (n < 2) return 0;
-                                      std::vector<long long> buf(n);
+                                    // inline, non-allocating inversion counter; sorts 'a' into nondecreasing order
+                                    auto inversion_count_inplace = [&](long long* a, long long* buf, int N) -> long long {
+                                      if (N < 2) return 0LL;
                                       long long inv = 0;
-                                      auto insertion = [&](int L, int R){
+
+                                      // small-block insertion sort, then bottom-up merges
+                                      constexpr int TH = 96; // tune if needed
+                                      auto insertion_block = [&](int L, int R) {
                                         long long v_inv = 0;
-                                        for (int i = L + 1; i <= R; ++i){
+                                        for (int i = L + 1; i <= R; ++i) {
                                           long long v = a[i]; int j = i - 1;
-                                          while (j >= L && a[j] > v){ a[j+1] = a[j]; --j; ++v_inv; }
-                                          a[j+1] = v;
+                                          while (j >= L && a[j] > v) { a[j + 1] = a[j]; --j; ++v_inv; }
+                                          a[j + 1] = v;
                                         }
                                         return v_inv;
                                       };
-                                      const int TH = 32;
-                                      for (int L = 0; L < n; L += TH) {
-                                        int R = std::min(L + TH - 1, n - 1);
-                                        inv += insertion(L, R);
+
+                                      // sort small blocks
+                                      for (int L = 0; L < N; L += TH) {
+                                        const int R = std::min(L + TH - 1, N - 1);
+                                        inv += insertion_block(L, R);
                                       }
-                                      for (int w = TH; w < n; w <<= 1) {
-                                        for (int L = 0; L < n; L += 2*w) {
-                                          int M = std::min(L + w, n), R = std::min(L + 2*w, n);
+
+                                      // bottom-up merge, counting cross inversions
+                                      for (int width = TH; width < N; width <<= 1) {
+                                        for (int L = 0; L < N; L += 2 * width) {
+                                          const int M = std::min(L + width, N);
+                                          const int R = std::min(L + 2 * width, N);
                                           int i = L, j = M, k = L;
                                           while (i < M && j < R) {
                                             if (a[i] <= a[j]) buf[k++] = a[i++];
@@ -263,19 +252,39 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
                                       }
                                       return inv;
                                     };
-                                    const long long inv = inv_count(yy);
-                                    const long long m2  = getMs_ll(yy.data(), n);
 
+                                    // m1 and s_acc: scan x-runs without materialising xs[]
+                                    long long m1 = 0, s_acc = 0;
+                                    for (int i = 0; i < n; ) {
+                                      int j = i + 1;
+                                      const long long xi = x[ord[i]];
+                                      while (j < n && x[ord[j]] == xi) ++j;
+                                      const int L = j - i;
+                                      if (L > 1) {
+                                        // ties in x contribute to m1; for s_acc we need Ms within this block by y
+                                        m1 += 1LL * L * (L - 1) / 2;
+                                        std::sort(ybuf.begin() + i, ybuf.begin() + j);
+                                        s_acc += matrixCorr_detail::order_stats::getMs_ll(ybuf.data() + i, L);
+                                      }
+                                      i = j;
+                                    }
+
+                                    // inversion count on ybuf (in place) + m2 on globally sorted ybuf
+                                    const long long inv = inversion_count_inplace(ybuf.data(), mrg.data(), n);
+                                    const long long m2  = matrixCorr_detail::order_stats::getMs_ll(ybuf.data(), n);
+
+                                    // assemble tau-b
                                     const long long n0 = 1LL * n * (n - 1) / 2LL;
-                                    long double s = (long double)n0;
-                                    s -= (long double)m1 + (long double)m2;
-                                    s -= 2.0L * (long double)inv;
-                                    s += (long double)s_acc;
+                                    long double s = static_cast<long double>(n0);
+                                    s -= static_cast<long double>(m1) + static_cast<long double>(m2);
+                                    s -= 2.0L * static_cast<long double>(inv);
+                                    s += static_cast<long double>(s_acc);
 
-                                    const long double den1 = (long double)n0 - (long double)m1;
-                                    const long double den2 = (long double)n0 - (long double)m2;
+                                    const long double den1 = static_cast<long double>(n0 - m1);
+                                    const long double den2 = static_cast<long double>(n0 - m2);
                                     if (den1 <= 0.0L || den2 <= 0.0L) return NA_REAL;
-                                    return (double)(s / std::sqrt(den1 * den2));
+
+                                    return static_cast<double>(s / std::sqrt(den1 * den2));
                                   };
 
   Rcpp::NumericMatrix out(p, p);
