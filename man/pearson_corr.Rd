@@ -76,39 +76,41 @@ Generates a ggplot2-based heatmap of the Pearson correlation
 matrix.
 }
 \details{
-\strong{Statistical formulation.} Let \eqn{X \in \mathbb{R}^{n \times p}} be a
+Let \eqn{X \in \mathbb{R}^{n \times p}} be a
 numeric matrix with rows as observations and columns as variables, and let
-\eqn{\mu = \tfrac{1}{n}\mathbf{1}^\top X} be the vector of column means.
-Define the centred cross-product matrix
-\deqn{S \;=\; (X - \mathbf{1}\mu)^\top (X - \mathbf{1}\mu)
-      \;=\; X^\top X \;-\; n\,\mu\,\mu^\top.}
-The (unbiased) sample covariance is then
-\deqn{\widehat{\Sigma} \;=\; \tfrac{1}{n-1}\,S,}
-and the vector of sample standard deviations is
-\deqn{s_i \;=\; \sqrt{\widehat{\Sigma}_{ii}}, \qquad i=1,\ldots,p.}
-The Pearson correlation matrix \eqn{R} is obtained by standardising
-\eqn{\widehat{\Sigma}}, given by:
-\deqn{R \;=\; D^{-1/2}\,\widehat{\Sigma}\,D^{-1/2}, \qquad
-      D \;=\; \mathrm{diag}(\widehat{\Sigma}_{11},\ldots,\widehat{\Sigma}_{pp}),}
-equivalently, entrywise
-\deqn{R_{ij} \;=\; \frac{\widehat{\Sigma}_{ij}}{s_i\,s_j}, \quad i \neq j,
-      \qquad R_{ii} \;=\; 1.}
+\eqn{\mathbf{1} \in \mathbb{R}^n} denote the all-ones vector. Define the column
+means \eqn{\mu = (1/n)\,\mathbf{1}^\top X} and the centred cross-product
+matrix
+\deqn{ S \;=\; (X - \mathbf{1}\mu)^\top (X - \mathbf{1}\mu)
+      \;=\; X^\top \!\Big(I_n - \tfrac{1}{n}\mathbf{1}\mathbf{1}^\top\Big) X
+      \;=\; X^\top X \;-\; n\,\mu\,\mu^\top. }
+The (unbiased) sample covariance is
+\deqn{ \widehat{\Sigma} \;=\; \tfrac{1}{n-1}\,S, }
+and the sample standard deviations are \eqn{s_i = \sqrt{\widehat{\Sigma}_{ii}}}.
+The Pearson correlation matrix is obtained by standardising \eqn{\widehat{\Sigma}}, and it is given by
+\deqn{ R \;=\; D^{-1/2}\,\widehat{\Sigma}\,D^{-1/2}, \qquad
+      D \;=\; \mathrm{diag}(\widehat{\Sigma}_{11},\ldots,\widehat{\Sigma}_{pp}), }
+equivalently, entrywise \eqn{R_{ij} = \widehat{\Sigma}_{ij}/(s_i s_j)} for
+\eqn{i \neq j} and \eqn{R_{ii} = 1}. With \eqn{1/(n-1)} scaling,
+\eqn{\widehat{\Sigma}} is unbiased for the covariance; the induced
+correlations are biased in finite samples.
 
-If \eqn{s_i = 0} (zero variance),
-the \eqn{i}-th row and column are set to \code{NA}. Tiny negative values on
-the covariance diagonal caused by floating-point rounding are reduced to
-zero before taking square roots. No missing values are permitted in \eqn{X}.
-
-The implementation forms \eqn{X^\top X} via a
-symmetric rank-\eqn{k} update ('BLAS' 'SYRK') on the upper triangle, then
-applies the rank-1 correction \eqn{-\,n\,\mu\,\mu^\top} to obtain \eqn{S}
-without explicitly materialising \eqn{X - \mathbf{1}\mu}. After scaling by
+The implementation forms \eqn{X^\top X} via a BLAS
+symmetric rank-\eqn{k} update (SYRK) on the upper triangle, then applies the
+rank-1 correction \eqn{-\,n\,\mu\,\mu^\top} to obtain \eqn{S} without
+explicitly materialising \eqn{X - \mathbf{1}\mu}. After scaling by
 \eqn{1/(n-1)}, triangular normalisation by \eqn{D^{-1/2}} yields \eqn{R},
-which is then symmetrised. The dominant cost is \eqn{O(n p^2)} flops with
-\eqn{O(p^2)} memory.
+which is then symmetrised to remove round-off asymmetry. Tiny negative values
+on the covariance diagonal due to floating-point rounding are truncated to
+zero before taking square roots.
 
-This implementation avoids calculating means explicitly and instead
-uses a numerically stable form.
+If a variable has zero variance (\eqn{s_i = 0}), the
+corresponding row and column of \eqn{R} are set to \code{NA}. No missing
+values are permitted in \eqn{X}; columns must have at least two distinct,
+non-missing values.
+
+\strong{Computational complexity.} The dominant cost is \eqn{O(n p^2)} flops
+with \eqn{O(p^2)} memory.
 }
 \note{
 Missing values are not allowed. Columns with fewer than two

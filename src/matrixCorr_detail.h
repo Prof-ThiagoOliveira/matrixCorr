@@ -239,66 +239,90 @@ inline arma::vec safe_inv_stddev(const arma::vec& s) {
 //------------------------------------------------------------------------------
 namespace order_stats {
 
-// stable integer discretisation (no NA handling here; caller decides policy)
+struct Compressed {
+  std::vector<int> rank;   // 1-based rank per input position
+  std::vector<int> freq;   // frequency per rank (size = max_rank)
+  long long T;             // sum over ties: sum_i C(freq_i, 2)
+  int max_rank;            // number of unique values
+};
+
+// O(n log n), single sort
+inline Compressed compress_ranks_and_T(const std::vector<long long>& v){
+  const size_t n = v.size();
+  std::vector<size_t> idx(n);
+  std::iota(idx.begin(), idx.end(), 0);
+  std::sort(idx.begin(), idx.end(),
+            [&](size_t a, size_t b){ return v[a] < v[b]; });
+
+  std::vector<int> rank(n);
+  std::vector<int> freq;
+  freq.reserve(n);
+
+  long long T = 0;
+  int r = 0;
+  for (size_t i = 0; i < n; ){
+    size_t j = i + 1;
+    while (j < n && v[idx[j]] == v[idx[i]]) ++j;
+    ++r;
+    const int cnt = int(j - i);
+    for (size_t k = i; k < j; ++k) rank[idx[k]] = r;
+    freq.push_back(cnt);
+    T += 1LL * cnt * (cnt - 1) / 2;
+    i = j;
+  }
+  return { std::move(rank), std::move(freq), T, r };
+}
+
+static inline long long insertion_count(std::vector<int>& a, int L, int R){
+  long long inv = 0;
+  for (int i = L + 1; i <= R; ++i){
+    int v = a[i], j = i - 1;
+    while (j >= L && a[j] > v){ a[j + 1] = a[j]; --j; ++inv; }
+    a[j + 1] = v;
+  }
+  return inv;
+}
+
+// sorts 'a' and returns inversion count; O(n log n)
+inline long long inversion_count(std::vector<int>& a){
+  const int n = (int)a.size();
+  if (n < 2) return 0;
+  std::vector<int> buf(n);
+  long long inv = 0;
+  const int TH = 32; // insertion sort threshold
+
+  // sort small blocks first
+  for (int L = 0; L < n; L += TH){
+    int R = std::min(L + TH - 1, n - 1);
+    inv += insertion_count(a, L, R);
+  }
+
+  // bottom-up merging
+  for (int width = TH; width < n; width <<= 1){
+    for (int L = 0; L < n; L += 2 * width){
+      int M = std::min(L + width, n);
+      int R = std::min(L + 2 * width, n);
+      int i = L, j = M, k = L;
+      while (i < M && j < R){
+        if (a[i] <= a[j]) buf[k++] = a[i++];
+        else { buf[k++] = a[j++]; inv += (M - i); }
+      }
+      while (i < M) buf[k++] = a[i++];
+      while (j < R) buf[k++] = a[j++];
+      for (int t = L; t < R; ++t) a[t] = buf[t];
+    }
+  }
+  return inv;
+}
 inline std::vector<long long> discretise(const arma::vec& x, double scale){
   const arma::uword n = x.n_elem;
   std::vector<long long> out(n);
-  for (arma::uword i = 0; i < n; ++i) out[i] = (long long) std::floor(x[i] * scale);
+  for (arma::uword i = 0; i < n; ++i)
+    out[i] = (long long) std::floor(x[i] * scale);
   return out;
 }
-
-inline bool has_ties(const std::vector<long long>& v){
-  std::vector<long long> s = v;
-  std::sort(s.begin(), s.end());
-  return std::adjacent_find(s.begin(), s.end()) != s.end();
-}
-
-// ----- merge-sort inversion counter (for tau-a fast path) -----
-inline long long merge_count(std::vector<int>& a, std::vector<int>& tmp, int L, int M, int R){
-  int i = L, j = M, k = L;
-  long long inv = 0;
-  while (i < M && j <= R){
-    if (a[i] <= a[j]) tmp[k++] = a[i++];
-    else { tmp[k++] = a[j++]; inv += (M - i); }
-  }
-  while (i < M)  tmp[k++] = a[i++];
-  while (j <= R) tmp[k++] = a[j++];
-  for (int t = L; t <= R; ++t) a[t] = tmp[t];
-  return inv;
-}
-
-inline long long sort_count(std::vector<int>& a, std::vector<int>& tmp, int L, int R){
-  if (R - L < 1) return 0LL;
-  int M = L + (R - L) / 2;
-  long long inv = 0;
-  inv += sort_count(a, tmp, L, M);
-  inv += sort_count(a, tmp, M + 1, R);
-  inv += merge_count(a, tmp, L, M + 1, R);
-  return inv;
-}
-
-// ----- Fenwick (BIT) for tau-b numerator -----
-struct Fenwick {
-  std::vector<long long> t;
-  int n;
-  explicit Fenwick(int n): t(n + 1, 0), n(n) {}
-  void add(int i, long long v){ for (; i <= n; i += i & -i) t[i] += v; }
-  long long sum(int i) const { long long s = 0; for (; i > 0; i -= i & -i) s += t[i]; return s; }
-};
-
-// coordinate compression of arbitrary long long vector (returns 1-based ranks)
-inline std::vector<int> compress_1based(const std::vector<long long>& v){
-  std::vector<long long> u = v;
-  std::sort(u.begin(), u.end());
-  u.erase(std::unique(u.begin(), u.end()), u.end());
-  std::vector<int> r(v.size());
-  for (size_t i = 0; i < v.size(); ++i){
-    r[i] = int(std::lower_bound(u.begin(), u.end(), v[i]) - u.begin()) + 1;
-  }
-  return r;
-}
-
 } // namespace order_stats
+
 
 //------------------------------------------------------------------------------
 // ---------- pairwise ----------

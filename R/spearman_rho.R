@@ -20,52 +20,54 @@
 #' @details
 #' For each column \eqn{j=1,\ldots,p}, let
 #' \eqn{R_{\cdot j} \in \{1,\ldots,n\}^n} denote the (mid-)ranks of
-#' \eqn{X_{\cdot j}}, assigning average ranks to ties. Write
-#' \eqn{\bar R_j = (n+1)/2} for the mean rank and define the centred rank
-#' vectors \eqn{\tilde R_{\cdot j} = R_{\cdot j} - \bar R_j \mathbf{1}}. The
+#' \eqn{X_{\cdot j}}, assigning average ranks to ties. The mean rank is
+#' \eqn{\bar R_j = (n+1)/2} regardless of ties. Define the centred rank
+#' vectors \eqn{\tilde R_{\cdot j} = R_{\cdot j} - \bar R_j \mathbf{1}},
+#' where \eqn{\mathbf{1}\in\mathbb{R}^n} is the all-ones vector. The
 #' Spearman correlation between columns \eqn{i} and \eqn{j} is the Pearson
-#' correlation of their rank vectors, given by
+#' correlation of their rank vectors:
 #' \deqn{
 #' \rho_S(i,j) \;=\;
-#' \frac{\sum_{k=1}^n \bigl(R_{ki}-\bar R_i\bigr)\bigl(R_{kj}-\bar R_j\bigr)}
-#'      {\sqrt{\sum_{k=1}^n \bigl(R_{ki}-\bar R_i\bigr)^2}\;
-#'       \sqrt{\sum_{k=1}^n \bigl(R_{kj}-\bar R_j\bigr)^2}}.
+#' \frac{\sum_{k=1}^n (R_{ki}-\bar R_i)(R_{kj}-\bar R_j)}
+#'      {\sqrt{\sum_{k=1}^n (R_{ki}-\bar R_i)^2}\;
+#'       \sqrt{\sum_{k=1}^n (R_{kj}-\bar R_j)^2}}.
 #' }
 #' In matrix form, with \eqn{R=[R_{\cdot 1},\ldots,R_{\cdot p}]},
-#' \eqn{\mu=(n+1)\mathbf{1}_p/2} and
+#' \eqn{\mu=(n+1)\mathbf{1}_p/2} for \eqn{\mathbf{1}_p\in\mathbb{R}^p}, and
 #' \eqn{S_R=\bigl(R-\mathbf{1}\mu^\top\bigr)^\top
 #'            \bigl(R-\mathbf{1}\mu^\top\bigr)/(n-1)},
 #' the Spearman correlation matrix is
 #' \deqn{
-#' \widehat{\rho}_S \;=\; D^{-1/2} S_R D^{-1/2},
-#' \qquad D \;=\; \mathrm{diag}(S_R).
+#' \widehat{\rho}_S \;=\; D^{-1/2} S_R D^{-1/2}, \qquad
+#' D \;=\; \mathrm{diag}(\mathrm{diag}(S_R)).
 #' }
 #' When there are no ties, the familiar rank-difference formula obtains
 #' \deqn{
 #' \rho_S(i,j) \;=\; 1 - \frac{6}{n(n^2-1)} \sum_{k=1}^n d_k^2,
 #' \quad d_k \;=\; R_{ki}-R_{kj},
 #' }
-#' but this expression does \emph{not} hold under ties; computing Pearson
-#' correlation on mid-ranks (as above) is the standard tie-robust approach.
+#' but this expression does \emph{not} hold under ties; computing Pearson on
+#' mid-ranks (as above) is the standard tie-robust approach. Without ties,
+#' \eqn{\mathrm{Var}(R_{\cdot j})=(n^2-1)/12}; with ties, the variance is
+#' smaller.
 #'
-#' \eqn{\rho_S(i,j) \in [-1,1]} and the matrix
-#' \eqn{\widehat{\rho}_S} is symmetric positive semi-definite. Spearman’s
-#' correlation is invariant to any strictly monotone transformation applied
-#' separately to each variable, and to common translations and positive
-#' rescalings prior to ranking.
+#' \eqn{\rho_S(i,j) \in [-1,1]} and \eqn{\widehat{\rho}_S} is symmetric
+#' positive semi-definite by construction (up to floating-point error). The
+#' implementation symmetrises the result to remove round-off asymmetry.
+#' Spearman’s correlation is invariant to strictly monotone transformations
+#' applied separately to each variable.
 #'
-#' The implementation ranks each column to
-#' form \eqn{R}, then evaluates \eqn{R^\top R} using a symmetric rank update
-#' ('BLAS' 'SYRK') and centres it via the identity
+#' \strong{Computation.} Each column is ranked (mid-ranks) to form \eqn{R}.
+#' The product \eqn{R^\top R} is computed via a 'BLAS' symmetric rank update
+#' ('SYRK'), and centred using
 #' \deqn{
 #' (R-\mathbf{1}\mu^\top)^\top (R-\mathbf{1}\mu^\top)
 #' \;=\; R^\top R \;-\; n\,\mu\mu^\top,
 #' }
 #' avoiding an explicit centred copy. Division by \eqn{n-1} yields the sample
-#' covariance of ranks, which is finally standardised by \eqn{D^{-1/2}} to
-#' obtain \eqn{\widehat{\rho}_S}. Columns with zero rank variance (all values
-#' equal) are returned as \code{NA} along their row/column, with the diagonal
-#' set to \code{NA}.
+#' covariance of ranks; standardising by \eqn{D^{-1/2}} gives \eqn{\widehat{\rho}_S}.
+#' Columns with zero rank variance (all values equal) are returned as \code{NA}
+#' along their row/column; the corresponding diagonal entry is also \code{NA}.
 #'
 #' Ranking costs
 #' \eqn{O\!\bigl(p\,n\log n\bigr)}; forming and normalising

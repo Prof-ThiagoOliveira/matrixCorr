@@ -68,10 +68,10 @@ numeric columns of a matrix or data frame using a high-performance
 
 This function uses a fast and scalable algorithm implemented in 'C++'
 to compute both Kendall's tau-a (when no ties are present) and tau-b
-(when ties are detected), making it suitable for large datasets. Internally,
-it calls a highly optimized function that uses a combination of merge-sort-
-based inversion counting and a Fenwick Tree (binary indexed tree)
-for efficient tie handling.
+(when ties are detected), making it suitable for large datasets. It follows
+the Knight (1966) \eqn{O(n \log n)} scheme, where a single sort on one
+variable, in-block sorting of the paired variable within tie groups, and a
+global merge-sort–based inversion count with closed-form tie corrections.
 
 Prints a summary of the Kendall's tau correlation matrix,
 including description and method metadata.
@@ -81,28 +81,31 @@ correlation matrix.
 }
 \details{
 Kendall's tau is a rank-based measure of association between two variables.
-For a dataset with \eqn{n} observations of two variables \eqn{X} and
-\eqn{Y}, Kendall's tau coefficient is defined as:
+For a dataset with \eqn{n} observations on variables \eqn{X} and \eqn{Y},
+let \eqn{n_0 = n(n - 1)/2} be the number of unordered pairs, \eqn{C} the
+number of concordant pairs, and \eqn{D} the number of discordant pairs.
+Let \eqn{T_x = \sum_g t_g (t_g - 1)/2} and \eqn{T_y = \sum_h u_h (u_h - 1)/2}
+be the numbers of tied pairs within \eqn{X} and within \eqn{Y}, respectively,
+where \eqn{t_g} and \eqn{u_h} are tie-group sizes in \eqn{X} and \eqn{Y}.
 
-\deqn{ \tau = \frac{C - D}{\sqrt{(C + D + T_x)(C + D + T_y)}} }
-
-where:
-\itemize{
-\item \eqn{C} is the number of concordant pairs defined by
-\eqn{(x_i - x_j)(y_i - y_j) > 0}
-\item \eqn{D} is the number of discordant pairs defined by
-\eqn{(x_i - x_j)(y_i - y_j) < 0}
-\item \eqn{T_x}, \eqn{T_y} are the number of tied pairs in \eqn{X} and
-\eqn{Y}, respectively
-}
+The tie-robust Kendall's tau-b is defined as:
+\deqn{ \tau_b = \frac{C - D}{\sqrt{(n_0 - T_x)\,(n_0 - T_y)}}. }
 
 When there are no ties, the function computes the faster \emph{tau-a}
 version:
-\deqn{ \tau_a = \frac{C - D}{n(n-1)/2} }
+\deqn{ \tau_a = \frac{C - D}{n(n-1)/2}. }
 
-The function automatically selects \emph{tau-a} or \emph{tau-b} depending
-on the presence of ties. Performance is maximized by computing correlations
-in 'C++' directly from the matrix columns.
+Note that if \eqn{T_{xy}} denotes the number of pairs tied on both
+variables, then pairs partition as \eqn{C + D + T_x + T_y + T_{xy} = n_0}.
+
+The function automatically selects \emph{tau-a} or \emph{tau-b} depending on
+the presence of ties. In degenerate cases where a variable is constant
+(so \eqn{n_0 = T_x} or \eqn{n_0 = T_y}), the tau-b denominator is zero and
+the correlation is undefined (returned as \code{NA}).
+
+Performance is maximised by computing correlations in 'C++' directly from
+the matrix columns using the Knight \eqn{O(n \log n)} procedure; columns are
+discretised once and pairwise computations are parallelised where available.
 }
 \note{
 Missing values are not allowed. Columns with fewer than two
@@ -131,8 +134,12 @@ plot(kt)
 
 }
 \references{
-Kendall, M. G. (1938). A New Measure of Rank Correlation. Biometrika,
+Kendall, M. G. (1938). A New Measure of Rank Correlation. \emph{Biometrika},
 30(1/2), 81–93.
+
+Knight, W. R. (1966). A Computer Method for Calculating Kendall’s Tau with
+Ungrouped Data. \emph{Journal of the American Statistical Association},
+61(314), 436–439.
 }
 \seealso{
 \code{\link{print.kendall_matrix}},

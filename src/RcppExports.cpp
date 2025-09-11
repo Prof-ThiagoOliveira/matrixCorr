@@ -397,12 +397,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // matrixCorr_tetrachoric_mle_cpp
-double matrixCorr_tetrachoric_mle_cpp(NumericMatrix tab, double correct);
+double matrixCorr_tetrachoric_mle_cpp(Rcpp::NumericMatrix tab, double correct);
 RcppExport SEXP _matrixCorr_matrixCorr_tetrachoric_mle_cpp(SEXP tabSEXP, SEXP correctSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type tab(tabSEXP);
     Rcpp::traits::input_parameter< double >::type correct(correctSEXP);
     rcpp_result_gen = Rcpp::wrap(matrixCorr_tetrachoric_mle_cpp(tab, correct));
     return rcpp_result_gen;

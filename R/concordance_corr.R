@@ -18,26 +18,34 @@
 #' \code{\link{bland_altman}}).
 #'
 #' @details
-#' Lin's CCC is defined as:
+#' Lin's CCC is defined as
 #' \deqn{
-#' \rho_c = \frac{2 \cdot \mathrm{cov}(X, Y)}{\sigma_X^2 + \sigma_Y^2 +
-#' (\mu_X - \mu_Y)^2}
-#' }{
-#' rho_c = 2 * cov(X, Y) / [var(X) + var(Y) + (mean(X) - mean(Y))^2]
+#' \rho_c \;=\; \frac{2\,\mathrm{cov}(X, Y)}
+#'                  {\sigma_X^2 + \sigma_Y^2 + (\mu_X - \mu_Y)^2},
 #' }
-#'
-#' This formula combines the Pearson correlation coefficient
-#' \eqn{r = \mathrm{cov}(X, Y) / (\sigma_X \sigma_Y)}
-#' with a bias correction factor:
+#' where \eqn{\mu_X,\mu_Y} are the means, \eqn{\sigma_X^2,\sigma_Y^2} the
+#' variances, and \eqn{\mathrm{cov}(X,Y)} the covariance. Equivalently,
 #' \deqn{
-#' C_b = \frac{2 \sigma_X \sigma_Y}{\sigma_X^2 + \sigma_Y^2 + (\mu_X - \mu_Y)^2}
+#' \rho_c \;=\; r \times C_b, \qquad
+#' r \;=\; \frac{\mathrm{cov}(X,Y)}{\sigma_X \sigma_Y}, \quad
+#' C_b \;=\; \frac{2 \sigma_X \sigma_Y}
+#'                {\sigma_X^2 + \sigma_Y^2 + (\mu_X - \mu_Y)^2}.
 #' }
+#' Hence \eqn{|\rho_c| \le |r| \le 1}, \eqn{\rho_c = r} iff
+#' \eqn{\mu_X=\mu_Y} and \eqn{\sigma_X=\sigma_Y}, and \eqn{\rho_c=1} iff, in
+#' addition, \eqn{r=1}. CCC is symmetric in \eqn{(X,Y)} and penalises both
+#' location and scale differences; unlike Pearson's \eqn{r}, it is not invariant
+#' to affine transformations that change means or variances.
 #'
-#' Confidence intervals are not provided in the matrix version to retain speed,
-#' but can be computed separately for individual variable pairs using the
-#' scalar form of Lin's CCC.
+#' When \code{ci = TRUE}, large-sample
+#' confidence intervals for \eqn{\rho_c} are returned for each pair (delta-method
+#' approximation). For speed, CIs are omitted when \code{ci = FALSE}.
 #'
-#' Missing values are not allowed; input must be clean numeric data.
+#'If either variable has zero variance, \eqn{\rho_c} is
+#' undefined and \code{NA} is returned for that pair (including the diagonal).
+#'
+#' Missing values are not allowed; inputs must be numeric with at least two
+#' distinct non-missing values per column.
 #'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #' Non-numeric columns will be ignored.
