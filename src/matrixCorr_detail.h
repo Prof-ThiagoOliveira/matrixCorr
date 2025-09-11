@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
+#include <numeric>
 #include <limits>
 
 namespace matrixCorr_detail {
@@ -239,7 +240,7 @@ inline arma::vec safe_inv_stddev(const arma::vec& s) {
 //------------------------------------------------------------------------------
 namespace order_stats {
 
-// Tiny insertion sort for short ranges [s, e) (used within x-tie runs).
+// ---------- Tiny insertion sort for [s, e) ----------
 template <typename T>
 inline void insertion_sort_range(T* a, int s, int e) noexcept {
   for (int i = s + 1; i < e; ++i) {
@@ -249,7 +250,7 @@ inline void insertion_sort_range(T* a, int s, int e) noexcept {
   }
 }
 
-// Count ties (“Ms”) on a sorted buffer (generic).
+// ---------- Count ties (Ms) on a sorted buffer ----------
 template <typename T>
 inline long long getMs_T(const T* dat, int len) noexcept {
   long long Ms = 0, tie = 0;
@@ -260,8 +261,6 @@ inline long long getMs_T(const T* dat, int len) noexcept {
   if (tie) Ms += tie * (tie + 1) / 2;
   return Ms;
 }
-
-// Convenience aliases.
 inline long long getMs_ll(const long long* dat, int len) noexcept {
   return getMs_T<long long>(dat, len);
 }
@@ -269,16 +268,14 @@ inline long long getMs_double(const double* dat, int len) noexcept {
   return getMs_T<double>(dat, len);
 }
 
-// Non-allocating inversion counter (bottom-up mergesort with insertion warm-up).
-// Sorts a[0..n) in place (nondecreasing) and returns the inversion count.
-// Requires external buffer buf[0..n).
+// ---------- Bottom-up mergesort inversion counter (non-allocating) ----------
 template <typename T>
 inline long long inv_count_inplace(T* __restrict__ a,
                                    T* __restrict__ buf,
                                    const int n) noexcept {
   if (n < 2) return 0LL;
   long long inv = 0;
-  constexpr int TH = 96; // tune 64–128 if desired
+  constexpr int TH = 96; // warm-up block size (tune 64–128 if you like)
 
   auto insertion_block = [&](int L, int R) noexcept {
     long long v_inv = 0;
@@ -290,13 +287,13 @@ inline long long inv_count_inplace(T* __restrict__ a,
     return v_inv;
   };
 
-  // Warm-up small blocks with insertion sort (cache-friendly).
+  // Warm small blocks with insertion sort (cache-friendly).
   for (int L = 0; L < n; L += TH) {
     const int R = std::min(L + TH - 1, n - 1);
     inv += insertion_block(L, R);
   }
 
-  // Bottom-up merge; count cross inversions.
+  // Bottom-up merges (count cross inversions).
   for (int width = TH; width < n; width <<= 1) {
     for (int L = 0; L < n; L += 2 * width) {
       const int M = std::min(L + width, n);
@@ -314,31 +311,33 @@ inline long long inv_count_inplace(T* __restrict__ a,
   return inv;
 }
 
-// Scalar fast path using raw doubles (no discretisation).
-// Knight O(n log n): order by x, sort y within x-runs (Ms in runs),
-// global inversion count on y|x + Ms on globally sorted y.
-inline double tau_two_vectors_raw(const double* x,
-                                  const double* y,
-                                  int n) {
+// ---------- p==2 fast path: double-specialized Knight O(n log n) ----------
+inline double tau_two_vectors_fast(const double* x,
+                                   const double* y,
+                                   int n) {
   if (n < 2) return NA_REAL;
 
-  // Per-thread reusable buffers
+  // per-thread reusable buffers
   thread_local std::vector<int>     ord;
   thread_local std::vector<double>  ybuf, mrg;
+  if ((int)ord.capacity() < n) { ord.reserve(n); ybuf.reserve(n); mrg.reserve(n); }
+  ord.resize(n); ybuf.resize(n); mrg.resize(n);
 
-  ord.resize(n);
-  ybuf.resize(n);
-  mrg.resize(n);
-
-  // ord := argsort(x)
+  // argsort(x) with strict-weak ordering (tie-break by index)
+  struct IdxLess {
+    const double* x;
+    bool operator()(int a, int b) const noexcept {
+      const double xa = x[a], xb = x[b];
+      return (xa < xb) || (!(xb < xa) && a < b);
+    }
+  };
   std::iota(ord.begin(), ord.end(), 0);
-  std::sort(ord.begin(), ord.end(),
-            [&](int a, int b) noexcept { return x[a] < x[b]; });
+  std::sort(ord.begin(), ord.end(), IdxLess{ x });
 
-  // ybuf := y in x-sorted order
+  // y|x
   for (int k = 0; k < n; ++k) ybuf[k] = y[ord[k]];
 
-  // tie-runs in x (on x[ord[*]]); sort y within runs; accumulate m1 and within-run Ms
+  // sort y within equal-x runs; accumulate m1 and within-run Ms
   long long m1 = 0, s_acc = 0;
   for (int s = 0; s < n; ) {
     int e = s + 1;
@@ -347,7 +346,6 @@ inline double tau_two_vectors_raw(const double* x,
     const int L = e - s;
     if (L > 1) {
       m1 += 1LL * L * (L - 1) / 2;
-      // small runs: insertion sort; larger: std::sort
       if (L <= 32) insertion_sort_range<double>(ybuf.data(), s, e);
       else         std::sort(ybuf.begin() + s, ybuf.begin() + e);
       s_acc += getMs_double(ybuf.data() + s, L);
@@ -355,11 +353,10 @@ inline double tau_two_vectors_raw(const double* x,
     s = e;
   }
 
-  // Global inversion count on y|x, and global Ms on sorted y
-  const long long inv = inv_count_inplace(ybuf.data(), mrg.data(), n);
+  // global inversion count on y|x + global Ms on sorted y
+  const long long inv = inv_count_inplace<double>(ybuf.data(), mrg.data(), n);
   const long long m2  = getMs_double(ybuf.data(), n);
 
-  // Kendall tau-b in double (counts are 64-bit)
   const long long n0  = 1LL * n * (n - 1) / 2LL;
   const double    S   = double(n0) - double(m1) - double(m2)
     - 2.0 * double(inv) + double(s_acc);

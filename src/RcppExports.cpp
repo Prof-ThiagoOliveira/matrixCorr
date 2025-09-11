@@ -322,6 +322,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// kendall_tau2_from_mat_cpp
+double kendall_tau2_from_mat_cpp(Rcpp::NumericMatrix mat);
+RcppExport SEXP _matrixCorr_kendall_tau2_from_mat_cpp(SEXP matSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type mat(matSEXP);
+    rcpp_result_gen = Rcpp::wrap(kendall_tau2_from_mat_cpp(mat));
+    return rcpp_result_gen;
+END_RCPP
+}
 // partial_correlation_cpp
 Rcpp::List partial_correlation_cpp(SEXP X_, const std::string method, const double lambda, const bool return_cov_precision);
 RcppExport SEXP _matrixCorr_partial_correlation_cpp(SEXP X_SEXP, SEXP methodSEXP, SEXP lambdaSEXP, SEXP return_cov_precisionSEXP) {
@@ -464,6 +475,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_ustat_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_cpp, 1},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
     {"_matrixCorr_kendall_tau2_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_cpp, 2},
+    {"_matrixCorr_kendall_tau2_from_mat_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_from_mat_cpp, 1},
     {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 4},
     {"_matrixCorr_pearson_matrix_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_cpp, 1},
     {"_matrixCorr_sss_cor_cpp", (DL_FUNC) &_matrixCorr_sss_cor_cpp, 1},

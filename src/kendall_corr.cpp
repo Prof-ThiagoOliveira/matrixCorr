@@ -14,27 +14,29 @@ using namespace matrixCorr_detail;
 using matrixCorr_detail::order_stats::insertion_sort_range;
 using matrixCorr_detail::order_stats::getMs_ll;
 using matrixCorr_detail::order_stats::inv_count_inplace;
-using matrixCorr_detail::order_stats::tau_two_vectors_raw;
-
+using matrixCorr_detail::order_stats::tau_two_vectors_fast;
 
 // ---------------------------- Matrix version ---------------------------------
 // [[Rcpp::export]]
 Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
+  using namespace matrixCorr_detail;
+  using namespace matrixCorr_detail::order_stats;
+
   const int n = mat.nrow();
   const int p = mat.ncol();
 
-  // --- (C) Scalar fast path (p == 2): raw doubles, no discretisation
+  // --- Scalar fast path (p == 2): raw doubles, no discretisation
   if (p == 2) {
     const double* x = &mat(0, 0);
     const double* y = &mat(0, 1);
-    const double tau = tau_two_vectors_raw(x, y, n);
+    const double tau = tau_two_vectors_fast(x, y, n);
     Rcpp::NumericMatrix out(2, 2);
     out(0,0) = out(1,1) = 1.0;
     out(0,1) = out(1,0) = tau;
     return out;
   }
 
-  // discretise once per column for p >= 3 (matrix path)
+  // --- Discretise once per column for p >= 3 (matrix path)
   const double scale = 1e8;
   std::vector< std::vector<long long> > cols(p, std::vector<long long>(n));
   for (int j = 0; j < p; ++j) {
@@ -46,11 +48,11 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
   Rcpp::NumericMatrix out(p, p);
   for (int j = 0; j < p; ++j) out(j,j) = 1.0;
 
-  // --- (B) Avoid OpenMP overhead when p is tiny
+  // --- Avoid OpenMP overhead when p is tiny
 #if defined(_OPENMP)
   if (p >= 3) {
 #pragma omp parallel for schedule(static)
-    for (int i = 0; i < p - 1; ++i) { // --- (A) stop at p-1
+    for (int i = 0; i < p - 1; ++i) {
       // Precompute ord for column i (indices sorted by x_i)
       std::vector<int> ord(n);
       std::iota(ord.begin(), ord.end(), 0);
@@ -70,6 +72,7 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
 
       auto tau_from_ord = [&](const std::vector<long long>& y) -> double {
         thread_local std::vector<long long> ybuf, mrg;
+        if ((int)ybuf.capacity() < n) { ybuf.reserve(n); mrg.reserve(n); }
         ybuf.resize(n);
         mrg.resize(n);
 
@@ -86,15 +89,16 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
           }
         }
 
-        const long long inv = inv_count_inplace(ybuf.data(), mrg.data(), n);
+        const long long inv = inv_count_inplace<long long>(ybuf.data(), mrg.data(), n);
         const long long m2  = getMs_ll(ybuf.data(), n);
 
         const long long n0 = 1LL * n * (n - 1) / 2LL;
-        long double s = (long double)n0 - m1 - m2 - 2.0L * inv + s_acc;
-        const long double den1 = (long double)(n0 - m1);
-        const long double den2 = (long double)(n0 - m2);
-        if (den1 <= 0.0L || den2 <= 0.0L) return NA_REAL;
-        return (double)(s / std::sqrt(den1 * den2));
+        const double    S   = double(n0) - double(m1) - double(m2)
+          - 2.0 * double(inv) + double(s_acc);
+        const double    den1 = double(n0 - m1);
+        const double    den2 = double(n0 - m2);
+        if (den1 <= 0.0 || den2 <= 0.0) return NA_REAL;
+        return S / std::sqrt(den1 * den2);
       };
 
       for (int j = i + 1; j < p; ++j) {
@@ -106,7 +110,7 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
 #endif
 {
   // single-threaded path
-  for (int i = 0; i < p - 1; ++i) { // --- (A) stop at p-1
+  for (int i = 0; i < p - 1; ++i) {
     std::vector<int> ord(n);
     std::iota(ord.begin(), ord.end(), 0);
     std::sort(ord.begin(), ord.end(),
@@ -125,6 +129,7 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
     thread_local std::vector<long long> ybuf, mrg;
 
     auto tau_from_ord = [&](const std::vector<long long>& y) -> double {
+      if ((int)ybuf.capacity() < n) { ybuf.reserve(n); mrg.reserve(n); }
       ybuf.resize(n);
       mrg.resize(n);
       for (int k = 0; k < n; ++k) ybuf[k] = y[ord[k]];
@@ -140,15 +145,16 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
         }
       }
 
-      const long long inv = inv_count_inplace(ybuf.data(), mrg.data(), n);
+      const long long inv = inv_count_inplace<long long>(ybuf.data(), mrg.data(), n);
       const long long m2  = getMs_ll(ybuf.data(), n);
 
       const long long n0 = 1LL * n * (n - 1) / 2LL;
-      long double s = (long double)n0 - m1 - m2 - 2.0L * inv + s_acc;
-      const long double den1 = (long double)(n0 - m1);
-      const long double den2 = (long double)(n0 - m2);
-      if (den1 <= 0.0L || den2 <= 0.0L) return NA_REAL;
-      return (double)(s / std::sqrt(den1 * den2));
+      const double    S   = double(n0) - double(m1) - double(m2)
+        - 2.0 * double(inv) + double(s_acc);
+      const double    den1 = double(n0 - m1);
+      const double    den2 = double(n0 - m2);
+      if (den1 <= 0.0 || den2 <= 0.0) return NA_REAL;
+      return S / std::sqrt(den1 * den2);
     };
 
     for (int j = i + 1; j < p; ++j) {
@@ -161,9 +167,22 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
   return out;
 }
 
+// ---------------------------- Two-vector wrapper ------------------------------
 // [[Rcpp::export]]
 double kendall_tau2_cpp(Rcpp::NumericVector x, Rcpp::NumericVector y) {
-  if (x.size() != y.size() || x.size() < 2) return NA_REAL;
-  return tau_two_vectors_raw(x.begin(), y.begin(),
-                             static_cast<int>(x.size()));
+  const R_xlen_t n = x.size();
+  if (n != y.size() || n < 2) return NA_REAL;
+  const double* px = x.begin();
+  const double* py = y.begin();
+  return matrixCorr_detail::order_stats::tau_two_vectors_fast(px, py, static_cast<int>(n));
+}
+
+
+// [[Rcpp::export]]
+double kendall_tau2_from_mat_cpp(Rcpp::NumericMatrix mat) {
+  if (mat.ncol() != 2 || mat.nrow() < 2) return NA_REAL;
+  const int n = mat.nrow();
+  const double* x = &mat(0, 0);
+  const double* y = &mat(0, 1);
+  return matrixCorr_detail::order_stats::tau_two_vectors_fast(x, y, n);
 }

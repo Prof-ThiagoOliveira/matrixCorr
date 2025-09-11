@@ -98,26 +98,52 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 kendall_tau <- function(data, y = NULL) {
-  # Two-vector path (scalar return)
+  # Two vectors
   if (!is.null(y)) {
-    x <- data
-    stopifnot(is.numeric(x), is.numeric(y), length(x) == length(y))
-    return(kendall_tau2_cpp(x, y))
+    stopifnot(is.numeric(data), is.numeric(y), length(data) == length(y))
+    tau <- kendall_tau2_cpp(data, y)
+
+    nm1 <- deparse(substitute(data))
+    nm2 <- deparse(substitute(y))
+    labs <- c(nm1, nm2)
+    use_names <- all(nzchar(labs)) && !any(labs %in% c("data", "y"))
+
+    out <- matrix(c(1, tau, tau, 1), nrow = 2L,
+                  dimnames = if (use_names) list(labs, labs) else NULL)
+    attr(out, "method")      <- "kendall"
+    attr(out, "description") <- "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
+    attr(out, "package")     <- "matrixCorr"
+    class(out) <- c("kendall_matrix", "matrix")
+    return(out)
   }
 
-  # Matrix/data.frame path (matrix return)
-  numeric_data <- validate_corr_input(data)
+  # Two columns matrix/data.frame
+  if (is.matrix(data) && ncol(data) == 2L) {
+    storage.mode(data) <- "double"            # zero-copy if already double
+    tau <- kendall_tau2_from_mat_cpp(data)    # scalar from C++
+
+    dn <- colnames(data)
+    out <- matrix(c(1, tau, tau, 1), nrow = 2L,
+                  dimnames = if (!is.null(dn)) list(dn, dn) else NULL)
+    attr(out, "method")      <- "kendall"
+    attr(out, "description") <- "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
+    attr(out, "package")     <- "matrixCorr"
+    class(out) <- c("kendall_matrix", "matrix")
+    return(out)
+  }
+
+  # General matrix/data.frame path (p >= 3)
+  numeric_data  <- validate_corr_input(data)
   colnames_data <- colnames(numeric_data)
+
   result <- kendall_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
-  attr(result, "method") <- "kendall"
-  attr(result, "description") <-
-    "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
-  attr(result, "package") <- "matrixCorr"
+  attr(result, "method")      <- "kendall"
+  attr(result, "description") <- "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
+  attr(result, "package")     <- "matrixCorr"
   class(result) <- c("kendall_matrix", "matrix")
   result
 }
-
 
 #' @rdname kendall_tau
 #' @method print kendall_matrix
