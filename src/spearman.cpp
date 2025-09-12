@@ -1,7 +1,8 @@
 // Thiago de Paula Oliveira
 #include <RcppArmadillo.h>
 #include <limits>
-#include "matrixCorr_detail.h"   // <- use your header
+#include <cmath>
+#include "matrixCorr_detail.h"
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::plugins(openmp)]]
 
@@ -21,12 +22,14 @@ arma::mat spearman_matrix_cpp(SEXP X_) {
   arma::mat X(REAL(X_), n, p, /*copy_aux_mem*/ false, /*strict*/ true);
 
   // 1) Rank each column (OpenMP-parallel)
-  arma::mat R(n, p);
+  arma::mat R(n, p, arma::fill::none);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
-    R.col(static_cast<arma::uword>(j)) = rank_vector(X.col(static_cast<arma::uword>(j)));
+    // Create a view onto the j-th column memory to avoid an intermediate vector
+    arma::vec out(R.colptr(static_cast<arma::uword>(j)), n, /*copy_aux_mem*/ false, /*strict*/ true);
+    rank_vector(X.col(static_cast<arma::uword>(j)), out);  // in-place, fast path when no ties
   }
 
   // 2) Compute RtR via BLAS SYRK (upper triangle), fallback to GEMM
@@ -46,7 +49,7 @@ arma::mat spearman_matrix_cpp(SEXP X_) {
 #else
 RtR = R.t() * R;
 #endif
-RtR = arma::symmatu(RtR);
+RtR = arma::symmatu(RtR);  // Fill lower triangle
 
 // 3) Subtract constant n * mu^2 from all entries; mu = (n+1)/2 for ranks
 const double mu = 0.5 * (static_cast<double>(n) + 1.0);
@@ -61,7 +64,7 @@ arma::vec s  = arma::sqrt(s2);
 arma::mat corr = RtR / static_cast<double>(n - 1);
 arma::vec inv_s = safe_inv_stddev(s);
 
-// Broadcast: scale columns then rows (equivalent to D^{-1} * corr * D^{-1})
+// scale columns then rows (equivalent to D^{-1} * corr * D^{-1})
 corr.each_row() %= inv_s.t();  // scale columns j by inv_s[j]
 corr.each_col() %= inv_s;      // scale rows    i by inv_s[i]
 
@@ -77,4 +80,3 @@ for (arma::uword k = 0; k < zero.n_elem; ++k) {
 
 return corr;  // correlation matrix in [-1, 1]
 }
-

@@ -195,35 +195,67 @@ inline bool is_close(double a, double b, double abs_eps, double rel_eps) noexcep
   return diff <= (abs_eps + rel_eps * std::max(std::abs(a), std::abs(b)));
 }
 
-// tolerance-capable ranker (average ranks)
-inline arma::vec rank_vector_eps(const arma::vec& x,
-                                 double abs_eps = 0.0,
-                                 double rel_eps = 0.0,
-                                 bool   stable  = true)
+// In-place tolerance-capable ranker (average ranks).
+// Writes ranks (1-based) into 'out' without extra return allocation.
+// Uses a fast path when there are no ties.
+inline void rank_vector_eps(const arma::vec& x,
+                            arma::vec& out,
+                            double abs_eps = 0.0,
+                            double rel_eps = 0.0,
+                            bool   stable  = false)  // default: prefer speed; average-tie rank is unaffected by stability
 {
   const arma::uword n = x.n_elem;
-  // stable sort gives deterministic grouping for near-ties
+  // Sort indices (non-stable is faster, stability not needed for average tie ranks)
   arma::uvec idx = stable ? arma::stable_sort_index(x) : arma::sort_index(x);
-  // precompute sorted values to avoid x(idx[...]) in the loop
-  arma::vec xs   = x.elem(idx);
-  arma::vec ranks(n);
+  // Build sorted values (contiguous for cache-friendly tie scan)
+  arma::vec xs = x.elem(idx);
 
+  // Fast path: no ties (exact equality or within eps if provided)
+  bool has_tie = false;
+  if (abs_eps == 0.0 && rel_eps == 0.0) {
+    for (arma::uword k = 1; k < n; ++k) {
+      if (xs[k] == xs[k - 1]) { has_tie = true; break; }
+    }
+  } else {
+    for (arma::uword k = 1; k < n; ++k) {
+      if (is_close(xs[k], xs[k - 1], abs_eps, rel_eps)) { has_tie = true; break; }
+    }
+  }
+
+  if (!has_tie) {
+    // Strictly increasing — ranks are just positions + 1
+    for (arma::uword k = 0; k < n; ++k)
+      out[idx[k]] = static_cast<double>(k + 1);
+    return;
+  }
+
+  // General path: average ranks over tie groups
   arma::uword i = 0;
   while (i < n) {
     arma::uword j = i + 1;
     const double xi = xs[i];
-    while (j < n && is_close(xs[j], xi, abs_eps, rel_eps)) ++j;
-    // 1-based average
-    const double avg_rank = 0.5 * static_cast<double>(i + j - 1) + 1.0;
-    for (arma::uword k = i; k < j; ++k) ranks(idx[k]) = avg_rank;
+    if (abs_eps == 0.0 && rel_eps == 0.0) {
+      while (j < n && xs[j] == xi) ++j;
+    } else {
+      while (j < n && is_close(xs[j], xi, abs_eps, rel_eps)) ++j;
+    }
+    const double avg_rank = 0.5 * static_cast<double>(i + j - 1) + 1.0; // 1-based average
+    for (arma::uword k = i; k < j; ++k) out[idx[k]] = avg_rank;
     i = j;
   }
-  return ranks;
 }
 
-// Backwards-compatible wrapper: exact ties only (your original behavior)
+// Backwards-compatible wrapper: exact ties only (original behavior).
+// Overload #1: in-place (preferred by spearman core)
+inline void rank_vector(const arma::vec& x, arma::vec& out) {
+  rank_vector_eps(x, out, /*abs_eps=*/0.0, /*rel_eps=*/0.0, /*stable=*/false);
+}
+
+// Overload #2: return-by-value (kept for compatibility elsewhere)
 inline arma::vec rank_vector(const arma::vec& x) {
-  return rank_vector_eps(x, /*abs_eps=*/0.0, /*rel_eps=*/0.0, /*stable=*/true);
+  arma::vec out(x.n_elem);
+  rank_vector(x, out);
+  return out;
 }
 
 // Invert standard deviations safely (unchanged)
