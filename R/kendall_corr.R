@@ -5,10 +5,10 @@
 #' **all pairs of numeric columns** in a matrix/data frame, or
 #' for **two numeric vectors** directly (scalar path).
 #'
-#' This function uses a scalable algorithm implemented in C++ to
+#' This function uses a scalable algorithm implemented in 'C++' to
 #' compute Kendall's tau-b (tie-robust). When there are no ties, tau-b reduces
 #' to tau-a. The implementation follows the Knight (1966) \eqn{O(n \log n)}
-#' scheme: a single sort on one variable, in-block sorting of the paired
+#' scheme, where a single sort on one variable, in-block sorting of the paired
 #' variable within tie groups, and a global merge-sort–based inversion count
 #' with closed-form tie corrections.
 #'
@@ -119,15 +119,14 @@ kendall_tau <- function(data, y = NULL) {
 
   # Two columns matrix/data.frame
   if (is.matrix(data) && ncol(data) == 2L) {
-    storage.mode(data) <- "double"            # zero-copy if already double
-    tau <- kendall_tau2_from_mat_cpp(data)    # scalar from C++
+    if (!is.double(data)) storage.mode(data) <- "double"
 
-    dn <- colnames(data)
+    tau <- kendall_tau2_from_mat_cpp(data)
+
+    dn  <- colnames(data)
     out <- matrix(c(1, tau, tau, 1), nrow = 2L,
                   dimnames = if (!is.null(dn)) list(dn, dn) else NULL)
-    attr(out, "method")      <- "kendall"
-    attr(out, "description") <- "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
-    attr(out, "package")     <- "matrixCorr"
+    attr(out, "method") <- "kendall"
     class(out) <- c("kendall_matrix", "matrix")
     return(out)
   }

@@ -75,10 +75,10 @@ Computes Kendall's tau rank correlation either for
 \strong{all pairs of numeric columns} in a matrix/data frame, or
 for \strong{two numeric vectors} directly (scalar path).
 
-This function uses a scalable algorithm implemented in C++ to
+This function uses a scalable algorithm implemented in 'C++' to
 compute Kendall's tau-b (tie-robust). When there are no ties, tau-b reduces
 to tau-a. The implementation follows the Knight (1966) \eqn{O(n \log n)}
-scheme: a single sort on one variable, in-block sorting of the paired
+scheme, where a single sort on one variable, in-block sorting of the paired
 variable within tie groups, and a global merge-sort–based inversion count
 with closed-form tie corrections.
 
