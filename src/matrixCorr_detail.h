@@ -202,7 +202,7 @@ inline void rank_vector_eps(const arma::vec& x,
                             arma::vec& out,
                             double abs_eps = 0.0,
                             double rel_eps = 0.0,
-                            bool   stable  = false)  // default: prefer speed; average-tie rank is unaffected by stability
+                            bool   stable  = false)
 {
   const arma::uword n = x.n_elem;
   // Sort indices (non-stable is faster, stability not needed for average tie ranks)
@@ -210,7 +210,7 @@ inline void rank_vector_eps(const arma::vec& x,
   // Build sorted values (contiguous for cache-friendly tie scan)
   arma::vec xs = x.elem(idx);
 
-  // Fast path: no ties (exact equality or within eps if provided)
+  // no ties
   bool has_tie = false;
   if (abs_eps == 0.0 && rel_eps == 0.0) {
     for (arma::uword k = 1; k < n; ++k) {
@@ -229,7 +229,7 @@ inline void rank_vector_eps(const arma::vec& x,
     return;
   }
 
-  // General path: average ranks over tie groups
+  // average ranks over tie groups
   arma::uword i = 0;
   while (i < n) {
     arma::uword j = i + 1;
@@ -245,20 +245,18 @@ inline void rank_vector_eps(const arma::vec& x,
   }
 }
 
-// Backwards-compatible wrapper: exact ties only (original behavior).
-// Overload #1: in-place (preferred by spearman core)
+// exact ties only
 inline void rank_vector(const arma::vec& x, arma::vec& out) {
   rank_vector_eps(x, out, /*abs_eps=*/0.0, /*rel_eps=*/0.0, /*stable=*/false);
 }
 
-// Overload #2: return-by-value (kept for compatibility elsewhere)
+// return-by-value
 inline arma::vec rank_vector(const arma::vec& x) {
   arma::vec out(x.n_elem);
   rank_vector(x, out);
   return out;
 }
 
-// Invert standard deviations safely (unchanged)
 inline arma::vec safe_inv_stddev(const arma::vec& s) {
   arma::vec inv_s(s.n_elem, arma::fill::zeros);
   arma::uvec nz = arma::find(s > 0.0);
