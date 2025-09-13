@@ -238,7 +238,8 @@ Rcpp::List ccc_vc_cpp(
     double ar1_rho = 0.0,
     bool include_subj_method = true,
     bool include_subj_time = true,
-    double sb_zero_tol = 1e-10
+    double sb_zero_tol = 1e-10,
+    bool eval_single_visit = false
 ) {
 #ifdef _OPENMP
 #ifndef MATRIXCORR_NO_BLAS_GUARD
@@ -867,36 +868,41 @@ Rcpp::List ccc_vc_cpp(
   double kappa_e_bar = 1.0;
   int    units = 0;
 
-  if (nt > 0) {
-    kappa_g_bar = 0.0;
-    kappa_e_bar = 0.0;
-    for (int i = 0; i < m; ++i) {
-      const auto& met_i = S.met[i];
-      const auto& tim_i = S.tim[i];
-      if (nm > 0) {
-        for (int l = 0; l < nm; ++l) {
+  if (!eval_single_visit) {
+    if (nt > 0) {
+      kappa_g_bar = 0.0;
+      kappa_e_bar = 0.0;
+      for (int i = 0; i < m; ++i) {
+        const auto& met_i = S.met[i];
+        const auto& tim_i = S.tim[i];
+        if (nm > 0) {
+          for (int l = 0; l < nm; ++l) {
+            int T = 0;
+            for (size_t k = 0; k < tim_i.size(); ++k)
+              if (met_i[k] == l && tim_i[k] >= 0) ++T;
+              if (T <= 0) continue;
+              kappa_g_bar += 1.0 / (double)T;
+              kappa_e_bar += use_ar1 ? kappa_T(ar1_rho, T) : 1.0 / (double)T;
+              ++units;
+          }
+        } else {
           int T = 0;
-          for (size_t k = 0; k < tim_i.size(); ++k) if (met_i[k] == l && tim_i[k] >= 0) ++T;
+          for (size_t k = 0; k < tim_i.size(); ++k) if (tim_i[k] >= 0) ++T;
           if (T <= 0) continue;
           kappa_g_bar += 1.0 / (double)T;
           kappa_e_bar += use_ar1 ? kappa_T(ar1_rho, T) : 1.0 / (double)T;
           ++units;
         }
-      } else {
-        int T = 0;
-        for (size_t k = 0; k < tim_i.size(); ++k) if (tim_i[k] >= 0) ++T;
-        if (T <= 0) continue;
-        kappa_g_bar += 1.0 / (double)T;
-        kappa_e_bar += use_ar1 ? kappa_T(ar1_rho, T) : 1.0 / (double)T;
-        ++units;
       }
+      if (units > 0) {
+        kappa_g_bar /= (double)units;
+        kappa_e_bar /= (double)units;
+      } else { kappa_g_bar = 1.0; kappa_e_bar = 1.0; }
+      kappa_e_bar = std::min(1.0, std::max(kappa_e_bar, 1e-12));
+    } else {
+      kappa_g_bar = 0.0; kappa_e_bar = 1.0;
     }
-    if (units > 0) {
-      kappa_g_bar /= (double)units;
-      kappa_e_bar /= (double)units;
-    } else { kappa_g_bar = 1.0; kappa_e_bar = 1.0; }
-    kappa_e_bar = std::min(1.0, std::max(kappa_e_bar, 1e-12));
-  } else { kappa_g_bar = 0.0; kappa_e_bar = 1.0; }
+  }
 
   const double sab_eff = include_subj_method ? sab : 0.0;
   const double sag_eff = include_subj_time ? sag : 0.0;

@@ -310,8 +310,7 @@ ccc_pairwise_u_stat <- function(data,
 #' @param conf_level Numeric in \eqn{(0,1)}. Confidence level when
 #'   \code{ci = TRUE} (default \code{0.95}).
 #' @param verbose Logical. If \code{TRUE}, prints a structured summary of the
-#'   fitted variance components and \eqn{S_B} for each fit (overall or
-#'   pairwise). Default \code{FALSE}.
+#'   fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.
 #' @param digits Integer \eqn{(\ge 0)}. Number of decimal places to use in the
 #'   printed summary when \code{verbose = TRUE}. Default \code{4}.
 #' @param use_message Logical. When \code{verbose = TRUE}, choose the printing
@@ -1011,24 +1010,20 @@ ccc_lmm_reml <- function(data, response, rind,
                         NULL)
 
   if (is.null(method) || nlevels(df[[method]]) < 2L) {
-    return(ccc_lmm_reml_overall(df, fml, response, rind, method, time,
-                                slope, slope_var, slope_Z, drop_zero_cols,
-                                Dmat, ar, ar_rho, max_iter, tol,
-                                conf_level, verbose, digits, use_message,
-                                extra_label, ci,
-                                Dmat_type = Dmat_type,
-                                Dmat_weights = Dmat_weights,
-                                Dmat_rescale = Dmat_rescale))
-  } else {
-    return(ccc_lmm_reml_pairwise(df, fml, response, rind, method, time,
-                                 slope, slope_var, slope_Z, drop_zero_cols,
-                                 Dmat, ar, ar_rho, max_iter, tol,
-                                 conf_level, verbose, digits, use_message,
-                                 extra_label, ci, all_time_lvls,
-                                 Dmat_type = Dmat_type,
-                                 Dmat_weights = Dmat_weights,
-                                 Dmat_rescale = Dmat_rescale))
+    stop("At least two method levels are required to compute pairwise CCC. ",
+         "The 'overall' CCC has been removed. ",
+         "Supply `method` with >= 2 levels.", call. = FALSE)
   }
+
+  # Only pairwise path remains
+  return(ccc_lmm_reml_pairwise(df, fml, response, rind, method, time,
+                               slope, slope_var, slope_Z, drop_zero_cols,
+                               Dmat, ar, ar_rho, max_iter, tol,
+                               conf_level, verbose, digits, use_message,
+                               extra_label, ci, all_time_lvls,
+                               Dmat_type = Dmat_type,
+                               Dmat_weights = Dmat_weights,
+                               Dmat_rescale = Dmat_rescale))
 }
 
 #' @title num_or_na
@@ -1266,222 +1261,6 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
   }
 
   list(include_subj_method = inc_subj_method, include_subj_time = inc_subj_time, fit = fit_full)
-}
-
-#' @title ccc_lmm_reml_overall
-#' @description Internal function to handle overall CCC estimation when `method` is NULL or has < 2 levels.
-#' @keywords internal
-#' @title ccc_lmm_reml_overall
-#' @description Internal function to handle overall CCC estimation when `method` is NULL or has < 2 levels.
-#' @keywords internal
-ccc_lmm_reml_overall <- function(df, fml, response, rind, method, time,
-                                 slope, slope_var, slope_Z, drop_zero_cols,
-                                 Dmat, ar, ar_rho, max_iter, tol,
-                                 conf_level, verbose, digits, use_message,
-                                 extra_label, ci,
-                                 Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
-                                 Dmat_weights = NULL,
-                                 Dmat_rescale = TRUE,
-                                 vc_select = c("auto","none"),
-                                 vc_alpha = 0.05,
-                                 vc_test_order = c("subj_time","subj_method"),
-                                 include_subj_method = NULL,
-                                 include_subj_time = NULL,
-                                 sb_zero_tol = 1e-10) {
-
-  Dmat_type <- match.arg(Dmat_type)
-  vc_select <- match.arg(vc_select)
-  vc_test_order <- match.arg(vc_test_order, several.ok = TRUE)
-
-  X <- model.matrix(fml, data = df)
-
-  ## Determine present time levels in this (overall) fit
-  lev_time_sub <- if (!is.null(time)) levels(df[[time]]) else character(0)
-
-  ## Build/subset the time kernel Dsub only when there are ≥ 2 time levels
-  if (!is.null(time) && length(lev_time_sub) >= 2L) {
-    if (!is.null(Dmat)) {
-      Dfull <- as.matrix(Dmat)
-      ## In overall fits lev_time_sub are the global time levels; require conformity
-      if (nrow(Dfull) != length(lev_time_sub) || ncol(Dfull) != length(lev_time_sub))
-        stop("Dmat has incompatible dimension for present time levels (overall fit).")
-      Dsub <- Dfull
-      if (isTRUE(Dmat_rescale))
-        Dsub <- .Dmat_normalise_mass(Dsub, length(lev_time_sub))
-      ## soft symmetrisation for safety
-      Dsub <- 0.5 * (Dsub + t(Dsub))
-    } else {
-      ## Construct from type/weights; align (named) weights if provided
-      w_sub <- .align_weights_to_levels(Dmat_weights, lev_time_sub, lev_time_sub)
-      Dsub  <- .Dmat_build_kernel(length(lev_time_sub),
-                                  type    = Dmat_type,
-                                  w       = w_sub,
-                                  rescale = Dmat_rescale)
-    }
-  } else {
-    Dsub <- NULL
-  }
-
-  ## infer "has_interaction" from model matrix columns
-  has_interaction <- any(grepl(":", colnames(X), fixed = TRUE))
-
-  Laux <- build_LDZ(
-    colnames_X    = colnames(X),
-    method_levels = if (is.null(method)) character(0) else levels(df[[method]]),
-    time_levels   = if (is.null(time)) character(0) else levels(df[[time]]),
-    Dsub          = Dsub,
-    df_sub        = df,
-    method_name     = method,
-    time_name    = time,
-    slope         = slope,
-    interaction   = has_interaction,
-    slope_var     = slope_var,
-    drop_zero_cols= drop_zero_cols
-  )
-
-  method_int <- if (!is.null(method)  && nlevels(df[[method]])  >= 2L) as.integer(df[[method]])  else integer(0)
-  time_int   <- if (!is.null(time) && nlevels(df[[time]]) >= 2L) as.integer(df[[time]]) else integer(0)
-  Z_overall  <- if (!identical(slope, "custom")) Laux$Z else {
-    if (is.null(slope_Z)) NULL else as.matrix(slope_Z)
-  }
-
-  ## Decide which random components to include
-  decide_include <- function(nm, nt, include_subj_method, include_subj_time, vc_select) {
-    inc_subj_method <- if (!is.null(include_subj_method)) isTRUE(include_subj_method) else nm > 0
-    inc_subj_time <- if (!is.null(include_subj_time)) isTRUE(include_subj_time) else nt > 0
-    if (identical(vc_select, "none")) return(list(subj_method = inc_subj_method, subj_time = inc_subj_time))
-    NULL
-  }
-  inc0 <- decide_include(Laux$nm, Laux$nt, include_subj_method, include_subj_time, vc_select)
-
-  if (is.null(inc0) && (Laux$nm > 0 || Laux$nt > 0) && identical(vc_select, "auto")) {
-    ## Automatic, boundary-aware REML LRT selection; rho profiled appropriately inside
-    sel <- reml_lrt_select(X, df[[response]], as.integer(df[[rind]]),
-                           method_int, time_int, Laux, Z_overall,
-                           ar = ar, ar_rho = ar_rho,
-                           max_iter = max_iter, tol = tol, conf_level = conf_level,
-                           alpha = vc_alpha, test_order = vc_test_order,
-                           sb_zero_tol = sb_zero_tol)
-    ans <- sel$fit
-    inc_subj_method_eff <- isTRUE(sel$include_subj_method)
-    inc_subj_time_eff   <- isTRUE(sel$include_subj_time)
-
-    ## For reporting attributes, compute rho used (only if AR1 with unknown rho)
-    rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
-      er <- estimate_rho(X, df[[response]], as.integer(df[[rind]]),
-                         method_int, time_int, Laux, Z_overall,
-                         max_iter = max_iter, tol = tol, conf_level = conf_level,
-                         include_subj_method = inc_subj_method_eff, include_subj_time = inc_subj_time_eff,
-                         sb_zero_tol = sb_zero_tol)
-      er$rho
-    } else ar_rho
-
-  } else {
-    ## Honour explicit choice (or default to presence of factors) without testing
-    inc_subj_method_eff <- if (is.null(inc0)) (Laux$nm > 0) else inc0$subj_method
-    inc_subj_time_eff <- if (is.null(inc0)) (Laux$nt > 0) else inc0$subj_time
-
-    ## Estimate rho for these inclusions if needed
-    rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
-      er <- estimate_rho(X, df[[response]], as.integer(df[[rind]]),
-                         method_int, time_int, Laux, Z_overall,
-                         max_iter = max_iter, tol = tol, conf_level = conf_level,
-                         include_subj_method = inc_subj_method_eff, include_subj_time = inc_subj_time_eff,
-                         sb_zero_tol = sb_zero_tol)
-      er$rho
-    } else ar_rho
-
-    ans <- tryCatch(
-      run_cpp(X, df[[response]], as.integer(df[[rind]]),
-              method_int, time_int, Laux, Z_overall,
-              use_ar1 = identical(ar, "ar1"),
-              ar1_rho = if (identical(ar, "ar1")) rho_used else 0,
-              max_iter = max_iter, tol = tol, conf_level = conf_level,
-              include_subj_method = inc_subj_method_eff, include_subj_time = inc_subj_time_eff,
-              sb_zero_tol = sb_zero_tol),
-      error = function(e) {
-        stop("ccc_vc_cpp failed on this dataset (near-singular tiny data): ",
-             conditionMessage(e), call. = FALSE)
-      }
-    )
-  }
-
-  if (isTRUE(verbose)) {
-    .vc_message(ans, label = "Overall", nm = Laux$nm, nt = Laux$nt,
-                conf_level = conf_level, digits = digits, use_message = use_message,
-                extra_label = extra_label, ar = ar,
-                ar_rho = if (identical(ar, "ar1")) rho_used else NA_real_)
-  }
-
-  lab <- "Overall"
-  est_mat <- matrix(unname(ans$ccc), 1, 1, dimnames = list(lab, lab))
-
-  # AR recommendation from model residuals
-  if (isTRUE(ans[["ar1_recommend"]])) {
-    message("AR(1) residual model recommended (lag-1 autocorrelation detected). ",
-            "Use ar = \"ar1\" to account for serial correlation.\n")
-  }
-
-  if (isTRUE(ci)) {
-    lwr_cpp <- num_or_na(ans[["lwr"]]); upr_cpp <- num_or_na(ans[["upr"]])
-    if (is.na(lwr_cpp) || is.na(upr_cpp)) {
-      se_cpp <- num_or_na(ans[["se_ccc"]])
-      ci2 <- compute_ci_from_se(num_or_na(ans[["ccc"]]), se_cpp, conf_level)
-      lwr_cpp <- ci2[1]; upr_cpp <- ci2[2]
-    }
-    out <- list(
-      est    = est_mat,
-      lwr.ci = matrix(lwr_cpp, 1, 1, dimnames = dimnames(est_mat)),
-      upr.ci = matrix(upr_cpp, 1, 1, dimnames = dimnames(est_mat))
-    )
-    attr(out, "method")      <- "Variance Components REML"
-    attr(out, "description") <- "Lin's CCC from random-effects LMM"
-    attr(out, "package")     <- "matrixCorr"
-    attr(out, "conf.level")  <- conf_level
-    if (identical(ar, "ar1")) attr(out, "ar_rho") <- as.numeric(rho_used)
-
-    ## variance-components attributes for overall (scalars)
-    attr(out, "sigma2_subject")        <- num_or_na(ans[["sigma2_subject"]])
-    attr(out, "sigma2_subject_method") <- num_or_na(ans[["sigma2_subject_method"]])
-    attr(out, "sigma2_subject_time")   <- num_or_na(ans[["sigma2_subject_time"]])
-    attr(out, "sigma2_error")          <- num_or_na(ans[["sigma2_error"]])
-    attr(out, "sigma2_extra")          <- num_or_na_vec(ans[["sigma2_extra"]])
-    attr(out, "SB")                    <- num_or_na(ans[["SB"]])
-    attr(out, "se_ccc")                <- num_or_na(ans[["se_ccc"]])
-
-    # AR1 diagnostics
-    attr(out, "ar1_rho_mom")   <- num_or_na(ans[["ar1_rho_mom"]])
-    attr(out, "ar1_pairs")     <- suppressWarnings(as.integer(ans[["ar1_pairs"]]))
-    attr(out, "ar1_pval")      <- num_or_na(ans[["ar1_pval"]])
-    attr(out, "ar1_recommend") <- isTRUE(ans[["ar1_recommend"]])
-
-    class(out) <- c("ccc_lmm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc")
-    return(out)
-  } else {
-    out <- est_mat
-    attr(out, "method")      <- "Variance Components REML"
-    attr(out, "description") <- "Lin's CCC from random-effects LMM"
-    attr(out, "package")     <- "matrixCorr"
-    if (identical(ar, "ar1")) attr(out, "ar_rho") <- as.numeric(rho_used)
-
-    ## variance-components attributes for overall (scalars)
-    attr(out, "sigma2_subject")        <- num_or_na(ans[["sigma2_subject"]])
-    attr(out, "sigma2_subject_method") <- num_or_na(ans[["sigma2_subject_method"]])
-    attr(out, "sigma2_subject_time")   <- num_or_na(ans[["sigma2_subject_time"]])
-    attr(out, "sigma2_error")          <- num_or_na(ans[["sigma2_error"]])
-    attr(out, "sigma2_extra")          <- num_or_na_vec(ans[["sigma2_extra"]])
-    attr(out, "SB")                    <- num_or_na(ans[["SB"]])
-    attr(out, "se_ccc")                <- num_or_na(ans[["se_ccc"]])
-
-    # AR1 diagnostics
-    attr(out, "ar1_rho_mom")   <- num_or_na(ans[["ar1_rho_mom"]])
-    attr(out, "ar1_pairs")     <- suppressWarnings(as.integer(ans[["ar1_pairs"]]))
-    attr(out, "ar1_pval")      <- num_or_na(ans[["ar1_pval"]])
-    attr(out, "ar1_recommend") <- isTRUE(ans[["ar1_recommend"]])
-
-    class(out) <- c("ccc_lmm_reml", "matrixCorr_ccc", "ccc", "matrix")
-    return(out)
-  }
 }
 
 #' @title ccc_lmm_reml_pairwise

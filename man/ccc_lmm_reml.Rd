@@ -100,8 +100,7 @@ by a large-sample delta method for CCC (see \strong{CIs} note below).}
 \code{ci = TRUE} (default \code{0.95}).}
 
 \item{verbose}{Logical. If \code{TRUE}, prints a structured summary of the
-fitted variance components and \eqn{S_B} for each fit (overall or
-pairwise). Default \code{FALSE}.}
+fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.}
 
 \item{digits}{Integer \eqn{(\ge 0)}. Number of decimal places to use in the
 printed summary when \code{verbose = TRUE}. Default \code{4}.}
