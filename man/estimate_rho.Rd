@@ -19,7 +19,8 @@ estimate_rho(
   conf_level = 0.95,
   include_subj_method = TRUE,
   include_subj_time = TRUE,
-  sb_zero_tol = 1e-10
+  sb_zero_tol = 1e-10,
+  eval_single_visit = FALSE
 )
 }
 \description{
