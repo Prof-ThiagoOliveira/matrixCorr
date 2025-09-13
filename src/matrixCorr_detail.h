@@ -1160,61 +1160,43 @@ inline double kappa_T(double rho, int T) {
   return std::max(acc / TT, 1e-12);
 }
 
-// Log|R| when residuals are block-diagonal AR(1) sequences separated by negatives in tim_i.
-// se = σ_e, so log|Σ| = log|R| + n_i*log(se^2) = log|R| + 2*n_i*log(se) (we return the latter form).
-inline double logdet_R_blocks(const std::vector<int>& tim_i,
-                              double rho,
-                              double se,
-                              double eps = 1e-12)
-{
-  const int n_i = static_cast<int>(tim_i.size());
-  const double lg_se = std::log(std::max(se, eps));
-  const double lg_one_minus_r2 = std::log(std::max(1.0 - rho*rho, 1e-12));
-  double out = 0.0;
-  int s = 0;
-  while (s < n_i) {
-    if (tim_i[s] < 0) { out += lg_se; ++s; continue; }
-    int e = s; while (e + 1 < n_i && tim_i[e + 1] >= 0) ++e;
-    const int L = e - s + 1;
-    out += L * lg_se;
-    if (L >= 2) out += (L - 1) * lg_one_minus_r2;
-    s = e + 1;
-  }
-  return out;
-}
-
-// Build the block-tri-diagonal R^{-1} for AR(1) sequences separated by negatives in tim_i.
-// The matrix returned is symmetric and slightly jittered on the diagonal for safety.
-inline void make_Cinv(const std::vector<int>& tim_i,
-                      double rho,
-                      arma::mat& Cinv)
-{
-  const int n_i = static_cast<int>(tim_i.size());
-  Cinv.zeros(n_i, n_i);
-  if (n_i == 0) return;
-
+inline void make_Cinv_by_method(const std::vector<int>& tim_ord,
+                                const std::vector<int>& met_ord,
+                                int nm_levels, double rho,
+                                arma::mat& Cinv) {
+  Cinv.zeros(tim_ord.size(), tim_ord.size());
   const double r2 = rho * rho;
   const double denom = std::max(1.0 - r2, 1e-12);
 
-  int s = 0;
-  while (s < n_i) {
-    if (tim_i[s] < 0) { Cinv(s, s) += 1.0; ++s; continue; }
-    int e = s;
-    while (e + 1 < n_i && tim_i[e + 1] >= 0) ++e;
-    const int L = e - s + 1;
+  for (int l = 0; l < nm_levels; ++l) {
+    // collect indices of rows with method==l and time>=0, in current order
+    std::vector<int> idx;
+    idx.reserve(tim_ord.size());
+    for (int k = 0; k < (int)tim_ord.size(); ++k)
+      if (met_ord[k] == l && tim_ord[k] >= 0) idx.push_back(k);
 
-    if (L == 1) {
-      Cinv(s, s) += 1.0;
-    } else {
-      Cinv(s, s) += 1.0 / denom;
-      Cinv(e, e) += 1.0 / denom;
-      for (int t = s + 1; t <= e - 1; ++t) Cinv(t, t) += (1.0 + r2) / denom;
-      for (int t = s; t <= e - 1; ++t) {
-        Cinv(t, t + 1) += -rho / denom;
-        Cinv(t + 1, t) += -rho / denom;
+      // walk contiguous runs in this idx (consecutive entries in 'idx' are consecutive in the subject ordering)
+      int s = 0;
+      while (s < (int)idx.size()) {
+        int e = s;
+        // same method by construction; runs are contiguous in 'idx'
+        while (e + 1 < (int)idx.size()) ++e;
+        const int L = e - s + 1;
+        if (L == 1) {
+          Cinv(idx[s], idx[s]) += 1.0;
+        } else {
+          Cinv(idx[s], idx[s])     += 1.0 / denom;
+          Cinv(idx[e], idx[e])     += 1.0 / denom;
+          for (int t = s + 1; t <= e - 1; ++t)
+            Cinv(idx[t], idx[t])   += (1.0 + r2) / denom;
+          for (int t = s; t <= e - 1; ++t) {
+            const int a = idx[t], b = idx[t+1];
+            Cinv(a, b) += -rho / denom;
+            Cinv(b, a) += -rho / denom;
+          }
+        }
+        s = e + 1;
       }
-    }
-    s = e + 1;
   }
   Cinv.diag() += 1e-10;
 }

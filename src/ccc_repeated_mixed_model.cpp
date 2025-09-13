@@ -24,8 +24,7 @@ using matrixCorr_detail::linalg::inv_sympd_safe;
 using matrixCorr_detail::linalg::solve_sympd_safe;
 using matrixCorr_detail::linalg::logdet_spd_safe;
 using matrixCorr_detail::timeseries::ar1::kappa_T;
-using matrixCorr_detail::timeseries::ar1::logdet_R_blocks;
-using matrixCorr_detail::timeseries::ar1::make_Cinv;
+using matrixCorr_detail::timeseries::ar1::make_Cinv_by_method;
 using matrixCorr_detail::indexing::BySubject;
 using matrixCorr_detail::indexing::reindex;
 using matrixCorr_detail::indexing::group_by_subject;
@@ -203,7 +202,7 @@ static std::vector<PrecompGen>
       // Cinv (AR1 or I), independent of se
       P.Cinv.zeros(n_i, n_i);
       if (use_ar1 && nt_full > 0) {
-        make_Cinv(P.tim_ord, ar1_rho, P.Cinv);
+        make_Cinv_by_method(P.tim_ord, P.met_ord, nm_full, ar1_rho, P.Cinv);
       } else {
         P.Cinv.eye(n_i, n_i);
       }
@@ -1090,13 +1089,16 @@ Rcpp::List ccc_vc_cpp(
     for (int t=0; t<nt_re; ++t) prior_prec[pos2++] = 1.0 / std::max(sag, eps);
     for (int j=0; j<qZ;    ++j) prior_prec[pos2++] = 1.0 / std::max(tau2[j], eps);
 
+    const double lg_se = std::log(std::max(se, eps));
     for (int i=0; i<m; ++i) {
       if (PG[i].n_i == 0) continue;
 
       if (use_ar1 && nt > 0) {
-        sum_logdetR += logdet_R_blocks(PG[i].tim_ord, ar1_rho, se, eps);
+        // R_i = se * C_i, and we already have Cinv_i = C_i^{-1} (by method)
+        // log|R_i| = n_i*log(se) + log|C_i| = n_i*lg_se - log|Cinv_i|
+        sum_logdetR += PG[i].n_i * lg_se - logdet_spd_safe(PG[i].Cinv);
       } else {
-        sum_logdetR += PG[i].n_i * std::log(std::max(se, eps));
+        sum_logdetR += PG[i].n_i * lg_se;
       }
 
       arma::mat M(r_eff, r_eff, fill::zeros);
