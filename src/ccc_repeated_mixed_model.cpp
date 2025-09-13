@@ -35,6 +35,10 @@ using matrixCorr_detail::design::accumulate_Ut_vec;
 using matrixCorr_detail::design::add_U_times;
 using matrixCorr_detail::linalg::rows_take_to;
 using matrixCorr_detail::moments::sample_var;
+using matrixCorr_detail::timeseries::kappas::clamp01;
+using matrixCorr_detail::timeseries::kappas::kappa_e_equal_ar1;
+using matrixCorr_detail::timeseries::kappas::kappa_g_weighted;
+using matrixCorr_detail::timeseries::kappas::kappa_e_weighted_ar1;
 
 // =========================
 // ==  helpers (thread guard)
@@ -239,7 +243,8 @@ Rcpp::List ccc_vc_cpp(
     bool include_subj_method = true,
     bool include_subj_time = true,
     double sb_zero_tol = 1e-10,
-    bool eval_single_visit = false
+    bool eval_single_visit = false,
+    Rcpp::Nullable<Rcpp::NumericVector> time_weights = R_NilValue
 ) {
 #ifdef _OPENMP
 #ifndef MATRIXCORR_NO_BLAS_GUARD
@@ -257,6 +262,30 @@ Rcpp::List ccc_vc_cpp(
   arma::mat X(Xr.begin(), Xr.nrow(), Xr.ncol(), false);
   arma::vec y(yr.begin(), yr.size(), false);
   const int p = X.n_cols;
+
+  // ---- parse time_weights
+  std::vector<double> w_time;
+  bool has_w_time = false;
+  if (time_weights.isNotNull()) {
+    Rcpp::NumericVector wR(time_weights.get());
+    if (wR.size() > 0) {
+      w_time.assign(wR.begin(), wR.end());
+      // basic sanity: length must match nt when nt>=2 (we only use when >=2)
+      if (nt >= 2 && static_cast<int>(w_time.size()) != nt) {
+        Rcpp::stop("time_weights length (%d) must equal nt (%d) for this pair.",
+                   static_cast<int>(w_time.size()), nt);
+      }
+      // normalise to sum=1 (R side already does it, but safe here)
+      double s = 0.0;
+      for (double v : w_time) {
+        if (!std::isfinite(v) || v < 0.0) Rcpp::stop("time_weights must be finite and nonnegative.");
+        s += v;
+      }
+      if (s <= 0.0) Rcpp::stop("time_weights sum must be positive.");
+      for (double &v : w_time) v /= s;
+      has_w_time = true;
+    }
+  }
 
   // Optional extra random effects Z
   arma::mat Z; int qZ = 0; bool has_extra = false;
@@ -868,39 +897,91 @@ Rcpp::List ccc_vc_cpp(
   double kappa_e_bar = 1.0;
   int    units = 0;
 
-  if (!eval_single_visit) {
+  if (!eval_single_visit) { // time-avg or weighted-avg
     if (nt > 0) {
       kappa_g_bar = 0.0;
       kappa_e_bar = 0.0;
+
+      auto unit_kappas = [&](const std::vector<int>& times_obs)
+        -> std::pair<double,double>
+        {
+          // unique observed time codes (0..nt-1), ignore negatives
+          std::vector<int> tuniq;
+          tuniq.reserve(times_obs.size());
+          for (int t : times_obs) if (t >= 0) tuniq.push_back(t);
+          if (tuniq.empty()) return {NAN, NAN};
+
+          std::sort(tuniq.begin(), tuniq.end());
+          tuniq.erase(std::unique(tuniq.begin(), tuniq.end()), tuniq.end());
+          const int T = static_cast<int>(tuniq.size());
+
+          if (!has_w_time) {
+            const double kg = 1.0 / static_cast<double>(T);
+            const double ke = use_ar1 ? kappa_e_equal_ar1(T, ar1_rho) : kg;
+            return {kg, ke};
+          }
+
+          // build sub-weights for observed times and renormalize to 1
+          std::vector<double> wsub(T, 0.0);
+          double s = 0.0;
+          for (int i = 0; i < T; ++i) { wsub[i] = w_time[tuniq[i]]; s += wsub[i]; }
+          if (s <= 0.0) {
+            const double kg = 1.0 / static_cast<double>(T);
+            const double ke = use_ar1 ? kappa_e_equal_ar1(T, ar1_rho) : kg;
+            return {kg, ke};
+          }
+          for (double &v : wsub) v /= s;
+
+          const double kg = kappa_g_weighted(wsub);
+          const double ke = use_ar1 ? kappa_e_weighted_ar1(wsub, ar1_rho) : kg;
+          return {kg, ke};
+        };
+
       for (int i = 0; i < m; ++i) {
         const auto& met_i = S.met[i];
         const auto& tim_i = S.tim[i];
+
         if (nm > 0) {
           for (int l = 0; l < nm; ++l) {
-            int T = 0;
+            std::vector<int> times_obs; times_obs.reserve(tim_i.size());
             for (size_t k = 0; k < tim_i.size(); ++k)
-              if (met_i[k] == l && tim_i[k] >= 0) ++T;
-              if (T <= 0) continue;
-              kappa_g_bar += 1.0 / (double)T;
-              kappa_e_bar += use_ar1 ? kappa_T(ar1_rho, T) : 1.0 / (double)T;
-              ++units;
+              if (met_i[k] == l && tim_i[k] >= 0) times_obs.push_back(tim_i[k]);
+
+              auto kp = unit_kappas(times_obs);
+              if (std::isfinite(kp.first) && std::isfinite(kp.second)) {
+                kappa_g_bar += kp.first;
+                kappa_e_bar += kp.second;
+                ++units;
+              }
           }
-        } else {
-          int T = 0;
-          for (size_t k = 0; k < tim_i.size(); ++k) if (tim_i[k] >= 0) ++T;
-          if (T <= 0) continue;
-          kappa_g_bar += 1.0 / (double)T;
-          kappa_e_bar += use_ar1 ? kappa_T(ar1_rho, T) : 1.0 / (double)T;
-          ++units;
+        } else { // no method factor: just per subject
+          std::vector<int> times_obs; times_obs.reserve(tim_i.size());
+          for (size_t k = 0; k < tim_i.size(); ++k)
+            if (tim_i[k] >= 0) times_obs.push_back(tim_i[k]);
+
+            auto kp = unit_kappas(times_obs);
+            if (std::isfinite(kp.first) && std::isfinite(kp.second)) {
+              kappa_g_bar += kp.first;
+              kappa_e_bar += kp.second;
+              ++units;
+            }
         }
       }
+
       if (units > 0) {
-        kappa_g_bar /= (double)units;
-        kappa_e_bar /= (double)units;
-      } else { kappa_g_bar = 1.0; kappa_e_bar = 1.0; }
-      kappa_e_bar = std::min(1.0, std::max(kappa_e_bar, 1e-12));
+        kappa_g_bar /= static_cast<double>(units);
+        kappa_e_bar /= static_cast<double>(units);
+      } else {
+        kappa_g_bar = 1.0;
+        kappa_e_bar = 1.0;
+      }
+
+      kappa_g_bar = clamp01(kappa_g_bar);
+      kappa_e_bar = clamp01(kappa_e_bar);
     } else {
-      kappa_g_bar = 0.0; kappa_e_bar = 1.0;
+      // no time factor
+      kappa_g_bar = 0.0;
+      kappa_e_bar = 1.0;
     }
   }
 

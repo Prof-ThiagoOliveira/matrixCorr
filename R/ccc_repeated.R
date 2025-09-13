@@ -1151,11 +1151,12 @@ build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub,
 run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                     use_ar1, ar1_rho, max_iter, tol, conf_level,
                     include_subj_method = TRUE, include_subj_time = TRUE,
-                    sb_zero_tol = 1e-10, eval_single_visit = FALSE) {
+                    sb_zero_tol = 1e-10, eval_single_visit = FALSE,
+                    time_weights = NULL) {  # <-- NEW
 
   # Guard: you cannot include a random component whose dimension is 0
   include_subj_method <- isTRUE(include_subj_method) && isTRUE(Laux$nm > 0)
-  include_subj_time <- isTRUE(include_subj_time) && isTRUE(Laux$nt > 0)
+  include_subj_time   <- isTRUE(include_subj_time)   && isTRUE(Laux$nt > 0)
 
   ccc_vc_cpp(
     Xr = unname(Xr),
@@ -1172,9 +1173,10 @@ run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
     use_ar1 = use_ar1,
     ar1_rho = as.numeric(ar1_rho),
     include_subj_method = include_subj_method,
-    include_subj_time = include_subj_time,
+    include_subj_time   = include_subj_time,
     sb_zero_tol = as.numeric(sb_zero_tol),
-    eval_single_visit = eval_single_visit
+    eval_single_visit = eval_single_visit,
+    time_weights = if (is.null(time_weights)) NULL else as.numeric(time_weights)
   )
 }
 
@@ -1185,7 +1187,8 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                          rho_lo = -0.95, rho_hi = 0.95,
                          max_iter = 100, tol = 1e-6, conf_level = 0.95,
                          include_subj_method = TRUE, include_subj_time = TRUE,
-                         sb_zero_tol = 1e-10, eval_single_visit = FALSE) {
+                         sb_zero_tol = 1e-10, eval_single_visit = FALSE,
+                         time_weights = NULL) {  # <-- NEW
   obj <- function(r) {
     fit <- run_cpp(Xr, yr, subject, method_int, time_int, Laux, Z,
                    use_ar1 = TRUE, ar1_rho = r,
@@ -1193,7 +1196,8 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                    include_subj_method = include_subj_method,
                    include_subj_time   = include_subj_time,
                    sb_zero_tol = sb_zero_tol,
-                   eval_single_visit = eval_single_visit)
+                   eval_single_visit = eval_single_visit,
+                   time_weights = time_weights)
     ll <- suppressWarnings(as.numeric(fit[["reml_loglik"]]))
     if (!is.finite(ll)) return(Inf)
     -ll
@@ -1212,13 +1216,14 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                             max_iter = 100, tol = 1e-6, conf_level = 0.95,
                             alpha = 0.05, test_order = c("subj_time","subj_method"),
                             sb_zero_tol = 1e-10,
-                            eval_single_visit = FALSE) {
+                            eval_single_visit = FALSE,
+                            time_weights = NULL) {
   ar <- match.arg(ar)
   can_subj_method <- isTRUE(Laux$nm > 0)
-  can_subj_time <- isTRUE(Laux$nt > 0)
+  can_subj_time   <- isTRUE(Laux$nt > 0)
 
   inc_subj_method <- can_subj_method
-  inc_subj_time <- can_subj_time
+  inc_subj_time   <- can_subj_time
 
   # Function to get rho for a given (inc_subj_method, inc_subj_time)
   get_rho <- function(inc_subj_method, inc_subj_time) {
@@ -1228,7 +1233,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                        include_subj_method = inc_subj_method,
                        include_subj_time   = inc_subj_time,
                        sb_zero_tol = sb_zero_tol,
-                       eval_single_visit = eval_single_visit)
+                       eval_single_visit = eval_single_visit,
+                       time_weights = time_weights)  # <-- NEW
     er$rho
   }
 
@@ -1241,7 +1247,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       include_subj_method = inc_subj_method,
                       include_subj_time   = inc_subj_time,
                       sb_zero_tol = sb_zero_tol,
-                      eval_single_visit = eval_single_visit)
+                      eval_single_visit = eval_single_visit,
+                      time_weights = time_weights)   # <-- NEW
 
   for (what in test_order) {
     if (what == "subj_time" && inc_subj_time) {
@@ -1252,10 +1259,15 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       max_iter = max_iter, tol = tol, conf_level = conf_level,
                       include_subj_method = inc_subj_method, include_subj_time = FALSE,
                       sb_zero_tol = sb_zero_tol,
-                      eval_single_visit = eval_single_visit)
+                      eval_single_visit = eval_single_visit,
+                      time_weights = time_weights)   # <-- NEW
       lrt <- 2 * (as.numeric(fit_full$reml_loglik) - as.numeric(fit0$reml_loglik))
       p   <- p_half_chisq1(max(lrt, 0))
-      if (is.finite(p) && p > alpha) { inc_subj_time <- FALSE; fit_full <- fit0 }
+      if (is.finite(p) && p > alpha) {
+        inc_subj_time <- FALSE
+        fit_full <- fit0
+        rho_full <- rho0
+      }
     }
     if (what == "subj_method" && inc_subj_method) {
       rho0 <- get_rho(FALSE, inc_subj_time)
@@ -1265,16 +1277,27 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       max_iter = max_iter, tol = tol, conf_level = conf_level,
                       include_subj_method = FALSE, include_subj_time = inc_subj_time,
                       sb_zero_tol = sb_zero_tol,
-                      eval_single_visit = eval_single_visit)
+                      eval_single_visit = eval_single_visit,
+                      time_weights = time_weights)   # <-- NEW
       lrt <- 2 * (as.numeric(fit_full$reml_loglik) - as.numeric(fit0$reml_loglik))
       p   <- p_half_chisq1(max(lrt, 0))
-      if (is.finite(p) && p > alpha) { inc_subj_method <- FALSE; fit_full <- fit0 }
+      if (is.finite(p) && p > alpha) {
+        inc_subj_method <- FALSE
+        fit_full <- fit0
+        rho_full <- rho0
+      }
     }
   }
 
-  list(include_subj_method = inc_subj_method, include_subj_time = inc_subj_time, fit = fit_full)
+  list(include_subj_method = inc_subj_method,
+       include_subj_time   = inc_subj_time,
+       rho = rho_full,
+       fit = fit_full)
 }
 
+#' @title ccc_lmm_reml_pairwise
+#' @description Internal function to handle pairwise CCC estimation for each method pair.
+#' @keywords internal
 #' @title ccc_lmm_reml_pairwise
 #' @description Internal function to handle pairwise CCC estimation for each method pair.
 #' @keywords internal
@@ -1345,11 +1368,13 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       # Present time levels in this pair
       lev_time_sub <- if (!is.null(time_fac)) levels(time_fac) else character(0)
 
-      # Build/subset Dmat for this pair (only if ≥ 2 time levels)
+      # -------- Build/subset Dmat for this pair (only if ≥ 2 time levels) --------
       if (!is.null(time) && length(lev_time_sub) >= 2L) {
         if (!is.null(Dmat)) {
+          # Subset the user-supplied Dmat to the present time levels
           Dfull <- as.matrix(Dmat)
-          if (!is.null(all_time_lvls) && nrow(Dfull) == length(all_time_lvls) && ncol(Dfull) == length(all_time_lvls)) {
+          if (!is.null(all_time_lvls) &&
+              nrow(Dfull) == length(all_time_lvls) && ncol(Dfull) == length(all_time_lvls)) {
             pos  <- match(lev_time_sub, all_time_lvls)
             Dsub <- Dfull[pos, pos, drop = FALSE]
           } else if (nrow(Dfull) == length(lev_time_sub) && ncol(Dfull) == length(lev_time_sub)) {
@@ -1374,22 +1399,32 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         Dsub <- NULL
       }
 
+      # --- NEW: per-pair time weights for kappa (only for weighted-avg target) ---
+      time_weights_kappa <- NULL
+      if (!is.null(time) && length(lev_time_sub) >= 2L && identical(Dmat_type, "weighted-avg")) {
+        w_sub <- .align_weights_to_levels(Dmat_weights, lev_time_sub, all_time_lvls)
+        if (is.null(w_sub)) w_sub <- rep(1 / length(lev_time_sub), length(lev_time_sub))
+        sw <- sum(w_sub, na.rm = TRUE)
+        if (!is.finite(sw) || sw <= 0) stop("Dmat_weights must sum to a positive finite number.")
+        time_weights_kappa <- as.numeric(w_sub / sw)
+      }
+
       # infer "has_interaction" from model matrix columns for this pair
       has_interaction <- any(grepl(":", colnames(Xp), fixed = TRUE))
 
       df_sub <- df[idx, , drop = FALSE]
       Laux <- build_LDZ(
-        colnames_X    = colnames(Xp),
-        method_levels = levels(met_fac),
-        time_levels   = lev_time_sub,
-        Dsub          = Dsub,
-        df_sub        = df_sub,
+        colnames_X      = colnames(Xp),
+        method_levels   = levels(met_fac),
+        time_levels     = lev_time_sub,
+        Dsub            = Dsub,
+        df_sub          = df_sub,
         method_name     = method,
-        time_name    = time,
-        slope         = slope,
-        interaction   = has_interaction,
-        slope_var     = slope_var,
-        drop_zero_cols= drop_zero_cols
+        time_name       = time,
+        slope           = slope,
+        interaction     = has_interaction,
+        slope_var       = slope_var,
+        drop_zero_cols  = drop_zero_cols
       )
 
       method_int <- if (nlevels(met_fac)  >= 2L) as.integer(met_fac)  else integer(0)
@@ -1400,59 +1435,65 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
 
       ## Decide inclusions for this pair
       inc_pair <- if (identical(vc_select, "none")) {
-        list(subj_method = if (!is.null(include_subj_method)) isTRUE(include_subj_method) else Laux$nm > 0,
-             subj_time = if (!is.null(include_subj_time)) isTRUE(include_subj_time) else Laux$nt > 0)
+        list(
+          subj_method = if (!is.null(include_subj_method)) isTRUE(include_subj_method) else Laux$nm > 0,
+          subj_time   = if (!is.null(include_subj_time))   isTRUE(include_subj_time)   else Laux$nt > 0
+        )
       } else NULL
 
       if (is.null(inc_pair) && (Laux$nm > 0 || Laux$nt > 0) && identical(vc_select, "auto")) {
-        sel <- reml_lrt_select(Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
-                               ar = ar, ar_rho = ar_rho,
-                               max_iter = max_iter, tol = tol, conf_level = conf_level,
-                               alpha = vc_alpha, test_order = vc_test_order,
-                               sb_zero_tol = sb_zero_tol,
-                               eval_single_visit = eval_single_visit)
+        # --- AUTO: boundary-aware REML LRTs with rho profiled consistently ---
+        sel <- reml_lrt_select(
+          Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
+          ar = ar, ar_rho = ar_rho,
+          max_iter = max_iter, tol = tol, conf_level = conf_level,
+          alpha = vc_alpha, test_order = vc_test_order,
+          sb_zero_tol = sb_zero_tol,
+          eval_single_visit = eval_single_visit,
+          time_weights = time_weights_kappa     # <-- NEW
+        )
         ans <- sel$fit
         inc_subj_method_eff <- sel$include_subj_method
-        inc_subj_time_eff <- sel$include_subj_time
-
-        rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
-          er <- estimate_rho(Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
-                             max_iter = max_iter, tol = tol, conf_level = conf_level,
-                             include_subj_method = inc_subj_method_eff, include_subj_time = inc_subj_time_eff,
-                             sb_zero_tol = sb_zero_tol,
-                             eval_single_visit = eval_single_visit)
-          er$rho
-        } else ar_rho
+        inc_subj_time_eff   <- sel$include_subj_time
+        rho_used            <- sel$rho                 # <-- rho actually used in 'fit'
       } else {
+        # --- NONE (or no testing): decide includes, then estimate rho if needed and fit once ---
         inc_subj_method_eff <- if (is.null(inc_pair)) (Laux$nm > 0) else inc_pair$subj_method
-        inc_subj_time_eff <- if (is.null(inc_pair)) (Laux$nt > 0) else inc_pair$subj_time
+        inc_subj_time_eff   <- if (is.null(inc_pair)) (Laux$nt > 0) else inc_pair$subj_time
 
         rho_used <- if (identical(ar, "ar1") && is.na(ar_rho)) {
-          er <- estimate_rho(Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
-                             max_iter = max_iter, tol = tol, conf_level = conf_level,
-                             include_subj_method = inc_subj_method_eff, include_subj_time = inc_subj_time_eff,
-                             sb_zero_tol = sb_zero_tol,
-                             eval_single_visit = eval_single_visit)
+          er <- estimate_rho(
+            Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
+            max_iter = max_iter, tol = tol, conf_level = conf_level,
+            include_subj_method = inc_subj_method_eff,
+            include_subj_time   = inc_subj_time_eff,
+            sb_zero_tol = sb_zero_tol,
+            eval_single_visit = eval_single_visit,
+            time_weights = time_weights_kappa    # <-- NEW
+          )
           er$rho
         } else ar_rho
 
         ans <- tryCatch(
-          run_cpp(Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
-                  use_ar1 = identical(ar, "ar1"),
-                  ar1_rho = if (identical(ar, "ar1")) rho_used else 0,
-                  max_iter = max_iter, tol = tol, conf_level = conf_level,
-                  include_subj_method = inc_subj_method_eff,
-                  include_subj_time = inc_subj_time_eff,
-                  sb_zero_tol = sb_zero_tol,
-                  eval_single_visit = eval_single_visit),
+          run_cpp(
+            Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
+            use_ar1 = identical(ar, "ar1"),
+            ar1_rho = if (identical(ar, "ar1")) rho_used else 0,
+            max_iter = max_iter, tol = tol, conf_level = conf_level,
+            include_subj_method = inc_subj_method_eff,
+            include_subj_time   = inc_subj_time_eff,
+            sb_zero_tol = sb_zero_tol,
+            eval_single_visit = eval_single_visit,
+            time_weights = time_weights_kappa      # <-- NEW
+          ),
           error = function(e) {
-            warning(sprintf("ccc_vc_cpp failed for pair (%s, %s): %s",
-                            m1, m2, conditionMessage(e)))
+            warning(sprintf("ccc_vc_cpp failed for pair (%s, %s): %s", m1, m2, conditionMessage(e)))
             NULL
           }
         )
       }
 
+      # ---- record results (common to both branches) ----
       rho_mat[i, j] <- rho_mat[j, i] <- as.numeric(rho_used)
 
       val <- if (is.null(ans)) NA_real_ else unname(ans$ccc)

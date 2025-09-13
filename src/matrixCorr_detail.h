@@ -1220,6 +1220,56 @@ inline void make_Cinv(const std::vector<int>& tim_i,
 }
 
 } // namespace matrixCorr_detail::timeseries::ar1
+
+namespace kappas {
+// ---- helpers for weighted kappas -------------------------------------------
+inline double clamp01(double x, double lo = 1e-12, double hi = 1.0) {
+  if (!std::isfinite(x)) return lo;
+  if (x < lo) return lo;
+  if (x > hi) return hi;
+  return x;
+}
+
+// equal-weights AR(1) kappa_e (reference formula)
+// kappa_e = { T + 2 * sum_{k=1}^{T-1} (T-k) * rho^k } / T^2
+inline double kappa_e_equal_ar1(int T, double rho) {
+  if (T <= 1) return 1.0;
+  if (!std::isfinite(rho) || std::abs(rho) < 1e-15) return 1.0 / static_cast<double>(T);
+  double num = static_cast<double>(T);
+  const double r = rho;
+  // accumulate 2 * sum_{k=1}^{T-1} (T-k) * r^k
+  double rk = r;
+  for (int k = 1; k <= T - 1; ++k) {
+    num += 2.0 * (static_cast<double>(T - k)) * rk;
+    rk *= r;
+  }
+  const double den = static_cast<double>(T) * static_cast<double>(T);
+  return clamp01(num / den);
+}
+
+// weighted kappa_g = sum_t w_t^2
+inline double kappa_g_weighted(const std::vector<double>& w) {
+  double s = 0.0;
+  for (double wt : w) s += wt * wt;
+  return clamp01(s);
+}
+
+// weighted kappa_e = sum_{t,s} w_t w_s rho^{|t-s|}
+inline double kappa_e_weighted_ar1(const std::vector<double>& w, double rho) {
+  const int T = static_cast<int>(w.size());
+  if (T <= 1) return 1.0; // single visit => no shrinkage
+  if (!std::isfinite(rho) || std::abs(rho) < 1e-15) return kappa_g_weighted(w);
+  double acc = 0.0;
+  for (int t = 0; t < T; ++t) {
+    for (int s = 0; s < T; ++s) {
+      const int d = (t > s) ? (t - s) : (s - t);
+      acc += w[t] * w[s] * std::pow(rho, d);
+    }
+  }
+  return clamp01(acc);
+}
+} // namespace kappas
+
 } // namespace matrixCorr_detail::timeseries
 
 namespace indexing {
