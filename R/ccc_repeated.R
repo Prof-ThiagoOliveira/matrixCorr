@@ -1056,10 +1056,19 @@ ccc_lmm_reml <- function(data, response, rind,
       all_time_lvls     = all_time_lvls,
       Dmat_type         = Dmat_type,
       Dmat_weights      = Dmat_weights,
-      Dmat_rescale      = Dmat_rescale
+      Dmat_rescale      = Dmat_rescale,
+      vc_select         = vc_select,
+      vc_alpha          = vc_alpha,
+      vc_test_order     = vc_test_order,
+      include_subj_method = include_subj_method,
+      include_subj_time   = include_subj_time,
+      sb_zero_tol       = sb_zero_tol
     )
   )
 }
+
+#' @keywords internal
+`%||%` <- function(a, b) if (!is.null(a)) a else b
 
 #' @title num_or_na
 #' @description Helper to safely coerce a value to numeric or return NA if invalid.
@@ -1079,6 +1088,7 @@ compute_ci_from_se <- function(ccc, se, level) {
 }
 
 #' @keywords internal
+#' @importFrom stats plogis qlogis
 compute_ci_logit_from_se <- function(ccc, se, level) {
   if (!is.finite(ccc) || !is.finite(se) || ccc <= 0 || ccc >= 1) return(c(NA_real_, NA_real_))
   z <- qnorm(1 - (1 - level)/2)
@@ -1204,12 +1214,14 @@ num_or_na_vec <- function(x) {
            v("S_B (fixed-effect dispersion)",   ans[["SB"]]),
            v("SE(CCC)",                         ans[["se_ccc"]]))
 
-  if (!is.null(ans$ci_method) || !is.null(ans$conf_level)) {
+  has_bounds <- is.finite(num_or_na(ans$lwr)) && is.finite(num_or_na(ans$upr))
+  if (!is.null(ans$ci_method) || has_bounds) {
     cm <- ans$ci_method %||% ci_mode_name(ans$ci_mode_code %||% NA_integer_)
     cl <- ans$conf_level %||% conf_level
-    out <- c(out, sprintf("CI: %s (conf_level = %s)", cm, fmt(cl)),
-             "--------------------------------------------------------------------------")
+    out <- c(out, sprintf("CI: %s (conf_level = %s)", cm, fmt(cl)))
   }
+  out <- c(out,
+           "--------------------------------------------------------------------------")
 
   if (use_message) message(paste(out, collapse = "\n")) else cat(paste(out, collapse = "\n"), "\n")
 }
@@ -1415,12 +1427,6 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
        fit = fit_full)
 }
 
-#' @title ccc_lmm_reml_pairwise
-#' @description Internal function to handle pairwise CCC estimation for each method pair.
-#' @keywords internal
-#' @title ccc_lmm_reml_pairwise
-#' @description Internal function to handle pairwise CCC estimation for each method pair.
-#' @keywords internal
 #' @title ccc_lmm_reml_pairwise
 #' @description Internal function to handle pairwise CCC estimation for each method pair.
 #' @keywords internal
