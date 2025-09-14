@@ -124,13 +124,13 @@ uses \code{cat()} to \code{stdout}. Default \code{TRUE}.}
 
 \item{ar}{Character. Residual correlation structure: \code{"none"} (iid) or
 \code{"ar1"} for subject-level AR(1) correlation within contiguous time
-runs. Default \code{c("none","ar1")}.}
+runs. Default \code{c("none")}.}
 
-\item{ar_rho}{Numeric of length 1 in \eqn{(-0.999,\,0.999)} or \code{NA}.
-When \code{ar = "ar1"} and \code{ar_rho} is finite, it is treated as fixed.
-When \code{ar = "ar1"} and \code{ar_rho = NA}, \emph{\eqn{\rho} is estimated}
-by profiling a 1-D objective (preferring REML if available; a proxy objective
-is used as a fallback). Default \code{NA_real_}.}
+\item{ar_rho}{Numeric in \eqn{(-0.999,\,0.999)} or \code{NA}.
+If \code{ar = "ar1"} and \code{ar_rho} is finite, it is treated as fixed.
+If \code{ar = "ar1"} and \code{ar_rho = NA}, \eqn{\rho} is estimated by
+profiling a 1-D objective (REML when available; an approximation otherwise).
+Default \code{NA_real_}.}
 
 \item{slope}{Character. Optional extra random-effect design \eqn{Z}.
 With \code{"subject"} a single random slope is added (one column in \eqn{Z});
@@ -200,16 +200,16 @@ inference in rare boundary cases; it has no effect when
 \description{
 Compute Lin's Concordance Correlation Coefficient (CCC) from a linear
 mixed-effects model fitted by REML. The fixed-effects part can include
-\code{method} and/or \code{time} factors (and optionally their interaction),
-while a subject-specific random intercept captures between-subject variation.
-The implementation avoids any \eqn{n \times n}
-inversions by working with small per-subject systems via the Woodbury
-identity.
+\code{method} and/or \code{time} (optionally their interaction), with a
+subject-specific random intercept to capture between-subject variation.
+Large \eqn{n \times n} inversions are avoided by solving small per-subject
+systems.
 
 \strong{Assumption:} time levels are treated as \emph{regular, equally spaced}
-visits indexed by their order within subject. The AR(1) residual model is discrete-time
-on visit index (not calendar time). \code{NA} time codes break the serial run. Gaps in
-the factor levels are \emph{ignored} (adjacent observed visits are treated as lag-1).
+visits indexed by their order within subject. The AR(1) residual model is
+in discrete time on the visit index (not calendar time). \code{NA} time codes
+break the serial run. Gaps in the factor levels are \emph{ignored} (adjacent
+observed visits are treated as lag-1).
 }
 \details{
 For measurement \eqn{y_{ij}} on subject \eqn{i} under fixed
@@ -267,7 +267,7 @@ and accumulates GLS blocks via rank-\eqn{r} corrections using
        (U_i^\top R_i^{-1}y_i) \Big]. }
 Because \eqn{G^{-1}} is diagonal with positive entries, each \eqn{M_i} is
 symmetric positive definite; solves/inversions use symmetric-PD routines with
-a tiny diagonal "jitter" and a pseudo-inverse fallback when needed.
+a small diagonal ridge and a pseudo-inverse if needed.
 
 \strong{Random-slope \eqn{Z}.}
 Besides \eqn{U_i}, the function can include an extra design \eqn{Z_i}.
@@ -478,25 +478,21 @@ mildly anti-conservative near the boundary; a logit transform for CCC or a
 subject-level (cluster) bootstrap can be used for sensitivity analysis.
 
 \strong{Choosing \eqn{\rho} for AR(1).}
-When \code{ar="ar1"} and \code{ar_rho = NA}, \eqn{\rho} can be estimated by
-profiling the REML log-likelihood computed at the fitted
-\eqn{(\hat\beta,\hat G,\hat\sigma_E^2)}; when \code{ar_rho} is finite, that
-fixed value is used. Very small numbers of visits per subject can make
-\eqn{\rho} weakly identified; sensitivity checks over a plausible range (e.g., 0.3–0.8)
-are recommended.
+When \code{ar="ar1"} and \code{ar_rho = NA}, \eqn{\rho} is estimated by
+profiling the REML log-likelihood at \eqn{(\hat\beta,\hat G,\hat\sigma_E^2)}.
+With very few visits per subject, \eqn{\rho} can be weakly identified; consider
+sensitivity checks over a plausible range.
 }
 \section{Notes on stability and performance}{
 
 All per-subject solves are \eqn{\,r\times r} with \eqn{r=1+nm+nt+q_Z}, so cost
 scales with the number of subjects and the fixed-effects dimension rather
 than the total number of observations. Solvers use symmetric-PD paths with
-a small diagonal ridge and pseudo-inverse fallback, which helps for
-tiny/unbalanced subsets and near-boundary estimates. Very small samples or
-extreme imbalance can still make \eqn{S_B} numerically delicate; negative
-estimates are truncated to 0 by construction. For AR(1), observations are
-ordered by time within subject before building the run-wise tridiagonal precision;
-\code{NA} time codes break the run, and gaps between factor levels are treated as
-regular steps (we do not use elapsed time).
+a small diagonal ridge and pseudo-inverse,
+which helps for very small/unbalanced subsets and near-boundary estimates.
+For \code{AR(1)}, observations are ordered by time within subject; \code{NA} time codes
+break the run, and gaps between factor levels are treated as regular steps
+(elapsed time is not used).
 
 \emph{Heteroscedastic slopes across \eqn{Z} columns are supported.}
 Each \eqn{Z} column has its own variance component \eqn{\sigma_{Z,j}^2}, but

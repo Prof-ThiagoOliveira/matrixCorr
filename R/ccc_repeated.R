@@ -330,12 +330,12 @@ ccc_pairwise_u_stat <- function(data,
 #'
 #' @param ar Character. Residual correlation structure: \code{"none"} (iid) or
 #'   \code{"ar1"} for subject-level AR(1) correlation within contiguous time
-#'   runs. Default \code{c("none","ar1")}.
-#' @param ar_rho Numeric of length 1 in \eqn{(-0.999,\,0.999)} or \code{NA}.
-#'   When \code{ar = "ar1"} and \code{ar_rho} is finite, it is treated as fixed.
-#'   When \code{ar = "ar1"} and \code{ar_rho = NA}, \emph{\eqn{\rho} is estimated}
-#'   by profiling a 1-D objective (preferring REML if available; a proxy objective
-#'   is used as a fallback). Default \code{NA_real_}.
+#'   runs. Default \code{c("none")}.
+#' @param ar_rho Numeric in \eqn{(-0.999,\,0.999)} or \code{NA}.
+#'   If \code{ar = "ar1"} and \code{ar_rho} is finite, it is treated as fixed.
+#'   If \code{ar = "ar1"} and \code{ar_rho = NA}, \eqn{\rho} is estimated by
+#'   profiling a 1-D objective (REML when available; an approximation otherwise).
+#'   Default \code{NA_real_}.
 #' @param slope Character. Optional extra random-effect design \eqn{Z}.
 #'   With \code{"subject"} a single random slope is added (one column in \eqn{Z});
 #'   with \code{"method"} one column per method level is added; with
@@ -455,7 +455,7 @@ ccc_pairwise_u_stat <- function(data,
 #'        (U_i^\top R_i^{-1}y_i) \Big]. }
 #' Because \eqn{G^{-1}} is diagonal with positive entries, each \eqn{M_i} is
 #' symmetric positive definite; solves/inversions use symmetric-PD routines with
-#' a tiny diagonal "jitter" and a pseudo-inverse fallback when needed.
+#' a small diagonal ridge and a pseudo-inverse if needed.
 #'
 #' \strong{Random-slope \eqn{Z}.}
 #' Besides \eqn{U_i}, the function can include an extra design \eqn{Z_i}.
@@ -666,24 +666,20 @@ ccc_pairwise_u_stat <- function(data,
 #' subject-level (cluster) bootstrap can be used for sensitivity analysis.
 #'
 #' \strong{Choosing \eqn{\rho} for AR(1).}
-#' When \code{ar="ar1"} and \code{ar_rho = NA}, \eqn{\rho} can be estimated by
-#' profiling the REML log-likelihood computed at the fitted
-#' \eqn{(\hat\beta,\hat G,\hat\sigma_E^2)}; when \code{ar_rho} is finite, that
-#' fixed value is used. Very small numbers of visits per subject can make
-#' \eqn{\rho} weakly identified; sensitivity checks over a plausible range (e.g., 0.3–0.8)
-#' are recommended.
+#' When \code{ar="ar1"} and \code{ar_rho = NA}, \eqn{\rho} is estimated by
+#' profiling the REML log-likelihood at \eqn{(\hat\beta,\hat G,\hat\sigma_E^2)}.
+#' With very few visits per subject, \eqn{\rho} can be weakly identified; consider
+#' sensitivity checks over a plausible range.
 #'
 #' @section Notes on stability and performance:
 #' All per-subject solves are \eqn{\,r\times r} with \eqn{r=1+nm+nt+q_Z}, so cost
 #' scales with the number of subjects and the fixed-effects dimension rather
 #' than the total number of observations. Solvers use symmetric-PD paths with
-#' a small diagonal ridge and pseudo-inverse fallback, which helps for
-#' tiny/unbalanced subsets and near-boundary estimates. Very small samples or
-#' extreme imbalance can still make \eqn{S_B} numerically delicate; negative
-#' estimates are truncated to 0 by construction. For AR(1), observations are
-#' ordered by time within subject before building the run-wise tridiagonal precision;
-#' \code{NA} time codes break the run, and gaps between factor levels are treated as
-#' regular steps (we do not use elapsed time).
+#' a small diagonal ridge and pseudo-inverse,
+#' which helps for very small/unbalanced subsets and near-boundary estimates.
+#' For \code{AR(1)}, observations are ordered by time within subject; \code{NA} time codes
+#' break the run, and gaps between factor levels are treated as regular steps
+#' (elapsed time is not used).
 #'
 #' \emph{Heteroscedastic slopes across \eqn{Z} columns are supported.}
 #' Each \eqn{Z} column has its own variance component \eqn{\sigma_{Z,j}^2}, but
@@ -1474,7 +1470,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   vc_se_ccc         <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
 
   # AR1 diagnostics
-  ar1_rho_mom_mat <- matrix(NA_real_,    Lm, Lm, dimnames = list(method_levels, method_levels))
+  ar1_rho_lag1_mat <- matrix(NA_real_,    Lm, Lm, dimnames = list(method_levels, method_levels))
   ar1_pairs_mat   <- matrix(NA_integer_, Lm, Lm, dimnames = list(method_levels, method_levels))
   ar1_pval_mat    <- matrix(NA_real_,    Lm, Lm, dimnames = list(method_levels, method_levels))
   ar1_reco_mat    <- matrix(NA,          Lm, Lm, dimnames = list(method_levels, method_levels))
@@ -1643,10 +1639,10 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         vc_se_ccc[i, j]         <- vc_se_ccc[j, i]         <- num_or_na(ans[["se_ccc"]])
 
         # AR1 diagnostics
-        ar1_rho_mom_mat[i, j] <- ar1_rho_mom_mat[j, i] <- num_or_na(ans[["ar1_rho_mom"]])
+        ar1_rho_lag1_mat[i, j] <- ar1_rho_lag1_mat[j, i] <- num_or_na(ans[["ar1_rho_lag1"]])
         ar1_pairs_mat[i, j]   <- ar1_pairs_mat[j, i]   <- suppressWarnings(as.integer(ans[["ar1_pairs"]]))
         ar1_pval_mat[i, j]    <- ar1_pval_mat[j, i]    <- num_or_na(ans[["ar1_pval"]])
-        ar1_reco_mat[i, j]    <- ar1_reco_mat[j, i]    <- isTRUE(ans[["ar1_recommend"]])
+        ar1_reco_mat[i, j]    <- ar1_reco_mat[j, i]    <- isTRUE(ans[["use_ar1"]])
 
         if (isTRUE(verbose)) {
           .vc_message(ans, label = sprintf("Pair: %s vs %s", m1, m2),
@@ -1673,9 +1669,11 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   }
 
   # Summarise AR(1) recommendation across pairs
-  if (any(ar1_reco_mat == TRUE, na.rm = TRUE)) {
-    message("AR(1) residual model recommended (lag-1 autocorrelation detected in at least one pair). ",
-            "Use ar = \"ar1\" to account for serial correlation.\n")
+  if (!identical(ar, "ar1")) {
+    if (any(ar1_reco_mat == TRUE, na.rm = TRUE)) {
+      message("AR(1) residual model recommended (lag-1 autocorrelation detected in at least one pair). ",
+              "Use ar = \"ar1\" to account for serial correlation.\n")
+    }
   }
 
   diag(est_mat) <- 1
@@ -1699,10 +1697,12 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     attr(out, "se_ccc")                <- vc_se_ccc
 
     # AR1 diagnostics
-    attr(out, "ar1_rho_mom")    <- ar1_rho_mom_mat
-    attr(out, "ar1_pairs")      <- ar1_pairs_mat
-    attr(out, "ar1_pval")       <- ar1_pval_mat
-    attr(out, "ar1_recommend")  <- ar1_reco_mat
+    if (!identical(ar, "ar1")) {
+      attr(out, "ar1_rho_lag1") <- ar1_rho_lag1_mat
+      attr(out, "ar1_pairs")    <- ar1_pairs_mat
+      attr(out, "ar1_pval")     <- ar1_pval_mat
+      attr(out, "use_ar1")      <- ar1_reco_mat
+    }
 
     class(out) <- c("ccc_lmm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc")
     return(out)
@@ -1723,10 +1723,12 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     attr(out, "se_ccc")                <- vc_se_ccc
 
     # AR1 diagnostics
-    attr(out, "ar1_rho_mom")    <- ar1_rho_mom_mat
-    attr(out, "ar1_pairs")      <- ar1_pairs_mat
-    attr(out, "ar1_pval")       <- ar1_pval_mat
-    attr(out, "ar1_recommend")  <- ar1_reco_mat
+    if (!identical(ar, "ar1")) {
+      attr(out, "ar1_rho_lag1") <- ar1_rho_lag1_mat
+      attr(out, "ar1_pairs")    <- ar1_pairs_mat
+      attr(out, "ar1_pval")     <- ar1_pval_mat
+      attr(out, "use_ar1")      <- ar1_reco_mat
+    }
 
     class(out) <- c("ccc_lmm_reml", "matrixCorr_ccc", "ccc", "matrix")
     return(out)
@@ -2081,22 +2083,52 @@ summary.ccc_lmm_reml <- function(object,
     outv
   }
 
-  # pull attributes (overall: scalars; pairwise: matrices)
-  ar1_rho_mom_attr  <- attr(object, "ar1_rho_mom")
-  ar1_pairs_attr    <- attr(object, "ar1_pairs")
-  ar1_pval_attr     <- attr(object, "ar1_pval")
-  ar1_reco_attr     <- attr(object, "ar1_recommend")
+  has_attr <- function(obj, nm) !is.null(attr(obj, nm))
 
-  ar1_rho_mom_col <- extract_pairs_num_mat(ar1_rho_mom_attr)
-  ar1_pairs_col   <- extract_pairs_num_mat(ar1_pairs_attr)
-  ar1_pval_col    <- extract_pairs_num_mat(ar1_pval_attr)
-  ar1_reco_col    <- extract_pairs_logi_mat(ar1_reco_attr)
+  ar1_cols <- list()
 
-  # round numerics; keep logical as-is
-  out[["ar1_rho_mom"]]  <- ifelse(is.finite(ar1_rho_mom_col), round(ar1_rho_mom_col, digits), NA_real_)
-  out[["ar1_pairs"]]    <- ifelse(is.finite(ar1_pairs_col),   as.integer(ar1_pairs_col),      NA_integer_)
-  out[["ar1_pval"]]     <- ifelse(is.finite(ar1_pval_col),    round(ar1_pval_col, digits),    NA_real_)
-  out[["ar1_recommend"]]<- ar1_reco_col
+  if (has_attr(object, "ar_rho")) {
+    ar1_rho_attr <- attr(object, "ar_rho")
+    ar1_cols$ar1_rho <- extract_pairs_num_mat(ar1_rho_attr)
+  }
+
+  if (has_attr(object, "ar1_rho_lag1")) {
+    ar1_rho_lag1_attr <- attr(object, "ar1_rho_lag1")
+    ar1_cols$ar1_rho_lag1 <- extract_pairs_num_mat(ar1_rho_lag1_attr)
+  }
+  if (has_attr(object, "ar1_pairs")) {
+    ar1_pairs_attr <- attr(object, "ar1_pairs")
+    ar1_cols$ar1_pairs <- extract_pairs_num_mat(ar1_pairs_attr)
+  }
+  if (has_attr(object, "ar1_pval")) {
+    ar1_pval_attr <- attr(object, "ar1_pval")
+    ar1_cols$ar1_pval <- extract_pairs_num_mat(ar1_pval_attr)
+  }
+  if (has_attr(object, "use_ar1")) {
+    ar1_reco_attr <- attr(object, "use_ar1")
+    ar1_cols$use_ar1 <- extract_pairs_logi_mat(ar1_reco_attr)
+  }
+
+  # then, after you build `out`, add only what you have:
+  if (!is.null(ar1_cols$ar1_rho)) {
+    out[["ar1_rho"]] <- ifelse(is.finite(ar1_cols$ar1_rho),
+                               round(ar1_cols$ar1_rho, digits), NA_real_)
+  }
+  if (!is.null(ar1_cols$ar1_rho_lag1)) {
+    out[["ar1_rho_lag1"]] <- ifelse(is.finite(ar1_cols$ar1_rho_lag1),
+                                    round(ar1_cols$ar1_rho_lag1, digits), NA_real_)
+  }
+  if (!is.null(ar1_cols$ar1_pairs)) {
+    out[["ar1_pairs"]] <- ifelse(is.finite(ar1_cols$ar1_pairs),
+                                 as.integer(ar1_cols$ar1_pairs), NA_integer_)
+  }
+  if (!is.null(ar1_cols$ar1_pval)) {
+    out[["ar1_pval"]] <- ifelse(is.finite(ar1_cols$ar1_pval),
+                                round(ar1_cols$ar1_pval, digits), NA_real_)
+  }
+  if (!is.null(ar1_cols$use_ar1)) {
+    out[["use_ar1"]] <- ar1_cols$use_ar1
+  }
 
   class(out) <- c("summary.ccc_lmm_reml", "data.frame")
   attr(out, "conf.level") <- attr(base_summary, "conf.level")

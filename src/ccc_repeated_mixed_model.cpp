@@ -1192,7 +1192,7 @@ Rcpp::List ccc_vc_cpp(
   );
 
   // AR(1) diagnostic (moments)
-  double ar1_rho_mom = NA_REAL;
+  double ar1_rho_mom  = NA_REAL;
   double ar1_pval     = NA_REAL;
   int    ar1_pairs    = 0;
   bool   ar1_recommend = false;
@@ -1324,10 +1324,10 @@ Rcpp::List ccc_vc_cpp(
     _["se_ccc"]                = se_ccc,
     _["conf_level"]            = conf_level,
     _["reml_loglik"]           = reml_loglik,
-    _["ar1_rho_mom"]           = ar1_rho_mom,
+    _["ar1_rho_lag1"]          = ar1_rho_mom,
     _["ar1_pairs"]             = ar1_pairs,
     _["ar1_pval"]              = ar1_pval,
-    _["ar1_recommend"]         = ar1_recommend,
+    _["use_ar1"]               = ar1_recommend,
     _["include_subj_method"]   = include_subj_method,
     _["include_subj_time"]     = include_subj_time,
     _["sb_fixed_zero"]         = sb_fixed_zero
