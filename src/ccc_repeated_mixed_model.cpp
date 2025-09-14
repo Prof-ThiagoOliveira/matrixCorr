@@ -234,6 +234,7 @@ Rcpp::List ccc_vc_cpp(
     int max_iter = 200,
     double tol = 1e-6,
     double conf_level = 0.95,
+    int ci_mode = 2,
     Rcpp::Nullable<Rcpp::NumericMatrix> Lr = R_NilValue,
     Rcpp::Nullable<Rcpp::NumericMatrix> auxDr = R_NilValue,
     Rcpp::Nullable<Rcpp::NumericMatrix> Zr = R_NilValue,
@@ -1054,11 +1055,40 @@ Rcpp::List ccc_vc_cpp(
   var_ccc += d_se * d_se * var_sehat;
   var_ccc += d_SB * d_SB * varSB;
 
+  // Delta-method SE
   double se_ccc = std::sqrt(std::max(0.0, var_ccc));
   const double alpha = 1.0 - std::min(std::max(conf_level, 0.0), 1.0);
   const double z = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0);
-  double lwr = std::min(1.0, std::max(0.0, ccc - z * se_ccc));
-  double upr = std::min(1.0, std::max(0.0, ccc + z * se_ccc));
+
+  // raw Wald CI (truncated)
+  double lwr_raw = std::min(1.0, std::max(0.0, ccc - z * se_ccc));
+  double upr_raw = std::min(1.0, std::max(0.0, ccc + z * se_ccc));
+
+  // logit-stabilised CI
+  const double eps_c = 1e-12;
+  double c_mid = std::min(1.0 - eps_c, std::max(eps_c, ccc));
+  double phi   = std::log(c_mid / (1.0 - c_mid));
+  double se_phi = (se_ccc > 0.0) ? (se_ccc / std::max(eps_c, c_mid * (1.0 - c_mid))) : 0.0;
+  double lo_phi = phi - z * se_phi;
+  double hi_phi = phi + z * se_phi;
+  auto expit = [](double x){ return 1.0 / (1.0 + std::exp(-x)); };
+  double lwr_logit = expit(lo_phi);
+  double upr_logit = expit(hi_phi);
+
+  // auto rule to choose method
+  int ci_mode_used = ci_mode;
+  // 0=raw, 1=logit, 2=auto
+  if (ci_mode == 2) {
+    bool near_boundary = (ccc > 0.90 || ccc < 0.10);
+    bool clipped_raw   = (lwr_raw <= eps_c || upr_raw >= 1.0 - eps_c);
+    bool tight_near_bd = (se_ccc < 0.5 * std::min(ccc, 1.0 - ccc));
+    if (near_boundary || clipped_raw || tight_near_bd) ci_mode_used = 1; else ci_mode_used = 0;
+  }
+
+  // select CI to report
+  double lwr, upr;
+  if (ci_mode_used == 1) { lwr = lwr_logit; upr = upr_logit; }
+  else { lwr = lwr_raw; upr = upr_raw; }
 
   // -------- REML log-likelihood (uses precomp) --------
   const double two_pi = 2.0 * std::acos(-1.0);
@@ -1284,6 +1314,13 @@ Rcpp::List ccc_vc_cpp(
     _["ccc"]                   = ccc,
     _["lwr"]                   = lwr,
     _["upr"]                   = upr,
+    _["lwr_raw"]               = lwr_raw,
+    _["upr_raw"]               = upr_raw,
+    _["lwr_logit"]             = lwr_logit,
+    _["upr_logit"]             = upr_logit,
+    _["ci_mode_input"]         = ci_mode,       // 0,1,2
+    _["ci_mode_used"]          = ci_mode_used,  // 0 or 1
+    _["ci_mode_label_used"]    = (ci_mode_used==1 ? "logit" : "raw"),
     _["se_ccc"]                = se_ccc,
     _["conf_level"]            = conf_level,
     _["reml_loglik"]           = reml_loglik,

@@ -17,6 +17,7 @@ run_cpp(
   max_iter,
   tol,
   conf_level,
+  ci_mode_int,
   include_subj_method = TRUE,
   include_subj_time = TRUE,
   sb_zero_tol = 1e-10,

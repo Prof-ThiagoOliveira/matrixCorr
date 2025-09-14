@@ -2,7 +2,7 @@
 % Please edit documentation in R/ccc_repeated.R
 \name{num_or_na_vec}
 \alias{num_or_na_vec}
-\title{.vc_message}
+\title{num_or_na_vec}
 \usage{
 num_or_na_vec(x)
 }

@@ -17,6 +17,7 @@ estimate_rho(
   max_iter = 100,
   tol = 1e-06,
   conf_level = 0.95,
+  ci_mode_int,
   include_subj_method = TRUE,
   include_subj_time = TRUE,
   sb_zero_tol = 1e-10,

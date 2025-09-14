@@ -309,6 +309,16 @@ ccc_pairwise_u_stat <- function(data,
 #'   by a large-sample delta method for CCC (see \strong{CIs} note below).
 #' @param conf_level Numeric in \eqn{(0,1)}. Confidence level when
 #'   \code{ci = TRUE} (default \code{0.95}).
+#' @param ci_mode Character scalar; one of \code{c("auto","raw","logit")}.
+#'   Controls how confidence intervals are computed when \code{ci = TRUE}.
+#'   If \code{"raw"}, a Wald CI is formed on the CCC scale and truncated to
+#'   \code{[0,1]}. If \code{"logit"}, a Wald CI is computed on the
+#'   \eqn{\mathrm{logit}(\mathrm{CCC})} scale and back-transformed to the
+#'   original scale (often more stable near 0 or 1). If \code{"auto"}
+#'   (default), the method is chosen per estimate based on simple diagnostics
+#'   (e.g., proximity to the \code{[0,1]} boundary / numerical stability),
+#'   typically preferring \code{"logit"} near the boundaries and \code{"raw"}
+#'   otherwise.
 #' @param verbose Logical. If \code{TRUE}, prints a structured summary of the
 #'   fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.
 #' @param digits Integer \eqn{(\ge 0)}. Number of decimal places to use in the
@@ -965,6 +975,7 @@ ccc_lmm_reml <- function(data, response, rind,
                          Dmat_weights = NULL,
                          Dmat_rescale = TRUE,
                          ci = FALSE, conf_level = 0.95,
+                         ci_mode = c("auto","raw","logit"),
                          verbose = FALSE, digits = 4, use_message = TRUE,
                          ar = c("none", "ar1"),
                          ar_rho = NA_real_,
@@ -984,6 +995,8 @@ ccc_lmm_reml <- function(data, response, rind,
   Dmat_type  <- match.arg(Dmat_type)
   vc_select    <- match.arg(vc_select)
   vc_test_order<- match.arg(vc_test_order, several.ok = TRUE)
+  ci_mode <- match.arg(ci_mode)
+  ci_mode_int <- switch(ci_mode, raw = 0L, logit = 1L, auto = 2L)
 
   if (identical(ar, "ar1")) {
     if (length(ar_rho) != 1L) stop("ar_rho must be length 1 (or NA to estimate).")
@@ -1016,14 +1029,36 @@ ccc_lmm_reml <- function(data, response, rind,
   }
 
   # Only pairwise path remains
-  return(ccc_lmm_reml_pairwise(df, fml, response, rind, method, time,
-                               slope, slope_var, slope_Z, drop_zero_cols,
-                               Dmat, ar, ar_rho, max_iter, tol,
-                               conf_level, verbose, digits, use_message,
-                               extra_label, ci, all_time_lvls,
-                               Dmat_type = Dmat_type,
-                               Dmat_weights = Dmat_weights,
-                               Dmat_rescale = Dmat_rescale))
+  return(
+    ccc_lmm_reml_pairwise(
+      df                = df,
+      fml               = fml,
+      response          = response,
+      rind              = rind,
+      method            = method,
+      time              = time,
+      slope             = slope,
+      slope_var         = slope_var,
+      slope_Z           = slope_Z,
+      drop_zero_cols    = drop_zero_cols,
+      Dmat              = Dmat,
+      ar                = ar,
+      ar_rho            = ar_rho,
+      max_iter          = max_iter,
+      tol               = tol,
+      conf_level        = conf_level,
+      verbose           = verbose,
+      digits            = digits,
+      use_message       = use_message,
+      extra_label       = extra_label,
+      ci                = ci,
+      ci_mode_int       = ci_mode_int,
+      all_time_lvls     = all_time_lvls,
+      Dmat_type         = Dmat_type,
+      Dmat_weights      = Dmat_weights,
+      Dmat_rescale      = Dmat_rescale
+    )
+  )
 }
 
 #' @title num_or_na
@@ -1043,8 +1078,70 @@ compute_ci_from_se <- function(ccc, se, level) {
   c(max(0, min(1, ccc - z * se)), max(0, min(1, ccc + z * se)))
 }
 
+#' @keywords internal
+compute_ci_logit_from_se <- function(ccc, se, level) {
+  if (!is.finite(ccc) || !is.finite(se) || ccc <= 0 || ccc >= 1) return(c(NA_real_, NA_real_))
+  z <- qnorm(1 - (1 - level)/2)
+  mu <- qlogis(ccc)
+  se_logit <- se / (ccc * (1 - ccc))  # delta
+  l <- plogis(mu - z * se_logit)
+  u <- plogis(mu + z * se_logit)
+  c(max(0, min(1, l)), max(0, min(1, u)))
+}
 
-#' @title .vc_message
+#' @keywords internal
+infer_ci_method <- function(ans, ci_mode_int, conf_level, tie_tol = 1e-8) {
+  if (is.null(ans)) return(ans)
+
+  # Respect explicit fields if backend already set them
+  if (!is.null(ans$ci_method) || !is.null(ans$ci_mode_code)) {
+    if (is.null(ans$conf_level)) ans$conf_level <- conf_level
+    return(ans)
+  }
+
+  method <- ci_mode_name(ci_mode_int)   # "wald-raw" / "wald-logit" / "auto"
+  code   <- ci_mode_int                 # 0 / 1 / 2
+
+  if (ci_mode_int == 2L) {  # auto
+    ccc <- num_or_na(ans$ccc)
+    se  <- num_or_na(ans$se_ccc)
+    lwr <- num_or_na(ans$lwr)
+    upr <- num_or_na(ans$upr)
+
+    if (is.finite(ccc) && is.finite(se)) {
+      if (is.finite(lwr) && is.finite(upr)) {
+        raw_ci   <- compute_ci_from_se(ccc, se, conf_level)
+        logit_ci <- compute_ci_logit_from_se(ccc, se, conf_level)
+
+        d_raw   <- sum(abs(raw_ci   - c(lwr, upr)))
+        d_logit <- sum(abs(logit_ci - c(lwr, upr)))
+
+        if (is.finite(d_raw) && is.finite(d_logit)) {
+          if (abs(d_raw - d_logit) <= tie_tol) {
+            # near tie: prefer logit near boundaries, else raw
+            prefer_logit <- (ccc < 0.1 || ccc > 0.9)
+            if (prefer_logit) { method <- "wald-logit"; code <- 1L }
+            else              { method <- "wald-raw";   code <- 0L }
+          } else if (d_logit < d_raw) {
+            method <- "wald-logit"; code <- 1L
+          } else {
+            method <- "wald-raw";   code <- 0L
+          }
+        }
+      } else {
+        # R will build CI later with compute_ci_from_se -> raw
+        method <- "wald-raw"; code <- 0L
+      }
+    }
+  }
+
+  ans$ci_method    <- method
+  ans$ci_mode_code <- code
+  if (is.null(ans$conf_level)) ans$conf_level <- conf_level
+  ans
+}
+
+#' @title num_or_na_vec
 #' @description Display variance component estimation details to the console.
 #' @keywords internal
 num_or_na_vec <- function(x) {
@@ -1105,8 +1202,14 @@ num_or_na_vec <- function(x) {
 
   out <- c(out,
            v("S_B (fixed-effect dispersion)",   ans[["SB"]]),
-           v("SE(CCC)",                         ans[["se_ccc"]]),
-           "--------------------------------------------------------------------------")
+           v("SE(CCC)",                         ans[["se_ccc"]]))
+
+  if (!is.null(ans$ci_method) || !is.null(ans$conf_level)) {
+    cm <- ans$ci_method %||% ci_mode_name(ans$ci_mode_code %||% NA_integer_)
+    cl <- ans$conf_level %||% conf_level
+    out <- c(out, sprintf("CI: %s (conf_level = %s)", cm, fmt(cl)),
+             "--------------------------------------------------------------------------")
+  }
 
   if (use_message) message(paste(out, collapse = "\n")) else cat(paste(out, collapse = "\n"), "\n")
 }
@@ -1149,10 +1252,10 @@ build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub,
 #' @description Wrapper for calling 'C++' backend for CCC estimation.
 #' @keywords internal
 run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
-                    use_ar1, ar1_rho, max_iter, tol, conf_level,
+                    use_ar1, ar1_rho, max_iter, tol, conf_level, ci_mode_int,
                     include_subj_method = TRUE, include_subj_time = TRUE,
                     sb_zero_tol = 1e-10, eval_single_visit = FALSE,
-                    time_weights = NULL) {  # <-- NEW
+                    time_weights = NULL) {
 
   # Guard: you cannot include a random component whose dimension is 0
   include_subj_method <- isTRUE(include_subj_method) && isTRUE(Laux$nm > 0)
@@ -1167,6 +1270,7 @@ run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
     nm = Laux$nm, nt = Laux$nt,
     max_iter = max_iter, tol = tol,
     conf_level = conf_level,
+    ci_mode = ci_mode_int,
     Lr    = if (is.null(Laux$L))  NULL else unname(Laux$L),
     auxDr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm),
     Zr    = if (is.null(Z))       NULL else unname(Z),
@@ -1180,12 +1284,22 @@ run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
   )
 }
 
+#' @keywords internal
+ci_mode_name <- function(code) {
+  switch(as.character(code),
+         "0" = "wald-raw",
+         "1" = "wald-logit",
+         "2" = "auto",     # chosen per-estimate in C++
+         "unknown")
+}
+
 #' @title estimate_rho
 #' @description Estimate AR(1) correlation parameter rho by optimizing REML log-likelihood.
 #' @keywords internal
 estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                          rho_lo = -0.95, rho_hi = 0.95,
                          max_iter = 100, tol = 1e-6, conf_level = 0.95,
+                         ci_mode_int,
                          include_subj_method = TRUE, include_subj_time = TRUE,
                          sb_zero_tol = 1e-10, eval_single_visit = FALSE,
                          time_weights = NULL) {  # <-- NEW
@@ -1193,6 +1307,7 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
     fit <- run_cpp(Xr, yr, subject, method_int, time_int, Laux, Z,
                    use_ar1 = TRUE, ar1_rho = r,
                    max_iter = max_iter, tol = tol, conf_level = conf_level,
+                   ci_mode_int = ci_mode_int,
                    include_subj_method = include_subj_method,
                    include_subj_time   = include_subj_time,
                    sb_zero_tol = sb_zero_tol,
@@ -1214,6 +1329,7 @@ p_half_chisq1 <- function(lrt) 0.5 * pchisq(lrt, df = 1, lower.tail = FALSE)
 reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                             ar = c("none","ar1"), ar_rho = NA_real_,
                             max_iter = 100, tol = 1e-6, conf_level = 0.95,
+                            ci_mode_int,
                             alpha = 0.05, test_order = c("subj_time","subj_method"),
                             sb_zero_tol = 1e-10,
                             eval_single_visit = FALSE,
@@ -1230,6 +1346,7 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
     if (!identical(ar, "ar1") || !is.na(ar_rho)) return(ar_rho)
     er <- estimate_rho(Xr, yr, subject, method_int, time_int, Laux, Z,
                        max_iter = max_iter, tol = tol, conf_level = conf_level,
+                       ci_mode_int = ci_mode_int,
                        include_subj_method = inc_subj_method,
                        include_subj_time   = inc_subj_time,
                        sb_zero_tol = sb_zero_tol,
@@ -1244,6 +1361,7 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       use_ar1 = identical(ar, "ar1"),
                       ar1_rho = if (identical(ar, "ar1")) rho_full else 0,
                       max_iter = max_iter, tol = tol, conf_level = conf_level,
+                      ci_mode_int = ci_mode_int,
                       include_subj_method = inc_subj_method,
                       include_subj_time   = inc_subj_time,
                       sb_zero_tol = sb_zero_tol,
@@ -1257,6 +1375,7 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       use_ar1 = identical(ar, "ar1"),
                       ar1_rho = if (identical(ar, "ar1")) rho0 else 0,
                       max_iter = max_iter, tol = tol, conf_level = conf_level,
+                      ci_mode_int = ci_mode_int,
                       include_subj_method = inc_subj_method, include_subj_time = FALSE,
                       sb_zero_tol = sb_zero_tol,
                       eval_single_visit = eval_single_visit,
@@ -1275,6 +1394,7 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       use_ar1 = identical(ar, "ar1"),
                       ar1_rho = if (identical(ar, "ar1")) rho0 else 0,
                       max_iter = max_iter, tol = tol, conf_level = conf_level,
+                      ci_mode_int = ci_mode_int,
                       include_subj_method = FALSE, include_subj_time = inc_subj_time,
                       sb_zero_tol = sb_zero_tol,
                       eval_single_visit = eval_single_visit,
@@ -1308,7 +1428,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
                                   slope, slope_var, slope_Z, drop_zero_cols,
                                   Dmat, ar, ar_rho, max_iter, tol,
                                   conf_level, verbose, digits, use_message,
-                                  extra_label, ci, all_time_lvls,
+                                  extra_label, ci, ci_mode_int, all_time_lvls,
                                   Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
                                   Dmat_weights = NULL,
                                   Dmat_rescale = TRUE,
@@ -1447,6 +1567,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
           Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
           ar = ar, ar_rho = ar_rho,
           max_iter = max_iter, tol = tol, conf_level = conf_level,
+          ci_mode_int = ci_mode_int,
           alpha = vc_alpha, test_order = vc_test_order,
           sb_zero_tol = sb_zero_tol,
           eval_single_visit = eval_single_visit,
@@ -1455,9 +1576,9 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         ans <- sel$fit
         inc_subj_method_eff <- sel$include_subj_method
         inc_subj_time_eff   <- sel$include_subj_time
-        rho_used            <- sel$rho                 # <-- rho actually used in 'fit'
+        rho_used            <- sel$rho
+        ans <- infer_ci_method(ans, ci_mode_int, conf_level)
       } else {
-        # --- NONE (or no testing): decide includes, then estimate rho if needed and fit once ---
         inc_subj_method_eff <- if (is.null(inc_pair)) (Laux$nm > 0) else inc_pair$subj_method
         inc_subj_time_eff   <- if (is.null(inc_pair)) (Laux$nt > 0) else inc_pair$subj_time
 
@@ -1465,6 +1586,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
           er <- estimate_rho(
             Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
             max_iter = max_iter, tol = tol, conf_level = conf_level,
+            ci_mode_int = ci_mode_int,
             include_subj_method = inc_subj_method_eff,
             include_subj_time   = inc_subj_time_eff,
             sb_zero_tol = sb_zero_tol,
@@ -1480,6 +1602,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
             use_ar1 = identical(ar, "ar1"),
             ar1_rho = if (identical(ar, "ar1")) rho_used else 0,
             max_iter = max_iter, tol = tol, conf_level = conf_level,
+            ci_mode_int = ci_mode_int,
             include_subj_method = inc_subj_method_eff,
             include_subj_time   = inc_subj_time_eff,
             sb_zero_tol = sb_zero_tol,
@@ -1491,6 +1614,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
             NULL
           }
         )
+        ans <- infer_ci_method(ans, ci_mode_int, conf_level)
       }
 
       # ---- record results (common to both branches) ----

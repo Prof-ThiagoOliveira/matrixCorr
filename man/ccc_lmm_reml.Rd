@@ -19,6 +19,7 @@ ccc_lmm_reml(
   Dmat_rescale = TRUE,
   ci = FALSE,
   conf_level = 0.95,
+  ci_mode = c("auto", "raw", "logit"),
   verbose = FALSE,
   digits = 4,
   use_message = TRUE,
@@ -98,6 +99,17 @@ by a large-sample delta method for CCC (see \strong{CIs} note below).}
 
 \item{conf_level}{Numeric in \eqn{(0,1)}. Confidence level when
 \code{ci = TRUE} (default \code{0.95}).}
+
+\item{ci_mode}{Character scalar; one of \code{c("auto","raw","logit")}.
+Controls how confidence intervals are computed when \code{ci = TRUE}.
+If \code{"raw"}, a Wald CI is formed on the CCC scale and truncated to
+\code{[0,1]}. If \code{"logit"}, a Wald CI is computed on the
+\eqn{\mathrm{logit}(\mathrm{CCC})} scale and back-transformed to the
+original scale (often more stable near 0 or 1). If \code{"auto"}
+(default), the method is chosen per estimate based on simple diagnostics
+(e.g., proximity to the \code{[0,1]} boundary / numerical stability),
+typically preferring \code{"logit"} near the boundaries and \code{"raw"}
+otherwise.}
 
 \item{verbose}{Logical. If \code{TRUE}, prints a structured summary of the
 fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.}

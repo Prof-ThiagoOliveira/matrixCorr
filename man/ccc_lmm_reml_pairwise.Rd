@@ -26,6 +26,7 @@ ccc_lmm_reml_pairwise(
   use_message,
   extra_label,
   ci,
+  ci_mode_int,
   all_time_lvls,
   Dmat_type = c("time-avg", "typical-visit", "weighted-avg", "weighted-sq"),
   Dmat_weights = NULL,
