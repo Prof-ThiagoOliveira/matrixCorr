@@ -245,16 +245,16 @@ ccc_pairwise_u_stat <- function(data,
 #' @description
 #' Compute Lin's Concordance Correlation Coefficient (CCC) from a linear
 #' mixed-effects model fitted by REML. The fixed-effects part can include
-#' \code{method} and/or \code{time} factors (and optionally their interaction),
-#' while a subject-specific random intercept captures between-subject variation.
-#' The implementation avoids any \eqn{n \times n}
-#' inversions by working with small per-subject systems via the Woodbury
-#' identity.
+#' \code{method} and/or \code{time} (optionally their interaction), with a
+#' subject-specific random intercept to capture between-subject variation.
+#' Large \eqn{n \times n} inversions are avoided by solving small per-subject
+#' systems.
 #'
 #' \strong{Assumption:} time levels are treated as \emph{regular, equally spaced}
-#' visits indexed by their order within subject. The AR(1) residual model is discrete-time
-#' on visit index (not calendar time). \code{NA} time codes break the serial run. Gaps in
-#' the factor levels are \emph{ignored} (adjacent observed visits are treated as lag-1).
+#' visits indexed by their order within subject. The AR(1) residual model is
+#' in discrete time on the visit index (not calendar time). \code{NA} time codes
+#' break the serial run. Gaps in the factor levels are \emph{ignored} (adjacent
+#' observed visits are treated as lag-1).
 #'
 #' @param data A data frame.
 #' @param response Character. Response variable name.
