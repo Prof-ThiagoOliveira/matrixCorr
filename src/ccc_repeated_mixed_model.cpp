@@ -866,7 +866,7 @@ Rcpp::List ccc_vc_cpp(
 
   arma::mat VarFix;
   if (!inv_sympd_safe(VarFix, XtViX_final)) Rcpp::stop("Failed to invert XtViX.");
-  if (!arma::is_finite(VarFix)) Rcpp::stop("VarFix is not finite");
+  if (!VarFix.is_finite()) Rcpp::stop("VarFix is not finite");
 
   // -------- SB & CCC & CI --------
   double SB = 0.0, varSB = 0.0;
