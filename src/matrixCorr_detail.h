@@ -1172,8 +1172,9 @@ inline void make_Cinv_by_method(const std::vector<int>& tim_ord,
     // collect indices of rows with method==l and time>=0, in current order
     std::vector<int> idx;
     idx.reserve(tim_ord.size());
-    for (int k = 0; k < (int)tim_ord.size(); ++k)
+    for (int k = 0; k < (int)tim_ord.size(); ++k) {
       if (met_ord[k] == l && tim_ord[k] >= 0) idx.push_back(k);
+    }
 
       // walk contiguous runs in this idx (consecutive entries in 'idx' are consecutive in the subject ordering)
       int s = 0;

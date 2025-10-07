@@ -944,8 +944,9 @@ Rcpp::List ccc_vc_cpp(
         if (nm > 0) {
           for (int l = 0; l < nm; ++l) {
             std::vector<int> times_obs; times_obs.reserve(tim_i.size());
-            for (size_t k = 0; k < tim_i.size(); ++k)
+            for (size_t k = 0; k < tim_i.size(); ++k){
               if (met_i[k] == l && tim_i[k] >= 0) times_obs.push_back(tim_i[k]);
+              }
 
               auto kp = unit_kappas(times_obs);
               if (std::isfinite(kp.first) && std::isfinite(kp.second)) {
@@ -956,8 +957,9 @@ Rcpp::List ccc_vc_cpp(
           }
         } else { // no method factor: just per subject
           std::vector<int> times_obs; times_obs.reserve(tim_i.size());
-          for (size_t k = 0; k < tim_i.size(); ++k)
+          for (size_t k = 0; k < tim_i.size(); ++k) {
             if (tim_i[k] >= 0) times_obs.push_back(tim_i[k]);
+            }
 
             auto kp = unit_kappas(times_obs);
             if (std::isfinite(kp.first) && std::isfinite(kp.second)) {
@@ -1260,18 +1262,27 @@ Rcpp::List ccc_vc_cpp(
       for (int l = 0; l < nm; ++l) {
         std::vector<std::pair<int,int>> idx;
         idx.reserve(n_i);
-        for (int k = 0; k < n_i; ++k)
-          if (met_ord[k] == l && tim_ord[k] >= 0) idx.emplace_back(tim_ord[k], k);
-          if ((int)idx.size() <= 1) continue;
-          std::sort(idx.begin(), idx.end());
-          for (size_t t = 0; t + 1 < idx.size(); ++t) {
-            double a = e[ idx[t].second     ];
-            double b = e[ idx[t+1].second   ];
-            num_m[l]  += a * b;
-            den1_m[l] += a * a;
-            den2_m[l] += b * b;
-            pairs_m[l] += 1;
+
+        // collect (time, index) pairs for this method l
+        for (int k = 0; k < n_i; ++k) {
+          if (met_ord[k] == l && tim_ord[k] >= 0) {
+            idx.emplace_back(tim_ord[k], k);
           }
+        }
+
+        // if there’s fewer than 2 observations, skip this method
+        if ((int)idx.size() <= 1) continue;
+
+        std::sort(idx.begin(), idx.end());
+
+        for (size_t t = 0; t + 1 < idx.size(); ++t) {
+          double a = e[ idx[t].second     ];
+          double b = e[ idx[t+1].second   ];
+          num_m[l]  += a * b;
+          den1_m[l] += a * a;
+          den2_m[l] += b * b;
+          pairs_m[l] += 1;
+        }
       }
     }
     double num_pool = 0.0, den1_pool = 0.0, den2_pool = 0.0; int pairs_pool = 0;
