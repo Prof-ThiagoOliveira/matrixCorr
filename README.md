@@ -5,6 +5,10 @@
 
 <!-- badges: start -->
 
+[![CRAN
+version](https://www.r-pkg.org/badges/version/matrixCorr)](https://CRAN.R-project.org/package=matrixCorr)
+![CRAN
+downloads](https://cranlogs.r-pkg.org/badges/grand-total/matrixCorr)
 [![R-CMD-check.yaml](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/R-CMD-check.yaml)
 [![test-coverage.yaml](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/test-coverage.yaml)
 <!-- badges: end -->
@@ -147,14 +151,6 @@ summary(ba_rep)
 # plot(ba_rep)  # faceted BA scatter by pair
 ```
 
-### Two-method Lin’s concordance correlation
-
-    # Lin's CCC for x vs y (with CI + heatmap)
-    cc2 <- ccc(cbind(x = x, y = y), ci = TRUE)
-    print(cc2)
-    summary(cc2)
-    plot(cc2, title = "Lin's CCC (two methods)")
-
 ### Lin’s concordance correlation coefficient (repeated-measures LMM/REML)
 
 ``` r
@@ -170,19 +166,8 @@ g  <- g[ (as.integer(id) - 1L) * Tm + as.integer(time) ]
 y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
 
 dat_ccc <- data.frame(y, id, method, time)
-
-# Using non-parametric approch
-ccc_rep_u <- ccc_pairwise_u_stat(
-  data = dat_ccc, response = "y", method = "method", time = "time",
-  ci = TRUE
-)
-print(ccc_rep_u)
-summary(ccc_rep_u)
-plot(ccc_rep_u, title = "Repeated-measures CCC (U-statistic)")
-
-# Using LMM approch
 fit_ccc <- ccc_lmm_reml(dat_ccc, response = "y", rind = "id",
-                        method = "method", time = "time", ci = TRUE)
+                        method = "method", time = "time")
 summary(fit_ccc)  # overall CCC, variance components, SEs/CI
 ```
 
