@@ -369,7 +369,7 @@ giving
 \deqn{ d^\top D_m d \;\propto\; \sum_{t=1}^{n_t} w_t
            \sum_{p=1}^{P} d_{t,p}^{\,2}. }
 Methods agree at visits sampled with
-probabilities \eqn{\{w_t\}}, counting each visit’s discrepancy on its own.
+probabilities \eqn{\{w_t\}}, counting each visit's discrepancy on its own.
 Use when per-visit agreement is required but some visits should be
 emphasised more than others.
 }
@@ -503,28 +503,7 @@ introduce correlations.
 
 \examples{
 # ====================================================================
-# 1) Two methods (no time): baseline CCC
-# ====================================================================
-set.seed(1)
-n_subj <- 30
-meth   <- factor(rep(c("A","B"), each = n_subj))
-id     <- factor(rep(seq_len(n_subj), times = 2))
-sigA <- 1.0; sigE <- 0.5
-u  <- rnorm(n_subj, 0, sqrt(sigA))
-y  <- c(u + rnorm(n_subj, 0, sqrt(sigE)),
-         u + 0.2 + rnorm(n_subj, 0, sqrt(sigE)))
-dat <- data.frame(y, id, method = meth)
-
-ccc_rm1 <- ccc_lmm_reml(dat, response = "y", rind = "id", method = "method")
-print(ccc_rm1)
-summary(ccc_rm1)
-
-# 95\% CI container
-ccc_rm2 <- ccc_lmm_reml(dat, response = "y", rind = "id", method = "method", ci = TRUE)
-ccc_rm2
-
-# ====================================================================
-# 2) Subject x METHOD variance present, no time
+# 1) Subject x METHOD variance present, no time
 #     y_{i,m} = mu + b_m + u_i + w_{i,m} + e_{i,m}
 #     with u_i ~ N(0, s_A^2), w_{i,m} ~ N(0, s_{AxM}^2)
 # ====================================================================
@@ -537,8 +516,8 @@ time   <- factor(rep(rep(seq_len(n_time), times = 2), times = n_subj))
 method <- factor(rep(rep(c("A","B"),    each  = n_time), times = n_subj))
 
 sigA  <- 0.6   # subject
-sigAM <- 0.3   # subject × method
-sigAT <- 0.5   # subject × time
+sigAM <- 0.3   # subject x method
+sigAT <- 0.5   # subject x time
 sigE  <- 0.4   # residual
 # Expected estimate S_B = 0.2^2 = 0.04
 biasB <- 0.2   # fixed method bias
@@ -567,7 +546,7 @@ fit_both <- ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
 summary(fit_both)
 
 # ====================================================================
-# 3) Subject x TIME variance present (sag > 0) with two methods
+# 2) Subject x TIME variance present (sag > 0) with two methods
 #     y_{i,m,t} = mu + b_m + u_i + g_{i,t} + e_{i,m,t}
 #     where g_{i,t} ~ N(0, s_{AxT}^2) shared across methods at time t
 # ====================================================================
@@ -594,7 +573,7 @@ fit_sag <- ccc_lmm_reml(dat_sag, "y", "id", method = "method", time = "time",
 summary(fit_sag)
 
 # ====================================================================
-# 4) BOTH components present: sab > 0 and sag > 0 (2 methods x T times)
+# 3) BOTH components present: sab > 0 and sag > 0 (2 methods x T times)
 #     y_{i,m,t} = mu + b_m + u_i + w_{i,m} + g_{i,t} + e_{i,m,t}
 # ====================================================================
 set.seed(303)
@@ -631,7 +610,7 @@ fit_both_forced <-
 summary(fit_both_forced)
 
 # ====================================================================
-# 5) D_m choices: time-averaged (default) vs typical visit
+# 4) D_m choices: time-averaged (default) vs typical visit
 # ====================================================================
 # Time-average
 ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
@@ -644,7 +623,7 @@ ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
              include_subj_time  = TRUE, Dmat_type = "typical-visit")
 
 # ====================================================================
-# 6) AR(1) residual correlation with fixed rho (larger example)
+# 5) AR(1) residual correlation with fixed rho (larger example)
 # ====================================================================
 \donttest{
 set.seed(10)
@@ -687,7 +666,7 @@ ccc_lmm_reml(dat_ar4,
 }
 
 # ====================================================================
-# 7) Random slope variants (subject, method, custom Z)
+# 6) Random slope variants (subject, method, custom Z)
 # ====================================================================
 \donttest{
 ## By SUBJECT
@@ -762,7 +741,7 @@ Lin L (2000). A note on the concordance correlation coefficient.
 
 Carrasco, J. L. et al. (2013). Estimation of the concordance
 correlation coefficient for repeated measures using SAS and R.
-\emph{Computer Methods and Programs in Biomedicine}, 109(3), 293–304.
+\emph{Computer Methods and Programs in Biomedicine}, 109(3), 293-304.
 \doi{10.1016/j.cmpb.2012.09.002}
 
 King et al. (2007). A Class of Repeated Measures Concordance
