@@ -687,6 +687,14 @@ ccc_pairwise_u_stat <- function(data,
 #' rescaling changes the implied prior on \eqn{b_{i,\text{extra}}} but does not
 #' introduce correlations.
 #'
+#' @section Threading and BLAS guards:
+#' The C++ backend uses OpenMP loops while also forcing vendor BLAS libraries to
+#' run single-threaded so that overall CPU usage stays predictable. On OpenBLAS
+#' and Apple's Accelerate this is handled automatically. On Intel MKL builds the
+#' guard is disabled by default, but you can also opt out manually by setting
+#' \code{MATRIXCORR_DISABLE_BLAS_GUARD=1} in the environment before loading
+#' \pkg{matrixCorr}.
+#'
 #' @seealso \code{build_L_Dm_Z_cpp}
 #' for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_pairwise_u_stat}}
 #' for a U-statistic alternative; and \pkg{cccrm} for a reference approach via

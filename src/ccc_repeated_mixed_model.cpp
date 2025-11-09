@@ -6,6 +6,8 @@
 #include <numeric>
 #include <cmath>
 #include <cstdlib>
+#include <cctype>
+#include <string>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -44,9 +46,74 @@ using matrixCorr_detail::timeseries::kappas::kappa_e_weighted_ar1;
 // =========================
 #ifdef _OPENMP
 namespace detail_blas_guard {
+inline bool env_flag_true(const char* key) {
+  const char* val = std::getenv(key);
+  if (!val) return false;
+  if (!*val) return true;
+  const char c0 = static_cast<char>(std::tolower(static_cast<unsigned char>(val[0])));
+  return (c0 == '1' || c0 == 't' || c0 == 'y');
+}
+
+inline bool detect_mkl_runtime() {
+  if (std::getenv("MKL_INTERFACE_LAYER") ||
+      std::getenv("MKLROOT") ||
+      std::getenv("MKL_NUM_THREADS") ||
+      std::getenv("MKL_THREADING_LAYER") ||
+      std::getenv("MKL_DYNAMIC")) {
+    return true;
+  }
+
+  static bool checked_extsoft = false;
+  static bool extsoft_is_mkl = false;
+  if (!checked_extsoft) {
+    checked_extsoft = true;
+    try {
+      Rcpp::Function extSoftVersion = Rcpp::Environment::base_env()["extSoftVersion"];
+      Rcpp::List info = extSoftVersion();
+      if (info.containsElementNamed("BLAS")) {
+        std::string blas = Rcpp::as<std::string>(info["BLAS"]);
+        for (char& ch : blas) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        extsoft_is_mkl = (blas.find("mkl") != std::string::npos);
+      }
+    } catch (...) {
+      // ignore: best-effort detection only
+    }
+  }
+  if (extsoft_is_mkl) return true;
+
+#if defined(__unix__) || defined(__APPLE__)
+#ifdef RTLD_NOLOAD
+  static bool checked_dl = false;
+  static bool dl_has_mkl = false;
+  if (!checked_dl) {
+    checked_dl = true;
+    auto has_lib = [](const char* name) {
+      void* h = dlopen(name, RTLD_NOLOAD | RTLD_LAZY);
+      if (h) dlclose(h);
+      return (h != nullptr);
+    };
+    dl_has_mkl = has_lib("libmkl_rt.so") || has_lib("libmkl_rt.dylib");
+  }
+  if (dl_has_mkl) return true;
+#endif
+#endif
+
+  return false;
+}
+
+#if defined(__unix__) || defined(__APPLE__)
+inline void* safe_dlsym(const char* symbol) {
+  dlerror();
+  void* ptr = dlsym(RTLD_DEFAULT, symbol);
+  const char* err = dlerror();
+  return (err == nullptr) ? ptr : nullptr;
+}
+#endif
+
 struct BLASThreadGuard {
   int saved_openblas = -1;
   int saved_mkl      = -1;
+  bool active        = false;
   using OB_get_t = int  (*)();
   using OB_set_t = void (*)(int);
   using MKL_get_t = int  (*)();
@@ -59,22 +126,23 @@ struct BLASThreadGuard {
   MKL_set_t mkl_set_local = nullptr;
   MKL_dyn_t mkl_set_dynamic = nullptr;
 
-  explicit BLASThreadGuard(int one = 1) {
+  explicit BLASThreadGuard(int one = 1, bool enable = true) : active(enable) {
+    if (!active) return;
 #if defined(__APPLE__)
     setenv("VECLIB_MAXIMUM_THREADS", "1", 1);
     setenv("ACCELERATE_MAX_THREADS", "1", 1);
 #endif
 #if defined(__unix__) || defined(__APPLE__)
-    ob_get       = reinterpret_cast<OB_get_t>( dlsym(RTLD_DEFAULT, "openblas_get_num_threads") );
-    ob_set       = reinterpret_cast<OB_set_t>( dlsym(RTLD_DEFAULT, "openblas_set_num_threads") );
-    ob_set_local = reinterpret_cast<OB_set_t>( dlsym(RTLD_DEFAULT, "openblas_set_num_threads_local") );
-    mkl_get = reinterpret_cast<MKL_get_t>( dlsym(RTLD_DEFAULT, "mkl_get_max_threads") );
+    ob_get       = reinterpret_cast<OB_get_t>( safe_dlsym("openblas_get_num_threads") );
+    ob_set       = reinterpret_cast<OB_set_t>( safe_dlsym("openblas_set_num_threads") );
+    ob_set_local = reinterpret_cast<OB_set_t>( safe_dlsym("openblas_set_num_threads_local") );
+    mkl_get = reinterpret_cast<MKL_get_t>( safe_dlsym("mkl_get_max_threads") );
     if (!mkl_get)
-      mkl_get = reinterpret_cast<MKL_get_t>( dlsym(RTLD_DEFAULT, "MKL_Get_Max_Threads") );
-    mkl_set_local = reinterpret_cast<MKL_set_t>( dlsym(RTLD_DEFAULT, "mkl_set_num_threads_local") );
+      mkl_get = reinterpret_cast<MKL_get_t>( safe_dlsym("MKL_Get_Max_Threads") );
+    mkl_set_local = reinterpret_cast<MKL_set_t>( safe_dlsym("mkl_set_num_threads_local") );
     if (!mkl_set_local)
-      mkl_set_local = reinterpret_cast<MKL_set_t>( dlsym(RTLD_DEFAULT, "MKL_Set_Num_Threads_Local") );
-    mkl_set_dynamic = reinterpret_cast<MKL_dyn_t>( dlsym(RTLD_DEFAULT, "mkl_set_dynamic") );
+      mkl_set_local = reinterpret_cast<MKL_set_t>( safe_dlsym("MKL_Set_Num_Threads_Local") );
+    mkl_set_dynamic = reinterpret_cast<MKL_dyn_t>( safe_dlsym("mkl_set_dynamic") );
 #endif
     if (ob_get)   saved_openblas = ob_get();
     if (mkl_get)  saved_mkl      = mkl_get();
@@ -84,6 +152,7 @@ struct BLASThreadGuard {
     if (mkl_set_dynamic)   mkl_set_dynamic(0);
   }
   ~BLASThreadGuard() {
+    if (!active) return;
     if (saved_openblas > 0) {
       if (ob_set_local) ob_set_local(saved_openblas);
       else if (ob_set)  ob_set(saved_openblas);
@@ -92,6 +161,11 @@ struct BLASThreadGuard {
     if (mkl_set_dynamic) mkl_set_dynamic(1);
   }
 };
+
+inline bool guard_disabled() {
+  return env_flag_true("MATRIXCORR_DISABLE_BLAS_GUARD") || detect_mkl_runtime();
+}
+
 inline void harden_omp_runtime_once() {
   omp_set_dynamic(0);
 #if defined(_OPENMP) && (_OPENMP >= 201307)
@@ -249,7 +323,8 @@ Rcpp::List ccc_vc_cpp(
 #ifdef _OPENMP
 #ifndef MATRIXCORR_NO_BLAS_GUARD
   detail_blas_guard::harden_omp_runtime_once();
-  detail_blas_guard::BLASThreadGuard _guard_one_thread_blas(1);
+  detail_blas_guard::BLASThreadGuard _guard_one_thread_blas(
+    1, !detail_blas_guard::guard_disabled());
 #endif
 #endif
 
