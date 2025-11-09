@@ -1,0 +1,39 @@
+#!/bin/sh
+
+# configure script to detect whether we need -latomic for __atomic builtins
+
+echo "checking whether the C++ toolchain needs -latomic for __atomic builtins... " >&2
+
+cat > conftest.cpp <<'EOF'
+#include <cstdint>
+int main() {
+  std::uint64_t value = 0;
+  std::uint64_t expected = 0;
+  const std::uint64_t desired = 1;
+  __atomic_compare_exchange_n(&value, &expected, desired, false,
+                              __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+  return static_cast<int>(value == desired);
+}
+EOF
+
+need_atomic=no
+
+: "${CXX:=c++}"
+
+"$CXX" $CXXFLAGS $CPPFLAGS conftest.cpp -o conftest >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  "$CXX" $CXXFLAGS $CPPFLAGS conftest.cpp -o conftest -latomic >/dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    need_atomic=yes
+  fi
+fi
+
+rm -f conftest.cpp conftest
+
+if [ "$need_atomic" = yes ]; then
+  echo "  adding -latomic" >&2
+  echo "PKG_LIBS += -latomic" > src/Makevars.libatomic
+else
+  echo "  not required" >&2
+  : > src/Makevars.libatomic
+fi

@@ -5,3 +5,5 @@ PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS) -DARMA_USE_CURRENT
 
 # Use matching OpenMP linker flags for C++
 PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS) $(SHLIB_OPENMP_CXXFLAGS)
+
+-include Makevars.libatomic
