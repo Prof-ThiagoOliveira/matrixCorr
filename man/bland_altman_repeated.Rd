@@ -202,7 +202,8 @@ single difference after accounting for the random intercept (and AR(1), if used)
 \item \code{ar1_rho} \emph{(scalar numeric or \code{NA})}; user-supplied \eqn{\rho}
 if a single common value was provided; \code{NA} otherwise.
 \item \code{ar1_rho_pair} (\eqn{m \times m}; optional); \eqn{\rho} actually used per pair
-(may be estimated from data or equal to the supplied value).
+(may be estimated from data or equal to the supplied value). AR(1) blocks
+require consecutive integer time indices for each subject.
 \item \code{ar1_estimated} (\eqn{m \times m}; optional logical); for each pair, \code{TRUE}
 if \eqn{\rho} was estimated internally; \code{FALSE} if supplied.
 
@@ -252,7 +253,7 @@ all pairwise contrasts when \eqn{\ge}3 methods are supplied.
 \item \code{time}: replicate index used to form pairs; only records where
 both methods are present for the same \code{subject} and \code{time}
 contribute to a given pairwise BA (rows with missing components are dropped
-per contrast before fitting).
+before fitting each pair).
 }
 }
 \details{
@@ -266,7 +267,7 @@ subject \eqn{i} at replicate/time \eqn{t}; \eqn{d_{it}} is the paired difference
 (method \eqn{b} minus method \eqn{a}); and \eqn{m_{it}} is the corresponding pair mean.
 Here \eqn{i=1,\ldots,S} indexes subjects and \eqn{t} indexes replicates/time within subject.
 Only records with both methods present at the same \code{subject} and \code{time}
-contribute to that pair; incomplete combinations are removed before modelling.
+contribute to that pair.
 
 The fitted per-pair model is
 \deqn{d_{it} = \beta_0 + \beta_1\, m_{it} + u_i + \varepsilon_{it},}

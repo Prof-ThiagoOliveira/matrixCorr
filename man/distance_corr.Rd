@@ -92,13 +92,16 @@ The unbiased distance correlation is
 \deqn{\widehat{\mathrm{dCor}}_u(x,y) =
       \frac{\widehat{\mathrm{dCov}}_u(x,y)}
            {\sqrt{\widehat{\mathrm{dVar}}_u(x)\,\widehat{\mathrm{dVar}}_u(y)}} \in [0,1].}
+
+\strong{Computation.} All heavy lifting (distance matrices, U-centering,
+and unbiased scaling) is implemented in C++ (\code{ustat_dcor_matrix_cpp}), so
+the R wrapper only validates/coerces the input. OpenMP parallelises the
+upper-triangular loops.
 }
 \note{
 Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance
 variance yield \code{NA} in their row/column. Computation is \eqn{O(n^2)} per
-pair. All heavy lifting (distance matrices, U-centering, unbiased scaling)
-is implemented in C++ (\code{ustat_dcor_matrix_cpp}); the R wrapper only
-validates/coerces the input.
+pair.
 }
 \examples{
 ##Independent variables -> dCor ~ 0

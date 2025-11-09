@@ -31,11 +31,15 @@ EOF
 : "${LDFLAGS:=}"
 
 need_atomic=no
-could_link=no
+atomic_flags=""
 
-compile_shared() {
-  "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1 || return 1
-  "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS $LD_NO_UNDEF_FLAG -o conftest.so >/dev/null 2>&1
+compile_object() {
+  "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1
+}
+
+try_link() {
+  local extra_flags="$1"
+  "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS $LD_NO_UNDEF_FLAG $extra_flags -o conftest.so >/dev/null 2>&1
 }
 
 check_symbol_undefined() {
@@ -47,46 +51,72 @@ check_symbol_undefined() {
   return 1
 }
 
-compile_shared
-if [ $? -eq 0 ]; then
-  could_link=yes
-  if check_symbol_undefined; then
-    need_atomic=yes
+find_clang_atomic() {
+  local libpath=""
+  libpath=$("$CXX" --print-file-name=libclang_rt.atomic-x86_64.a 2>/dev/null)
+  if [ -n "$libpath" ] && [ "$libpath" != "libclang_rt.atomic-x86_64.a" ]; then
+    echo "-L$(dirname "$libpath") -lclang_rt.atomic-x86_64"
+    return 0
   fi
-else
-  # failed without -latomic, so try with it
-  "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1 \
-    && "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS $LD_NO_UNDEF_FLAG -latomic -o conftest.so >/dev/null 2>&1
-  if [ $? -eq 0 ]; then
-    could_link=yes
-    need_atomic=yes
+  libpath=$("$CXX" --print-file-name=libclang_rt.atomic-x86_64.so 2>/dev/null)
+  if [ -n "$libpath" ] && [ "$libpath" != "libclang_rt.atomic-x86_64.so" ]; then
+    echo "-L$(dirname "$libpath") -lclang_rt.atomic-x86_64"
+    return 0
+  fi
+  return 1
+}
+
+if ! compile_object; then
+  echo "could not compile test object" >&2
+  rm -f conftest.cpp conftest.o conftest.so
+  exit 0
+fi
+
+if ! try_link ""; then
+  echo "warning: unable to link test object (without atomic flags)" >&2
+fi
+
+if check_symbol_undefined; then
+  need_atomic=yes
+fi
+
+uname_s=$(uname -s 2>/dev/null)
+case "$CXX $CXXFLAGS $LDFLAGS" in
+  *clang* )
+    if printf '%s %s\n' "$CXXFLAGS" "$LDFLAGS" | grep -q 'sanitize'; then
+      echo "  clang + sanitizer compile/link detected; forcing atomic runtime" >&2
+      need_atomic=yes
+    elif [ "$uname_s" = "Linux" ]; then
+      echo "  clang on Linux detected; forcing atomic runtime" >&2
+      need_atomic=yes
+    fi
+  ;;
+esac
+
+if [ "$need_atomic" = yes ]; then
+  if try_link "-latomic"; then
+    atomic_flags="-latomic"
+  else
+    if echo "$CXX" | grep -qi clang; then
+      clang_atomic_flags=$(find_clang_atomic)
+      if [ -n "$clang_atomic_flags" ]; then
+        if try_link "$clang_atomic_flags"; then
+          atomic_flags="$clang_atomic_flags"
+        fi
+      fi
+    fi
   fi
 fi
 
 rm -f conftest.cpp conftest.o conftest.so
 
-if [ "$need_atomic" = no ]; then
-  case "$CXX $CXXFLAGS $LDFLAGS" in
-    *clang* )
-      if printf '%s %s\n' "$CXXFLAGS" "$LDFLAGS" | grep -q 'sanitize'; then
-        echo "  clang + sanitizer compile/link detected; forcing -latomic" >&2
-        need_atomic=yes
-      elif [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
-        echo "  clang on Linux detected; forcing -latomic for atomic builtins" >&2
-        need_atomic=yes
-      fi
-    ;;
-  esac
+if [ "$need_atomic" = yes ] && [ -z "$atomic_flags" ]; then
+  echo "  requested atomic runtime but could not link any test combination; continuing without it" >&2
 fi
 
-if [ "$need_atomic" = yes ]; then
-  if [ "$could_link" != yes ]; then
-    echo "  requested -latomic but could not link test program; continuing without it" >&2
-    : > src/Makevars.libatomic
-  else
-    echo "  using -latomic" >&2
-    echo "PKG_LIBS += -latomic" > src/Makevars.libatomic
-  fi
+if [ -n "$atomic_flags" ]; then
+  echo "  using atomic flags: $atomic_flags" >&2
+  echo "PKG_LIBS += $atomic_flags" > src/Makevars.libatomic
 else
   echo "  not required" >&2
   : > src/Makevars.libatomic

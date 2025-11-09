@@ -35,7 +35,7 @@ bland_altman(
 \item{group1, group2}{Numeric vectors of equal length.}
 
 \item{two}{Positive scalar; the multiple of the standard deviation used to
-define the LoA (default 1.96 for nominal 95\% agreement). The confidence
+define the LoA (default 1.96 for nominal 95\\% agreement). The confidence
 intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.}
 
 \item{mode}{Integer; 1 uses \code{group1 - group2}, 2 uses \code{group2 - group1}.}

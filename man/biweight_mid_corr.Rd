@@ -122,7 +122,11 @@ A symmetric correlation matrix with class \code{biweight_mid_corr}
 (or a \code{dgCMatrix} if \code{sparse_threshold} is used), with attributes:
 \code{method = "biweight_mid_correlation"}, \code{description},
 and \code{package = "matrixCorr"}. Downstream code should be prepared to
-handle either a dense numeric matrix or a sparse object.
+handle either a dense numeric matrix or a sparse \code{dgCMatrix}.
+Internally, all medians/MADs, Tukey weights, optional pairwise-NA handling,
+and OpenMP loops are implemented in the C++ helpers
+(\code{bicor_*_cpp()}), so the R wrapper mostly validates arguments and
+dispatches to the appropriate backend.
 
 Invisibly returns \code{x}.
 
@@ -160,10 +164,6 @@ Robust standardisation of a column is
       \sqrt{\sum_{b=1}^m \big[(x_b - \mathrm{med}(x))\,w_b\big]^2}}.}
 For two columns \eqn{x,y}, the biweight mid-correlation is
 \deqn{\mathrm{bicor}(x,y) = \sum_{a=1}^m \tilde x_a\,\tilde y_a \in [-1,1].}
-
-Internally, all medians/MADs, Tukey weights, optional pairwise-NA handling,
-and OpenMP loops are implemented in the C++ helpers (\code{bicor_*_cpp()}),
-so the R wrapper mostly validates arguments and dispatches to the appropriate backend.
 
 \strong{Capping the maximum proportion of outliers (\code{max_p_outliers}).}
 If \code{max_p_outliers < 1}, let \eqn{q_L = Q_x(\text{max\_p\_outliers})} and
