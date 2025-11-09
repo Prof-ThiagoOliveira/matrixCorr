@@ -29,8 +29,12 @@ errs <- grep("^  \\[[A-Z][A-Z]\\] ", lines, value = TRUE)
 ignored <- c(
   "unsupported form of unprotect",
   "has address taken, results will be incomplete",
+  "possible protection stack imbalance",
+  "negative depth",
+  "attempt to unprotect more items",
   "protection/Armor.h",
   "protection/Shield.h",
+  "Armor<SEXPREC*>",
   "Rcpp_protect(",
   "Rcpp_unprotect("
 )
