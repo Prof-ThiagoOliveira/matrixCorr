@@ -4,6 +4,12 @@
 
 echo "checking for required atomic ops support..." >&2
 
+LD_NO_UNDEF_FLAG=""
+case "$(uname -s 2>/dev/null)" in
+  Linux*)  LD_NO_UNDEF_FLAG="-Wl,--no-undefined";;
+  Darwin*) LD_NO_UNDEF_FLAG="-Wl,-undefined,error";;
+esac
+
 cat > conftest.cpp <<'EOF'
 #include <cstdint>
 extern "C" void probe_compare_exchange(std::uint64_t* p) {
@@ -16,12 +22,15 @@ EOF
 
 : "${CXX:=c++}"
 
+: "${CPPFLAGS:=}"
+: "${LDFLAGS:=}"
+
 need_atomic=no
 could_link=no
 
 compile_shared() {
   "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1 || return 1
-  "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS -o conftest.so >/dev/null 2>&1
+  "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS $LD_NO_UNDEF_FLAG -o conftest.so >/dev/null 2>&1
 }
 
 check_symbol_undefined() {
@@ -42,7 +51,7 @@ if [ $? -eq 0 ]; then
 else
   # failed without -latomic, so try with it
   "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1 \
-    && "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS -latomic -o conftest.so >/dev/null 2>&1
+    && "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS $LD_NO_UNDEF_FLAG -latomic -o conftest.so >/dev/null 2>&1
   if [ $? -eq 0 ]; then
     could_link=yes
     need_atomic=yes
