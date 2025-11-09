@@ -90,8 +90,11 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
           // preserve colnames
           Rcpp::List dn = Mi.attr("dimnames");
           if (dn.size() == 2){
-             SEXP cn = dn[1];
-             if (!Rf_isNull(cn)) M.attr("dimnames") = Rcpp::List::create(R_NilValue, cn);
+             Rcpp::CharacterVector src = dn[1];
+             if (!src.isNULL()){
+               Rcpp::CharacterVector copy = Rcpp::clone(src);
+               M.attr("dimnames") = Rcpp::List::create(R_NilValue, copy);
+             }
           }
           return M;
        }
@@ -196,12 +199,18 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
     }
 
     // set column names (serial; safe)
+    std::vector<std::string> colnames;
+    colnames.reserve(k);
     Rcpp::CharacterVector src_names = df.attr("names");
-    Rcpp::CharacterVector cn(k);
     for (int jj = 0; jj < k; ++jj){
        const int j = idx[jj];
-       if (src_names.size() > j) cn[jj] = src_names[j];
+       if (src_names.size() > j && !src_names.isNULL()){
+         colnames.emplace_back(Rcpp::as<std::string>(src_names[j]));
+       } else {
+         colnames.emplace_back(std::string());
+       }
     }
+    Rcpp::CharacterVector cn = Rcpp::wrap(colnames);
     M.attr("dimnames") = Rcpp::List::create(R_NilValue, cn);
     return M;
  }
