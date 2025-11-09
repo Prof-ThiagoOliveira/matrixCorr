@@ -11,7 +11,10 @@
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Each column must have
-#' at least two non-missing values and contain no NAs.
+#' at least two non-missing values.
+#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, the input is
+#' required to be free of \code{NA}/\code{NaN}/\code{Inf}. Set to
+#' \code{FALSE} only when the caller already handled missingness.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)}-th element is
 #' the Spearman correlation between the \code{i}-th and \code{j}-th
@@ -75,8 +78,8 @@
 #' memory. 'OpenMP' parallelism is used across columns for ranking, and a 'BLAS'
 #' 'SYRK' kernel is used for the matrix product when available.
 #'
-#' @note Missing values are not allowed. Columns with fewer than two
-#' observations are excluded.
+#' @note Missing values are not allowed when \code{check_na = TRUE}. Columns
+#' with fewer than two observations are excluded.
 #'
 #' @references
 #' Spearman, C. (1904). The proof and measurement of association between
@@ -140,8 +143,8 @@
 #' @seealso \code{\link{print.spearman_rho}}, \code{\link{plot.spearman_rho}}
 #' @author Thiago de Paula Oliveira
 #' @export
-spearman_rho <- function(data) {
-  numeric_data <- validate_corr_input(data)
+spearman_rho <- function(data, check_na = TRUE) {
+  numeric_data <- validate_corr_input(data, check_na = check_na)
   colnames_data <- colnames(numeric_data)
   result <- spearman_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data

@@ -65,6 +65,16 @@ fi
 
 rm -f conftest.cpp conftest.o conftest.so
 
+if [ "$need_atomic" = no ]; then
+  case "$CXX $CXXFLAGS $LDFLAGS" in
+    *clang* )
+      if printf '%s %s\n' "$CXXFLAGS" "$LDFLAGS" | grep -q 'sanitize'; then
+        need_atomic=yes
+      fi
+    ;;
+  esac
+fi
+
 if [ "$need_atomic" = yes ]; then
   if [ "$could_link" != yes ]; then
     echo "  requested -latomic but could not link test program; continuing without it" >&2

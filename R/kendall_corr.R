@@ -16,11 +16,14 @@
 #' For matrix/data frame, it is expected a numeric matrix or a data frame with at
 #' least two numeric columns. All non-numeric columns will be excluded.
 #' For two-vector mode, a numeric vector \code{x}.
-#'
+#' 
 #' @param y Optional numeric vector \code{y} of the same length as \code{data}
 #' when \code{data} is a vector. If supplied, the function computes the
 #' Kendall correlation \emph{between \code{data} and \code{y}} using a
 #' low-overhead scalar path and returns a single number.
+#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, inputs must
+#' be free of missing/undefined values. Use \code{FALSE} only when you have
+#' already filtered or imputed them.
 #'
 #' @return
 #' \itemize{
@@ -58,8 +61,8 @@
 #'   procedure; where available, pairs are evaluated in parallel.
 #' }
 #'
-#' @note Missing values are not allowed. Columns with fewer than two
-#' observations are excluded.
+#' @note Missing values are not allowed when \code{check_na = TRUE}. Columns
+#' with fewer than two observations are excluded.
 #'
 #' @references
 #' Kendall, M. G. (1938). A New Measure of Rank Correlation. \emph{Biometrika},
@@ -97,11 +100,26 @@
 #' @seealso \code{\link{print.kendall_matrix}}, \code{\link{plot.kendall_matrix}}
 #' @author Thiago de Paula Oliveira
 #' @export
-kendall_tau <- function(data, y = NULL) {
+kendall_tau <- function(data, y = NULL, check_na = TRUE) {
+  if (!is.logical(check_na) || length(check_na) != 1L) {
+    stop("`check_na` must be a single logical.", call. = FALSE)
+  }
+
   # Two vectors
   if (!is.null(y)) {
-    stopifnot(is.numeric(data), is.numeric(y), length(data) == length(y))
-    tau <- kendall_tau2_cpp(data, y)
+    if (!is.numeric(data) || !is.numeric(y)) {
+      stop("For two-vector mode, both `data` and `y` must be numeric vectors.",
+           call. = FALSE)
+    }
+    if (length(data) != length(y)) {
+      stop("`data` and `y` must have the same length.", call. = FALSE)
+    }
+    if (check_na && (any(!is.finite(data)) || any(!is.finite(y)))) {
+      stop("Missing/undefined values detected. Set `check_na = FALSE` to bypass.",
+           call. = FALSE)
+    }
+
+    tau <- kendall_tau2_cpp(as.numeric(data), as.numeric(y))
 
     nm1 <- deparse(substitute(data))
     nm2 <- deparse(substitute(y))
@@ -132,7 +150,7 @@ kendall_tau <- function(data, y = NULL) {
   }
 
   # General matrix/data.frame path (p >= 3)
-  numeric_data  <- validate_corr_input(data)
+  numeric_data  <- validate_corr_input(data, check_na = check_na)
   colnames_data <- colnames(numeric_data)
 
   result <- kendall_matrix_cpp(numeric_data)

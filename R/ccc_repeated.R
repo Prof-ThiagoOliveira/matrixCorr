@@ -949,6 +949,20 @@ ccc_pairwise_u_stat <- function(data,
 #'
 #' @author Thiago de Paula Oliveira
 #' @importFrom stats as.formula model.matrix setNames qnorm optimize
+#'
+#' @section Model overview:
+#' Internally, the call is routed to `ccc_lmm_reml_pairwise()`, which fits one
+#' repeated-measures mixed model per pair of methods. Each model includes:
+#' \itemize{
+#'   \item subject random intercepts (always)
+#'   \item optional subject-by-method (`sigma^2_{A \times M}`) and
+#'         subject-by-time (`sigma^2_{A \times T}`) variance components
+#'   \item optional random slopes specified via `slope`/`slope_var`/`slope_Z`
+#'   \item residual structure `ar = "none"` (iid) or `ar = "ar1"`
+#' }
+#' D-matrix options (`Dmat_type`, `Dmat`, `Dmat_weights`) control how time
+#' averaging operates when translating variance components into CCC summaries.
+#'
 #' @export
 ccc_lmm_reml <- function(data, response, rind,
                          method = NULL, time = NULL, interaction = FALSE,
@@ -987,17 +1001,30 @@ ccc_lmm_reml <- function(data, response, rind,
   }
 
   df <- as.data.frame(data)
-  df[[response]]   <- as.numeric(df[[response]])
+
+  for (col in c(response, rind, method, time, slope_var)) {
+    if (is.null(col)) next
+    if (!col %in% names(df)) {
+      stop(sprintf("Column '%s' not found in 'data'.", col), call. = FALSE)
+    }
+  }
+  df[[response]] <- as.numeric(df[[response]])
+  if (anyNA(df[[response]])) {
+    stop(sprintf("Column '%s' contains non-numeric values that could not be coerced.", response),
+         call. = FALSE)
+  }
   df[[rind]] <- factor(df[[rind]])
   if (!is.null(method))  df[[method]]  <- factor(df[[method]])
   if (!is.null(time)) df[[time]] <- factor(df[[time]])
   all_time_lvls <- if (!is.null(time)) levels(df[[time]]) else character(0)
 
-  rhs <- "1"
-  if (!is.null(method))  rhs <- paste(rhs, "+", method)
-  if (!is.null(time)) rhs <- paste(rhs, "+", time)
-  if (!is.null(method) && !is.null(time) && interaction) rhs <- paste(rhs, "+", paste0(method, ":", time))
-  fml <- as.formula(paste("~", rhs))
+  terms_rhs <- "1"
+  if (!is.null(method)) terms_rhs <- c(terms_rhs, method)
+  if (!is.null(time))   terms_rhs <- c(terms_rhs, time)
+  if (!is.null(method) && !is.null(time) && interaction) {
+    terms_rhs <- c(terms_rhs, sprintf("%s:%s", method, time))
+  }
+  fml <- as.formula(paste("~", paste(terms_rhs, collapse = " + ")))
 
   extra_label <- switch(slope,
                         "subject" = "random slope (subject)",

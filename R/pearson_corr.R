@@ -11,7 +11,10 @@
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Each column must have
-#' at least two non-missing values and contain no NAs.
+#' at least two non-missing values.
+#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, inputs must be
+#' free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only when the
+#' caller already handled missingness.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)}-th element is
 #' the Pearson correlation between the \code{i}-th and \code{j}-th
@@ -54,8 +57,8 @@
 #' \strong{Computational complexity.} The dominant cost is \eqn{O(n p^2)} flops
 #' with \eqn{O(p^2)} memory.
 #'
-#' @note Missing values are not allowed. Columns with fewer than two
-#' observations are excluded.
+#' @note Missing values are not allowed when \code{check_na = TRUE}. Columns
+#' with fewer than two observations are excluded.
 #'
 #' @references
 #' Pearson, K. (1895). "Notes on regression and inheritance in the case of
@@ -99,8 +102,8 @@
 #' @seealso \code{\link{print.pearson_corr}}, \code{\link{plot.pearson_corr}}
 #' @author Thiago de Paula Oliveira
 #' @export
-pearson_corr <- function(data) {
-  numeric_data <- validate_corr_input(data)
+pearson_corr <- function(data, check_na = TRUE) {
+  numeric_data <- validate_corr_input(data, check_na = check_na)
   colnames_data <- colnames(numeric_data)
   result <- pearson_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
