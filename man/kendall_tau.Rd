@@ -6,7 +6,7 @@
 \alias{plot.kendall_matrix}
 \title{Pairwise (or Two-Vector) Kendall's Tau Rank Correlation}
 \usage{
-kendall_tau(data, y = NULL)
+kendall_tau(data, y = NULL, check_na = TRUE)
 
 \method{print}{kendall_matrix}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
 
@@ -29,6 +29,10 @@ For two-vector mode, a numeric vector \code{x}.}
 when \code{data} is a vector. If supplied, the function computes the
 Kendall correlation \emph{between \code{data} and \code{y}} using a
 low-overhead scalar path and returns a single number.}
+
+\item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, inputs must
+be free of missing/undefined values. Use \code{FALSE} only when you have
+already filtered or imputed them.}
 
 \item{x}{An object of class \code{kendall_matrix}.}
 
@@ -116,8 +120,8 @@ procedure; where available, pairs are evaluated in parallel.
 }
 }
 \note{
-Missing values are not allowed. Columns with fewer than two
-observations are excluded.
+Missing values are not allowed when \code{check_na = TRUE}. Columns
+with fewer than two observations are excluded.
 }
 \examples{
 # Basic usage with a matrix

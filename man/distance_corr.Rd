@@ -6,7 +6,7 @@
 \alias{plot.distance_corr}
 \title{Pairwise Distance Correlation (dCor)}
 \usage{
-distance_corr(data)
+distance_corr(data, check_na = TRUE)
 
 \method{print}{distance_corr}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
 
@@ -21,8 +21,11 @@ distance_corr(data)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
-columns. All non-numeric columns are dropped. Columns must be numeric
-and contain no \code{NA}s.}
+columns. All non-numeric columns are dropped. Columns must be numeric.}
+
+\item{check_na}{Logical (default \code{TRUE}). When \code{TRUE}, inputs must
+be free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only if you
+have already handled missingness upstream.}
 
 \item{x}{An object of class \code{distance_corr}.}
 
@@ -93,7 +96,9 @@ The unbiased distance correlation is
 \note{
 Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance
 variance yield \code{NA} in their row/column. Computation is \eqn{O(n^2)} per
-pair.
+pair. All heavy lifting (distance matrices, U-centering, unbiased scaling)
+is implemented in C++ (\code{ustat_dcor_matrix_cpp}); the R wrapper only
+validates/coerces the input.
 }
 \examples{
 ##Independent variables -> dCor ~ 0

@@ -6,7 +6,7 @@
 \alias{plot.pearson_corr}
 \title{Pairwise Pearson correlation}
 \usage{
-pearson_corr(data)
+pearson_corr(data, check_na = TRUE)
 
 \method{print}{pearson_corr}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
 
@@ -23,7 +23,11 @@ pearson_corr(data)
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
 columns. All non-numeric columns will be excluded. Each column must have
-at least two non-missing values and contain no NAs.}
+at least two non-missing values.}
+
+\item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, inputs must be
+free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only when the
+caller already handled missingness.}
 
 \item{x}{An object of class \code{pearson_corr}.}
 
@@ -113,8 +117,8 @@ non-missing values.
 with \eqn{O(p^2)} memory.
 }
 \note{
-Missing values are not allowed. Columns with fewer than two
-observations are excluded.
+Missing values are not allowed when \code{check_na = TRUE}. Columns
+with fewer than two observations are excluded.
 }
 \examples{
 ## MVN with AR(1) correlation

@@ -15,7 +15,8 @@
 #'   \item \code{method}: method label with \eqn{\ge}2 levels (factor/character/integer).
 #'   \item \code{time}: replicate index used to form pairs; only records where
 #'         both methods are present for the same \code{subject} and \code{time}
-#'         contribute to a given pairwise BA.
+#'         contribute to a given pairwise BA (rows with missing components are dropped
+#'         before fitting each pair).
 #' }
 #'
 #' @param data Optional `data.frame`/`data.table` containing required columns.
@@ -80,7 +81,8 @@
 #'   \item \code{ar1_rho} \emph{(scalar numeric or \code{NA})}; user-supplied \eqn{\rho}
 #'         if a single common value was provided; \code{NA} otherwise.
 #'   \item \code{ar1_rho_pair} (\eqn{m \times m}; optional); \eqn{\rho} actually used per pair
-#'         (may be estimated from data or equal to the supplied value).
+#'         (may be estimated from data or equal to the supplied value). AR(1) blocks
+#'         require consecutive integer time indices for each subject.
 #'   \item \code{ar1_estimated} (\eqn{m \times m}; optional logical); for each pair, \code{TRUE}
 #'         if \eqn{\rho} was estimated internally; \code{FALSE} if supplied.
 #'

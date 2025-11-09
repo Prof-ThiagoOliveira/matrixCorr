@@ -69,6 +69,10 @@ if [ "$need_atomic" = no ]; then
   case "$CXX $CXXFLAGS $LDFLAGS" in
     *clang* )
       if printf '%s %s\n' "$CXXFLAGS" "$LDFLAGS" | grep -q 'sanitize'; then
+        echo "  clang + sanitizer compile/link detected; forcing -latomic" >&2
+        need_atomic=yes
+      elif [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
+        echo "  clang on Linux detected; forcing -latomic for atomic builtins" >&2
         need_atomic=yes
       fi
     ;;

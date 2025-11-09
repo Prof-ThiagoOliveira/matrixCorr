@@ -9,8 +9,10 @@
 #' (in population) if and only if the variables are independent.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
-#' columns. All non-numeric columns are dropped. Columns must be numeric
-#' and contain no \code{NA}s.
+#' columns. All non-numeric columns are dropped. Columns must be numeric.
+#' @param check_na Logical (default \code{TRUE}). When \code{TRUE}, inputs must
+#' be free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only if you
+#' have already handled missingness upstream.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)} entry is the
 #' unbiased distance correlation between the \code{i}-th and \code{j}-th
@@ -37,6 +39,11 @@
 #' \deqn{\widehat{\mathrm{dCor}}_u(x,y) =
 #'       \frac{\widehat{\mathrm{dCov}}_u(x,y)}
 #'            {\sqrt{\widehat{\mathrm{dVar}}_u(x)\,\widehat{\mathrm{dVar}}_u(y)}} \in [0,1].}
+#'
+#' \strong{Computation.} All heavy lifting (distance matrices, U-centering,
+#' and unbiased scaling) is implemented in C++ (`ustat_dcor_matrix_cpp`), so
+#' the R wrapper only validates/coerces the input. OpenMP parallelises the
+#' upper-triangular loops.
 #'
 #' @note Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance
 #' variance yield \code{NA} in their row/column. Computation is \eqn{O(n^2)} per
@@ -81,8 +88,8 @@
 #' @author Thiago de paula Oliveira
 #'
 #' @export
-distance_corr <- function(data) {
-  numeric_data <- validate_corr_input(data)
+distance_corr <- function(data, check_na = TRUE) {
+  numeric_data <- validate_corr_input(data, check_na = check_na)
   colnames_data <- colnames(numeric_data)
 
   dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)

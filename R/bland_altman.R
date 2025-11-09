@@ -30,10 +30,13 @@
 #' Assumptions include approximately normal differences and roughly constant
 #' variability across the measurement range; if differences increase with
 #' magnitude, consider a transformation before analysis. Missing values are
-#' removed pairwise (any row with an \code{NA} in either input is dropped).
+#' removed pairwise (rows with an \code{NA} in either input are dropped before
+#' calling the C++ backend).
 #'
 #' @param group1,group2 Numeric vectors of equal length.
-#' @param two Positive scalar; the multiple of SD for the LoA (default 1.96).
+#' @param two Positive scalar; the multiple of the standard deviation used to
+#'   define the LoA (default 1.96 for nominal 95\% agreement). The confidence
+#'   intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.
 #' @param mode Integer; 1 uses \code{group1 - group2}, 2 uses \code{group2 - group1}.
 #' @param conf_level Confidence level for CIs (default 0.95).
 #' @param verbose Logical; if TRUE, prints how many OpenMP threads are used.

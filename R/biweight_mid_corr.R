@@ -44,7 +44,12 @@
 #' @return A symmetric correlation matrix with class \code{biweight_mid_corr}
 #'   (or a \code{dgCMatrix} if \code{sparse_threshold} is used), with attributes:
 #'   \code{method = "biweight_mid_correlation"}, \code{description},
-#'   and \code{package = "matrixCorr"}.
+#'   and \code{package = "matrixCorr"}. Downstream code should be prepared to
+#'   handle either a dense numeric matrix or a sparse \code{dgCMatrix}.
+#' Internally, all medians/MADs, Tukey weights, optional pairwise-NA handling,
+#' and OpenMP loops are implemented in the C++ helpers
+#' (\code{bicor_*_cpp()}), so the R wrapper mostly validates arguments and
+#' dispatches to the appropriate backend.
 #'
 #' @details
 #'

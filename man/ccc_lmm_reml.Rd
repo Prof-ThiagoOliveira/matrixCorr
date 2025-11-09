@@ -511,6 +511,21 @@ guard is disabled by default, but you can also opt out manually by setting
 \pkg{matrixCorr}.
 }
 
+\section{Model overview}{
+
+Internally, the call is routed to \code{ccc_lmm_reml_pairwise()}, which fits one
+repeated-measures mixed model per pair of methods. Each model includes:
+\itemize{
+\item subject random intercepts (always)
+\item optional subject-by-method (\verb{sigma^2_\{A \\times M\}}) and
+subject-by-time (\verb{sigma^2_\{A \\times T\}}) variance components
+\item optional random slopes specified via \code{slope}/\code{slope_var}/\code{slope_Z}
+\item residual structure \code{ar = "none"} (iid) or \code{ar = "ar1"}
+}
+D-matrix options (\code{Dmat_type}, \code{Dmat}, \code{Dmat_weights}) control how time
+averaging operates when translating variance components into CCC summaries.
+}
+
 \examples{
 # ====================================================================
 # 1) Subject x METHOD variance present, no time

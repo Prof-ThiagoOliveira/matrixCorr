@@ -251,7 +251,8 @@ all pairwise contrasts when \eqn{\ge}3 methods are supplied.
 \item \code{method}: method label with \eqn{\ge}2 levels (factor/character/integer).
 \item \code{time}: replicate index used to form pairs; only records where
 both methods are present for the same \code{subject} and \code{time}
-contribute to a given pairwise BA.
+contribute to a given pairwise BA (rows with missing components are dropped
+per contrast before fitting).
 }
 }
 \details{
@@ -265,7 +266,7 @@ subject \eqn{i} at replicate/time \eqn{t}; \eqn{d_{it}} is the paired difference
 (method \eqn{b} minus method \eqn{a}); and \eqn{m_{it}} is the corresponding pair mean.
 Here \eqn{i=1,\ldots,S} indexes subjects and \eqn{t} indexes replicates/time within subject.
 Only records with both methods present at the same \code{subject} and \code{time}
-contribute to that pair.
+contribute to that pair; incomplete combinations are removed before modelling.
 
 The fitted per-pair model is
 \deqn{d_{it} = \beta_0 + \beta_1\, m_{it} + u_i + \varepsilon_{it},}

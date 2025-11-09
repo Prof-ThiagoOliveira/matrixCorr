@@ -6,7 +6,7 @@
 \alias{plot.spearman_rho}
 \title{Pairwise Spearman's rank correlation}
 \usage{
-spearman_rho(data)
+spearman_rho(data, check_na = TRUE)
 
 \method{print}{spearman_rho}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
 
@@ -23,7 +23,11 @@ spearman_rho(data)
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
 columns. All non-numeric columns will be excluded. Each column must have
-at least two non-missing values and contain no NAs.}
+at least two non-missing values.}
+
+\item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, the input is
+required to be free of \code{NA}/\code{NaN}/\code{Inf}. Set to
+\code{FALSE} only when the caller already handled missingness.}
 
 \item{x}{An object of class \code{spearman_rho}.}
 
@@ -135,8 +139,8 @@ memory. 'OpenMP' parallelism is used across columns for ranking, and a 'BLAS'
 'SYRK' kernel is used for the matrix product when available.
 }
 \note{
-Missing values are not allowed. Columns with fewer than two
-observations are excluded.
+Missing values are not allowed when \code{check_na = TRUE}. Columns
+with fewer than two observations are excluded.
 }
 \examples{
 ## Monotone transformation invariance (Spearman is rank-based)
