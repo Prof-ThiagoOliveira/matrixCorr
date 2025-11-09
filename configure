@@ -32,6 +32,7 @@ EOF
 
 need_atomic=no
 atomic_flags=""
+compiled_ok=0
 
 compile_object() {
   "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1
@@ -66,55 +67,67 @@ find_clang_atomic() {
   return 1
 }
 
-if ! compile_object; then
-  echo "could not compile test object" >&2
-  rm -f conftest.cpp conftest.o conftest.so
-  exit 0
-fi
-
-if ! try_link ""; then
-  echo "warning: unable to link test object (without atomic flags)" >&2
-fi
-
-if check_symbol_undefined; then
-  need_atomic=yes
+if compile_object; then
+  compiled_ok=1
+  if ! try_link ""; then
+    echo "warning: unable to link test object (without atomic flags)" >&2
+  fi
+  if check_symbol_undefined; then
+    need_atomic=yes
+  fi
+else
+  echo "warning: could not compile atomic probe; falling back to default detection" >&2
 fi
 
 uname_s=$(uname -s 2>/dev/null)
+is_clang=false
 case "$CXX $CXXFLAGS $LDFLAGS" in
-  *clang* )
-    if printf '%s %s\n' "$CXXFLAGS" "$LDFLAGS" | grep -q 'sanitize'; then
-      echo "  clang + sanitizer compile/link detected; forcing atomic runtime" >&2
-      need_atomic=yes
-    elif [ "$uname_s" = "Linux" ]; then
-      echo "  clang on Linux detected; forcing atomic runtime" >&2
-      need_atomic=yes
-    fi
-  ;;
+  *clang* ) is_clang=true ;;
 esac
 
-if [ "$need_atomic" = yes ]; then
+if $is_clang; then
+  if printf '%s %s\n' "$CXXFLAGS" "$LDFLAGS" | grep -q 'sanitize'; then
+    echo "  clang + sanitizer compile/link detected; forcing atomic runtime" >&2
+    need_atomic=yes
+  elif [ "$uname_s" = "Linux" ]; then
+    echo "  clang on Linux detected; forcing atomic runtime" >&2
+    need_atomic=yes
+  fi
+fi
+
+if [ "$need_atomic" = yes ] && [ "$compiled_ok" -eq 1 ]; then
   if try_link "-latomic"; then
     atomic_flags="-latomic"
-  else
-    if echo "$CXX" | grep -qi clang; then
-      clang_atomic_flags=$(find_clang_atomic)
-      if [ -n "$clang_atomic_flags" ]; then
-        if try_link "$clang_atomic_flags"; then
-          atomic_flags="$clang_atomic_flags"
-        fi
-      fi
+  elif $is_clang; then
+    clang_atomic_flags=$(find_clang_atomic)
+    if [ -n "$clang_atomic_flags" ] && try_link "$clang_atomic_flags"; then
+      atomic_flags="$clang_atomic_flags"
     fi
   fi
 fi
 
-rm -f conftest.cpp conftest.o conftest.so
+rm -f conftest.o conftest.so
 
 if [ "$need_atomic" = yes ] && [ -z "$atomic_flags" ]; then
-  echo "  requested atomic runtime but could not link any test combination; continuing without it" >&2
+  if $is_clang; then
+    clang_atomic_flags=$(find_clang_atomic)
+    if [ -n "$clang_atomic_flags" ]; then
+      atomic_flags="$clang_atomic_flags"
+    fi
+  fi
 fi
 
-if [ -n "$atomic_flags" ]; then
+if [ "$need_atomic" = yes ] && [ -z "$atomic_flags" ]; then
+  atomic_flags="-latomic"
+fi
+
+rm -f conftest.cpp
+
+if [ "$need_atomic" = yes ] && [ -z "$atomic_flags" ]; then
+  echo "  requested atomic runtime but could not determine suitable flags; continuing without it" >&2
+fi
+
+if [ -n "$atomic_flags" ] && [ "$need_atomic" = yes ]; then
   echo "  using atomic flags: $atomic_flags" >&2
   echo "PKG_LIBS += $atomic_flags" > src/Makevars.libatomic
 else
