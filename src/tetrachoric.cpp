@@ -29,28 +29,6 @@ using matrixCorr_detail::bvn_adaptive::rect_prob;
 using namespace Rcpp;
 
 // ---------- internal helpers (TU-agnostic; no policy aliases) ----------
-static inline double tetra_loglik(double rho, double a, double b, double c, double d){
-  using matrixCorr_detail::norm1::Phi;
-  using matrixCorr_detail::norm1::qnorm01;
-  using matrixCorr_detail::bvn_adaptive::Phi2;
-
-  const double N   = a + b + c + d;
-  const double eps = 1e-12;
-
-  const double p_row1 = matrixCorr_detail::clamp_policy::nan_preserve((a + b) / N, eps, 1.0 - eps);
-  const double p_col1 = matrixCorr_detail::clamp_policy::nan_preserve((a + c) / N, eps, 1.0 - eps);
-  const double q1 = qnorm01(p_row1);
-  const double q2 = qnorm01(p_col1);
-
-  const double p11 = std::max(rect_prob(-INFINITY, q1, -INFINITY, q2, rho), 1e-16);
-  const double p1_ = Phi(q1);
-  const double _1p = Phi(q2);
-  const double p10 = std::max(p1_ - p11, 1e-16);
-  const double p01 = std::max(_1p - p11, 1e-16);
-  const double p00 = std::max(1.0 - p1_ - _1p + p11, 1e-16);
-
-  return a*std::log(p11) + b*std::log(p10) + c*std::log(p01) + d*std::log(p00);
-}
 
 static inline void build_cutpoints(const NumericMatrix& N,
                                    std::vector<double>& alpha,
@@ -61,29 +39,39 @@ static inline void build_cutpoints(const NumericMatrix& N,
   const int R = N.nrow(), C = N.ncol();
   NumericVector rowp(R), colp(C);
   double tot = 0.0;
-  for (int i=0;i<R;++i)
-    for (int j=0;j<C;++j){
+  for (int i = 0; i < R; ++i) {
+    for (int j = 0; j < C; ++j) {
       rowp[i] += N(i,j);
       colp[j] += N(i,j);
       tot     += N(i,j);
     }
-    if (tot <= 0) stop("Empty table");
+  }
+  if (tot <= 0) stop("Empty table");
 
-    rowp = rowp / tot; colp = colp / tot;
+  rowp = rowp / tot;
+  colp = colp / tot;
 
-    const double eps = 1e-12;
-    NumericVector rowcum(R-1), colcum(C-1);
-    double acc = 0.0;
-    for (int i=0;i<R-1;++i){ acc += rowp[i]; rowcum[i] = matrixCorr_detail::clamp_policy::nan_preserve(acc, eps, 1.0 - eps); }
-    acc = 0.0;
-    for (int j=0;j<C-1;++j){ acc += colp[j]; colcum[j] = matrixCorr_detail::clamp_policy::nan_preserve(acc, eps, 1.0 - eps); }
+  const double eps = 1e-12;
+  NumericVector rowcum(R-1), colcum(C-1);
+  double acc = 0.0;
+  for (int i = 0; i < R - 1; ++i) {
+    acc += rowp[i];
+    rowcum[i] = matrixCorr_detail::clamp_policy::nan_preserve(acc, eps, 1.0 - eps);
+  }
+  acc = 0.0;
+  for (int j = 0; j < C - 1; ++j) {
+    acc += colp[j];
+    colcum[j] = matrixCorr_detail::clamp_policy::nan_preserve(acc, eps, 1.0 - eps);
+  }
 
-    alpha.assign(R+1, 0.0);
-    beta.assign(C+1, 0.0);
-    alpha[0] = -INFINITY; alpha[R] = INFINITY;
-    beta[0]  = -INFINITY; beta[C]  = INFINITY;
-    for (int i=1;i<=R-1;++i) alpha[i] = qnorm01(rowcum[i-1]);
-    for (int j=1;j<=C-1;++j) beta[j]  = qnorm01(colcum[j-1]);
+  alpha.assign(R + 1, 0.0);
+  beta.assign(C + 1, 0.0);
+  alpha[0] = -INFINITY;
+  alpha[R] = INFINITY;
+  beta[0]  = -INFINITY;
+  beta[C]  = INFINITY;
+  for (int i = 1; i <= R - 1; ++i) alpha[i] = qnorm01(rowcum[i - 1]);
+  for (int j = 1; j <= C - 1; ++j) beta[j]  = qnorm01(colcum[j - 1]);
 }
 
 static inline double polychoric_loglik(double rho, const NumericMatrix& N,
@@ -173,36 +161,38 @@ double matrixCorr_polychoric_mle_cpp(NumericMatrix tab, double correct = 0.5){
   if (R < 2 || C < 2) return NA_REAL;
 
   NumericMatrix N = clone(tab);
-  for (int i=0;i<R;++i)
-    for (int j=0;j<C;++j)
+  for (int i = 0; i < R; ++i) {
+    for (int j = 0; j < C; ++j) {
       if (N(i,j) <= 0.0) N(i,j) += correct;
+    }
+  }
 
-      std::vector<double> alpha, beta;
-      build_cutpoints(N, alpha, beta);
+  std::vector<double> alpha, beta;
+  build_cutpoints(N, alpha, beta);
 
-      auto nll = [&](double rho){ return -polychoric_loglik(rho, N, alpha, beta); };
+  auto nll = [&](double rho){ return -polychoric_loglik(rho, N, alpha, beta); };
 
-      // --- robust global search: coarse grid then local Brent refine ---
-      const double lo = -0.99999, hi = 0.99999;
-      const int    G  = 801;
-      const double h  = (hi - lo) / (G - 1);
+  // --- robust global search: coarse grid then local Brent refine ---
+  const double lo = -0.99999, hi = 0.99999;
+  const int    G  = 801;
+  const double h  = (hi - lo) / (G - 1);
 
-      double best_rho = lo, best_val = nll(lo);
-      for (int g = 1; g < G; ++g) {
-        const double r = lo + g * h;
-        const double v = nll(r);
-        if (v < best_val) { best_val = v; best_rho = r; }
-      }
+  double best_rho = lo, best_val = nll(lo);
+  for (int g = 1; g < G; ++g) {
+    const double r = lo + g * h;
+    const double v = nll(r);
+    if (v < best_val) { best_val = v; best_rho = r; }
+  }
 
-      double a_br = std::max(lo, best_rho - 5*h);
-      double b_br = std::min(hi, best_rho + 5*h);
-      if (b_br - a_br < 20*h) {
-        a_br = std::max(lo, best_rho - 10*h);
-        b_br = std::min(hi, best_rho + 10*h);
-      }
+  double a_br = std::max(lo, best_rho - 5*h);
+  double b_br = std::min(hi, best_rho + 5*h);
+  if (b_br - a_br < 20*h) {
+    a_br = std::max(lo, best_rho - 10*h);
+    b_br = std::min(hi, best_rho + 10*h);
+  }
 
-      const double est = matrixCorr_detail::brent::optimize(nll, a_br, b_br, 1e-6, 300);
-      return matrixCorr_detail::clamp_policy::nan_preserve(est, -1.0, 1.0);
+  const double est = matrixCorr_detail::brent::optimize(nll, a_br, b_br, 1e-6, 300);
+  return matrixCorr_detail::clamp_policy::nan_preserve(est, -1.0, 1.0);
 }
 
 // [[Rcpp::export]]

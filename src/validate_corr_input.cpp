@@ -210,7 +210,6 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
          colnames.emplace_back(std::string());
        }
     }
-    Rcpp::CharacterVector cn = Rcpp::wrap(colnames);
-    M.attr("dimnames") = Rcpp::List::create(R_NilValue, cn);
+    M.attr("dimnames") = Rcpp::List::create(R_NilValue, Rcpp::wrap(colnames));
     return M;
  }

@@ -20,7 +20,6 @@ using matrixCorr_detail::symm::put;
 
 // [[Rcpp::export]]
 arma::mat ccc_cpp(const arma::mat& X) {
-  const int n = X.n_rows;
   const int p = X.n_cols;
   arma::mat result(p, p, arma::fill::eye);
 
