@@ -1,38 +1,64 @@
 #!/bin/sh
 
-# configure script to detect whether we need -latomic for __atomic builtins
+# Configure helper: detect whether we must link with -latomic.
 
-echo "checking whether the C++ toolchain needs -latomic for __atomic builtins... " >&2
+echo "checking for required atomic ops support..." >&2
 
 cat > conftest.cpp <<'EOF'
 #include <cstdint>
-int main() {
-  std::uint64_t value = 0;
+extern "C" void probe_compare_exchange(std::uint64_t* p) {
   std::uint64_t expected = 0;
   const std::uint64_t desired = 1;
-  __atomic_compare_exchange_n(&value, &expected, desired, false,
+  __atomic_compare_exchange_n(p, &expected, desired, false,
                               __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
-  return static_cast<int>(value == desired);
 }
 EOF
 
-need_atomic=no
-
 : "${CXX:=c++}"
 
-"$CXX" $CXXFLAGS $CPPFLAGS conftest.cpp -o conftest >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-  "$CXX" $CXXFLAGS $CPPFLAGS conftest.cpp -o conftest -latomic >/dev/null 2>&1
+need_atomic=no
+could_link=no
+
+compile_shared() {
+  "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1 || return 1
+  "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS -o conftest.so >/dev/null 2>&1
+}
+
+check_symbol_undefined() {
+  if command -v nm >/dev/null 2>&1; then
+    if nm -D conftest.so 2>/dev/null | grep '__atomic_compare_exchange' | grep -q ' U '; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+compile_shared
+if [ $? -eq 0 ]; then
+  could_link=yes
+  if check_symbol_undefined; then
+    need_atomic=yes
+  fi
+else
+  # failed without -latomic, so try with it
+  "$CXX" $CXXFLAGS $CPPFLAGS -fPIC -c conftest.cpp -o conftest.o >/dev/null 2>&1 \
+    && "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS -latomic -o conftest.so >/dev/null 2>&1
   if [ $? -eq 0 ]; then
+    could_link=yes
     need_atomic=yes
   fi
 fi
 
-rm -f conftest.cpp conftest
+rm -f conftest.cpp conftest.o conftest.so
 
 if [ "$need_atomic" = yes ]; then
-  echo "  adding -latomic" >&2
-  echo "PKG_LIBS += -latomic" > src/Makevars.libatomic
+  if [ "$could_link" != yes ]; then
+    echo "  requested -latomic but could not link test program; continuing without it" >&2
+    : > src/Makevars.libatomic
+  else
+    echo "  using -latomic" >&2
+    echo "PKG_LIBS += -latomic" > src/Makevars.libatomic
+  fi
 else
   echo "  not required" >&2
   : > src/Makevars.libatomic
