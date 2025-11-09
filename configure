@@ -12,11 +12,16 @@ esac
 
 cat > conftest.cpp <<'EOF'
 #include <cstdint>
-extern "C" void probe_compare_exchange(std::uint64_t* p) {
+static void probe_compare_exchange(std::uint64_t* p) {
   std::uint64_t expected = 0;
   const std::uint64_t desired = 1;
   __atomic_compare_exchange_n(p, &expected, desired, false,
                               __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+}
+int main() {
+  std::uint64_t value = 0;
+  probe_compare_exchange(&value);
+  return static_cast<int>(value);
 }
 EOF
 
