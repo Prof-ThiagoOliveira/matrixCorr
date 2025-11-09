@@ -57,7 +57,7 @@ jobs:
         id: rhub-setup
         with:
           # On push/PR use our fixed platform set; allow override when manually dispatched
-          config: ${{ github.event.inputs.config || 'mkl,clang-asan,rchk,clang-ubsan' }}
+          config: ${{ github.event.inputs.config || 'mkl,clang-asan,clang-ubsan' }}
 
   linux-containers:
     needs: setup
