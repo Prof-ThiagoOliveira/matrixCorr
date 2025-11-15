@@ -227,7 +227,8 @@ partial_correlation <- function(data, method = c("oas","ridge","sample"),
   res$lambda <- if (identical(method, "ridge")) lambda else NA_real_
   res$rho    <- if (identical(method, "oas"))   res$rho %||% NA_real_ else NA_real_
   res$jitter <- res$jitter %||% NA_real_
-  class(res) <- c("partial_corr", "list")
+  res <- structure(res, class = c("partial_corr", "list"))
+  attr(res, "method") <- method
   res
 }
 

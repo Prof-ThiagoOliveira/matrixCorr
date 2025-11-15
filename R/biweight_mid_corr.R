@@ -239,17 +239,18 @@ biweight_mid_corr <- function(
 
   # --- names & metadata
   colnames(res) <- rownames(res) <- colnames_data
-  attr(res, "method")      <- "biweight_mid_correlation"
-  attr(res, "description") <- paste0(
+  desc <- paste0(
     "Median/MAD-based biweight mid-correlation (bicor); max_p_outliers = ", max_p_outliers,
     ", MAD = ", if (mad_consistent) "normal-consistent (1.4826 * raw)" else "raw",
     "; fallback = ", pf, "; NA mode = ", na_method, "."
   )
-  attr(res, "package")     <- "matrixCorr"
 
   # --- default: dense matrix with S3 class (original behaviour)
   if (is.null(sparse_threshold)) {
-    class(res) <- c("biweight_mid_corr", "matrix")
+    res <- structure(res, class = c("biweight_mid_corr", "matrix"))
+    attr(res, "method")      <- "biweight_mid_correlation"
+    attr(res, "description") <- desc
+    attr(res, "package")     <- "matrixCorr"
     return(res)
   }
 
@@ -261,9 +262,8 @@ biweight_mid_corr <- function(
 
   res_sparse <- Matrix::Matrix(res, sparse = TRUE)
   # carry metadata; do not overwrite S4 class
-  attr(res_sparse, "method")      <- attr(res, "method")
-  attr(res_sparse, "description") <- paste0(attr(res, "description"),
-                                            " Sparse threshold = ", sparse_threshold, ".")
+  attr(res_sparse, "method")      <- "biweight_mid_correlation"
+  attr(res_sparse, "description") <- paste0(desc, " Sparse threshold = ", sparse_threshold, ".")
   attr(res_sparse, "package")     <- "matrixCorr"
   # Return S4 dsCMatrix with attrs; no S3 class assignment here
   res_sparse

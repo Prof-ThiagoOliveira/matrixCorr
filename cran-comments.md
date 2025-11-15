@@ -1,6 +1,10 @@
-## R CMD check results
+## Resubmission after archive
 
-0 errors | 0 warnings | 1 note
+This is a resubmission of matrixCorr, which was archived on 2025-10-19
+due to check issues.
 
-* This is a new release.
-* Added a runtime guard so the BLAS thread locker is skipped on MKL builds (previous CRAN MKL checks hit a segfault inside the guard before any examples ran). Set `MATRIXCORR_DISABLE_BLAS_GUARD=1` to opt out explicitly.
+Changes since 0.5.1:
+* Fixed a segfault in the `ccc_lmm_reml()` example that appeared on the
+  MKL BLAS additional-issues checks.
+* Simplified the `configure` script to avoid bash-specific `local`
+  declarations and use only POSIX `/bin/sh` features.

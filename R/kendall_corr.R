@@ -120,19 +120,7 @@ kendall_tau <- function(data, y = NULL, check_na = TRUE) {
     }
 
     tau <- kendall_tau2_cpp(as.numeric(data), as.numeric(y))
-
-    nm1 <- deparse(substitute(data))
-    nm2 <- deparse(substitute(y))
-    labs <- c(nm1, nm2)
-    use_names <- all(nzchar(labs)) && !any(labs %in% c("data", "y"))
-
-    out <- matrix(c(1, tau, tau, 1), nrow = 2L,
-                  dimnames = if (use_names) list(labs, labs) else NULL)
-    attr(out, "method")      <- "kendall"
-    attr(out, "description") <- "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
-    attr(out, "package")     <- "matrixCorr"
-    class(out) <- c("kendall_matrix", "matrix")
-    return(out)
+    return(as.numeric(tau))
   }
 
   # Two columns matrix/data.frame
@@ -144,8 +132,8 @@ kendall_tau <- function(data, y = NULL, check_na = TRUE) {
     dn  <- colnames(data)
     out <- matrix(c(1, tau, tau, 1), nrow = 2L,
                   dimnames = if (!is.null(dn)) list(dn, dn) else NULL)
+    out <- structure(out, class = c("kendall_matrix", "matrix"))
     attr(out, "method") <- "kendall"
-    class(out) <- c("kendall_matrix", "matrix")
     return(out)
   }
 
@@ -155,10 +143,10 @@ kendall_tau <- function(data, y = NULL, check_na = TRUE) {
 
   result <- kendall_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
+  result <- structure(result, class = c("kendall_matrix", "matrix"))
   attr(result, "method")      <- "kendall"
   attr(result, "description") <- "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix"
   attr(result, "package")     <- "matrixCorr"
-  class(result) <- c("kendall_matrix", "matrix")
   result
 }
 

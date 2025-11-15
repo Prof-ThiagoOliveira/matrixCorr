@@ -100,14 +100,13 @@ bland_altman <- function(group1,
   # -- compute in C++ ---------------------------------------------------------
   ba_out <- bland_altman_cpp(group1, group2, two, mode, conf_level)
 
+  # keep 'ba' first, and add a friendly alias 'bland_altman' as second class
+  ba_out <- structure(ba_out, class = c("ba", "bland_altman"))
   attr(ba_out, "method")      <- "Bland-Altman"
   attr(ba_out, "description") <- "Mean difference and limits of agreement with CIs"
   attr(ba_out, "package")     <- "matrixCorr"
   attr(ba_out, "conf.level")  <- conf_level
   attr(ba_out, "called.with") <- length(group1)
-
-  # keep 'ba' first, and add a friendly alias 'bland_altman' as second class
-  class(ba_out) <- c("ba", "bland_altman")
   ba_out
 }
 

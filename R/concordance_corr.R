@@ -112,20 +112,20 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
     ccc_lin$upr.ci <- `dimnames<-`(ccc_lin$upr.ci,
                                    list(colnames_data, colnames_data))
 
+    ccc_lin <- structure(ccc_lin, class = c("ccc", "ccc_ci"))   # list with CIs
     attr(ccc_lin, "method") <- "Lin's concordance"
     attr(ccc_lin, "description") <-
       "Pairwise Lin's concordance with confidence intervals"
     attr(ccc_lin, "package") <- "matrixCorr"
-    class(ccc_lin) <- c("ccc", "ccc_ci")   # list with CIs
   } else {
     est <- ccc_cpp(mat)
     ccc_lin <- `dimnames<-`(est, list(colnames_data, colnames_data))
 
+    ccc_lin <- structure(ccc_lin, class = c("ccc", "matrix"))   # matrix printing still available
     attr(ccc_lin, "method") <- "Lin's concordance"
     attr(ccc_lin, "description") <- "Pairwise Lin's concordance correlation matrix"
     attr(ccc_lin, "package") <- "matrixCorr"
     attr(ccc_lin, "conf.level")  <- conf_level
-    class(ccc_lin) <- c("ccc", "matrix")   # matrix printing still available
   }
 
   ccc_lin
@@ -323,12 +323,11 @@ summary.ccc <- function(object,
   }
 
   # carry attrs for printing
+  df <- structure(df, class = c("summary.ccc", "data.frame"))
   attr(df, "conf.level") <- if (is.finite(conf_level)) conf_level else NA_real_
   attr(df, "has_ci")     <- isTRUE(include_ci)
   attr(df, "digits")     <- digits
   attr(df, "ci_digits")  <- ci_digits
-
-  class(df) <- c("summary.ccc", "data.frame")
   df
 }
 

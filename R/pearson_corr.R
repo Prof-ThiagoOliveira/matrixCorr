@@ -107,10 +107,10 @@ pearson_corr <- function(data, check_na = TRUE) {
   colnames_data <- colnames(numeric_data)
   result <- pearson_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
+  result <- structure(result, class = c("pearson_corr", "matrix"))
   attr(result, "method") <- "pearson"
   attr(result, "description") <- "Pairwise Pearson correlation matrix"
   attr(result, "package") <- "matrixCorr"
-  class(result) <- c("pearson_corr", "matrix")
   return(result)
 }
 

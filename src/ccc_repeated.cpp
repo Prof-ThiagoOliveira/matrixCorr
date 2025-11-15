@@ -11,6 +11,7 @@ using namespace Rcpp;
 List cccUst_rcpp(NumericVector y_vec,
                  IntegerVector met_vec,
                  IntegerVector time_vec,
+                 IntegerVector subj_vec,
                  int nmet0,
                  int nmet1,
                  int ntime,
@@ -22,20 +23,41 @@ List cccUst_rcpp(NumericVector y_vec,
   arma::mat D = Rcpp::as<arma::mat>(Dmat);  // Convert once
 
   // Reshape into ns × ntime matrices
-  arma::mat X(ns, ntime), Y(ns, ntime);
-  int idx0 = 0, idx1 = 0;
+  if (y_vec.size() != met_vec.size() ||
+      y_vec.size() != time_vec.size() ||
+      y_vec.size() != subj_vec.size()) {
+    Rcpp::stop("Input vectors must have the same length");
+  }
+
+  arma::mat X(ns, ntime, arma::fill::zeros);
+  arma::mat Y(ns, ntime, arma::fill::zeros);
+  arma::umat seenX(ns, ntime, arma::fill::zeros);
+  arma::umat seenY(ns, ntime, arma::fill::zeros);
+
   for (int i = 0; i < y_vec.size(); ++i) {
     int mi = met_vec[i];
     int ti = time_vec[i];
-    if (mi == nmet0)
-      X(idx0, ti) = y_vec[i];
-    else if (mi == nmet1)
-      Y(idx1, ti) = y_vec[i];
-
-    if (ti == ntime - 1) {
-      if (mi == nmet0) ++idx0;
-      else ++idx1;
+    int si = subj_vec[i];
+    if (ti < 0 || ti >= ntime) {
+      Rcpp::stop("time index out of bounds");
     }
+    if (si < 0 || si >= ns) {
+      Rcpp::stop("subject index out of bounds");
+    }
+    if (mi == nmet0) {
+      if (seenX(si, ti)) Rcpp::stop("duplicate observations for method 0");
+      X(si, ti) = y_vec[i];
+      seenX(si, ti) = 1u;
+    } else if (mi == nmet1) {
+      if (seenY(si, ti)) Rcpp::stop("duplicate observations for method 1");
+      Y(si, ti) = y_vec[i];
+      seenY(si, ti) = 1u;
+    }
+  }
+
+  if (arma::accu(seenX) != static_cast<unsigned int>(ns * ntime) ||
+      arma::accu(seenY) != static_cast<unsigned int>(ns * ntime)) {
+    Rcpp::stop("Missing observations detected for at least one subject/time cell");
   }
 
   arma::vec phi1_rows(ns * (ns - 1));

@@ -33,8 +33,8 @@ bland_altman_repeated_em_ext_cpp <- function(y, subject, method, time, include_s
     .Call(`_matrixCorr_bland_altman_repeated_em_ext_cpp`, y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, two_arg, use_cov_su_se)
 }
 
-cccUst_rcpp <- function(y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl) {
-    .Call(`_matrixCorr_cccUst_rcpp`, y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl)
+cccUst_rcpp <- function(y_vec, met_vec, time_vec, subj_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl) {
+    .Call(`_matrixCorr_cccUst_rcpp`, y_vec, met_vec, time_vec, subj_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl)
 }
 
 set_omp_threads <- function(n) {

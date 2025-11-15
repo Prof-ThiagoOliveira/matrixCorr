@@ -95,10 +95,10 @@ distance_corr <- function(data, check_na = TRUE) {
   dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
   colnames(dcor_matrix) <- rownames(dcor_matrix) <- colnames_data
 
+  dcor_matrix <- structure(dcor_matrix, class = c("distance_corr", "matrix"))
   attr(dcor_matrix, "method") <- "distance_correlation"
   attr(dcor_matrix, "description") <- "Pairwise distance correlation matrix (unbiased)"
   attr(dcor_matrix, "package") <- "matrixCorr"
-  class(dcor_matrix) <- c("distance_corr", "matrix")
   dcor_matrix
 }
 

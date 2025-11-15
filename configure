@@ -39,7 +39,7 @@ compile_object() {
 }
 
 try_link() {
-  local extra_flags="$1"
+  extra_flags="$1"
   "$CXX" $CXXFLAGS $CPPFLAGS conftest.o -shared $LDFLAGS $LD_NO_UNDEF_FLAG $extra_flags -o conftest.so >/dev/null 2>&1
 }
 
@@ -53,7 +53,7 @@ check_symbol_undefined() {
 }
 
 find_clang_atomic() {
-  local libpath=""
+  libpath=""
   libpath=$("$CXX" --print-file-name=libclang_rt.atomic-x86_64.a 2>/dev/null)
   if [ -n "$libpath" ] && [ "$libpath" != "libclang_rt.atomic-x86_64.a" ]; then
     echo "-L$(dirname "$libpath") -lclang_rt.atomic-x86_64"

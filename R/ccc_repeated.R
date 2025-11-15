@@ -15,6 +15,9 @@
 #' @param response Character. Name of the numeric outcome column.
 #' @param method Character. Name of the method column (factor with L
 #' \eqn{\geq} 2 levels).
+#' @param subject Character. Column identifying subjects. Every subject must
+#'   have measurements from all methods (and times, when supplied); rows with
+#'   incomplete {subject, time, method} coverage are dropped per pair.
 #' @param time Character or NULL. Name of the time/repetition column. If NULL,
 #' one time point is assumed.
 #' @param Dmat Optional numeric weight matrix (T \eqn{\times} T) for
@@ -129,13 +132,15 @@
 #' df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
 #'
 #' # CCC matrix (no CIs)
-#' ccc1 <- ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time")
+#' ccc1 <- ccc_pairwise_u_stat(df, response = "y", method = "method",
+#'                             subject = "subject", time = "time")
 #' print(ccc1)
 #' summary(ccc1)
 #' plot(ccc1)
 #'
 #' # With confidence intervals
-#' ccc2 <- ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", ci = TRUE)
+#' ccc2 <- ccc_pairwise_u_stat(df, response = "y", method = "method",
+#'                             subject = "subject", time = "time", ci = TRUE)
 #' print(ccc2)
 #' summary(ccc2)
 #' plot(ccc2)
@@ -144,19 +149,23 @@
 #' # Choosing delta based on distance sensitivity
 #' #------------------------------------------------------------------------
 #' # Absolute distance (L1 norm) - robust
-#' ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 1)
+#' ccc_pairwise_u_stat(df, response = "y", method = "method",
+#'                     subject = "subject", time = "time", delta = 1)
 #'
 #' # Squared distance (L2 norm) - amplifies large deviations
-#' ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 2)
+#' ccc_pairwise_u_stat(df, response = "y", method = "method",
+#'                     subject = "subject", time = "time", delta = 2)
 #'
 #' # Presence/absence of disagreement (like kappa)
-#' ccc_pairwise_u_stat(df, response = "y", method = "method", time = "time", delta = 0)
+#' ccc_pairwise_u_stat(df, response = "y", method = "method",
+#'                     subject = "subject", time = "time", delta = 0)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export
 ccc_pairwise_u_stat <- function(data,
                         response,
                         method,
+                        subject,
                         time = NULL,
                         Dmat = NULL,
                         delta = 1,
@@ -165,26 +174,49 @@ ccc_pairwise_u_stat <- function(data,
                         n_threads = getOption("matrixCorr.threads", 1L),
                         verbose = FALSE) {
   df <- as.data.frame(data)
-  df[[method]] <- factor(df[[method]])
+
+  req_cols <- c(response, method, subject)
+  if (!is.null(time)) req_cols <- c(req_cols, time)
+  missing_cols <- req_cols[!req_cols %in% names(df)]
+  if (length(missing_cols)) {
+    stop(sprintf("Missing required column(s): %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
+  }
+
+  if (!is.numeric(df[[response]])) {
+    stop("`response` must reference a numeric column.", call. = FALSE)
+  }
+  df[[method]]  <- droplevels(factor(df[[method]]))
+  df[[subject]] <- droplevels(factor(df[[subject]]))
   method_levels <- levels(df[[method]])
   L <- length(method_levels)
 
   if (L < 2) stop("Need at least two methods (levels in method)")
 
-  if (is.null(time)) {
-    df$time_i <- 0
-    ntime <- 1
-  } else {
-    df[[time]] <- factor(df[[time]])
-    df$time_i <- as.integer(df[[time]]) - 1
+  if (!is.null(time)) {
+    df[[time]] <- droplevels(factor(df[[time]]))
+    df$time_i <- as.integer(df[[time]]) - 1L
     ntime <- length(levels(df[[time]]))
+  } else {
+    df$time_i <- 0L
+    ntime <- 1L
+  }
+  df$subject_i <- as.integer(df[[subject]]) - 1L
+
+  if (!is.numeric(delta) || length(delta) != 1L || !is.finite(delta) || delta < 0) {
+    stop("`delta` must be a single finite numeric >= 0.", call. = FALSE)
   }
 
   if (is.null(Dmat)) {
     Dmat <- diag(ntime)
   } else {
     Dmat <- as.matrix(Dmat)
+    if (!is.numeric(Dmat) || any(!is.finite(Dmat))) {
+      stop("`Dmat` must be a finite numeric matrix.", call. = FALSE)
+    }
     if (!all(dim(Dmat) == c(ntime, ntime))) stop("Dmat dimension mismatch")
+    if (!isTRUE(all.equal(Dmat, t(Dmat)))) {
+      stop("`Dmat` must be symmetric.", call. = FALSE)
+    }
   }
 
   cccr_est <- matrix(1, L, L, dimnames = list(method_levels, method_levels))
@@ -202,15 +234,40 @@ ccc_pairwise_u_stat <- function(data,
       m2 <- method_levels[j]
 
       df_sub <- df[df[[method]] %in% c(m1, m2), , drop = FALSE]
-      df_sub$met_i <- as.integer(factor(df_sub[[method]], levels = c(m1, m2))) - 1
+      needed <- c(response, method, subject)
+      if (!is.null(time)) needed <- c(needed, time)
+      df_sub <- df_sub[stats::complete.cases(df_sub[, needed, drop = FALSE]), , drop = FALSE]
+      if (!nrow(df_sub)) {
+        stop(sprintf("No complete observations for method pair %s vs %s", m1, m2), call. = FALSE)
+      }
 
-      ns <- nrow(df_sub) / (2 * ntime)
-      if (ns != floor(ns))
-        stop(sprintf("Data inconsistent for method pair %s vs %s", m1, m2))
+      df_sub$met_i <- as.integer(factor(df_sub[[method]], levels = c(m1, m2))) - 1L
+
+      subj_split <- split(df_sub, df_sub$subject_i)
+      if (!length(subj_split)) {
+        stop(sprintf("No subjects available for method pair %s vs %s", m1, m2), call. = FALSE)
+      }
+      complete_subj <- vapply(subj_split, function(subdat) {
+        if (nrow(subdat) != ntime * 2L) return(FALSE)
+        tf <- factor(subdat$time_i, levels = seq_len(ntime) - 1L)
+        mf <- factor(subdat$met_i,  levels = 0:1)
+        tab <- table(tf, mf)
+        all(tab == 1L)
+      }, logical(1))
+      keep_ids <- as.integer(names(subj_split)[complete_subj])
+      if (!length(keep_ids)) {
+        stop(sprintf("All subjects have incomplete {method,time} coverage for %s vs %s", m1, m2), call. = FALSE)
+      }
+
+      df_sub <- df_sub[df_sub$subject_i %in% keep_ids, , drop = FALSE]
+      keep_ids <- sort(unique(df_sub$subject_i))
+      df_sub$subject_pair <- match(df_sub$subject_i, keep_ids) - 1L
+      ns <- length(keep_ids)
 
       res <- cccUst_rcpp(df_sub[[response]],
                          df_sub$met_i,
                          df_sub$time_i,
+                         df_sub$subject_pair,
                          0, 1,
                          ntime, ns,
                          Dmat, delta,
@@ -223,19 +280,19 @@ ccc_pairwise_u_stat <- function(data,
   }
 
   if (ci) {
-    result <- list(est = cccr_est, lwr.ci = cccr_lwr, upr.ci = cccr_upr)
-    attr(result, "method") <- "Repeated-measures Lin's concordance"
-    attr(result, "description") <- "Repeated-measures CCC (pairwise) with confidence intervals"
-    attr(result, "package") <- "matrixCorr"
-    attr(result, "conf.level")  <- conf_level
-    class(result) <- c("ccc", "ccc_ci")
+    result <- structure(list(est = cccr_est, lwr.ci = cccr_lwr, upr.ci = cccr_upr),
+                        class = c("ccc", "ccc_ci"))
   } else {
-    result <- cccr_est
-    attr(result, "method") <- "Repeated-measures Lin's concordance"
-    attr(result, "description") <- "Repeated-measures CCC (pairwise matrix)"
-    attr(result, "package") <- "matrixCorr"
-    class(result) <- c("ccc", "matrix")
+    result <- structure(cccr_est, class = c("ccc", "matrix"))
   }
+  attr(result, "method") <- "Repeated-measures Lin's concordance"
+  attr(result, "description") <- if (ci) {
+    "Repeated-measures CCC (pairwise) with confidence intervals"
+  } else {
+    "Repeated-measures CCC (pairwise matrix)"
+  }
+  attr(result, "package") <- "matrixCorr"
+  if (ci) attr(result, "conf.level") <- conf_level
 
   return(result)
 }
@@ -1712,7 +1769,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   if (isTRUE(ci)) {
     diag(lwr_mat) <- NA_real_
     diag(upr_mat) <- NA_real_
-    out <- list(est = est_mat, lwr.ci = lwr_mat, upr.ci = upr_mat)
+    out <- structure(list(est = est_mat, lwr.ci = lwr_mat, upr.ci = upr_mat),
+                     class = c("ccc_lmm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc"))
     attr(out, "method")      <- "Variance Components REML - pairwise"
     attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
     attr(out, "package")     <- "matrixCorr"
@@ -1734,10 +1792,9 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       attr(out, "use_ar1")      <- ar1_reco_mat
     }
 
-    class(out) <- c("ccc_lmm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc")
     return(out)
   } else {
-    out <- est_mat
+    out <- structure(est_mat, class = c("ccc_lmm_reml", "matrixCorr_ccc", "ccc", "matrix"))
     attr(out, "method")      <- "Variance Components REML - pairwise"
     attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
     attr(out, "package")     <- "matrixCorr"
@@ -1758,7 +1815,6 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       attr(out, "use_ar1")      <- ar1_reco_mat
     }
 
-    class(out) <- c("ccc_lmm_reml", "matrixCorr_ccc", "ccc", "matrix")
     return(out)
   }
 }
@@ -2143,8 +2199,10 @@ summary.ccc_lmm_reml <- function(object,
                                round(ar1_cols$ar1_rho, digits), NA_real_)
   }
   if (!is.null(ar1_cols$ar1_rho_lag1)) {
-    out[["ar1_rho_lag1"]] <- ifelse(is.finite(ar1_cols$ar1_rho_lag1),
-                                    round(ar1_cols$ar1_rho_lag1, digits), NA_real_)
+    vals <- ifelse(is.finite(ar1_cols$ar1_rho_lag1),
+                   round(ar1_cols$ar1_rho_lag1, digits), NA_real_)
+    out[["ar1_rho_lag1"]] <- vals
+    out[["ar1_rho_mom"]]  <- vals  # synonym kept for compatibility/tests
   }
   if (!is.null(ar1_cols$ar1_pairs)) {
     out[["ar1_pairs"]] <- ifelse(is.finite(ar1_cols$ar1_pairs),
@@ -2155,13 +2213,13 @@ summary.ccc_lmm_reml <- function(object,
                                 round(ar1_cols$ar1_pval, digits), NA_real_)
   }
   if (!is.null(ar1_cols$use_ar1)) {
-    out[["use_ar1"]] <- ar1_cols$use_ar1
+    out[["use_ar1"]]        <- ar1_cols$use_ar1
+    out[["ar1_recommend"]]  <- ar1_cols$use_ar1
   }
 
-  class(out) <- c("summary.ccc_lmm_reml", "data.frame")
   attr(out, "conf.level") <- attr(base_summary, "conf.level")
   attr(out, "has_ci")     <- attr(base_summary, "has_ci")
   attr(out, "digits")     <- digits
   attr(out, "ci_digits")  <- ci_digits
-  out
+  structure(out, class = c("summary.ccc_lmm_reml", "data.frame"))
 }

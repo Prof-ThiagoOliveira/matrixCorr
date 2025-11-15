@@ -643,7 +643,7 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     data_long      = data_long,
     mapping        = mapping
   )
-  class(ba_repeated) <- c("ba_repeated_matrix","list")
+  ba_repeated <- structure(ba_repeated, class = c("ba_repeated_matrix","list"))
   attr(ba_repeated, "conf.level") <- conf_level
   ba_repeated
 }
@@ -701,7 +701,7 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     ar1_rho       = if (use_ar1) as.numeric(fit$ar1_rho) else NA_real_,
     ar1_estimated = if (use_ar1) isTRUE(fit$ar1_estimated) else NA
   )
-  class(ba_repeated) <- c("ba_repeated","list")
+  ba_repeated <- structure(ba_repeated, class = c("ba_repeated","list"))
   attr(ba_repeated, "conf.level") <- conf_level
   ba_repeated
 }
@@ -886,8 +886,8 @@ summary.ba_repeated <- function(object,
   ba_repeated$ar1_rho        <- if (isTRUE(object$use_ar1)) round(num_or_na_ba(object$ar1_rho), digits) else NA_real_
   ba_repeated$ar1_estimated  <- if (isTRUE(object$use_ar1)) isTRUE(object$ar1_estimated) else NA
 
+  ba_repeated <- structure(ba_repeated, class = c("summary.ba_repeated","data.frame"))
   attr(ba_repeated, "conf.level") <- cl
-  class(ba_repeated) <- c("summary.ba_repeated","data.frame")
   ba_repeated
 }
 
@@ -943,9 +943,9 @@ summary.ba_repeated_matrix <- function(object,
     }
     rows[[k]] <- row
   }
-  df <- do.call(rbind.data.frame, rows)
+  df <- structure(do.call(rbind.data.frame, rows),
+                  class = c("summary.ba_repeated_matrix", "data.frame"))
   attr(df, "conf.level") <- cl
-  class(df) <- c("summary.ba_repeated_matrix", "data.frame")
   df
 }
 

@@ -81,6 +81,20 @@ test_that("kendall_tau numerics match stats::cor(Kendall)", {
   )
 })
 
+test_that("kendall_tau two-vector mode returns a scalar matching base::cor", {
+  set.seed(456)
+  x <- rnorm(300)
+  y <- -0.4 * x + rnorm(300)
+  kt <- kendall_tau(x, y)
+  expect_type(kt, "double")
+  expect_length(kt, 1L)
+  expect_equal(
+    kt,
+    cor(x, y, method = "kendall"),
+    tolerance = 1e-12
+  )
+})
+
 
 test_that("kendall_tau returns NA when a column is constant", {
   X <- cbind(a = rnorm(20), b = rep(1, 20))

@@ -138,14 +138,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // cccUst_rcpp
-List cccUst_rcpp(NumericVector y_vec, IntegerVector met_vec, IntegerVector time_vec, int nmet0, int nmet1, int ntime, int ns, NumericMatrix Dmat, double delta, double cl);
-RcppExport SEXP _matrixCorr_cccUst_rcpp(SEXP y_vecSEXP, SEXP met_vecSEXP, SEXP time_vecSEXP, SEXP nmet0SEXP, SEXP nmet1SEXP, SEXP ntimeSEXP, SEXP nsSEXP, SEXP DmatSEXP, SEXP deltaSEXP, SEXP clSEXP) {
-BEGIN_RCPP
+List cccUst_rcpp(NumericVector y_vec, IntegerVector met_vec, IntegerVector time_vec, IntegerVector subj_vec, int nmet0, int nmet1, int ntime, int ns, NumericMatrix Dmat, double delta, double cl);
+RcppExport SEXP _matrixCorr_cccUst_rcpp(SEXP y_vecSEXP, SEXP met_vecSEXP, SEXP time_vecSEXP, SEXP subj_vecSEXP, SEXP nmet0SEXP, SEXP nmet1SEXP, SEXP ntimeSEXP, SEXP nsSEXP, SEXP DmatSEXP, SEXP deltaSEXP, SEXP clSEXP) {
+    BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type y_vec(y_vecSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type met_vec(met_vecSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type time_vec(time_vecSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type subj_vec(subj_vecSEXP);
     Rcpp::traits::input_parameter< int >::type nmet0(nmet0SEXP);
     Rcpp::traits::input_parameter< int >::type nmet1(nmet1SEXP);
     Rcpp::traits::input_parameter< int >::type ntime(ntimeSEXP);
@@ -153,9 +154,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type Dmat(DmatSEXP);
     Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
     Rcpp::traits::input_parameter< double >::type cl(clSEXP);
-    rcpp_result_gen = Rcpp::wrap(cccUst_rcpp(y_vec, met_vec, time_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl));
+    rcpp_result_gen = Rcpp::wrap(cccUst_rcpp(y_vec, met_vec, time_vec, subj_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl));
     return rcpp_result_gen;
-END_RCPP
+    END_RCPP
 }
 // set_omp_threads
 void set_omp_threads(const int n);
@@ -465,7 +466,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 5},
     {"_matrixCorr_ba_openmp_threads", (DL_FUNC) &_matrixCorr_ba_openmp_threads, 0},
     {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 12},
-    {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 10},
+    {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 11},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},
     {"_matrixCorr_build_L_Dm_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_cpp, 7},
