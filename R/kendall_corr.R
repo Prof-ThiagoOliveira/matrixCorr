@@ -101,22 +101,21 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 kendall_tau <- function(data, y = NULL, check_na = TRUE) {
-  if (!is.logical(check_na) || length(check_na) != 1L) {
-    stop("`check_na` must be a single logical.", call. = FALSE)
-  }
+  check_bool(check_na)
 
   # Two vectors
   if (!is.null(y)) {
     if (!is.numeric(data) || !is.numeric(y)) {
-      stop("For two-vector mode, both `data` and `y` must be numeric vectors.",
-           call. = FALSE)
+      abort_bad_arg("data",
+        message = "and {.arg y} must be numeric vectors for two-vector mode."
+      )
     }
-    if (length(data) != length(y)) {
-      stop("`data` and `y` must have the same length.", call. = FALSE)
-    }
+    check_same_length(data, y, arg_x = "data", arg_y = "y")
     if (check_na && (any(!is.finite(data)) || any(!is.finite(y)))) {
-      stop("Missing/undefined values detected. Set `check_na = FALSE` to bypass.",
-           call. = FALSE)
+      abort_bad_arg("data",
+        message = "and {.arg y} must be free of NA/NaN/Inf when {.arg check_na} = TRUE.",
+        .hint   = "Set `check_na = FALSE` only if missingness has been handled upstream."
+      )
     }
 
     tau <- kendall_tau2_cpp(as.numeric(data), as.numeric(y))
@@ -227,9 +226,7 @@ plot.kendall_matrix <- function(x, title = "Kendall's Tau correlation heatmap",
                                 mid_color = "white",
                                 value_text_size = 4, ...) {
 
-  if (!inherits(x, "kendall_matrix")) {
-    stop("x must be of class 'kendall_matrix'.")
-  }
+  check_inherits(x, "kendall_matrix")
 
   mat <- as.matrix(x)
   df <- as.data.frame(as.table(mat))

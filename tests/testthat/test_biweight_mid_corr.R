@@ -287,7 +287,7 @@ test_that("mad_consistent=TRUE equals using c_const*1.4826", {
   R1 <- biweight_mid_corr(X, mad_consistent = TRUE,  c_const = 9)
   R2 <- biweight_mid_corr(X, mad_consistent = FALSE, c_const = 9 * 1.4826)
 
-  expect_equal(R1, R2, tolerance = 1e-12, check.attributes = FALSE)
+  expect_equal(R1, R2, tolerance = 1e-12, ignore_attr = TRUE)
 })
 
 

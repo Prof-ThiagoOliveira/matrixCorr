@@ -185,9 +185,7 @@ plot.pearson_corr <-
            low_color = "indianred1", high_color = "steelblue1",
            mid_color = "white", value_text_size = 4, ...) {
 
-  if (!inherits(x, "pearson_corr")) {
-    stop("x must be of class 'pearson_corr'.")
-  }
+  check_inherits(x, "pearson_corr")
 
   mat <- as.matrix(x)
   df <- as.data.frame(as.table(mat))

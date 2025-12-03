@@ -32,8 +32,7 @@
 #' @keywords internal
 #' @name matrixCorr-internal
 validate_corr_input <- function(data, check_na = TRUE) {
-  if (!is.logical(check_na) || length(check_na) != 1L)
-    stop("`check_na` must be a single logical.", call. = FALSE)
+  check_bool(check_na)
   validate_corr_input_cpp(data, check_na)
 }
 

@@ -131,5 +131,6 @@ test_that("errors on invalid inputs", {
   expect_error(bland_altman(letters[1:3], 1:3), "numeric", ignore.case = TRUE)
   expect_error(bland_altman(1:3, 1:3, two = 0), "positive")
   expect_error(bland_altman(1:3, 1:3, mode = 0), "1 or 2")
+
   expect_error(bland_altman(1:3, 1:3, conf_level = 1.5), "in \\(0, 1\\)")
 })

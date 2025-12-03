@@ -163,11 +163,9 @@ plot.distance_corr <-
            low_color = "white", high_color = "steelblue1",
            value_text_size = 4, ...) {
 
-    if (!inherits(x, "distance_corr")) {
-      stop("x must be of class 'distance_corr'.")
-    }
+    check_inherits(x, "distance_corr")
     if (!requireNamespace("ggplot2", quietly = TRUE)) {
-      stop("Package 'ggplot2' is required for plotting.")
+      cli::cli_abort("Package {.pkg ggplot2} is required for plotting.")
     }
 
     mat <- as.matrix(x)

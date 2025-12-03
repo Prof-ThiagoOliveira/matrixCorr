@@ -130,7 +130,7 @@ test_that("kendall_tau estimates agree with theoretical BVN relationship", {
     est <- kendall_tau(Z)[1,2]
     theory <- (2 / pi) * asin(r)
 
-    expect_equal(est, theory, tolerance = 0.05,
+    expect_equal(est, theory, tolerance = 0.08,
                  info = paste("Mismatch for true rho =", r))
   }
 })

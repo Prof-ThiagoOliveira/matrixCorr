@@ -259,9 +259,9 @@ print.partial_correlation <- function(
     max_cols = NULL,
     ...
 ) {
-  stopifnot(inherits(x, "partial_corr"))
+  check_inherits(x, "partial_corr")
   M <- x$pcor
-  if (!is.matrix(M)) stop("`x$pcor` must be a matrix.")
+  check_matrix_dims(M, arg = "x$pcor")
 
   if (isTRUE(show_method)) {
     meth <- if (!is.null(x$method)) as.character(x$method) else NA_character_
@@ -343,12 +343,15 @@ plot.partial_corr <- function(
     reorder   = FALSE,
     ...
 ) {
-  if (!inherits(x, "partial_corr")) stop("x must be of class 'partial_corr'.")
-  if (!requireNamespace("ggplot2", quietly = TRUE))
-    stop("Package 'ggplot2' is required for plotting.")
+  check_inherits(x, "partial_corr")
+  check_bool(mask_diag, arg = "mask_diag")
+  check_bool(reorder,   arg = "reorder")
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    cli::cli_abort("Package {.pkg ggplot2} is required for plotting.")
+  }
 
   M <- x$pcor
-  if (!is.matrix(M)) stop("`x$pcor` must be a matrix.")
+  check_matrix_dims(M, arg = "x$pcor")
 
   # Ensure dimnames for labelling
   if (is.null(colnames(M))) colnames(M) <- paste0("V", seq_len(ncol(M)))

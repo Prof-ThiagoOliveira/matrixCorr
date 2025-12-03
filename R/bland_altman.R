@@ -81,18 +81,30 @@ bland_altman <- function(group1,
                          conf_level = 0.95,
                          verbose = FALSE) {
   # -- validate ---------------------------------------------------------------
-  if (!is.numeric(group1) || !is.numeric(group2))
-    stop("group1 and group2 must be numeric vectors.")
-  if (length(group1) != length(group2))
-    stop("group1 and group2 must have the same length.")
-  if (!is.numeric(two) || length(two) != 1L || two <= 0)
-    stop("'two' must be a positive scalar.")
+  if (!is.numeric(group1) || !is.numeric(group2)) {
+    abort_bad_arg("group1",
+      message = "and {.arg group2} must be numeric vectors."
+    )
+  }
+  check_same_length(group1, group2, arg_x = "group1", arg_y = "group2")
+  if (!is.numeric(two) || length(two) != 1L || !is.finite(two) || two <= 0) {
+    abort_bad_arg("two",
+      message = "`{arg}` must be a positive scalar."
+    )
+  }
+  if (!rlang::is_scalar_integerish(mode) || !(as.integer(mode) %in% c(1L, 2L))) {
+    abort_bad_arg("mode",
+      message = "must be 1 or 2."
+    )
+  }
   mode <- as.integer(mode)
-  if (!mode %in% c(1L, 2L))
-    stop("'mode' must be 1 or 2.")
-  if (!(is.numeric(conf_level) && length(conf_level) == 1L &&
-        conf_level > 0 && conf_level < 1))
-    stop("'conf_level' must be in (0, 1).")
+  if (!is.numeric(conf_level) || length(conf_level) != 1L ||
+      !is.finite(conf_level) || conf_level <= 0 || conf_level >= 1) {
+    abort_bad_arg("conf_level",
+      message = "`conf_level` must be in (0, 1)."
+    )
+  }
+  check_bool(verbose, arg = "verbose")
 
   called.with <- length(group1)
   if (isTRUE(verbose)) cat("Using", ba_openmp_threads(), "OpenMP threads\n")
@@ -118,7 +130,7 @@ bland_altman <- function(group1,
 #' @param ... Unused.
 #' @export
 print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
-  if (!inherits(x, "ba")) stop("Object is not of class 'ba'.")
+  check_inherits(x, "ba")
 
   n   <- as.integer(x$based.on)
   two <- as.numeric(x$two)
@@ -193,7 +205,7 @@ plot.ba <- function(x,
                     smoother    = c("none", "loess", "lm"),
                     symmetrize_y = TRUE,
                     ...) {
-  if (!inherits(x, "ba")) stop("x must be of class 'ba'.")
+  check_inherits(x, "ba")
   smoother <- match.arg(smoother)
 
   means <- as.numeric(x$means)

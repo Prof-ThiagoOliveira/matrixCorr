@@ -168,25 +168,23 @@ biweight_mid_corr <- function(
   na_method <- match.arg(na_method)
 
   # --- checks
-  if (!is.numeric(c_const) || length(c_const) != 1L || !(c_const > 0))
-    stop("`c_const` must be a single positive numeric.", call. = FALSE)
-  if (!is.numeric(max_p_outliers) || length(max_p_outliers) != 1L ||
-      !(max_p_outliers > 0 && max_p_outliers <= 1))
-    stop("`max_p_outliers` must be a single numeric in (0, 1].", call. = FALSE)
-  if (!is.numeric(n_threads) || length(n_threads) != 1L || n_threads < 1)
-    n_threads <- 1L
+  check_scalar_nonneg(c_const, arg = "c_const", strict = TRUE)
+  check_scalar_numeric(max_p_outliers,
+                       arg          = "max_p_outliers",
+                       lower        = 0,
+                       upper        = 1,
+                       closed_lower = FALSE,
+                       closed_upper = TRUE)
+  check_bool(mad_consistent, arg = "mad_consistent")
+  if (!rlang::is_scalar_integerish(n_threads) || n_threads < 1) {
+    abort_bad_arg("n_threads",
+      message = "must be a positive integer."
+    )
+  }
   n_threads <- as.integer(n_threads)
 
-  if (!is.null(w)) {
-    w <- as.numeric(w)
-    if (anyNA(w) || any(w < 0))
-      stop("`w` must be a non-negative numeric vector with no missing values.", call. = FALSE)
-  }
-
   if (!is.null(sparse_threshold)) {
-    if (!is.numeric(sparse_threshold) || length(sparse_threshold) != 1L ||
-        sparse_threshold < 0)
-      stop("`sparse_threshold` must be a single numeric >= 0.", call. = FALSE)
+    check_scalar_nonneg(sparse_threshold, arg = "sparse_threshold", strict = FALSE)
   }
 
   # --- validate/coerce input (allow NA only in pairwise mode)
@@ -196,6 +194,7 @@ biweight_mid_corr <- function(
     validate_corr_input(data, check_na = FALSE)
   }
   colnames_data <- colnames(numeric_data)
+  w <- check_weights(w, n = nrow(numeric_data), arg = "w")
 
   # --- MAD consistency via effective c
   c_eff <- if (isTRUE(mad_consistent)) c_const * 1.4826 else c_const
@@ -299,8 +298,7 @@ print.biweight_mid_corr <- function(x,
                                     width    = getOption("width", 80L),
                                     na_print = "NA",
                                     ...) {
-  if (!inherits(x, "biweight_mid_corr"))
-    stop("x must be of class 'biweight_mid_corr'.")
+  check_inherits(x, "biweight_mid_corr")
 
   # ---- header ----
   cat("Biweight mid-correlation matrix (bicor):\n")
@@ -401,8 +399,7 @@ plot.biweight_mid_corr <- function(
     na_fill = "grey90",
     ...
 ) {
-  if (!inherits(x, "biweight_mid_corr"))
-    stop("x must be of class 'biweight_mid_corr'.")
+  check_inherits(x, "biweight_mid_corr")
 
   reorder  <- match.arg(reorder)
   triangle <- match.arg(triangle)

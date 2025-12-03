@@ -167,7 +167,7 @@ plot.schafer_corr <- function(
     palette = c("diverging", "viridis"),
     ...
 ) {
-  if (!inherits(x, "schafer_corr")) stop("x must be of class 'schafer_corr'.")
+  check_inherits(x, "schafer_corr")
   triangle <- match.arg(triangle)
   palette  <- match.arg(palette)
 
@@ -205,7 +205,7 @@ plot.schafer_corr <- function(
     )
   } else {
     if (!requireNamespace("viridisLite", quietly = TRUE)) {
-      stop("Install 'viridisLite' for palette = 'viridis'.")
+      cli::cli_abort("Package {.pkg viridisLite} is required for {.arg palette} = \"viridis\".")
     }
     fill_scale <- ggplot2::scale_fill_gradientn(
       colours = viridisLite::viridis(256, option = "B"),

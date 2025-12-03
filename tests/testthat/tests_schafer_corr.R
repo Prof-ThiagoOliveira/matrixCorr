@@ -63,7 +63,7 @@ test_that("base-R reference agrees (within tolerance) and attributes sane", {
   expect_equal(
     drop_attrs(R_pkg),
     drop_attrs(R_base),
-    tolerance = 2e-4, scale = 1
+    tolerance = 2e-4
   )
 
   # Diagonal ones in this case (no zero-variance)

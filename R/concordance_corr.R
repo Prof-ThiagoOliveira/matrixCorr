@@ -164,7 +164,9 @@ print.ccc <- function(x,
     lwr <- matrix(NA_real_, nrow(est), ncol(est), dimnames = dimnames(est))
     upr <- lwr
   } else {
-    stop("Invalid object format for class 'ccc'.")
+    abort_bad_arg("x",
+      message = "must be a matrix or a list with elements `est`, `lwr.ci`, and `upr.ci`."
+    )
   }
 
   rn <- rownames(est); cn <- colnames(est)
@@ -269,7 +271,9 @@ summary.ccc <- function(object,
     upr <- lwr
     conf_level <- NA_real_
   } else {
-    stop("Invalid object format for class 'ccc'.")
+    abort_bad_arg("object",
+      message = "must be a matrix or a list with elements `est`, `lwr.ci`, and `upr.ci`."
+    )
   }
 
   # labels (fallback if missing)
@@ -385,8 +389,7 @@ plot.ccc <- function(x,
                      ci_text_size = 3,
                      ...) {
 
-  if (!inherits(x, "ccc"))
-    stop("x must be of class 'ccc'.")
+  check_inherits(x, "ccc")
 
   # --- Build long data with proper alignment by (Var1, Var2) ---
   est_mat <- if (is.list(x) && !is.null(x$est)) x$est else unclass(x)

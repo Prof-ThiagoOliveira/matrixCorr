@@ -28,7 +28,7 @@ ccc_pairwise_u_stat(
 
 \item{subject}{Character. Column identifying subjects. Every subject must
 have measurements from all methods (and times, when supplied); rows with
-incomplete {subject, time, method} coverage are dropped per pair.}
+incomplete \{subject, time, method\} coverage are dropped per pair.}
 
 \item{time}{Character or NULL. Name of the time/repetition column. If NULL,
 one time point is assumed.}

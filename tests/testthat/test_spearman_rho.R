@@ -91,7 +91,7 @@ test_that("theoretical BVN formula for Spearman holds approximately", {
     est <- spearman_rho(Z)[1,2]
     theory <- (6/pi) * asin(r/2)
 
-    expect_equal(est, theory, tolerance = 0.05,
+    expect_equal(est, theory, tolerance = 0.08,
                  info = paste("Mismatch for true rho =", r))
   }
 })

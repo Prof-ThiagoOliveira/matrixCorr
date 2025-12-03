@@ -224,9 +224,7 @@ plot.spearman_rho <-
            low_color = "indianred1", high_color = "steelblue1",
            mid_color = "white", value_text_size = 4, ...) {
 
-  if (!inherits(x, "spearman_rho")) {
-    stop("x must be of class 'spearman_rho'.")
-  }
+  check_inherits(x, "spearman_rho")
 
   mat <- as.matrix(x)
   df <- as.data.frame(as.table(mat))
