@@ -176,12 +176,7 @@ biweight_mid_corr <- function(
                        closed_lower = FALSE,
                        closed_upper = TRUE)
   check_bool(mad_consistent, arg = "mad_consistent")
-  if (!rlang::is_scalar_integerish(n_threads) || n_threads < 1) {
-    abort_bad_arg("n_threads",
-      message = "must be a positive integer."
-    )
-  }
-  n_threads <- as.integer(n_threads)
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
   if (!is.null(sparse_threshold)) {
     check_scalar_nonneg(sparse_threshold, arg = "sparse_threshold", strict = FALSE)

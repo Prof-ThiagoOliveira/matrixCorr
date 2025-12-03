@@ -209,12 +209,7 @@ ccc_pairwise_u_stat <- function(data,
   check_bool(ci, arg = "ci")
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   check_bool(verbose, arg = "verbose")
-  if (!rlang::is_scalar_integerish(n_threads) || n_threads < 1) {
-    abort_bad_arg("n_threads",
-      message = "must be a positive integer."
-    )
-  }
-  n_threads <- as.integer(n_threads)
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
   if (is.null(Dmat)) {
     Dmat <- diag(ntime)
@@ -1072,11 +1067,7 @@ ccc_lmm_reml <- function(data, response, rind,
   ci_mode_int <- switch(ci_mode, raw = 0L, logit = 1L, auto = 2L)
 
   check_bool(interaction, arg = "interaction")
-  if (!rlang::is_scalar_integerish(max_iter) || max_iter < 1) {
-    abort_bad_arg("max_iter",
-      message = "must be a positive integer."
-    )
-  }
+  max_iter <- check_scalar_int_pos(max_iter, arg = "max_iter")
   check_scalar_nonneg(tol, arg = "tol", strict = TRUE)
   check_bool(ci, arg = "ci")
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)

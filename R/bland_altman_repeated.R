@@ -530,12 +530,7 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
   check_bool(verbose, arg = "verbose")
   if (isTRUE(use_ar1)) {
     if (!is.na(ar1_rho)) {
-      if (!is.numeric(ar1_rho) || length(ar1_rho) != 1L || !is.finite(ar1_rho) ||
-          ar1_rho <= -0.999 || ar1_rho >= 0.999) {
-        abort_bad_arg("ar1_rho",
-          message = "`ar1_rho` must be in (-0.999, 0.999)."
-        )
-      }
+      ar1_rho <- check_ar1_rho(ar1_rho, arg = "ar1_rho", bound = 0.999)
     }
   } else {
     ar1_rho <- NA_real_

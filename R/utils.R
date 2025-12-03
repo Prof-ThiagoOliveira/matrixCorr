@@ -10,6 +10,17 @@
 #' @importFrom rlang is_bool is_scalar_integerish is_scalar_character arg_match
 NULL
 
+#' Abort for internal errors (should not happen)
+#' @keywords internal
+abort_internal <- function(message, ...,
+                           .class = character()) {
+  cli::cli_abort(
+    message,
+    ...,
+    class = c(.class, "matrixCorr_error", "matrixCorr_internal_error")
+  )
+}
+
 #' Abort with a standardised argument error
 #' @keywords internal
 abort_bad_arg <- function(arg,
@@ -230,6 +241,18 @@ check_scalar_nonneg <- function(x,
   invisible(x)
 }
 
+#' Check strictly positive scalar integer
+#' @keywords internal
+check_scalar_int_pos <- function(x,
+                                 arg = as.character(substitute(x))) {
+  if (!rlang::is_scalar_integerish(x) || is.na(x) || x <= 0) {
+    abort_bad_arg(arg,
+      message = "must be a positive integer."
+    )
+  }
+  as.integer(x)
+}
+
 #' Check probability in unit interval
 #' @keywords internal
 check_prob_scalar <- function(x,
@@ -245,6 +268,21 @@ check_prob_scalar <- function(x,
                          upper = 1, closed_upper = TRUE)
   }
   invisible(x)
+}
+
+#' Check AR(1) correlation parameter
+#' @keywords internal
+check_ar1_rho <- function(x,
+                          arg = as.character(substitute(x)),
+                          bound = 0.999) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) ||
+      x <= -bound || x >= bound) {
+    abort_bad_arg(arg,
+      message = "`{arg}` must be in (-{bound}, {bound}).",
+      bound = bound
+    )
+  }
+  as.numeric(x)
 }
 
 #' Check weights vector (non-negative, finite, correct length)
