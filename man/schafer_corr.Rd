@@ -132,6 +132,11 @@ mae_shr <- mean(abs(Rshr[off] - Sigma[off]))
 print(c(MAE_raw = mae_raw, MAE_shrunk = mae_shr))
 plot(Rshr, title = "Schafer-Strimmer shrinkage correlation")
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(Rshr)
+}
+
 }
 \references{
 Schafer, J. & Strimmer, K. (2005). A shrinkage approach to large-scale

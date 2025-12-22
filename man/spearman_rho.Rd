@@ -195,6 +195,10 @@ for (i in seq_along(r_target)) {
 }
 cbind(r_target, est = round(est, 3), theory = round(true_corr, 3))
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(sp_X)
+}
 }
 \references{
 Spearman, C. (1904). The proof and measurement of association between

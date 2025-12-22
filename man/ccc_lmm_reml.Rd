@@ -569,6 +569,12 @@ dat_both <- data.frame(y, id, method, time)
 fit_both <- ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
                          vc_select = "auto", verbose = TRUE)
 summary(fit_both)
+plot(fit_both)
+
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(fit_both)
+}
 
 # ====================================================================
 # 2) Subject x TIME variance present (sag > 0) with two methods
@@ -596,6 +602,7 @@ dat_sag <- data.frame(y, id, method, time)
 fit_sag <- ccc_lmm_reml(dat_sag, "y", "id", method = "method", time = "time",
                         vc_select = "auto", verbose = TRUE)
 summary(fit_sag)
+plot(fit_sag)
 
 # ====================================================================
 # 3) BOTH components present: sab > 0 and sag > 0 (2 methods x T times)
@@ -626,6 +633,7 @@ dat_both <- data.frame(y, id, method, time)
 fit_both <- ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
                          vc_select = "auto", verbose = TRUE, ci = TRUE)
 summary(fit_both)
+plot(fit_both)
 
 # If you want to force-include both VCs (skip testing):
 fit_both_forced <-
@@ -633,6 +641,7 @@ fit_both_forced <-
               vc_select = "none", include_subj_method  = TRUE,
               include_subj_time  = TRUE, verbose = TRUE)
 summary(fit_both_forced)
+plot(fit_both_forced)
 
 # ====================================================================
 # 4) D_m choices: time-averaged (default) vs typical visit

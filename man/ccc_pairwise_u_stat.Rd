@@ -165,6 +165,11 @@ print(ccc2)
 summary(ccc2)
 plot(ccc2)
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(ccc2)
+}
+
 #------------------------------------------------------------------------
 # Choosing delta based on distance sensitivity
 #------------------------------------------------------------------------

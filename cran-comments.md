@@ -11,3 +11,4 @@
 * Hardened partial correlation clustering against malformed distances
 * Validated Kendall tau two-column path through shared input checks
 * Locked correlation heatmap scales to [-1, 1] for consistent colour mapping
+* Added interactive Shiny viewer with coverage across all correlation outputs

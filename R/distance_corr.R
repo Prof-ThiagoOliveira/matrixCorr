@@ -85,6 +85,11 @@
 #' D3 <- distance_corr(X3)
 #' print(D3[1:3, 1:3], digits = 2)
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(D)
+#' }
+#'
 #' @author Thiago de paula Oliveira
 #'
 #' @export

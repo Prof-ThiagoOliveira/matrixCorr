@@ -124,6 +124,11 @@
 #'
 #' pc <- partial_correlation(X, method = "oas")
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(pc)
+#' }
+#'
 #' ## True partial correlation from Omega
 #' pcor_true <- -Omega / sqrt(diag(Omega) %o% diag(Omega))
 #' diag(pcor_true) <- 1

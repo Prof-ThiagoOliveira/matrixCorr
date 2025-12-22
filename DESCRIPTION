@@ -36,6 +36,9 @@ Suggests:
     knitr,
     rmarkdown,
     MASS,
+    plotly,
+    shiny,
+    shinyWidgets,
     viridisLite,
     testthat (>= 3.0.0)
 Roxygen: list(markdown = TRUE)

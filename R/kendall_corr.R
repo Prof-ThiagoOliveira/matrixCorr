@@ -97,6 +97,11 @@
 #' print(kt)
 #' plot(kt)
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(kt)
+#' }
+#'
 #' @seealso \code{\link{print.kendall_matrix}}, \code{\link{plot.kendall_matrix}}
 #' @author Thiago de Paula Oliveira
 #' @export

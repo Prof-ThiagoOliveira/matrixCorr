@@ -146,6 +146,11 @@ print(result_mvn)
 summary(result_mvn)
 plot(result_mvn)
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(result_mvn)
+}
+
 }
 \references{
 Lin L (1989). A concordance correlation coefficient to evaluate

@@ -148,6 +148,11 @@ kt <- kendall_tau(tied_df)
 print(kt)
 plot(kt)
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(kt)
+}
+
 }
 \references{
 Kendall, M. G. (1938). A New Measure of Rank Correlation. \emph{Biometrika},

@@ -97,6 +97,11 @@
 #' ## mean absolute error (MAE) of the off-diagonal correlations
 #' mean(abs(Rhat2[off] - Sigma[off]))
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(pr)
+#' }
+#'
 #' @useDynLib matrixCorr, .registration = TRUE
 #' @importFrom Rcpp evalCpp
 #' @seealso \code{\link{print.pearson_corr}}, \code{\link{plot.pearson_corr}}

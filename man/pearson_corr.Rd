@@ -153,6 +153,11 @@ off <- upper.tri(Sigma, diag = FALSE)
 ## mean absolute error (MAE) of the off-diagonal correlations
 mean(abs(Rhat2[off] - Sigma[off]))
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(pr)
+}
+
 }
 \references{
 Pearson, K. (1895). "Notes on regression and inheritance in the case of

@@ -150,6 +150,11 @@
 #'                        pearson_fallback = "hybrid")
 #' print(attr(R, "method"))
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(R)
+#' }
+#'
 #' @author Thiago de Paula Oliveira
 #' @export
 biweight_mid_corr <- function(

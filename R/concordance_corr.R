@@ -81,6 +81,11 @@
 #' summary(result_mvn)
 #' plot(result_mvn)
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(result_mvn)
+#' }
+#'
 #' @importFrom stats var cov cor
 #' @importFrom graphics plot
 #' @importFrom ggplot2 ggplot aes geom_tile geom_text scale_fill_gradient2
