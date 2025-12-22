@@ -271,7 +271,7 @@ biweight_mid_corr <- function(
   res_dense
 }
 
-
+#' @rdname biweight_mid_corr
 #' @export
 diag.biweight_mid_corr <- function(x, ...) {
   base::diag(as.matrix(x), ...)

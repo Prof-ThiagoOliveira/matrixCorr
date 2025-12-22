@@ -253,6 +253,7 @@ partial_correlation <- function(data, method = c("oas","ridge","sample"),
 #' @param ... Further arguments passed to \code{print.matrix()}.
 #' @return Invisibly returns \code{x}.
 #' @method print partial_corr
+#' @importFrom utils capture.output
 #' @export
 print.partial_corr <- function(
     x,

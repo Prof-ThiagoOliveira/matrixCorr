@@ -2,6 +2,7 @@
 % Please edit documentation in R/biweight_mid_corr.R
 \name{biweight_mid_corr}
 \alias{biweight_mid_corr}
+\alias{diag.biweight_mid_corr}
 \alias{print.biweight_mid_corr}
 \alias{plot.biweight_mid_corr}
 \title{Biweight mid-correlation (bicor)}
@@ -17,6 +18,8 @@ biweight_mid_corr(
   sparse_threshold = NULL,
   n_threads = getOption("matrixCorr.threads", 1L)
 )
+
+\method{diag}{biweight_mid_corr}(x, ...)
 
 \method{print}{biweight_mid_corr}(
   x,
