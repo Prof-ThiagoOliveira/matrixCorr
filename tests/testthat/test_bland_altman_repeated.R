@@ -322,3 +322,39 @@ test_that("Input argument validation works", {
     "Column 'NOPE' not found in `data`.", fixed = TRUE
   )
 })
+
+test_that("two-method path requires at least two matched pairs", {
+  dat <- data.frame(
+    y = c(10, 11, 12),
+    subject = c(1L, 1L, 1L),
+    method = factor(c("A", "B", "A"), levels = c("A", "B")),
+    time = c(1L, 1L, 2L),
+    check.names = FALSE
+  )
+
+  expect_error(
+    bland_altman_repeated(dat$y, dat$subject, dat$method, dat$time,
+                          include_slope = FALSE, use_ar1 = FALSE),
+    "at least two subject-time matched pairs",
+    fixed = FALSE
+  )
+})
+
+test_that("pairwise matrix drops contrasts with <2 matched pairs", {
+  dat <- data.frame(
+    y = c(1, 2, 3, 4, 5, 6),
+    subject = c(1L, 1L, 1L, 1L, 1L, 1L),
+    method = factor(c("A", "B", "C", "A", "B", "C"), levels = c("A", "B", "C")),
+    time = c(1L, 1L, 1L, 2L, NA, 2L),
+    check.names = FALSE
+  )
+
+  fit <- bland_altman_repeated(dat$y, dat$subject, dat$method, dat$time,
+                               include_slope = FALSE, use_ar1 = FALSE)
+
+  expect_true(is.na(fit$bias["A", "B"]))
+  expect_equal(fit$n["A", "B"], 1L)
+  expect_true(is.na(fit$sd_loa["A", "B"]))
+  expect_true(is.na(fit$loa_lower["A", "B"]))
+  expect_true(is.na(fit$loa_upper["A", "B"]))
+})

@@ -108,7 +108,16 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
   if (verbose) cat("Using", openmp_threads(), "OpenMP threads\n")
 
   if (ci) {
+    if (nrow(mat) <= 2L) {
+      abort_bad_arg("data",
+        message = "must provide at least three observations per variable when {.arg ci} = TRUE.",
+        .hint   = "Increase the sample size or set ci = FALSE to obtain point estimates only."
+      )
+    }
     ccc_lin <- ccc_with_ci_cpp(mat, conf_level)
+    diag(ccc_lin$est)    <- 1
+    diag(ccc_lin$lwr.ci) <- 1
+    diag(ccc_lin$upr.ci) <- 1
     ccc_lin$est    <- `dimnames<-`(ccc_lin$est,
                                    list(colnames_data, colnames_data))
     ccc_lin$lwr.ci <- `dimnames<-`(ccc_lin$lwr.ci,
@@ -434,7 +443,7 @@ plot.ccc <- function(x,
     ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size) +
     ggplot2::scale_fill_gradient2(
       low = low_color, high = high_color, mid = mid_color,
-      midpoint = 0, limit = c(-1, 1), name = "CCC"
+      midpoint = 0, limits = c(-1, 1), name = "CCC"
     ) +
     ggplot2::coord_fixed() +
     ggplot2::theme_minimal(base_size = 12) +

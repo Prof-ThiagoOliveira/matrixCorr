@@ -160,7 +160,7 @@ plot.schafer_corr <- function(
     title = "Schafer-Strimmer shrinkage correlation",
     cluster = TRUE,
     hclust_method = "complete",
-    triangle = "upper",
+    triangle = c("upper", "lower", "full"),
     show_values = FALSE,
     value_text_limit = 60,
     value_text_size = 3,

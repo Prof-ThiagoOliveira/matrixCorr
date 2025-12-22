@@ -122,23 +122,20 @@ kendall_tau <- function(data, y = NULL, check_na = TRUE) {
     return(as.numeric(tau))
   }
 
-  # Two columns matrix/data.frame
-  if (is.matrix(data) && ncol(data) == 2L) {
-    if (!is.double(data)) storage.mode(data) <- "double"
+  numeric_data  <- validate_corr_input(data, check_na = check_na)
+  colnames_data <- colnames(numeric_data)
+  p <- ncol(numeric_data)
 
-    tau <- kendall_tau2_from_mat_cpp(data)
-
-    dn  <- colnames(data)
-    out <- matrix(c(1, tau, tau, 1), nrow = 2L,
-                  dimnames = if (!is.null(dn)) list(dn, dn) else NULL)
+  if (p == 2L) {
+    tau <- kendall_tau2_from_mat_cpp(numeric_data)
+    out <- matrix(
+      c(1, tau, tau, 1), nrow = 2L,
+      dimnames = if (!is.null(colnames_data)) list(colnames_data, colnames_data) else NULL
+    )
     out <- structure(out, class = c("kendall_matrix", "matrix"))
     attr(out, "method") <- "kendall"
     return(out)
   }
-
-  # General matrix/data.frame path (p >= 3)
-  numeric_data  <- validate_corr_input(data, check_na = check_na)
-  colnames_data <- colnames(numeric_data)
 
   result <- kendall_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
@@ -241,7 +238,7 @@ plot.kendall_matrix <- function(x, title = "Kendall's Tau correlation heatmap",
                        size = value_text_size, color = "black") +
     ggplot2::scale_fill_gradient2(
       low = low_color, high = high_color, mid = mid_color,
-      midpoint = 0, limit = c(-1, 1), name = "Tau"
+      midpoint = 0, limits = c(-1, 1), name = "Tau"
     ) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(

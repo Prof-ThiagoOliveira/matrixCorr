@@ -254,13 +254,27 @@ biweight_mid_corr <- function(
   if (any(idx)) res[idx] <- 0
   diag(res) <- 1
 
-  res_sparse <- Matrix::Matrix(res, sparse = TRUE)
-  # carry metadata; do not overwrite S4 class
-  attr(res_sparse, "method")      <- "biweight_mid_correlation"
-  attr(res_sparse, "description") <- paste0(desc, " Sparse threshold = ", sparse_threshold, ".")
-  attr(res_sparse, "package")     <- "matrixCorr"
-  # Return S4 dsCMatrix with attrs; no S3 class assignment here
-  res_sparse
+  # mark degenerate columns (only diagonal finite) with NA diagonal for sparse reporting
+  degenerate_idx <- which(rowSums(is.finite(res)) <= 1)
+  if (length(degenerate_idx)) {
+    res[cbind(degenerate_idx, degenerate_idx)] <- NA_real_
+  }
+
+  sparse_obj <- Matrix::forceSymmetric(Matrix::Matrix(res, sparse = TRUE), uplo = "U")
+  sparse_info <- list(class = class(sparse_obj), threshold = sparse_threshold)
+  res_dense <- as.matrix(sparse_obj)
+  res_dense <- structure(res_dense, class = c("biweight_mid_corr", "matrix"))
+  attr(res_dense, "method")      <- "biweight_mid_correlation"
+  attr(res_dense, "description") <- paste0(desc, " Sparse threshold = ", sparse_threshold, ".")
+  attr(res_dense, "package")     <- "matrixCorr"
+  attr(res_dense, "sparse_info") <- sparse_info
+  res_dense
+}
+
+
+#' @export
+diag.biweight_mid_corr <- function(x, ...) {
+  base::diag(as.matrix(x), ...)
 }
 
 
@@ -345,7 +359,7 @@ print.biweight_mid_corr <- function(x,
     m2 <- round(m2, digits)
     print(m2, na.print = na_print, ...)
     if (nr > r || nc > c) {
-      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
+      cat(sprintf("omitted: %d rows, %d cols\n", nr - r, nc - c))
     }
   } else {
     print(round(m, digits), na.print = na_print, ...)
@@ -413,12 +427,25 @@ plot.biweight_mid_corr <- function(
 
   # Prepare long format with indices for triangle filtering
   rn <- rownames(mat); cn <- colnames(mat)
-  if (is.null(rn)) rn <- seq_len(nrow(mat))
-  if (is.null(cn)) cn <- seq_len(ncol(mat))
-  df <- as.data.frame(as.table(mat))
-  names(df) <- c("Var1", "Var2", "bicor")
-  df$Var1 <- factor(df$Var1, levels = rev(rn))
-  df$Var2 <- factor(df$Var2, levels = cn)
+  if (is.null(rn)) rn <- seq_len(nrow(mat)) else rn <- as.character(rn)
+  if (is.null(cn)) cn <- seq_len(ncol(mat)) else cn <- as.character(cn)
+  dimnames(mat) <- list(rn, cn)
+
+  idx_r <- rep(rn, each = length(cn))
+  idx_c <- rep(cn, times = length(rn))
+
+  tm <- as.data.frame(as.table(mat), stringsAsFactors = FALSE)
+  names(tm) <- c("Var1", "Var2", "bicor")
+  tm$Var1 <- as.character(tm$Var1)
+  tm$Var2 <- as.character(tm$Var2)
+  miss_r <- is.na(tm$Var1) | tm$Var1 == ""
+  miss_c <- is.na(tm$Var2) | tm$Var2 == ""
+  if (any(miss_r)) tm$Var1[miss_r] <- idx_r[miss_r]
+  if (any(miss_c)) tm$Var2[miss_c] <- idx_c[miss_c]
+
+  df <- tm
+  df$Var1 <- factor(as.character(df$Var1), levels = rev(rn))
+  df$Var2 <- factor(as.character(df$Var2), levels = cn)
 
   # Triangle filtering
   if (triangle != "full") {

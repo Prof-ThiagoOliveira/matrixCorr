@@ -134,3 +134,13 @@ test_that("errors on invalid inputs", {
 
   expect_error(bland_altman(1:3, 1:3, conf_level = 1.5), "in \\(0, 1\\)")
 })
+
+test_that("requires at least two complete pairs", {
+  x <- c(1, NA)
+  y <- c(1, 2)
+  expect_error(
+    bland_altman(x, y),
+    "at least two complete pairs",
+    fixed = FALSE
+  )
+})

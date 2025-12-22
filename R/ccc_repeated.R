@@ -279,6 +279,15 @@ ccc_pairwise_u_stat <- function(data,
         )
       }
 
+      if (length(keep_ids) < 2L) {
+        cli::cli_abort(
+          c(
+            "At least two subjects with complete observations are required for {.val {m1}} vs {.val {m2}}.",
+            "i" = "Provide additional subjects or relax filtering so each retained subject has both methods at all time points."
+          )
+        )
+      }
+
       df_sub <- df_sub[df_sub$subject_i %in% keep_ids, , drop = FALSE]
       keep_ids <- sort(unique(df_sub$subject_i))
       df_sub$subject_pair <- match(df_sub$subject_i, keep_ids) - 1L

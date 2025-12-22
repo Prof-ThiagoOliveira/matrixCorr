@@ -69,3 +69,23 @@ test_that("pearson_corr recovers true correlation in large MVN sample", {
                             "Expected =", rho))
 })
 
+test_that("pearson_corr print/plot methods cover optional arguments", {
+  skip_if_not_installed("ggplot2")
+
+  set.seed(202)
+  X <- matrix(rnorm(60), nrow = 15, ncol = 4)
+  colnames(X) <- paste0("P", seq_len(4))
+  pc <- pearson_corr(X)
+
+  out <- capture.output(print(pc, digits = 3, max_rows = 2, max_cols = 3))
+  expect_true(any(grepl("omitted", out)))
+
+  p <- plot(pc, title = "Pearson plot", low_color = "blue", high_color = "red", mid_color = "white", value_text_size = 3)
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("pearson_corr rejects missing values by default", {
+  X <- cbind(a = c(1, 2, NA, 4), b = c(1, 2, 3, 4))
+  expect_error(pearson_corr(X), "Missing values are not allowed.")
+})
+

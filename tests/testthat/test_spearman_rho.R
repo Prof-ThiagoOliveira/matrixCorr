@@ -95,3 +95,23 @@ test_that("theoretical BVN formula for Spearman holds approximately", {
                  info = paste("Mismatch for true rho =", r))
   }
 })
+
+test_that("spearman_rho print/plot methods cover options", {
+  skip_if_not_installed("ggplot2")
+
+  set.seed(101)
+  X <- matrix(rnorm(40), nrow = 10, ncol = 4)
+  colnames(X) <- paste0("S", seq_len(4))
+  sp <- spearman_rho(X)
+
+  out <- capture.output(print(sp, digits = 3, max_rows = 2, max_cols = 3))
+  expect_true(any(grepl("omitted", out)))
+
+  p <- plot(sp, title = "Spearman plot", low_color = "blue", high_color = "red", mid_color = "white", value_text_size = 3)
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("spearman_rho rejects missing values when check_na = TRUE", {
+  X <- cbind(a = c(1, 2, NA, 4), b = c(1, 2, 3, 4))
+  expect_error(spearman_rho(X), "Missing values are not allowed.")
+})

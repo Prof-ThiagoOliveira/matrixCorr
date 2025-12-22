@@ -59,3 +59,23 @@ test_that("matches expected dCor in AR(1) matrix", {
   # dCor between adjacent variables should be stronger than non-adjacent
   expect_gt(res["V1", "V2"], res["V1", "V3"])
 })
+
+test_that("distance_corr print/plot cover optional parameters", {
+  skip_if_not_installed("ggplot2")
+
+  set.seed(303)
+  X <- matrix(rnorm(60), nrow = 15, ncol = 4)
+  colnames(X) <- paste0("D", seq_len(4))
+  dc <- distance_corr(X)
+
+  out <- capture.output(print(dc, digits = 3, max_rows = 2, max_cols = 3))
+  expect_true(any(grepl("omitted", out)))
+
+  p <- plot(dc, title = "Distance plot", low_color = "white", high_color = "navy", value_text_size = 3)
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("distance_corr rejects missing values by default", {
+  X <- cbind(a = c(1, 2, NA, 4), b = c(1, 2, 3, 4), c = c(1, 2, 3, 4))
+  expect_error(distance_corr(X), "Missing values are not allowed.")
+})

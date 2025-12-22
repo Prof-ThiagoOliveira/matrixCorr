@@ -308,7 +308,7 @@ test_that("max_p_outliers side-cap improves robustness in one-sided outliers", {
   expect_gte(R1["x","y"], R0["x","y"])
 })
 
-test_that("sparse_threshold returns dsCMatrix with zeros below threshold; NAs preserved", {
+test_that("sparse_threshold returns sparse biweight_mid_corr class and preserves metadata", {
   skip_if_not_installed("Matrix")
 
   # Small matrix with modest correlations
@@ -316,12 +316,29 @@ test_that("sparse_threshold returns dsCMatrix with zeros below threshold; NAs pr
   X <- matrix(rnorm(200), 50, 4)
   R  <- biweight_mid_corr(X, sparse_threshold = 0.9)  # most off-diagonals -> 0
 
-  expect_s4_class(R, "ddiMatrix")
+  expect_true(inherits(R, "biweight_mid_corr"))
+  expect_true(grepl("Sparse threshold", attr(R, "description")))
   # diagonal must remain 1
-  expect_equal(as.numeric(Matrix::diag(R)), rep(1, ncol(X)))
+  expect_equal(as.numeric(diag(R)), rep(1, ncol(X)))
   # confirm many structural zeros (at least one)
-  nz  <- Matrix::nnzero(R)
+  nz  <- Matrix::nnzero(Matrix::Matrix(R, sparse = TRUE))
   expect_lt(nz, ncol(X)^2)  # sparsity achieved
+  expect_equal(attr(R, "method"), "biweight_mid_correlation")
+})
+
+test_that("sparse path retains NA diagonals for degenerate columns", {
+  skip_if_not_installed("Matrix")
+
+  M <- cbind(
+    const = rep(1, 6),
+    var   = c(0, 1, 2, 3, 4, 5)
+  )
+
+  R <- biweight_mid_corr(M, pearson_fallback = "none", sparse_threshold = 0.4)
+
+  expect_true(inherits(R, "biweight_mid_corr"))
+  expect_true(any(is.na(diag(R))))
+  expect_true(all(is.na(R["const", ])))
 })
 
 test_that("plot methods do not error and return expected classes", {

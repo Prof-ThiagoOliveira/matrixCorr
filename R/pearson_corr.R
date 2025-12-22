@@ -199,7 +199,7 @@ plot.pearson_corr <-
                        size = value_text_size, color = "black") +
     ggplot2::scale_fill_gradient2(
       low = low_color, high = high_color, mid = mid_color,
-      midpoint = 0, limit = c(-1, 1), name = "Pearson"
+      midpoint = 0, limits = c(-1, 1), name = "Pearson"
     ) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(

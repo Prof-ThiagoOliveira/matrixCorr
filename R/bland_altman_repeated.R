@@ -423,6 +423,19 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
                                   max_iter = 200L, tol = 1e-6,
   verbose = FALSE) {
 
+  # legacy positional signature support: bland_altman_repeated(response, subject, method, time, ...)
+  if (!missing(data) && !inherits(data, "data.frame") && missing(time)) {
+    time <- method
+    method <- subject
+    subject <- response
+    response <- data
+    data <- NULL
+  }
+
+  if (!is.null(data) && !inherits(data, "data.frame")) {
+    data <- as.data.frame(data, stringsAsFactors = FALSE)
+  }
+
   # --- resolve columns if 'data' provided and names given ---
   if (!is.null(data)) {
     if (!inherits(data, "data.frame")) {
@@ -613,6 +626,39 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
       max_iter = max_iter, tol = tol, conf_level = conf_level,
       two_arg = two
     )
+    n_pair <- as.integer(fit$n_pairs)
+    n_mat[j,k] <- n_mat[k,j] <- n_pair
+    if (n_pair < 2L) {
+      bias[j,k]      <- bias[k,j]      <- NA_real_
+      sd_loa[j,k]    <- sd_loa[k,j]    <- NA_real_
+      loa_lower[j,k] <- loa_lower[k,j] <- NA_real_
+      loa_upper[j,k] <- loa_upper[k,j] <- NA_real_
+      width[j,k]     <- width[k,j]     <- NA_real_
+
+      mean_ci_low[j,k]  <- mean_ci_low[k,j]   <- NA_real_
+      mean_ci_high[j,k] <- mean_ci_high[k,j]  <- NA_real_
+      lo_ci_low[j,k]    <- lo_ci_low[k,j]     <- NA_real_
+      lo_ci_high[j,k]   <- lo_ci_high[k,j]    <- NA_real_
+      hi_ci_low[j,k]    <- hi_ci_low[k,j]     <- NA_real_
+      hi_ci_high[j,k]   <- hi_ci_high[k,j]    <- NA_real_
+
+      vc_subject[j,k] <- vc_subject[k,j] <- NA_real_
+      vc_resid[j,k]   <- vc_resid[k,j]   <- NA_real_
+
+      if (!is.null(slope_mat)) {
+        slope_mat[j,k] <- slope_mat[k,j] <- NA_real_
+      }
+      if (isTRUE(use_ar1)) {
+        ar1_rho_mat[j,k] <- ar1_rho_mat[k,j] <- NA_real_
+        ar1_estimated[j,k] <- ar1_estimated[k,j] <- NA
+      }
+
+      inform_if_verbose(
+        "Skipping Bland-Altman pair {.val {lev_j}} vs {.val {lev_k}}: need at least 2 complete subject-time pairs (found {n_pair}).",
+        .verbose = verbose
+      )
+      next
+    }
     comp <- .recompose_pair(fit)
 
     bias[j,k]      <- comp$md;  bias[k,j]      <- -comp$md
@@ -620,7 +666,6 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     loa_lower[j,k] <- comp$lo;  loa_lower[k,j] <- -comp$hi
     loa_upper[j,k] <- comp$hi;  loa_upper[k,j] <- -comp$lo
     width[j,k]     <- comp$hi - comp$lo; width[k,j] <- width[j,k]
-    n_mat[j,k]     <- as.integer(fit$n_pairs); n_mat[k,j] <- n_mat[j,k]
 
     mean_ci_low[j,k]  <- comp$bias_l; mean_ci_low[k,j]  <- -comp$bias_u
     mean_ci_high[j,k] <- comp$bias_u; mean_ci_high[k,j] <- -comp$bias_l
@@ -696,6 +741,13 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     max_iter = max_iter, tol = tol, conf_level = conf_level,
     two_arg = two
   )
+  n_pairs <- as.integer(fit$n_pairs)
+  if (n_pairs < 2L) {
+    abort_bad_arg("response",
+      message = "must provide at least two subject-time matched pairs after removing missing observations; only {n_pairs} available.",
+      n_pairs = n_pairs
+    )
+  }
 
   md  <- as.numeric(fit$bias_mu0)
   sdL <- as.numeric(fit$sd_loa)
@@ -718,7 +770,7 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
   ba_repeated <- list(
     means         = means,
     diffs         = diffs,
-    based.on      = as.integer(fit$n_pairs),
+    based.on      = n_pairs,
     lower.limit   = loa_lower,
     mean.diffs    = md,
     upper.limit   = loa_upper,

@@ -107,6 +107,14 @@ bland_altman <- function(group1,
   check_bool(verbose, arg = "verbose")
 
   called.with <- length(group1)
+  complete_pairs <- !is.na(group1) & !is.na(group2)
+  n_pairs <- sum(complete_pairs)
+  if (n_pairs < 2L) {
+    abort_bad_arg("group1",
+      message = "must provide at least two complete pairs with {.arg group2} after removing missing values (found {n_pairs}).",
+      n_pairs = n_pairs
+    )
+  }
   if (isTRUE(verbose)) cat("Using", ba_openmp_threads(), "OpenMP threads\n")
 
   # -- compute in C++ ---------------------------------------------------------

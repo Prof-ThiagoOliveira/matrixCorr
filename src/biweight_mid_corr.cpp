@@ -85,8 +85,10 @@ arma::mat bicor_matrix_cpp(const arma::mat &X,
     if (!col_valid[j]) {
       R.row(j).fill(arma::datum::nan);
       R.col(j).fill(arma::datum::nan);
+      R(j, j) = 1.0;
+    } else {
+      R(j, j) = 1.0;
     }
-    R(j, j) = 1.0;
   }
   return R;
 }
@@ -204,8 +206,10 @@ arma::mat bicor_matrix_pairwise_cpp(const arma::mat &X,
     if (finite_idx[j].n_elem < 2) {
       R.row(j).fill(arma::datum::nan);
       R.col(j).fill(arma::datum::nan);
+      R(j, j) = 1.0;
+    } else {
+      R(j, j) = 1.0;
     }
-    R(j, j) = 1.0;
   }
   return R;
 }
@@ -260,7 +264,7 @@ arma::mat bicor_matrix_weighted_cpp(const arma::mat &X,
     } else {
       R.row(j).fill(arma::datum::nan);
       R.col(j).fill(arma::datum::nan);
-      R(j, j) = arma::datum::nan;
+      R(j, j) = 1.0;
     }
   }
   return R;
@@ -361,8 +365,10 @@ arma::mat bicor_matrix_weighted_pairwise_cpp(const arma::mat &X,
     if (finite_idx[j].n_elem < 2) {
       R.row(j).fill(arma::datum::nan);
       R.col(j).fill(arma::datum::nan);
+      R(j, j) = 1.0;
+    } else {
+      R(j, j) = 1.0;
     }
-    R(j, j) = 1.0;
   }
   return R;
 }

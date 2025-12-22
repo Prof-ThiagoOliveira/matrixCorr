@@ -114,6 +114,11 @@ using matrixCorr_detail::cov_shrinkage::oas_shrink;
      );
      return out;
    } else {
-     return Rcpp::List::create(Rcpp::Named("pcor") = pcor);
+     return Rcpp::List::create(
+       Rcpp::Named("pcor")   = pcor,
+       Rcpp::Named("lambda") = (method == "ridge" ? lambda : NA_REAL),
+       Rcpp::Named("rho")    = (method == "oas"   ? rho    : NA_REAL),
+       Rcpp::Named("jitter") = jitter
+     );
    }
  }

@@ -29,6 +29,10 @@ List cccUst_rcpp(NumericVector y_vec,
     Rcpp::stop("Input vectors must have the same length");
   }
 
+  if (ns < 2) {
+    Rcpp::stop("At least two subjects are required to compute repeated-measures CCC");
+  }
+
   arma::mat X(ns, ntime, arma::fill::zeros);
   arma::mat Y(ns, ntime, arma::fill::zeros);
   arma::umat seenX(ns, ntime, arma::fill::zeros);
