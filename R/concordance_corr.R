@@ -97,6 +97,10 @@
 #' between two methods of clinical measurement. The Lancet 327: 307-310.
 #' @export
 ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
+  check_bool(ci, arg = "ci")
+  check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  check_bool(verbose, arg = "verbose")
+
   numeric_data <- validate_corr_input(data)
   mat <- as.matrix(numeric_data)
   colnames_data <- colnames(numeric_data)
@@ -117,6 +121,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
     attr(ccc_lin, "description") <-
       "Pairwise Lin's concordance with confidence intervals"
     attr(ccc_lin, "package") <- "matrixCorr"
+    attr(ccc_lin, "conf.level") <- conf_level
   } else {
     est <- ccc_cpp(mat)
     ccc_lin <- `dimnames<-`(est, list(colnames_data, colnames_data))

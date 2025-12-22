@@ -202,6 +202,9 @@
 partial_correlation <- function(data, method = c("oas","ridge","sample"),
                                 lambda = 1e-3, return_cov_precision = FALSE) {
   method <- match.arg(method)
+  lambda <- check_scalar_numeric(lambda, arg = "lambda", lower = 0, closed_lower = TRUE)
+  lambda <- as.numeric(lambda)
+  check_bool(return_cov_precision, arg = "return_cov_precision")
 
   numeric_data <-
     if (is.matrix(data) && is.double(data) && all(is.finite(data))) {

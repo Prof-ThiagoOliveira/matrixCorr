@@ -229,6 +229,12 @@ ccc_pairwise_u_stat <- function(data,
   cccr_upr <- matrix(NA_real_, L, L, dimnames = list(method_levels, method_levels))
 
   n_threads <- max(1L, as.integer(n_threads))
+  prev_threads <- get_omp_threads()
+  on.exit({
+    if (!is.null(prev_threads) && is.finite(prev_threads) && prev_threads > 0L) {
+      set_omp_threads(as.integer(prev_threads))
+    }
+  }, add = TRUE)
   set_omp_threads(n_threads)
   if (verbose) cat("Using", get_omp_threads(), "OpenMP threads\n")
 
