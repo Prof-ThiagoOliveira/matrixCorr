@@ -109,6 +109,8 @@ test_that("spearman_rho print/plot methods cover options", {
 
   p <- plot(sp, title = "Spearman plot", low_color = "blue", high_color = "red", mid_color = "white", value_text_size = 3)
   expect_s3_class(p, "ggplot")
+  scale <- p$scales$get_scales("fill")
+  expect_equal(scale$limits, c(-1, 1))
 })
 
 test_that("spearman_rho rejects missing values when check_na = TRUE", {

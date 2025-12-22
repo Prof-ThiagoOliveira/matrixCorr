@@ -2,7 +2,7 @@
 % Please edit documentation in R/partial_correlation.R
 \name{partial_correlation}
 \alias{partial_correlation}
-\alias{print.partial_correlation}
+\alias{print.partial_corr}
 \alias{plot.partial_corr}
 \title{Partial correlation matrix (sample / ridge / OAS)}
 \usage{
@@ -13,7 +13,7 @@ partial_correlation(
   return_cov_precision = FALSE
 )
 
-\method{print}{partial_correlation}(x, digits = 3, show_method = TRUE, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{partial_corr}(x, digits = 3, show_method = TRUE, max_rows = NULL, max_cols = NULL, ...)
 
 \method{plot}{partial_corr}(
   x,

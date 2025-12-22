@@ -117,6 +117,11 @@ test_that("kendall_tau matches base::cor on a known toy dataset", {
                tolerance = 1e-12)
 })
 
+test_that("kendall_tau rejects NA input in two-column mode", {
+  X <- cbind(a = c(1, 2, NA, 4), b = c(0, 1, 2, 3))
+  expect_error(kendall_tau(X), "Missing values are not allowed.")
+})
+
 test_that("kendall_tau estimates agree with theoretical BVN relationship", {
   # For BVN, tau = (2/pi) * arcsin(r)
   set.seed(321)

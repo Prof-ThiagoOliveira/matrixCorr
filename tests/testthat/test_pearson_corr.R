@@ -82,6 +82,8 @@ test_that("pearson_corr print/plot methods cover optional arguments", {
 
   p <- plot(pc, title = "Pearson plot", low_color = "blue", high_color = "red", mid_color = "white", value_text_size = 3)
   expect_s3_class(p, "ggplot")
+  scale <- p$scales$get_scales("fill")
+  expect_equal(scale$limits, c(-1, 1))
 })
 
 test_that("pearson_corr rejects missing values by default", {
