@@ -17,9 +17,9 @@
 #' @details This helper lives in `Suggests`; it requires the `shiny` and
 #'   `shinyWidgets` packages at runtime and will optionally convert the plot to
 #'   an interactive widget when `plotly` is installed. Variable selection uses
-#'   a searchable picker, while clustering mirrors the package heatmap methods
-#'   (complete-linkage on `1 - |r|` for signed matrices or `1 - r` for
-#'   non-negative ones).
+#'   a searchable picker, and clustering controls let you reorder variables via
+#'   hierarchical clustering on either absolute or signed correlations with a
+#'   choice of linkage methods.
 #'
 #' @importFrom rlang .data
 #' @examples
@@ -90,11 +90,35 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
         ),
         shiny::checkboxInput("use_abs", "Colour by absolute value", value = FALSE),
         shiny::checkboxInput("mask_diag", "Hide diagonal", value = FALSE),
-        shiny::checkboxInput("reorder", "Reorder by hierarchical clustering", value = FALSE),
+        shiny::selectInput(
+          inputId = "cluster_mode",
+          label = "Cluster variables",
+          choices = c(
+            "None" = "none",
+            "Absolute correlation (|r|)" = "abs",
+            "Signed correlation (r)" = "signed"
+          ),
+          selected = "none"
+        ),
+        shiny::conditionalPanel(
+          condition = "input.cluster_mode !== 'none'",
+          shiny::selectInput(
+            inputId = "cluster_method",
+            label = "Linkage method",
+            choices = c(
+              "Complete" = "complete",
+              "Average" = "average",
+              "Single" = "single",
+              "Ward (D2)" = "ward.D2"
+            ),
+            selected = "complete"
+          )
+        ),
         shiny::checkboxInput("show_values", "Show cell labels", value = TRUE)
       ),
       shiny::mainPanel(
         plot_widget,
+        shiny::uiOutput("cluster_alert"),
         shiny::htmlOutput("meta")
       )
     )
@@ -110,8 +134,7 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
         choices = vars,
         selected = .mc_default_vars(info$matrix, default_max_vars)
       )
-      rng <- if (info$signed) c(0, 1) else c(0, 1)
-      shiny::updateSliderInput(session, "threshold", min = rng[[1L]], max = rng[[2L]])
+      shiny::updateSliderInput(session, "threshold", min = 0, max = 1, value = min(input$threshold %||% 0, 1))
     }, ignoreNULL = FALSE)
 
     current_matrix <- shiny::reactive({
@@ -127,8 +150,31 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
       vars <- intersect(vars, colnames(info$matrix))
       shiny::validate(shiny::need(length(vars) >= 2L, "Select at least two variables."))
       M <- info$matrix[vars, vars, drop = FALSE]
-      if (isTRUE(input$reorder) && nrow(M) > 2L) {
-        M <- .mc_reorder_matrix(M, signed = info$signed)
+      diag_map <- diag(M)
+      if (!is.null(colnames(M))) names(diag_map) <- colnames(M)
+      cluster_mode <- input$cluster_mode %||% "none"
+      cluster_method <- input$cluster_method %||% "complete"
+      cluster_message <- NULL
+      if (!identical(cluster_mode, "none")) {
+        if (nrow(M) < 3L) {
+          cluster_message <- "Clustering requires at least three variables."
+        } else {
+          res <- .mc_reorder_matrix(
+            M,
+            mode = cluster_mode,
+            method = cluster_method
+          )
+          M <- res$matrix
+          if (length(diag_map)) {
+            if (!is.null(res$order)) {
+              diag_map <- diag_map[res$order]
+            }
+            if (!is.null(colnames(M))) {
+              names(diag_map) <- colnames(M)
+            }
+          }
+          cluster_message <- res$message
+        }
       }
       thr <- input$threshold %||% 0
       if (thr > 0) {
@@ -137,8 +183,14 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
       }
       if (isTRUE(input$mask_diag)) {
         diag(M) <- NA_real_
+      } else if (length(diag_map)) {
+        if (!is.null(colnames(M))) {
+          diag(M) <- diag_map[colnames(M)]
+        } else {
+          diag(M) <- diag_map
+        }
       }
-      list(matrix = M, meta = info)
+      list(matrix = M, meta = info, cluster_message = cluster_message)
     })
 
     output$meta <- shiny::renderUI({
@@ -148,6 +200,18 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
         "<b>%s</b><br/>Class: %s<br/>Variables: %d<br/>Signed: %s", 
         info$label, info$class, dims[[1L]], if (info$signed) "yes" else "no"
       ))
+    })
+
+    output$cluster_alert <- shiny::renderUI({
+      msg <- filtered_matrix()$cluster_message
+      if (is.null(msg) || identical(msg, "")) {
+        return(NULL)
+      }
+      shiny::div(
+        class = "alert alert-warning",
+        style = "margin-top: 10px;",
+        msg
+      )
     })
 
     plot_data <- shiny::reactive({
@@ -250,20 +314,59 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   )
 }
 
-.mc_reorder_matrix <- function(mat, signed) {
-  dist_mat <- if (signed) 1 - pmin(1, abs(mat)) else 1 - pmin(1, mat)
+.mc_reorder_matrix <- function(mat, mode = c("abs", "signed"), method = "complete") {
+  mode <- match.arg(mode, c("abs", "signed"))
+  allowed_methods <- c(
+    complete = "complete",
+    average  = "average",
+    single   = "single",
+    ward.d   = "ward.D",
+    ward.d2  = "ward.D2",
+    mcquitty = "mcquitty",
+    median   = "median",
+    centroid = "centroid"
+  )
+  method_key <- match.arg(tolower(method), names(allowed_methods))
+  method <- allowed_methods[[method_key]]
+
+  base_mat <- pmax(pmin(mat, 1), -1)
+  dist_mat <- switch(
+    mode,
+    abs = 1 - abs(base_mat),
+    signed = 0.5 * (1 - base_mat)
+  )
   dist_mat <- (dist_mat + t(dist_mat)) / 2
+  dist_mat[dist_mat < 0] <- 0
+  dist_mat[dist_mat > 1] <- 1
   diag(dist_mat) <- 0
-  dist_mat[!is.finite(dist_mat)] <- 0
+  dist_mat[!is.finite(dist_mat)] <- 1
+
   dist_obj <- try(suppressWarnings(stats::as.dist(dist_mat)), silent = TRUE)
   if (inherits(dist_obj, "try-error") || is.null(dist_obj)) {
-    return(mat)
+    return(list(
+      matrix = mat,
+      message = "Unable to compute a distance matrix for clustering.",
+      order = seq_len(nrow(mat))
+    ))
   }
-  ord <- try(stats::hclust(dist_obj, method = "complete")$order, silent = TRUE)
-  if (inherits(ord, "try-error")) {
-    return(mat)
+
+  hc <- try(stats::hclust(dist_obj, method = method), silent = TRUE)
+  if (inherits(hc, "try-error")) {
+    cond <- attr(hc, "condition")
+    msg <- if (inherits(cond, "condition")) {
+      conditionMessage(cond)
+    } else {
+      as.character(hc)
+    }
+    return(list(
+      matrix = mat,
+      message = paste("Clustering failed:", msg),
+      order = seq_len(nrow(mat))
+    ))
   }
-  mat[ord, ord, drop = FALSE]
+
+  ord <- hc$order
+  list(matrix = mat[ord, ord, drop = FALSE], message = NULL, order = ord)
 }
 
 .mc_build_heatmap <- function(mat, signed, show_values, use_abs, use_plotly) {
@@ -273,9 +376,20 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   } else {
     plot_mat <- mat
   }
+  row_levels <- rownames(plot_mat)
+  if (is.null(row_levels)) {
+    row_levels <- sprintf("V%02d", seq_len(nrow(plot_mat)))
+    rownames(plot_mat) <- row_levels
+  }
+  col_levels <- colnames(plot_mat)
+  if (is.null(col_levels)) {
+    col_levels <- sprintf("V%02d", seq_len(ncol(plot_mat)))
+    colnames(plot_mat) <- col_levels
+  }
   df <- as.data.frame(as.table(plot_mat), stringsAsFactors = FALSE)
   names(df) <- c("Var1", "Var2", "Value")
-  df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
+  df$Var1 <- factor(df$Var1, levels = rev(row_levels))
+  df$Var2 <- factor(df$Var2, levels = col_levels)
   fill_scale <- if (signed) {
     ggplot2::scale_fill_gradient2(
       low = "indianred1",

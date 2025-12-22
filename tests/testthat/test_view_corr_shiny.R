@@ -40,11 +40,21 @@ test_that("heatmap helper returns ggplot when plotly missing", {
   expect_s3_class(p, "ggplot")
 })
 
-test_that("matrix reorder helper is stable", {
+test_that("matrix reorder helper handles absolute and signed modes", {
   mat <- matrix(c(1, 0.2, 0.8,
                   0.2, 1, 0.3,
                   0.8, 0.3, 1), nrow = 3, byrow = TRUE)
-  ord <- matrixCorr:::`.mc_reorder_matrix`(mat, signed = TRUE)
-  expect_equal(dim(ord), dim(mat))
-  expect_true(isSymmetric(ord, tol = 1e-12))
+  res_abs <- matrixCorr:::`.mc_reorder_matrix`(mat, mode = "abs", method = "complete")
+  expect_null(res_abs$message)
+  expect_equal(dim(res_abs$matrix), dim(mat))
+  expect_true(isSymmetric(res_abs$matrix, tol = 1e-12))
+  expect_equal(diag(res_abs$matrix), diag(mat)[res_abs$order])
+  expect_equal(sort(res_abs$order), seq_len(nrow(mat)))
+
+  res_signed <- matrixCorr:::`.mc_reorder_matrix`(mat, mode = "signed", method = "average")
+  expect_null(res_signed$message)
+  expect_equal(dim(res_signed$matrix), dim(mat))
+  expect_true(isSymmetric(res_signed$matrix, tol = 1e-12))
+  expect_equal(diag(res_signed$matrix), diag(mat)[res_signed$order])
+  expect_equal(sort(res_signed$order), seq_len(nrow(mat)))
 })

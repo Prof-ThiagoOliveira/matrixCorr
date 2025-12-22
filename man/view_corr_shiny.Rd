@@ -32,9 +32,9 @@ offers a picker to switch between results.
 This helper lives in \code{Suggests}; it requires the \code{shiny} and
 \code{shinyWidgets} packages at runtime and will optionally convert the plot to
 an interactive widget when \code{plotly} is installed. Variable selection uses
-a searchable picker, while clustering mirrors the package heatmap methods
-(complete-linkage on \verb{1 - |r|} for signed matrices or \code{1 - r} for
-non-negative ones).
+a searchable picker, and clustering controls let you reorder variables via
+hierarchical clustering on either absolute or signed correlations with a
+choice of linkage methods.
 }
 \examples{
 if (interactive()) {
