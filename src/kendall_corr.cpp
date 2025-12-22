@@ -37,10 +37,21 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
   }
 
   // --- Discretise once per column for p >= 3 (matrix path)
-  const double scale = 1e8;
   std::vector< std::vector<long long> > cols(p, std::vector<long long>(n));
   for (int j = 0; j < p; ++j) {
     const double* cj = &mat(0, j);
+    double max_abs = 0.0;
+    for (int i = 0; i < n; ++i)
+      max_abs = std::max(max_abs, std::abs(cj[i]));
+
+    double scale = 1e8;
+    if (max_abs > 0.0) {
+      const double max_ll = static_cast<double>(std::numeric_limits<long long>::max()) / 4.0;
+      double safe_scale = std::floor(max_ll / max_abs);
+      if (!std::isfinite(safe_scale) || safe_scale < 1.0) safe_scale = 1.0;
+      scale = std::min(1e8, safe_scale);
+    }
+
     for (int i = 0; i < n; ++i)
       cols[j][i] = static_cast<long long>(std::floor(cj[i] * scale));
   }

@@ -47,20 +47,19 @@ using matrixCorr_detail::cov_shrinkage::oas_shrink;
    arma::mat XtX = crossprod_no_copy(X);
    subtract_n_outer_mu(XtX, mu, static_cast<double>(n));
 
-   // Two scalings of covariance (MLE and unbiased)
-   arma::mat cov_mle      = XtX / static_cast<double>(n);
-   arma::mat cov_unbiased = XtX / static_cast<double>(n - 1);
-
-   // Choose estimator for Sigma
    arma::mat Sigma;
    double rho = NA_REAL;         // OAS shrinkage weight (if used)
-   if (method == "sample") {
-     Sigma = std::move(cov_unbiased);
-   } else if (method == "ridge") {
-     Sigma = std::move(cov_unbiased);
-     if (lambda < 0.0) Rcpp::stop("lambda must be non-negative.");
-     if (lambda > 0.0) Sigma.diag() += lambda;
+   if (method == "sample" || method == "ridge") {
+     const double inv_unbiased = 1.0 / static_cast<double>(n - 1);
+     XtX *= inv_unbiased;
+     Sigma = std::move(XtX);
+     if (method == "ridge") {
+       if (lambda < 0.0) Rcpp::stop("lambda must be non-negative.");
+       if (lambda > 0.0) Sigma.diag() += lambda;
+     }
    } else if (method == "oas") {
+     arma::mat cov_mle = XtX;
+     cov_mle *= 1.0 / static_cast<double>(n);
      Sigma = oas_shrink(cov_mle, static_cast<double>(n), rho);
    } else {
      Rcpp::stop("Unknown method: '%s' (use 'sample', 'ridge', or 'oas').", method.c_str());

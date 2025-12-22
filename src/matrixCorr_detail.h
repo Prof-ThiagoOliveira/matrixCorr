@@ -644,12 +644,17 @@ inline void col_means_vars_pop(const arma::mat& X,
 
 
 // Population covariance via manual loop (matches ccc_cpp evaluation route)
-inline double cov_xy_pop_manual(const arma::vec& x, const arma::vec& y,
+inline double cov_xy_pop_manual(const double* x, const double* y,
+                                const arma::uword n,
                                 double mean_x, double mean_y) {
-  const arma::uword n = x.n_elem;
   double s = 0.0;
   for (arma::uword k = 0; k < n; ++k) s += (x[k] - mean_x) * (y[k] - mean_y);
   return s / static_cast<double>(n);
+}
+
+inline double cov_xy_pop_manual(const arma::vec& x, const arma::vec& y,
+                                double mean_x, double mean_y) {
+  return cov_xy_pop_manual(x.memptr(), y.memptr(), x.n_elem, mean_x, mean_y);
 }
 
 // Population covariance from arma::cov (unbiased) scaled to population

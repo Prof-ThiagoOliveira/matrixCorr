@@ -4,6 +4,7 @@
 // [[Rcpp::plugins(openmp)]]
 #include <RcppArmadillo.h>
 #include <cmath>
+#include <vector>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -15,48 +16,49 @@ double ustat_dcor(const arma::vec& x, const arma::vec& y) {
   const int n = x.n_elem;
   if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased dCor");
 
-  arma::mat Dx(n, n, arma::fill::zeros);
-  arma::mat Dy(n, n, arma::fill::zeros);
+  static thread_local std::vector<double> Rx_buf;
+  static thread_local std::vector<double> Ry_buf;
+  Rx_buf.assign(static_cast<std::size_t>(n), 0.0);
+  Ry_buf.assign(static_cast<std::size_t>(n), 0.0);
 
-  // pairwise distances
+  double Sx = 0.0, Sy = 0.0;
   for (int i = 0; i < n; ++i) {
+    const double xi = x[i];
+    const double yi = y[i];
     for (int j = i + 1; j < n; ++j) {
-      const double dx = std::abs(x[i] - x[j]);
-      const double dy = std::abs(y[i] - y[j]);
-      Dx(i, j) = Dx(j, i) = dx;
-      Dy(i, j) = Dy(j, i) = dy;
+      const double dx = std::abs(xi - x[j]);
+      const double dy = std::abs(yi - y[j]);
+      Rx_buf[static_cast<std::size_t>(i)] += dx;
+      Rx_buf[static_cast<std::size_t>(j)] += dx;
+      Ry_buf[static_cast<std::size_t>(i)] += dy;
+      Ry_buf[static_cast<std::size_t>(j)] += dy;
+      Sx += 2.0 * dx;
+      Sy += 2.0 * dy;
     }
   }
 
-  // row sums and grand sums
-  const arma::vec Rx = arma::sum(Dx, 1);
-  const arma::vec Ry = arma::sum(Dy, 1);
-  const double Sx = arma::accu(Dx);
-  const double Sy = arma::accu(Dy);
+  const double inv_nm2 = 1.0 / static_cast<double>(n - 2);
+  const double add_x = Sx / static_cast<double>((n - 1) * (n - 2));
+  const double add_y = Sy / static_cast<double>((n - 1) * (n - 2));
 
-  // unbiased inner product
   double XY = 0.0, X2 = 0.0, Y2 = 0.0;
-
-  const double inv_nm2 = 1.0 / ( (double)(n - 2) );
-  const double add_x = Sx / ( (double)( (n - 1) * (n - 2) ) );
-  const double add_y = Sy / ( (double)( (n - 1) * (n - 2) ) );
-
   for (int i = 0; i < n; ++i) {
-    const double rxi = Rx[i];
-    const double ryi = Ry[i];
+    const double rxi = Rx_buf[static_cast<std::size_t>(i)];
+    const double ryi = Ry_buf[static_cast<std::size_t>(i)];
+    const double xi = x[i];
+    const double yi = y[i];
     for (int j = i + 1; j < n; ++j) {
-      // U-centering for the (i,j) off-diagonal element
-      const double ax = Dx(i, j) - (rxi + Rx[j]) * inv_nm2 + add_x;
-      const double ay = Dy(i, j) - (ryi + Ry[j]) * inv_nm2 + add_y;
-
+      const double dx = std::abs(xi - x[j]);
+      const double dy = std::abs(yi - y[j]);
+      const double ax = dx - (rxi + Rx_buf[static_cast<std::size_t>(j)]) * inv_nm2 + add_x;
+      const double ay = dy - (ryi + Ry_buf[static_cast<std::size_t>(j)]) * inv_nm2 + add_y;
       XY += ax * ay;
       X2 += ax * ax;
       Y2 += ay * ay;
     }
   }
 
-  // unbiased scaling 2 / (n * (n - 3))
-  const double scale = 2.0 / ( (double) n * (double)(n - 3) );
+  const double scale = 2.0 / (static_cast<double>(n) * static_cast<double>(n - 3));
   XY *= scale;
   X2 *= scale;
   Y2 *= scale;
@@ -65,12 +67,9 @@ double ustat_dcor(const arma::vec& x, const arma::vec& y) {
 
   const double denom = std::sqrt(X2 * Y2);
   double dcor = XY / denom;
-
-  // numerical clamp into [0, 1]
   if (!std::isfinite(dcor)) return NA_REAL;
   if (dcor < 0.0) dcor = 0.0;
   if (dcor > 1.0) dcor = 1.0;
-
   return dcor;
 }
 
