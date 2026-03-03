@@ -108,6 +108,10 @@ R_dcor <- distance_corr(X)
 print(R_dcor, digits = 2)
 ```
 
+`distance_corr()` uses an unbiased estimator with a fast univariate
+\(O(n \log n)\) dispatch and an exact \(O(n^2)\) fallback for
+robustness.
+
 ## Agreement analyses
 
 ### Two-method Bland–Altman

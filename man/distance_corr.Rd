@@ -96,12 +96,15 @@ The unbiased distance correlation is
 \strong{Computation.} All heavy lifting (distance matrices, U-centering,
 and unbiased scaling) is implemented in C++ (\code{ustat_dcor_matrix_cpp}), so
 the R wrapper only validates/coerces the input. OpenMP parallelises the
-upper-triangular loops.
+upper-triangular loops. The implementation includes a Huo-Szekely style
+univariate \eqn{O(n \log n)} dispatch for pairwise terms. We also have an exact
+unbiased \eqn{O(n^2)} fallback retained for robustness in small-sample or
+non-finite-path cases; no external dependencies are used.
 }
 \note{
 Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance
-variance yield \code{NA} in their row/column. Computation is \eqn{O(n^2)} per
-pair.
+variance yield \code{NA} in their row/column. Typical per-pair cost uses
+the \eqn{O(n \log n)} fast path, with \eqn{O(n^2)} fallback when needed.
 }
 \examples{
 ##Independent variables -> dCor ~ 0

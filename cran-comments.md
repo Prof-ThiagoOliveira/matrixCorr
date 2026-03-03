@@ -12,3 +12,11 @@
 * Validated Kendall tau two-column path through shared input checks
 * Locked correlation heatmap scales to [-1, 1] for consistent colour mapping
 * Added interactive Shiny viewer with coverage across all correlation outputs
+* Implemented a fast univariate O(n log n) dispatch for distance correlation
+  with an exact unbiased O(n^2) fallback path for robustness
+* Removed per-pair column-copy overhead in distance-correlation C++ kernels and
+  tuned OpenMP scheduling for uniform upper-triangle workloads
+* Verified distance-correlation before/after numerical equivalence on fixed-seed
+  workloads; outputs match to floating-point tolerance
+* Confirmed no new package dependency was introduced for the distance-correlation
+  acceleration path (all changes are internal C++/R code)
