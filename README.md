@@ -21,6 +21,12 @@ Performance-critical paths are implemented in C++ with BLAS/OpenMP and
 memory-aware symmetric updates. The API accepts base matrices and data
 frames and returns standard R objects via a consistent S3 interface.
 
+Contributions from other researchers who want to add new correlation
+methods are very welcome. A central goal of `matrixCorr` is to keep
+efficient correlation and agreement estimation in one package with a
+common interface and consistent outputs, so methods can be extended,
+compared, and used without repeated translation across packages.
+
 Supported measures include Pearson, Spearman, Kendall, distance
 correlation, partial correlation, and robust biweight mid-correlation;
 agreement tools cover Bland–Altman (two-method and repeated-measures)
