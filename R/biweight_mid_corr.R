@@ -149,6 +149,7 @@
 #' R <- biweight_mid_corr(X, c_const = 9, max_p_outliers = 1,
 #'                        pearson_fallback = "hybrid")
 #' print(attr(R, "method"))
+#' summary(R)
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -246,11 +247,12 @@ biweight_mid_corr <- function(
 
   # --- default: dense matrix with S3 class (original behaviour)
   if (is.null(sparse_threshold)) {
-    res <- structure(res, class = c("biweight_mid_corr", "matrix"))
-    attr(res, "method")      <- "biweight_mid_correlation"
-    attr(res, "description") <- desc
-    attr(res, "package")     <- "matrixCorr"
-    return(res)
+    return(.mc_structure_corr_matrix(
+      res,
+      class_name = "biweight_mid_corr",
+      method = "biweight_mid_correlation",
+      description = desc
+    ))
   }
 
   # --- optional sparse thresholding (S4 Matrix, no S3 class mutation)
@@ -268,10 +270,12 @@ biweight_mid_corr <- function(
   sparse_obj <- Matrix::forceSymmetric(Matrix::Matrix(res, sparse = TRUE), uplo = "U")
   sparse_info <- list(class = class(sparse_obj), threshold = sparse_threshold)
   res_dense <- as.matrix(sparse_obj)
-  res_dense <- structure(res_dense, class = c("biweight_mid_corr", "matrix"))
-  attr(res_dense, "method")      <- "biweight_mid_correlation"
-  attr(res_dense, "description") <- paste0(desc, " Sparse threshold = ", sparse_threshold, ".")
-  attr(res_dense, "package")     <- "matrixCorr"
+  res_dense <- .mc_structure_corr_matrix(
+    res_dense,
+    class_name = "biweight_mid_corr",
+    method = "biweight_mid_correlation",
+    description = paste0(desc, " Sparse threshold = ", sparse_threshold, ".")
+  )
   attr(res_dense, "sparse_info") <- sparse_info
   res_dense
 }
@@ -313,64 +317,15 @@ print.biweight_mid_corr <- function(x,
                                     na_print = "NA",
                                     ...) {
   check_inherits(x, "biweight_mid_corr")
-
-  # ---- header ----
-  cat("Biweight mid-correlation matrix (bicor):\n")
-
-  method <- attr(x, "method")
-  if (!is.null(method))
-    cat("  method: ", method, "\n", sep = "")
-
-  desc <- attr(x, "description")
-  if (!is.null(desc)) {
-    wrap <- strwrap(desc, width = max(1, width - 2), exdent = 2)
-    cat("  ", paste(wrap, collapse = "\n"), "\n", sep = "")
-  }
-
-  pkg <- attr(x, "package")
-  if (!is.null(pkg))
-    cat("  package: ", pkg, "\n", sep = "")
-
-  nr <- nrow(x); nc <- ncol(x)
-  cat(sprintf("  dimensions: %d x %d%s\n",
-              nr, nc,
-              if (inherits(x, "dsCMatrix")) " (sparse)" else ""))
-
-  # ---- small numeric summary (off-diagonals only) ----
-  as_dense <- if (inherits(x, "dsCMatrix")) Matrix::as.matrix(x) else as.matrix(x)
-  if (nr >= 2L && nc >= 2L) {
-    off <- as_dense
-    diag(off) <- NA_real_
-    rng <- range(off, na.rm = TRUE)
-    na_prop <- mean(!is.finite(off))
-    if (is.finite(rng[1]) && is.finite(rng[2])) {
-      cat(sprintf("  off-diagonal range: [%.4f, %.4f]; missing: %.1f%%\n",
-                  rng[1], rng[2], 100*na_prop))
-    } else {
-      cat(sprintf("  off-diagonal range: <all missing>; missing: %.1f%%\n",
-                  100*na_prop))
-    }
-  }
-
-  # ---- body ----
-  m <- as_dense
-  attributes(m) <- attributes(m)[c("dim", "dimnames")]  # strip attrs
-
-  # truncation logic
-  if (!is.null(max_rows) || !is.null(max_cols)) {
-    r <- if (is.null(max_rows)) nr else min(nr, as.integer(max_rows))
-    c <- if (is.null(max_cols)) nc else min(nc, as.integer(max_cols))
-    m2 <- m[seq_len(r), seq_len(c), drop = FALSE]
-    m2 <- round(m2, digits)
-    print(m2, na.print = na_print, ...)
-    if (nr > r || nc > c) {
-      cat(sprintf("omitted: %d rows, %d cols\n", nr - r, nc - c))
-    }
-  } else {
-    print(round(m, digits), na.print = na_print, ...)
-  }
-
-  invisible(x)
+  .mc_print_corr_matrix(
+    x,
+    header = "Biweight mid-correlation matrix (bicor):",
+    digits = digits,
+    max_rows = max_rows,
+    max_cols = max_cols,
+    na.print = na_print,
+    ...
+  )
 }
 
 #' @rdname biweight_mid_corr
@@ -489,5 +444,13 @@ plot.biweight_mid_corr <- function(
   }
 
   return(p)
+}
+
+#' @rdname biweight_mid_corr
+#' @method summary biweight_mid_corr
+#' @param object An object of class \code{biweight_mid_corr}.
+#' @export
+summary.biweight_mid_corr <- function(object, ...) {
+  .mc_summary_corr_matrix(object)
 }
 

@@ -4,6 +4,7 @@
 \alias{spearman_rho}
 \alias{print.spearman_rho}
 \alias{plot.spearman_rho}
+\alias{summary.spearman_rho}
 \title{Pairwise Spearman's rank correlation}
 \usage{
 spearman_rho(data, check_na = TRUE)
@@ -19,6 +20,8 @@ spearman_rho(data, check_na = TRUE)
   value_text_size = 4,
   ...
 )
+
+\method{summary}{spearman_rho}(object, ...)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -55,6 +58,8 @@ heatmap"}.}
 
 \item{value_text_size}{Font size for displaying correlation values. Default
 is \code{4}.}
+
+\item{object}{An object of class \code{spearman_rho}.}
 }
 \value{
 A symmetric numeric matrix where the \code{(i, j)}-th element is
@@ -163,6 +168,7 @@ X_mono[, 3] <- X_mono[, 3]^3
 
 sp_X <- spearman_rho(X)
 sp_m <- spearman_rho(X_mono)
+summary(sp_X)
 
 # Spearman should be (nearly) unchanged under monotone transformations
 round(max(abs(sp_X - sp_m)), 3)
@@ -180,6 +186,7 @@ tied <- cbind(
 )
 sp_tied <- spearman_rho(tied)
 print(sp_tied, digits = 2)
+summary(sp_tied)
 
 ## Bivariate normal, theoretical Spearman's rho
 ## For BVN with Pearson correlation r, rho_S = (6/pi) * asin(r/2).

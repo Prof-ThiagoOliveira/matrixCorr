@@ -3,6 +3,8 @@
 \name{partial_correlation}
 \alias{partial_correlation}
 \alias{print.partial_corr}
+\alias{summary.partial_corr}
+\alias{print.summary_partial_corr}
 \alias{plot.partial_corr}
 \title{Partial correlation matrix (sample / ridge / OAS)}
 \usage{
@@ -14,6 +16,10 @@ partial_correlation(
 )
 
 \method{print}{partial_corr}(x, digits = 3, show_method = TRUE, max_rows = NULL, max_cols = NULL, ...)
+
+\method{summary}{partial_corr}(object, ...)
+
+\method{print}{summary_partial_corr}(x, digits = 4, ...)
 
 \method{plot}{partial_corr}(
   x,
@@ -54,6 +60,8 @@ the printed matrix is truncated with a note about omitted rows/cols.}
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \pkg{ggplot2} layers.}
 
+\item{object}{An object of class \code{partial_corr}.}
+
 \item{title}{Plot title. By default, constructed from the estimator in
 \code{x$method}.}
 
@@ -89,6 +97,8 @@ definiteness.
 
 Invisibly returns \code{x}.
 
+A compact summary object of class \code{summary_partial_corr}.
+
 A \code{ggplot} object.
 }
 \description{
@@ -108,6 +118,10 @@ The method uses a high-performance 'C++' backend.
 
 Prints only the partial correlation matrix (no attribute spam),
 with an optional one-line header stating the estimator used.
+
+Prints the same compact matrix summary used by the other correlation
+methods, based on the partial-correlation matrix stored in
+\code{object$pcor}.
 
 Produces a \pkg{ggplot2}-based heatmap of the partial correlation matrix
 stored in \code{x$pcor}. Optionally masks the diagonal and/or reorders
@@ -198,6 +212,7 @@ X <- Z \%*\% L
 colnames(X) <- sprintf("V\%02d", seq_len(p))
 
 pc <- partial_correlation(X, method = "oas")
+summary(pc)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

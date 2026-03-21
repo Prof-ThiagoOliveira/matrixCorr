@@ -60,6 +60,7 @@
 #'
 #' Rshr <- schafer_corr(X)
 #' print(Rshr, digits = 2, max_rows = 6, max_cols = 6)
+#' summary(Rshr)
 #' plot(Rshr)
 #'
 #' ## Shrinkage typically moves the sample correlation closer to the truth
@@ -88,11 +89,12 @@ schafer_corr <- function(data) {
 
   # dimnames and metadata
   colnames(result) <- rownames(result) <- colnames_data
-  result <- structure(result, class = c("schafer_corr", "matrix"))
-  attr(result, "method") <- "schafer_shrinkage"
-  attr(result, "description") <- "Schafer-Strimmer shrinkage correlation matrix"
-  attr(result, "package") <- "matrixCorr"
-  result
+  .mc_structure_corr_matrix(
+    result,
+    class_name = "schafer_corr",
+    method = "schafer_shrinkage",
+    description = "Schafer-Strimmer shrinkage correlation matrix"
+  )
 }
 
 #' @rdname schafer_corr
@@ -114,25 +116,14 @@ schafer_corr <- function(data) {
 #' @export
 print.schafer_corr <- function(x, digits = 4, max_rows = NULL,
                                max_cols = NULL, ...) {
-  cat("Schafer-Strimmer shrinkage correlation matrix:\n")
-  m <- as.matrix(x)
-  attributes(m) <- attributes(m)[c("dim", "dimnames")]
-
-  # Truncate display for large matrices
-  if (!is.null(max_rows) || !is.null(max_cols)) {
-    nr <- nrow(m); nc <- ncol(m)
-    r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
-    c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
-    m2 <- round(m[seq_len(r), seq_len(c), drop = FALSE], digits)
-    print(m2, ...)
-    if (nr > r || nc > c) {
-      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
-    }
-  } else {
-    print(round(m, digits), ...)
-  }
-
-  invisible(x)
+  .mc_print_corr_matrix(
+    x,
+    header = "Schafer-Strimmer shrinkage correlation matrix:",
+    digits = digits,
+    max_rows = max_rows,
+    max_cols = max_cols,
+    ...
+  )
 }
 
 #' @rdname schafer_corr
@@ -245,4 +236,12 @@ plot.schafer_corr <- function(
   }
 
   p_
+}
+
+#' @rdname schafer_corr
+#' @method summary schafer_corr
+#' @param object An object of class \code{schafer_corr}.
+#' @export
+summary.schafer_corr <- function(object, ...) {
+  .mc_summary_corr_matrix(object)
 }

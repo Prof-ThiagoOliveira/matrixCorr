@@ -1,3 +1,41 @@
+schafer_shrink_base <- function(X) {
+  stopifnot(is.matrix(X))
+  n <- nrow(X)
+  R <- stats::cor(X)
+
+  zero <- is.na(diag(R))
+  if (any(zero)) {
+    R[zero, ] <- NA_real_
+    R[, zero] <- NA_real_
+  }
+
+  off <- upper.tri(R, diag = FALSE)
+  r <- R[off]
+  r <- r[is.finite(r)]
+  sum_sq <- sum(r^2)
+
+  if (sum_sq > 0) {
+    v <- ((1 - r^2)^2) / (n - 1)
+    lambda <- sum(v) / sum_sq
+    lambda <- min(max(lambda, 0), 1)
+  } else {
+    lambda <- 1
+  }
+
+  Rsh <- R
+  Rsh[off] <- (1 - lambda) * R[off]
+  Rsh[lower.tri(Rsh)] <- t(Rsh)[lower.tri(Rsh)]
+  diag(Rsh) <- ifelse(is.na(diag(R)), NA_real_, 1)
+  attr(Rsh, "lambda") <- lambda
+  Rsh
+}
+
+drop_schafer_attrs <- function(x) {
+  m <- as.matrix(x)
+  attributes(m) <- attributes(m)[c("dim", "dimnames")]
+  m
+}
+
 test_that("schafer_corr returns shrinkage matrix with metadata", {
   set.seed(123)
   X <- matrix(rnorm(80), nrow = 20, ncol = 4)
@@ -11,10 +49,49 @@ test_that("schafer_corr returns shrinkage matrix with metadata", {
   expect_equal(attr(R, "method"), "schafer_shrinkage")
   expect_equal(attr(R, "package"), "matrixCorr")
 
-  # shrinkage pulls towards zero relative to sample correlation
   R_raw <- stats::cor(X)
   off <- upper.tri(R_raw, diag = FALSE)
   expect_true(mean(abs(R[off])) <= mean(abs(R_raw[off])) + 1e-10)
+})
+
+test_that("base-R reference agrees within tolerance and attributes are sane", {
+  set.seed(123)
+  n <- 80
+  p <- 30
+  X <- matrix(rnorm(n * p), n, p)
+  colnames(X) <- paste0("V", seq_len(p))
+
+  R_pkg <- schafer_corr(X)
+  R_base <- schafer_shrink_base(X)
+
+  expect_s3_class(R_pkg, "schafer_corr")
+  expect_true(is.matrix(R_pkg))
+  expect_true(isSymmetric(R_pkg))
+  expect_identical(attr(R_pkg, "method"), "schafer_shrinkage")
+  expect_true(grepl("Scha", attr(R_pkg, "description"), fixed = TRUE))
+  expect_equal(drop_schafer_attrs(R_pkg), drop_schafer_attrs(R_base), tolerance = 2e-4)
+  expect_true(all(diag(R_pkg) == 1))
+})
+
+test_that("deterministic small example matches the base reference tightly", {
+  X <- matrix(
+    c(
+      1.1, 0.3, -0.7,
+      0.9, 0.4, -0.5,
+      1.2, 0.2, -0.6,
+      0.8, 0.5, -0.4,
+      1.0, 0.1, -0.8
+    ),
+    nrow = 5, ncol = 3, byrow = TRUE
+  )
+  colnames(X) <- c("A", "B", "C")
+
+  R_pkg <- schafer_corr(X)
+  R_base <- schafer_shrink_base(X)
+
+  expect_equal(unname(drop_schafer_attrs(R_pkg)),
+               unname(drop_schafer_attrs(R_base)),
+               tolerance = 1e-10)
 })
 
 test_that("schafer_corr flags zero-variance columns as NA", {
@@ -26,6 +103,68 @@ test_that("schafer_corr flags zero-variance columns as NA", {
   expect_true(all(is.na(R[, "const"])))
 })
 
+test_that("data.frame path ignores non-numeric columns and preserves names", {
+  set.seed(7)
+  n <- 40
+  df <- data.frame(
+    a = rnorm(n),
+    b = rnorm(n),
+    grp = rep(letters[1:4], length.out = n),
+    flag = rep(c(TRUE, FALSE), length.out = n)
+  )
+  out <- schafer_corr(df)
+
+  expect_equal(dim(out), c(2, 2))
+  expect_setequal(colnames(out), c("a", "b"))
+  expect_true(isSymmetric(out))
+  expect_true(all(diag(out) == 1))
+})
+
+test_that("independent columns are shrunk closer to identity than raw correlations", {
+  set.seed(99)
+  n <- 60
+  p <- 40
+  X <- matrix(rnorm(n * p), n, p)
+
+  R_raw <- stats::cor(X)
+  R_shr <- schafer_corr(X)
+  I <- diag(p)
+
+  err_raw <- sqrt(sum((R_raw - I)^2))
+  err_shr <- sqrt(sum((R_shr - I)^2))
+  expect_lt(err_shr, err_raw)
+
+  off <- upper.tri(R_raw, diag = FALSE)
+  r <- R_raw[off]
+  lambda_hat <- {
+    r2 <- r^2
+    sum_sq <- sum(r2[is.finite(r2)])
+    if (sum_sq > 0) {
+      v <- ((1 - r^2)^2) / (n - 1)
+      min(max(sum(v[is.finite(v)]) / sum_sq, 0), 1)
+    } else {
+      1
+    }
+  }
+  expect_equal(unname(as.vector(R_shr[off])),
+               unname(as.vector((1 - lambda_hat) * r)),
+               tolerance = 5e-5)
+})
+
+test_that("p >> n returns a valid symmetric PSD correlation matrix", {
+  set.seed(2024)
+  n <- 30
+  p <- 120
+  X <- matrix(rnorm(n * p), n, p)
+
+  R_shr <- schafer_corr(X)
+
+  expect_equal(dim(R_shr), c(p, p))
+  expect_true(isSymmetric(R_shr))
+  ev <- eigen(R_shr, symmetric = TRUE, only.values = TRUE)$values
+  expect_gte(min(ev), -1e-8)
+})
+
 test_that("print and plot methods cover optional arguments", {
   skip_if_not_installed("ggplot2")
 
@@ -34,7 +173,6 @@ test_that("print and plot methods cover optional arguments", {
   colnames(X) <- paste0("G", seq_len(4))
   R <- schafer_corr(X)
 
-  # print truncation path
   out <- capture.output(print(R, digits = 3, max_rows = 2, max_cols = 3))
   expect_true(any(grepl("omitted", out)))
 

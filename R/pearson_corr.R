@@ -77,6 +77,7 @@
 #'
 #' pr <- pearson_corr(X)
 #' print(pr, digits = 2)
+#' summary(pr)
 #' plot(pr)
 #'
 #' ## Compare the sample estimate to the truth
@@ -112,11 +113,12 @@ pearson_corr <- function(data, check_na = TRUE) {
   colnames_data <- colnames(numeric_data)
   result <- pearson_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
-  result <- structure(result, class = c("pearson_corr", "matrix"))
-  attr(result, "method") <- "pearson"
-  attr(result, "description") <- "Pairwise Pearson correlation matrix"
-  attr(result, "package") <- "matrixCorr"
-  return(result)
+  .mc_structure_corr_matrix(
+    result,
+    class_name = "pearson_corr",
+    method = "pearson",
+    description = "Pairwise Pearson correlation matrix"
+  )
 }
 
 
@@ -140,26 +142,14 @@ pearson_corr <- function(data, check_na = TRUE) {
 #' @export
 print.pearson_corr <- function(x, digits = 4, max_rows = NULL,
                                max_cols = NULL, ...) {
-  cat("Pearson correlation matrix:\n")
-  m <- as.matrix(x)
-  attributes(m) <- attributes(m)[c("dim", "dimnames")]
-
-  # Truncation for large matrices
-  if (!is.null(max_rows) || !is.null(max_cols)) {
-    nr <- nrow(m); nc <- ncol(m)
-    r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
-    c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
-    m  <- m[seq_len(r), seq_len(c), drop = FALSE]
-    m  <- round(m, digits)
-    print(m, ...)
-    if (nr > r || nc > c) {
-      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
-    }
-  } else {
-    print(round(m, digits), ...)
-  }
-
-  invisible(x)
+  .mc_print_corr_matrix(
+    x,
+    header = "Pearson correlation matrix:",
+    digits = digits,
+    max_rows = max_rows,
+    max_cols = max_cols,
+    ...
+  )
 }
 
 #' @rdname pearson_corr
@@ -189,32 +179,18 @@ plot.pearson_corr <-
   function(x, title = "Pearson correlation heatmap",
            low_color = "indianred1", high_color = "steelblue1",
            mid_color = "white", value_text_size = 4, ...) {
+  .mc_plot_corr_matrix(
+    x, class_name = "pearson_corr", fill_name = "Pearson",
+    title = title, low_color = low_color, high_color = high_color,
+    mid_color = mid_color, value_text_size = value_text_size, ...
+  )
+}
 
-  check_inherits(x, "pearson_corr")
-
-  mat <- as.matrix(x)
-  df <- as.data.frame(as.table(mat))
-  colnames(df) <- c("Var1", "Var2", "Pearson")
-
-  df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
-
-  p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = Pearson)) +
-    ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", Pearson)),
-                       size = value_text_size, color = "black") +
-    ggplot2::scale_fill_gradient2(
-      low = low_color, high = high_color, mid = mid_color,
-      midpoint = 0, limits = c(-1, 1), name = "Pearson"
-    ) +
-    ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(
-      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-      panel.grid = ggplot2::element_blank(),
-      ...
-    ) +
-    ggplot2::coord_fixed() +
-    ggplot2::labs(title = title, x = NULL, y = NULL)
-
-  return(p)
+#' @rdname pearson_corr
+#' @method summary pearson_corr
+#' @param object An object of class \code{pearson_corr}.
+#' @export
+summary.pearson_corr <- function(object, ...) {
+  .mc_summary_corr_matrix(object)
 }
 

@@ -10,18 +10,81 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::plugins(openmp)]]
 
-using namespace matrixCorr_detail;
-using matrixCorr_detail::order_stats::insertion_sort_range;
 using matrixCorr_detail::order_stats::getMs_ll;
+using matrixCorr_detail::order_stats::insertion_sort_range;
 using matrixCorr_detail::order_stats::inv_count_inplace;
 using matrixCorr_detail::order_stats::tau_two_vectors_fast;
+
+namespace {
+
+struct KendallColumnOrder {
+  std::vector<int> ord;
+  std::vector<std::pair<int, int>> tie_runs;
+  long long m1 = 0;
+};
+
+inline KendallColumnOrder build_kendall_column_order(const std::vector<long long>& x) {
+  const int n = static_cast<int>(x.size());
+  KendallColumnOrder state;
+  state.ord.resize(n);
+  std::iota(state.ord.begin(), state.ord.end(), 0);
+  std::sort(state.ord.begin(), state.ord.end(),
+            [&](int a, int b) { return x[a] < x[b]; });
+
+  state.tie_runs.reserve(64);
+  for (int s = 0; s < n; ) {
+    int e = s + 1;
+    const long long x0 = x[state.ord[s]];
+    while (e < n && x[state.ord[e]] == x0) ++e;
+    const int len = e - s;
+    if (len > 1) {
+      state.tie_runs.emplace_back(s, e);
+      state.m1 += 1LL * len * (len - 1) / 2;
+    }
+    s = e;
+  }
+  return state;
+}
+
+inline double kendall_tau_from_order(const std::vector<long long>& y,
+                                     const KendallColumnOrder& state) {
+  const int n = static_cast<int>(state.ord.size());
+  thread_local std::vector<long long> ybuf, mrg;
+  if (static_cast<int>(ybuf.capacity()) < n) {
+    ybuf.reserve(n);
+    mrg.reserve(n);
+  }
+  ybuf.resize(n);
+  mrg.resize(n);
+
+  for (int k = 0; k < n; ++k) ybuf[k] = y[state.ord[k]];
+
+  long long s_acc = 0;
+  for (const auto& run : state.tie_runs) {
+    const int s = run.first;
+    const int e = run.second;
+    const int len = e - s;
+    if (len <= 32) insertion_sort_range(ybuf.data(), s, e);
+    else           std::sort(ybuf.begin() + s, ybuf.begin() + e);
+    s_acc += getMs_ll(ybuf.data() + s, len);
+  }
+
+  const long long inv = inv_count_inplace<long long>(ybuf.data(), mrg.data(), n);
+  const long long m2  = getMs_ll(ybuf.data(), n);
+  const long long n0  = 1LL * n * (n - 1) / 2LL;
+  const double s = double(n0) - double(state.m1) - double(m2)
+    - 2.0 * double(inv) + double(s_acc);
+  const double den1 = double(n0 - state.m1);
+  const double den2 = double(n0 - m2);
+  if (den1 <= 0.0 || den2 <= 0.0) return NA_REAL;
+  return s / std::sqrt(den1 * den2);
+}
+
+} // namespace
 
 // ---------------------------- Matrix version ---------------------------------
 // [[Rcpp::export]]
 Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
-  using namespace matrixCorr_detail;
-  using namespace matrixCorr_detail::order_stats;
-
   const int n = mat.nrow();
   const int p = mat.ncol();
 
@@ -59,119 +122,27 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
   Rcpp::NumericMatrix out(p, p);
   for (int j = 0; j < p; ++j) out(j,j) = 1.0;
 
+  auto fill_row = [&](int i) {
+    const KendallColumnOrder state = build_kendall_column_order(cols[i]);
+    for (int j = i + 1; j < p; ++j) {
+      const double tau = kendall_tau_from_order(cols[j], state);
+      out(i, j) = out(j, i) = tau;
+    }
+  };
+
   // --- Avoid OpenMP overhead when p is tiny
 #if defined(_OPENMP)
   if (p >= 3) {
 #pragma omp parallel for schedule(static)
     for (int i = 0; i < p - 1; ++i) {
-      // Precompute ord for column i (indices sorted by x_i)
-      std::vector<int> ord(n);
-      std::iota(ord.begin(), ord.end(), 0);
-      std::sort(ord.begin(), ord.end(),
-                [&](int a, int b){ return cols[i][a] < cols[i][b]; });
-
-      // Precompute x-run boundaries for column i
-      std::vector<std::pair<int,int>> xruns;
-      xruns.reserve(64);
-      for (int s = 0; s < n; ) {
-        int e = s + 1;
-        const long long xi = cols[i][ord[s]];
-        while (e < n && cols[i][ord[e]] == xi) ++e;
-        xruns.emplace_back(s, e);
-        s = e;
-      }
-
-      auto tau_from_ord = [&](const std::vector<long long>& y) -> double {
-        thread_local std::vector<long long> ybuf, mrg;
-        if ((int)ybuf.capacity() < n) { ybuf.reserve(n); mrg.reserve(n); }
-        ybuf.resize(n);
-        mrg.resize(n);
-
-        for (int k = 0; k < n; ++k) ybuf[k] = y[ord[k]];
-
-        long long m1 = 0, s_acc = 0;
-        for (const auto& run : xruns) {
-          const int s = run.first, e = run.second, L = e - s;
-          if (L > 1) {
-            m1 += 1LL * L * (L - 1) / 2;
-            if (L <= 32) insertion_sort_range(ybuf.data(), s, e);
-            else         std::sort(ybuf.begin() + s, ybuf.begin() + e);
-            s_acc += getMs_ll(ybuf.data() + s, L);
-          }
-        }
-
-        const long long inv = inv_count_inplace<long long>(ybuf.data(), mrg.data(), n);
-        const long long m2  = getMs_ll(ybuf.data(), n);
-
-        const long long n0 = 1LL * n * (n - 1) / 2LL;
-        const double    S   = double(n0) - double(m1) - double(m2)
-          - 2.0 * double(inv) + double(s_acc);
-        const double    den1 = double(n0 - m1);
-        const double    den2 = double(n0 - m2);
-        if (den1 <= 0.0 || den2 <= 0.0) return NA_REAL;
-        return S / std::sqrt(den1 * den2);
-      };
-
-      for (int j = i + 1; j < p; ++j) {
-        const double tau = tau_from_ord(cols[j]);
-        out(i,j) = out(j,i) = tau;
-      }
+      fill_row(i);
     }
   } else
 #endif
 {
   // single-threaded path
   for (int i = 0; i < p - 1; ++i) {
-    std::vector<int> ord(n);
-    std::iota(ord.begin(), ord.end(), 0);
-    std::sort(ord.begin(), ord.end(),
-              [&](int a, int b){ return cols[i][a] < cols[i][b]; });
-
-    std::vector<std::pair<int,int>> xruns;
-    xruns.reserve(64);
-    for (int s = 0; s < n; ) {
-      int e = s + 1;
-      const long long xi = cols[i][ord[s]];
-      while (e < n && cols[i][ord[e]] == xi) ++e;
-      xruns.emplace_back(s, e);
-      s = e;
-    }
-
-    thread_local std::vector<long long> ybuf, mrg;
-
-    auto tau_from_ord = [&](const std::vector<long long>& y) -> double {
-      if ((int)ybuf.capacity() < n) { ybuf.reserve(n); mrg.reserve(n); }
-      ybuf.resize(n);
-      mrg.resize(n);
-      for (int k = 0; k < n; ++k) ybuf[k] = y[ord[k]];
-
-      long long m1 = 0, s_acc = 0;
-      for (const auto& run : xruns) {
-        const int s = run.first, e = run.second, L = e - s;
-        if (L > 1) {
-          m1 += 1LL * L * (L - 1) / 2;
-          if (L <= 32) insertion_sort_range(ybuf.data(), s, e);
-          else         std::sort(ybuf.begin() + s, ybuf.begin() + e);
-          s_acc += getMs_ll(ybuf.data() + s, L);
-        }
-      }
-
-      const long long inv = inv_count_inplace<long long>(ybuf.data(), mrg.data(), n);
-      const long long m2  = getMs_ll(ybuf.data(), n);
-
-      const long long n0 = 1LL * n * (n - 1) / 2LL;
-      const double    S   = double(n0) - double(m1) - double(m2)
-        - 2.0 * double(inv) + double(s_acc);
-      const double    den1 = double(n0 - m1);
-      const double    den2 = double(n0 - m2);
-      if (den1 <= 0.0 || den2 <= 0.0) return NA_REAL;
-      return S / std::sqrt(den1 * den2);
-    };
-
-    for (int j = i + 1; j < p; ++j) {
-      const double tau = tau_from_ord(cols[j]);
-      out(i,j) = out(j,i) = tau;
-    }
+    fill_row(i);
   }
 }
 

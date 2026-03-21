@@ -109,8 +109,24 @@ matrixCorr_tetrachoric_mle_cpp <- function(tab, correct = 0.5) {
     .Call(`_matrixCorr_matrixCorr_tetrachoric_mle_cpp`, tab, correct)
 }
 
+matrixCorr_tetrachoric_fixed_cpp <- function(tab, rc, cc, correct = 0.5) {
+    .Call(`_matrixCorr_matrixCorr_tetrachoric_fixed_cpp`, tab, rc, cc, correct)
+}
+
 matrixCorr_polychoric_mle_cpp <- function(tab, correct = 0.5) {
     .Call(`_matrixCorr_matrixCorr_polychoric_mle_cpp`, tab, correct)
+}
+
+matrixCorr_polychoric_fixed_cpp <- function(tab, rc_in, cc_in) {
+    .Call(`_matrixCorr_matrixCorr_polychoric_fixed_cpp`, tab, rc_in, cc_in)
+}
+
+matrixCorr_tetrachoric_matrix_cpp <- function(x, tau, correct = 0.5, pairwise_complete = TRUE) {
+    .Call(`_matrixCorr_matrixCorr_tetrachoric_matrix_cpp`, x, tau, correct, pairwise_complete)
+}
+
+matrixCorr_polychoric_matrix_cpp <- function(x, n_levels, tau_mat, global_all = FALSE, correct = 0.5, pairwise_complete = TRUE) {
+    .Call(`_matrixCorr_matrixCorr_polychoric_matrix_cpp`, x, n_levels, tau_mat, global_all, correct, pairwise_complete)
 }
 
 matrixCorr_biserial_latent_cpp <- function(x, y) {
@@ -119,6 +135,10 @@ matrixCorr_biserial_latent_cpp <- function(x, y) {
 
 matrixCorr_polyserial_mle_cpp <- function(x, y) {
     .Call(`_matrixCorr_matrixCorr_polyserial_mle_cpp`, x, y)
+}
+
+matrixCorr_polyserial_negloglik_cpp <- function(z, y, pars, maxcor = 0.9999) {
+    .Call(`_matrixCorr_matrixCorr_polyserial_negloglik_cpp`, z, y, pars, maxcor)
 }
 
 matrixCorr_polydi_mle_cpp <- function(tab, correct = 0.5) {

@@ -4,6 +4,7 @@
 \alias{pearson_corr}
 \alias{print.pearson_corr}
 \alias{plot.pearson_corr}
+\alias{summary.pearson_corr}
 \title{Pairwise Pearson correlation}
 \usage{
 pearson_corr(data, check_na = TRUE)
@@ -19,6 +20,8 @@ pearson_corr(data, check_na = TRUE)
   value_text_size = 4,
   ...
 )
+
+\method{summary}{pearson_corr}(object, ...)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -54,6 +57,8 @@ If \code{NULL}, all columns are shown.}
 
 \item{value_text_size}{Font size for displaying correlation values. Default
 is \code{4}.}
+
+\item{object}{An object of class \code{pearson_corr}.}
 }
 \value{
 A symmetric numeric matrix where the \code{(i, j)}-th element is
@@ -133,6 +138,7 @@ colnames(X) <- paste0("V", seq_len(p))
 
 pr <- pearson_corr(X)
 print(pr, digits = 2)
+summary(pr)
 plot(pr)
 
 ## Compare the sample estimate to the truth

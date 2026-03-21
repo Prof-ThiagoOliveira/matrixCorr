@@ -4,6 +4,7 @@
 \alias{kendall_tau}
 \alias{print.kendall_matrix}
 \alias{plot.kendall_matrix}
+\alias{summary.kendall_matrix}
 \title{Pairwise (or Two-Vector) Kendall's Tau Rank Correlation}
 \usage{
 kendall_tau(data, y = NULL, check_na = TRUE)
@@ -19,6 +20,8 @@ kendall_tau(data, y = NULL, check_na = TRUE)
   value_text_size = 4,
   ...
 )
+
+\method{summary}{kendall_matrix}(object, ...)
 }
 \arguments{
 \item{data}{For matrix/data frame, it is expected a numeric matrix or a data frame with at
@@ -60,6 +63,8 @@ Heatmap"}.}
 
 \item{value_text_size}{Font size for displaying correlation values. Default
 is \code{4}.}
+
+\item{object}{An object of class \code{kendall_matrix}.}
 }
 \value{
 \itemize{
@@ -128,6 +133,7 @@ with fewer than two observations are excluded.
 mat <- cbind(a = rnorm(100), b = rnorm(100), c = rnorm(100))
 kt <- kendall_tau(mat)
 print(kt)
+summary(kt)
 plot(kt)
 
 # Two-vector mode (scalar path)
@@ -146,6 +152,7 @@ tied_df <- data.frame(
 )
 kt <- kendall_tau(tied_df)
 print(kt)
+summary(kt)
 plot(kt)
 
 # Interactive viewing (requires shiny)

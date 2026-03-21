@@ -123,6 +123,7 @@
 #' colnames(X) <- sprintf("V%02d", seq_len(p))
 #'
 #' pc <- partial_correlation(X, method = "oas")
+#' summary(pc)
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -317,6 +318,40 @@ print.partial_corr <- function(
   }
 
   invisible(x)
+}
+
+#' @rdname partial_correlation
+#' @method summary partial_corr
+#' @title Summary Method for \code{partial_corr} Objects
+#'
+#' @description
+#' Prints the same compact matrix summary used by the other correlation
+#' methods, based on the partial-correlation matrix stored in
+#' \code{object$pcor}.
+#'
+#' @param object An object of class \code{partial_corr}.
+#' @param ... Unused.
+#'
+#' @return A compact summary object of class \code{summary_partial_corr}.
+#' @export
+summary.partial_corr <- function(object, ...) {
+  check_inherits(object, "partial_corr")
+  out <- .mc_summary_corr_matrix(object$pcor)
+  out$class <- "partial_corr"
+  out$method <- object$method %||% attr(object, "method")
+  out$lambda <- object$lambda %||% NA_real_
+  out$rho <- object$rho %||% NA_real_
+  out$jitter <- object$jitter %||% NA_real_
+  out$header <- "Correlation summary"
+  class(out) <- c("summary_partial_corr", "summary_corr_matrix")
+  out
+}
+
+#' @rdname partial_correlation
+#' @method print summary_partial_corr
+#' @export
+print.summary_partial_corr <- function(x, digits = 4, ...) {
+  print.summary_corr_matrix(x, digits = digits, ...)
 }
 
 

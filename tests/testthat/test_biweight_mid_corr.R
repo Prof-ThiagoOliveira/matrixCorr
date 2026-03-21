@@ -378,7 +378,10 @@ test_that("gross opposite-direction outlier matches manual bicor", {
 
 test_that("threading is numerically stable", {
   set.seed(42)
-  X <- matrix(rnorm(500 * 20), 500, 20)
+  t <- seq(0, 8 * pi, length.out = 500)
+  X <- sapply(1:20, function(j) {
+    sin(t * (j + 1) / 7) + cos(t * (j + 3) / 11) + rnorm(length(t), sd = 0.2)
+  })
   R1 <- biweight_mid_corr(X, n_threads = 1L)
   R2 <- biweight_mid_corr(X, n_threads = 2L)
   expect_equal(R1, R2, tolerance = 1e-8)

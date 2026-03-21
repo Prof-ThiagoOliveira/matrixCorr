@@ -106,6 +106,7 @@
 #'
 #' sp_X <- spearman_rho(X)
 #' sp_m <- spearman_rho(X_mono)
+#' summary(sp_X)
 #'
 #' # Spearman should be (nearly) unchanged under monotone transformations
 #' round(max(abs(sp_X - sp_m)), 3)
@@ -123,6 +124,7 @@
 #' )
 #' sp_tied <- spearman_rho(tied)
 #' print(sp_tied, digits = 2)
+#' summary(sp_tied)
 #'
 #' ## Bivariate normal, theoretical Spearman's rho
 #' ## For BVN with Pearson correlation r, rho_S = (6/pi) * asin(r/2).
@@ -152,10 +154,12 @@ spearman_rho <- function(data, check_na = TRUE) {
   colnames_data <- colnames(numeric_data)
   result <- spearman_matrix_cpp(numeric_data)
   colnames(result) <- rownames(result) <- colnames_data
-  attr(result, "method") <- "spearman"
-  attr(result, "description") <- "Pairwise Spearman's rank correlation matrix"
-  attr(result, "package") <- "matrixCorr"
-  return(structure(result, class = c("spearman_rho", "matrix")))
+  .mc_structure_corr_matrix(
+    result,
+    class_name = "spearman_rho",
+    method = "spearman",
+    description = "Pairwise Spearman's rank correlation matrix"
+  )
 }
 
 #' @rdname spearman_rho
@@ -176,27 +180,14 @@ spearman_rho <- function(data, check_na = TRUE) {
 #' @return Invisibly returns the \code{spearman_rho} object.
 #' @export
 print.spearman_rho <- function(x, digits = 4, max_rows = NULL, max_cols = NULL, ...) {
-  cat("Spearman correlation matrix:\n")
-
-  # Strip non-essential attributes
-  m <- as.matrix(x)
-  attributes(m) <- attributes(m)[c("dim", "dimnames")]
-
-  # Optional truncation for large matrices
-  if (!is.null(max_rows) || !is.null(max_cols)) {
-    nr <- nrow(m); nc <- ncol(m)
-    r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
-    c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
-    mm <- round(m[seq_len(r), seq_len(c), drop = FALSE], digits)
-    print(mm, ...)
-    if (nr > r || nc > c) {
-      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
-    }
-  } else {
-    print(round(m, digits), ...)
-  }
-
-  invisible(x)
+  .mc_print_corr_matrix(
+    x,
+    header = "Spearman correlation matrix:",
+    digits = digits,
+    max_rows = max_rows,
+    max_cols = max_cols,
+    ...
+  )
 }
 
 
@@ -227,31 +218,17 @@ plot.spearman_rho <-
   function(x, title = "Spearman's rank correlation heatmap",
            low_color = "indianred1", high_color = "steelblue1",
            mid_color = "white", value_text_size = 4, ...) {
+  .mc_plot_corr_matrix(
+    x, class_name = "spearman_rho", fill_name = "Rho",
+    title = title, low_color = low_color, high_color = high_color,
+    mid_color = mid_color, value_text_size = value_text_size, ...
+  )
+}
 
-  check_inherits(x, "spearman_rho")
-
-  mat <- as.matrix(x)
-  df <- as.data.frame(as.table(mat))
-  colnames(df) <- c("Var1", "Var2", "Rho")
-
-  df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
-
-  p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = Rho)) +
-    ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", Rho)),
-                       size = value_text_size, color = "black") +
-    ggplot2::scale_fill_gradient2(
-      low = low_color, high = high_color, mid = mid_color,
-      midpoint = 0, limits = c(-1, 1), name = "Rho"
-    ) +
-    ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(
-      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-      panel.grid = ggplot2::element_blank(),
-      ...
-    ) +
-    ggplot2::coord_fixed() +
-    ggplot2::labs(title = title, x = NULL, y = NULL)
-
-  return(p)
+#' @rdname spearman_rho
+#' @method summary spearman_rho
+#' @param object An object of class \code{spearman_rho}.
+#' @export
+summary.spearman_rho <- function(object, ...) {
+  .mc_summary_corr_matrix(object)
 }

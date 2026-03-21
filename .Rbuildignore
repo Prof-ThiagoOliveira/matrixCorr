@@ -10,3 +10,4 @@
 ^CRAN-SUBMISSION$
 ^CONTRIBUTING\.md$
 ^codemeta\.json$
+^\.local-lib$

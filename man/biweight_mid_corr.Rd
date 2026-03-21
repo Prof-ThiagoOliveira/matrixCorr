@@ -5,6 +5,7 @@
 \alias{diag.biweight_mid_corr}
 \alias{print.biweight_mid_corr}
 \alias{plot.biweight_mid_corr}
+\alias{summary.biweight_mid_corr}
 \title{Biweight mid-correlation (bicor)}
 \usage{
 biweight_mid_corr(
@@ -43,6 +44,8 @@ diag.biweight_mid_corr(x, ...)
   na_fill = "grey90",
   ...
 )
+
+\method{summary}{biweight_mid_corr}(object, ...)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame containing numeric columns.
@@ -119,6 +122,8 @@ to display the full matrix or a single triangle.}
 to suppress labels (recommended for large matrices).}
 
 \item{na_fill}{Fill colour for \code{NA} cells. Default \code{"grey90"}.}
+
+\item{object}{An object of class \code{biweight_mid_corr}.}
 }
 \value{
 A symmetric correlation matrix with class \code{biweight_mid_corr}
@@ -243,6 +248,7 @@ X <- matrix(rnorm(2000 * 40), 2000, 40)
 R <- biweight_mid_corr(X, c_const = 9, max_p_outliers = 1,
                        pearson_fallback = "hybrid")
 print(attr(R, "method"))
+summary(R)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

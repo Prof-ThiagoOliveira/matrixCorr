@@ -185,6 +185,85 @@ inline double rect_prob(double al, double au, double bl, double bu, double rho){
 } // namespace bvn_adaptive
 
 //------------------------------------------------------------------------------
+// ---------- BVN CDF (fast fixed Gauss-Legendre quadrature) ----------
+//------------------------------------------------------------------------------
+namespace bvn_fast {
+using matrixCorr_detail::norm1::Phi;
+
+constexpr double INV_2PI = 0.15915494309189533577;
+
+static constexpr double GL_X[10] = {
+  0.9931285991850949, 0.9639719272779138, 0.9122344282513259,
+  0.8391169718222188, 0.7463319064601508, 0.6360536807265150,
+  0.5108670019508271, 0.3737060887154195, 0.2277858511416451,
+  0.07652652113349733
+};
+
+static constexpr double GL_W[10] = {
+  0.01761400713915212, 0.04060142980038694, 0.06267204833410906,
+  0.08327674157670475, 0.1019301198172404, 0.1181945319615184,
+  0.1316886384491766, 0.1420961093183821, 0.1491729864726037,
+  0.1527533871307258
+};
+
+inline double bvn_theta_integrand(double theta, double a, double b) noexcept {
+  const double ct = std::cos(theta);
+  const double denom = ct * ct;
+  if (!(denom > 0.0) || !std::isfinite(denom)) return 0.0;
+  const double st = std::sin(theta);
+  const double expo = -(a * a - 2.0 * a * b * st + b * b) / (2.0 * denom);
+  if (expo < -745.0) return 0.0;
+  return std::exp(expo);
+}
+
+inline double Phi2(double a, double b, double rho){
+  using matrixCorr_detail::clamp_policy::nan_preserve;
+
+  if (std::isinf(a) && a < 0) return 0.0;
+  if (std::isinf(b) && b < 0) return 0.0;
+  if (std::isinf(a) && a > 0 && std::isinf(b) && b > 0) return 1.0;
+  if (std::isinf(a) && a > 0) return Phi(b);
+  if (std::isinf(b) && b > 0) return Phi(a);
+
+  rho = nan_preserve(rho, -0.999999, 0.999999);
+  const double pa = Phi(a);
+  const double pb = Phi(b);
+  if (rho == 0.0) return pa * pb;
+  if (rho > 0.99999) return Phi(std::min(a, b));
+  if (rho < -0.99999) return std::max(0.0, pa + pb - 1.0);
+
+  const double alpha = std::asin(rho);
+  const double center = 0.5 * alpha;
+  const double half = 0.5 * alpha;
+  double quad = 0.0;
+
+  for (int i = 0; i < 10; ++i) {
+    const double t1 = center - half * GL_X[i];
+    const double t2 = center + half * GL_X[i];
+    quad += GL_W[i] * (
+      bvn_theta_integrand(t1, a, b) +
+      bvn_theta_integrand(t2, a, b)
+    );
+  }
+
+  double out = pa * pb + half * quad * INV_2PI;
+  const double lo = std::max(0.0, pa + pb - 1.0);
+  const double hi = std::min(pa, pb);
+  if (!std::isfinite(out)) return NA_REAL;
+  return nan_preserve(out, lo, hi);
+}
+
+inline double rect_prob(double al, double au, double bl, double bu, double rho){
+  const double A = Phi2(au, bu, rho);
+  const double B = Phi2(al, bu, rho);
+  const double C = Phi2(au, bl, rho);
+  const double D = Phi2(al, bl, rho);
+  const double p = A - B - C + D;
+  return (p <= 0.0) ? 0.0 : p;
+}
+} // namespace bvn_fast
+
+//------------------------------------------------------------------------------
 // ---------- ranking utilities ----------
 //------------------------------------------------------------------------------
 namespace ranking {

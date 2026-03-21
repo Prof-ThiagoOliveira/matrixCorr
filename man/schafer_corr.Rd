@@ -4,6 +4,7 @@
 \alias{schafer_corr}
 \alias{print.schafer_corr}
 \alias{plot.schafer_corr}
+\alias{summary.schafer_corr}
 \title{Schafer-Strimmer shrinkage correlation}
 \usage{
 schafer_corr(data)
@@ -22,6 +23,8 @@ schafer_corr(data)
   palette = c("diverging", "viridis"),
   ...
 )
+
+\method{summary}{schafer_corr}(object, ...)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -58,6 +61,8 @@ matrix dimension \eqn{\le} \code{value_text_limit}).}
 \item{value_text_size}{Font size for values if shown.}
 
 \item{palette}{Character; \code{"diverging"} (default) or \code{"viridis"}.}
+
+\item{object}{An object of class \code{schafer_corr}.}
 }
 \value{
 A symmetric numeric matrix of class \code{schafer_corr} where entry
@@ -122,6 +127,7 @@ colnames(X) <- paste0("V", seq_len(p))
 
 Rshr <- schafer_corr(X)
 print(Rshr, digits = 2, max_rows = 6, max_cols = 6)
+summary(Rshr)
 plot(Rshr)
 
 ## Shrinkage typically moves the sample correlation closer to the truth

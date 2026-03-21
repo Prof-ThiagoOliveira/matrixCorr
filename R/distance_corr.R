@@ -67,6 +67,7 @@
 #' X <- cbind(a = rnorm(200), b = rnorm(200))
 #' D <- distance_corr(X)
 #' print(D, digits = 3)
+#' summary(D)
 #'
 #' ## Non-linear dependence: Pearson ~ 0, but unbiased dCor > 0
 #' set.seed(42)
@@ -77,6 +78,7 @@
 #' D2 <- distance_corr(XY)
 #' # Compare Pearson vs unbiased distance correlation
 #' round(c(pearson = cor(XY)[1, 2], dcor = D2["x", "y"]), 3)
+#' summary(D2)
 #' plot(D2, title = "Unbiased distance correlation (non-linear example)")
 #'
 #' ## Small AR(1) multivariate normal example
@@ -103,11 +105,12 @@ distance_corr <- function(data, check_na = TRUE) {
   dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
   colnames(dcor_matrix) <- rownames(dcor_matrix) <- colnames_data
 
-  dcor_matrix <- structure(dcor_matrix, class = c("distance_corr", "matrix"))
-  attr(dcor_matrix, "method") <- "distance_correlation"
-  attr(dcor_matrix, "description") <- "Pairwise distance correlation matrix (unbiased)"
-  attr(dcor_matrix, "package") <- "matrixCorr"
-  dcor_matrix
+  .mc_structure_corr_matrix(
+    dcor_matrix,
+    class_name = "distance_corr",
+    method = "distance_correlation",
+    description = "Pairwise distance correlation matrix (unbiased)"
+  )
 }
 
 #' @rdname distance_corr
@@ -129,23 +132,14 @@ distance_corr <- function(data, check_na = TRUE) {
 #' @export
 print.distance_corr <- function(x, digits = 4, max_rows = NULL,
                             max_cols = NULL, ...) {
-  cat("Distance correlation (dCor) matrix:\n")
-  m <- as.matrix(x)
-  attributes(m) <- attributes(m)[c("dim", "dimnames")]
-
-  if (!is.null(max_rows) || !is.null(max_cols)) {
-    nr <- nrow(m); nc <- ncol(m)
-    r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
-    c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
-    m2 <- round(m[seq_len(r), seq_len(c), drop = FALSE], digits)
-    print(m2, ...)
-    if (nr > r || nc > c) {
-      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
-    }
-  } else {
-    print(round(m, digits), ...)
-  }
-  invisible(x)
+  .mc_print_corr_matrix(
+    x,
+    header = "Distance correlation (dCor) matrix:",
+    digits = digits,
+    max_rows = max_rows,
+    max_cols = max_cols,
+    ...
+  )
 }
 
 #' @rdname distance_corr
@@ -182,7 +176,7 @@ plot.distance_corr <-
 
     df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
 
-    p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = dCor)) +
+    ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = dCor)) +
       ggplot2::geom_tile(color = "white") +
       ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", dCor)),
                          size = value_text_size, color = "black") +
@@ -198,6 +192,12 @@ plot.distance_corr <-
       ) +
       ggplot2::coord_fixed() +
       ggplot2::labs(title = title, x = NULL, y = NULL)
-
-    return(p)
   }
+
+#' @rdname distance_corr
+#' @method summary distance_corr
+#' @param object An object of class \code{distance_corr}.
+#' @export
+summary.distance_corr <- function(object, ...) {
+  .mc_summary_corr_matrix(object)
+}

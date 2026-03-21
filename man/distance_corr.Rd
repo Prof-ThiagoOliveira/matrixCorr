@@ -4,6 +4,7 @@
 \alias{distance_corr}
 \alias{print.distance_corr}
 \alias{plot.distance_corr}
+\alias{summary.distance_corr}
 \title{Pairwise Distance Correlation (dCor)}
 \usage{
 distance_corr(data, check_na = TRUE)
@@ -18,6 +19,8 @@ distance_corr(data, check_na = TRUE)
   value_text_size = 4,
   ...
 )
+
+\method{summary}{distance_corr}(object, ...)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -47,6 +50,8 @@ If \code{NULL}, all columns are shown.}
 \item{high_color}{Colour for strong correlation. Default is \code{"steelblue1"}.}
 
 \item{value_text_size}{Font size for displaying values. Default is \code{4}.}
+
+\item{object}{An object of class \code{distance_corr}.}
 }
 \value{
 A symmetric numeric matrix where the \code{(i, j)} entry is the
@@ -112,6 +117,7 @@ set.seed(1)
 X <- cbind(a = rnorm(200), b = rnorm(200))
 D <- distance_corr(X)
 print(D, digits = 3)
+summary(D)
 
 ## Non-linear dependence: Pearson ~ 0, but unbiased dCor > 0
 set.seed(42)
@@ -122,6 +128,7 @@ XY <- cbind(x = x, y = y)
 D2 <- distance_corr(XY)
 # Compare Pearson vs unbiased distance correlation
 round(c(pearson = cor(XY)[1, 2], dcor = D2["x", "y"]), 3)
+summary(D2)
 plot(D2, title = "Unbiased distance correlation (non-linear example)")
 
 ## Small AR(1) multivariate normal example
