@@ -145,6 +145,14 @@ matrixCorr_polydi_mle_cpp <- function(tab, correct = 0.5) {
     .Call(`_matrixCorr_matrixCorr_polydi_mle_cpp`, tab, correct)
 }
 
+rmcorr_pair_cpp <- function(x, y, subject, conf_level = 0.95) {
+    .Call(`_matrixCorr_rmcorr_pair_cpp`, x, y, subject, conf_level)
+}
+
+rmcorr_matrix_cpp <- function(x, y, subject, symmetric = FALSE, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_rmcorr_matrix_cpp`, x, y, subject, symmetric, conf_level, n_threads)
+}
+
 validate_corr_input_cpp <- function(data, check_na = TRUE) {
     .Call(`_matrixCorr_validate_corr_input_cpp`, data, check_na)
 }

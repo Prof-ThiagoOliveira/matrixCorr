@@ -30,27 +30,25 @@ compared, and used without repeated translation across packages.
 Supported measures include Pearson, Spearman, Kendall, distance
 correlation, partial correlation, robust biweight mid-correlation, and
 latent categorical/ordinal correlations (tetrachoric, polychoric,
-polyserial, and biserial); agreement tools cover Bland-Altman
-(two-method and repeated-measures) and Lin’s concordance correlation
-coefficient (including repeated-measures LMM/REML extensions).
+polyserial, and biserial), plus repeated-measures correlation
+(`rmcorr()`); agreement tools cover Bland-Altman (two-method and
+repeated-measures) and Lin's concordance correlation coefficient (including
+repeated-measures LMM/REML extensions).
 
 ## Features
 
 - High-performance C++ backend using `Rcpp`
-- General correlations such as `pearson_corr()`, `spearman_rho()`,
-  `kendall_tau()`
+- General correlations such as `pearson_corr()`, `spearman_rho()`, `kendall_tau()`
 - Robust correlation metrics (`biweight_mid_corr()`)
 - Distance correlation (`distance_corr()`)
 - Partial correlation (`partial_correlation()`)
-- Latent categorical/ordinal correlations (`tetrachoric()`,
-  `polychoric()`, `polyserial()`, `biserial()`)
+- Latent categorical/ordinal correlations (`tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()`)
+- Repeated-measures correlation (`rmcorr()`)
 - Shrinkage for $p >> n$ (`schafer_corr()`)
 - Agreement metrics
-  - Bland-Altman (two-method `bland_altman()` and repeated-measures
-    `bland_altman_repeated()`),
-  - Lin’s concordance correlation coefficient (pairwise `ccc()`,
-    repeated-measures LMM/REML `ccc_lmm_reml()` and non-parametric
-    `ccc_pairwise_u_stat()`)
+  - Bland-Altman (two-method `bland_altman()` and repeated-measures `bland_altman_repeated()`),
+  - Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_lmm_reml()` and non-parametric `ccc_pairwise_u_stat()`)
+- Interactive Shiny viewers for matrix-style outputs with a dedicated repeated-measures correlation viewer (`view_rmcorr_shiny()`)
 
 ## Installation
 
@@ -163,6 +161,44 @@ summary(R_ps)
 plot(R_pol)
 ```
 
+### Repeated-measures correlation
+
+``` r
+set.seed(2026)
+n_subjects <- 20
+n_rep <- 4
+subject <- rep(seq_len(n_subjects), each = n_rep)
+subj_eff_x <- rnorm(n_subjects, sd = 1.5)
+subj_eff_y <- rnorm(n_subjects, sd = 2.0)
+within_signal <- rnorm(n_subjects * n_rep)
+
+dat_rm <- data.frame(
+  subject = subject,
+  x = subj_eff_x[subject] + within_signal + rnorm(n_subjects * n_rep, sd = 0.2),
+  y = subj_eff_y[subject] + 0.8 * within_signal + rnorm(n_subjects * n_rep, sd = 0.3),
+  z = subj_eff_y[subject] - 0.4 * within_signal + rnorm(n_subjects * n_rep, sd = 0.4)
+)
+
+fit_xy <- rmcorr(dat_rm, response = c("x", "y"), subject = "subject")
+fit_mat <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "subject")
+
+print(fit_xy)
+print(fit_mat, digits = 2)
+plot(fit_xy)
+plot(fit_mat)
+
+# Dedicated Shiny viewer for repeated-measures correlation matrices
+# if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#   fit_mat_view <- rmcorr(
+#     dat_rm,
+#     response = c("x", "y", "z"),
+#     subject = "subject",
+#     keep_data = TRUE
+#   )
+#   view_rmcorr_shiny(fit_mat_view)
+# }
+```
+
 ## Agreement analyses
 
 ### Two-method Bland-Altman
@@ -206,7 +242,7 @@ summary(ba_rep)
 # plot(ba_rep)  # faceted BA scatter by pair
 ```
 
-### Lin’s concordance correlation coefficient (repeated-measures LMM/REML)
+### Lin's concordance correlation coefficient (repeated-measures LMM/REML)
 
 ``` r
 set.seed(6)
@@ -217,7 +253,7 @@ time   <- rep(rep(seq_len(Tm), times = 2), times = S)
 
 u  <- rnorm(S, 0, 0.8)[as.integer(id)]
 g  <- rnorm(S * Tm, 0, 0.5)
-g  <- g[ (as.integer(id) - 1L) * Tm + as.integer(time) ]
+g  <- g[(as.integer(id) - 1L) * Tm + as.integer(time)]
 y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
 
 dat_ccc <- data.frame(y, id, method, time)

@@ -12,6 +12,10 @@ Main changes in this submission:
 `polychoric()`, `polyserial()`, and `biserial()`.
 - Added standard `summary()` methods across the matrix-style 
 correlation objects.
+- Added repeated-measures correlation via `rmcorr()` for within-subject
+  association, with pairwise and matrix outputs.
+- Added a dedicated repeated-measures correlation Shiny viewer via
+  `view_rmcorr_shiny()`.
 
 ## Test environments
 

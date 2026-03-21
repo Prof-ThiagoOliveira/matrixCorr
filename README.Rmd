@@ -39,7 +39,7 @@ repeated translation across packages.
 Supported measures include Pearson, Spearman, Kendall, distance correlation,
 partial correlation, robust biweight mid-correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial, and
-biserial); agreement tools cover Bland-Altman (two-method and
+biserial), plus repeated-measures correlation (`rmcorr()`); agreement tools cover Bland-Altman (two-method and
 repeated-measures) and Lin's concordance correlation coefficient (including
 repeated-measures LMM/REML extensions).
 
@@ -51,10 +51,12 @@ repeated-measures LMM/REML extensions).
 - Distance correlation (`distance_corr()`)
 - Partial correlation (`partial_correlation()`)
 - Latent categorical/ordinal correlations (`tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()`)
+- Repeated-measures correlation (`rmcorr()`)
 - Shrinkage for $p >> n$ (`schafer_corr()`)
 - Agreement metrics
     * Bland-Altman (two-method `bland_altman()` and repeated-measures `bland_altman_repeated()`),
     * Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_lmm_reml()` and non-parametric `ccc_pairwise_u_stat()`)
+- Interactive Shiny viewers for matrix-style outputs with a dedicated repeated-measures correlation viewer (`view_rmcorr_shiny()`)
 
 ## Installation
 
@@ -164,6 +166,44 @@ R_bis <- biserial(X_cont, X_bin[, 1:2])
 print(R_tet, digits = 2)
 summary(R_ps)
 plot(R_pol)
+```
+
+### Repeated-measures correlation
+
+```{r}
+set.seed(2026)
+n_subjects <- 20
+n_rep <- 4
+subject <- rep(seq_len(n_subjects), each = n_rep)
+subj_eff_x <- rnorm(n_subjects, sd = 1.5)
+subj_eff_y <- rnorm(n_subjects, sd = 2.0)
+within_signal <- rnorm(n_subjects * n_rep)
+
+dat_rm <- data.frame(
+  subject = subject,
+  x = subj_eff_x[subject] + within_signal + rnorm(n_subjects * n_rep, sd = 0.2),
+  y = subj_eff_y[subject] + 0.8 * within_signal + rnorm(n_subjects * n_rep, sd = 0.3),
+  z = subj_eff_y[subject] - 0.4 * within_signal + rnorm(n_subjects * n_rep, sd = 0.4)
+)
+
+fit_xy <- rmcorr(dat_rm, response = c("x", "y"), subject = "subject")
+fit_mat <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "subject")
+
+print(fit_xy)
+print(fit_mat, digits = 2)
+plot(fit_xy)
+plot(fit_mat)
+
+# Dedicated Shiny viewer for repeated-measures correlation matrices
+# if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#   fit_mat_view <- rmcorr(
+#     dat_rm,
+#     response = c("x", "y", "z"),
+#     subject = "subject",
+#     keep_data = TRUE
+#   )
+#   view_rmcorr_shiny(fit_mat_view)
+# }
 ```
 
 ## Agreement analyses
