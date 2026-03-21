@@ -16,7 +16,7 @@ downloads](https://cranlogs.r-pkg.org/badges/grand-total/matrixCorr)
 `matrixCorr` computes correlation and related association matrices from
 small to high-dimensional data using simple, consistent functions and
 sensible defaults. It includes shrinkage and robust options for noisy or
-**p ≥ n** settings, plus convenient print/plot methods.
+**p >= n** settings, plus convenient print/plot/summary methods.
 Performance-critical paths are implemented in C++ with BLAS/OpenMP and
 memory-aware symmetric updates. The API accepts base matrices and data
 frames and returns standard R objects via a consistent S3 interface.
@@ -28,10 +28,11 @@ common interface and consistent outputs, so methods can be extended,
 compared, and used without repeated translation across packages.
 
 Supported measures include Pearson, Spearman, Kendall, distance
-correlation, partial correlation, and robust biweight mid-correlation;
-agreement tools cover Bland–Altman (two-method and repeated-measures)
-and Lin’s concordance correlation coefficient (including
-repeated-measures LMM/REML extensions).
+correlation, partial correlation, robust biweight mid-correlation, and
+latent categorical/ordinal correlations (tetrachoric, polychoric,
+polyserial, and biserial); agreement tools cover Bland-Altman
+(two-method and repeated-measures) and Lin’s concordance correlation
+coefficient (including repeated-measures LMM/REML extensions).
 
 ## Features
 
@@ -41,9 +42,11 @@ repeated-measures LMM/REML extensions).
 - Robust correlation metrics (`biweight_mid_corr()`)
 - Distance correlation (`distance_corr()`)
 - Partial correlation (`partial_correlation()`)
+- Latent categorical/ordinal correlations (`tetrachoric()`,
+  `polychoric()`, `polyserial()`, `biserial()`)
 - Shrinkage for $p >> n$ (`schafer_corr()`)
 - Agreement metrics
-  - Bland–Altman (two-method `bland_altman()` and repeated-measures
+  - Bland-Altman (two-method `bland_altman()` and repeated-measures
     `bland_altman_repeated()`),
   - Lin’s concordance correlation coefficient (pairwise `ccc()`,
     repeated-measures LMM/REML `ccc_lmm_reml()` and non-parametric
@@ -52,9 +55,12 @@ repeated-measures LMM/REML extensions).
 ## Installation
 
 ``` r
-# Install from GitHub
-# install.packages("devtools")
-devtools::install_github("Prof-ThiagoOliveira/matrixCorr")
+# Install from CRAN
+install.packages("matrixCorr")
+
+# Development version from GitHub
+# install.packages("remotes")
+remotes::install_github("Prof-ThiagoOliveira/matrixCorr")
 ```
 
 ## Example
@@ -118,9 +124,48 @@ print(R_dcor, digits = 2)
 \(O(n \log n)\) dispatch and an exact \(O(n^2)\) fallback for
 robustness.
 
+### Latent categorical and ordinal correlations
+
+``` r
+set.seed(8)
+n <- 800
+Sigma_lat <- matrix(c(
+  1.00, 0.55, 0.35, 0.20,
+  0.55, 1.00, 0.40, 0.25,
+  0.35, 0.40, 1.00, 0.45,
+  0.20, 0.25, 0.45, 1.00
+), 4, 4, byrow = TRUE)
+
+Z <- matrix(rnorm(n * 4), n, 4) %*% chol(Sigma_lat)
+
+X_bin <- data.frame(
+  b1 = Z[, 1] > qnorm(0.70),
+  b2 = Z[, 2] > qnorm(0.55),
+  b3 = Z[, 3] > qnorm(0.50)
+)
+
+X_ord <- data.frame(
+  o1 = ordered(cut(Z[, 2], breaks = c(-Inf, -0.5, 0.4, Inf),
+                   labels = c("low", "mid", "high"))),
+  o2 = ordered(cut(Z[, 3], breaks = c(-Inf, -1, 0, 1, Inf),
+                   labels = c("1", "2", "3", "4")))
+)
+
+X_cont <- data.frame(x1 = Z[, 1], x2 = Z[, 4])
+
+R_tet <- tetrachoric(X_bin)
+R_pol <- polychoric(X_ord)
+R_ps  <- polyserial(X_cont, X_ord)
+R_bis <- biserial(X_cont, X_bin[, 1:2])
+
+print(R_tet, digits = 2)
+summary(R_ps)
+plot(R_pol)
+```
+
 ## Agreement analyses
 
-### Two-method Bland–Altman
+### Two-method Bland-Altman
 
 ``` r
 set.seed(4)
@@ -132,7 +177,7 @@ print(ba)
 plot(ba)
 ```
 
-### Repeated-measures Bland–Altman (pairwise matrix)
+### Repeated-measures Bland-Altman (pairwise matrix)
 
 ``` r
 set.seed(5)

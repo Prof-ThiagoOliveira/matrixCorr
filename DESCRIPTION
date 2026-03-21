@@ -21,7 +21,6 @@ Description: Compute correlation and other association matrices from
     <doi:10.2202/1544-6115.1175>; Lin (1989) <doi:10.2307/2532051>.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 LinkingTo: 
     cpp11,
     Rcpp,
