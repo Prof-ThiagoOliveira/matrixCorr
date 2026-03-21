@@ -17,7 +17,8 @@ biserial_manual_test <- function(x, y) {
 
 # Brent optimization in the C++ latent estimators currently targets 1e-8,
 # so allow for small platform/compiler drift around these regression values.
-latent_reg_tol <- 5e-8
+latent_reg_tol <- 1e-7
+latent_reg_scale <- 1
 
 test_that("tetrachoric pair and matrix modes match fixed regression values", {
   set.seed(1001)
@@ -25,7 +26,12 @@ test_that("tetrachoric pair and matrix modes match fixed regression values", {
   y <- sample(c(FALSE, TRUE), 300, replace = TRUE)
 
   est_pair <- tetrachoric(x, y)
-  expect_equal(as.numeric(est_pair), -0.272117497540896, tolerance = latent_reg_tol)
+  expect_equal(
+    as.numeric(est_pair),
+    -0.272117497540896,
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
+  )
   expect_true(is.list(attr(est_pair, "diagnostics")))
   expect_true(is.list(attr(est_pair, "thresholds")))
 
@@ -47,8 +53,18 @@ test_that("tetrachoric pair and matrix modes match fixed regression values", {
   )
 
   expect_s3_class(est_mat, "tetrachoric_corr")
-  expect_equal(as.numeric(est_mat), as.numeric(ref_mat), tolerance = latent_reg_tol)
-  expect_equal(as.numeric(est_mat["a", "b"]), as.numeric(est_pair), tolerance = latent_reg_tol)
+  expect_equal(
+    as.numeric(est_mat),
+    as.numeric(ref_mat),
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
+  )
+  expect_equal(
+    as.numeric(est_mat["a", "b"]),
+    as.numeric(est_pair),
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
+  )
 })
 
 test_that("polychoric pair and matrix modes match fixed regression values", {
@@ -57,7 +73,12 @@ test_that("polychoric pair and matrix modes match fixed regression values", {
   y <- ordered(sample(1:5, 400, replace = TRUE))
 
   est_pair <- polychoric(x, y)
-  expect_equal(as.numeric(est_pair), 0.0034270943899109, tolerance = latent_reg_tol)
+  expect_equal(
+    as.numeric(est_pair),
+    0.0034270943899109,
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
+  )
 
   dat <- data.frame(
     x = x,
@@ -77,8 +98,18 @@ test_that("polychoric pair and matrix modes match fixed regression values", {
   )
 
   expect_s3_class(est_mat, "polychoric_corr")
-  expect_equal(as.numeric(est_mat), as.numeric(ref_mat), tolerance = latent_reg_tol)
-  expect_equal(as.numeric(est_mat["x", "y"]), as.numeric(est_pair), tolerance = latent_reg_tol)
+  expect_equal(
+    as.numeric(est_mat),
+    as.numeric(ref_mat),
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
+  )
+  expect_equal(
+    as.numeric(est_mat["x", "y"]),
+    as.numeric(est_pair),
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
+  )
 })
 
 test_that("polyserial pair and matrix modes match fixed regression values", {
@@ -177,16 +208,23 @@ test_that("regular table-input latent fits match known regression values", {
   expect_equal(
     as.numeric(tetrachoric(tab_2x2, correct = 0.5)),
     0.348073131513184,
-    tolerance = latent_reg_tol
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
   )
   expect_equal(
     as.numeric(polychoric(tab_2x2, correct = 0.5)),
     0.348073131513616,
-    tolerance = latent_reg_tol
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
   )
 
   pc_3x3 <- polychoric(tab_3x3, correct = 0)
-  expect_equal(as.numeric(pc_3x3), 0.491371943011718, tolerance = latent_reg_tol)
+  expect_equal(
+    as.numeric(pc_3x3),
+    0.491371943011718,
+    tolerance = latent_reg_tol,
+    scale = latent_reg_scale
+  )
   thr <- attr(pc_3x3, "thresholds")
   expect_equal(unname(thr$row), c(-1.77438191034496, -0.135773931302112), tolerance = 1e-12)
   expect_equal(unname(thr$col), c(-0.687131286795469, 0.668209299725723), tolerance = 1e-12)

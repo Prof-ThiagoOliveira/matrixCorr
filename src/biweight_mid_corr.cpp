@@ -46,7 +46,7 @@ arma::mat bicor_matrix_cpp(const arma::mat &X,
 
   // Standardised columns
   arma::mat Z(n, p, fill::zeros);
-  std::vector<bool> col_valid(p, false);
+  std::vector<unsigned char> col_valid(p, 0);
 
   // Standardise each column in parallel
 #ifdef _OPENMP
@@ -58,7 +58,7 @@ arma::mat bicor_matrix_cpp(const arma::mat &X,
     arma::vec zcol(n, fill::zeros);
     standardise_bicor_column(X.col(j), zcol, pearson_fallback, c_const, maxPOutliers, ok);
     Z.col(j) = zcol;
-    col_valid[static_cast<std::size_t>(j)] = ok;
+    col_valid[static_cast<std::size_t>(j)] = ok ? 1u : 0u;
   }
 
   // Correlation matrix R = Z'Z
@@ -82,7 +82,7 @@ arma::mat bicor_matrix_cpp(const arma::mat &X,
 
   // Mark invalid columns as NA, others keep unit diagonal
   for (std::size_t j = 0; j < p; ++j) {
-    if (!col_valid[j]) {
+    if (col_valid[j] == 0u) {
       R.row(j).fill(arma::datum::nan);
       R.col(j).fill(arma::datum::nan);
       R(j, j) = 1.0;
@@ -229,7 +229,7 @@ arma::mat bicor_matrix_weighted_cpp(const arma::mat &X,
   if (!w.is_finite() || arma::any(w < 0)) stop("Weights must be finite and non-negative.");
 
   arma::mat Z(n, p, arma::fill::zeros);
-  std::vector<bool> col_valid(p, false);
+  std::vector<unsigned char> col_valid(p, 0);
 
 #ifdef _OPENMP
   omp_set_num_threads(std::max(1, n_threads));
@@ -240,7 +240,7 @@ arma::mat bicor_matrix_weighted_cpp(const arma::mat &X,
     arma::vec zcol(n, arma::fill::zeros);
     standardise_bicor_column_weighted(X.col(j), w, zcol, pearson_fallback, c_const, maxPOutliers, ok);
     Z.col(j) = zcol;
-    col_valid[static_cast<std::size_t>(j)] = ok;
+    col_valid[static_cast<std::size_t>(j)] = ok ? 1u : 0u;
   }
 
   arma::mat R(p, p, arma::fill::zeros);
@@ -259,7 +259,7 @@ arma::mat bicor_matrix_weighted_cpp(const arma::mat &X,
     }
   }
   for (std::size_t j = 0; j < p; ++j) {
-    if (col_valid[j]) {
+    if (col_valid[j] != 0u) {
       R(j, j) = 1.0;
     } else {
       R.row(j).fill(arma::datum::nan);
