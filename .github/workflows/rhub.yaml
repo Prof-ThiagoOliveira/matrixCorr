@@ -33,7 +33,7 @@ on:
       config:
         description: "Comma-separated R-hub platforms"
         type: string
-        default: "mkl,clang-asan,rchk,clang-ubsan"
+        default: "clang-asan,rchk,clang-ubsan"
       name:
         description: "Run name (optional)"
         type: string
@@ -56,8 +56,10 @@ jobs:
       - uses: r-hub/actions/setup@v1
         id: rhub-setup
         with:
-          # On push/PR use our fixed platform set; allow override when manually dispatched
-          config: ${{ github.event.inputs.config || 'mkl,clang-asan,clang-ubsan' }}
+          # The R-hub MKL platform is currently failing in dependency compilation
+          # because its R BLAS/LAPACK flags reference unavailable MKL libraries.
+          # Keep it opt-in via manual dispatch, but exclude it from default CI.
+          config: ${{ github.event.inputs.config || 'clang-asan,clang-ubsan' }}
 
   linux-containers:
     needs: setup
