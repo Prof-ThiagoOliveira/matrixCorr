@@ -97,6 +97,34 @@ pearson_matrix_cpp <- function(X_) {
     .Call(`_matrixCorr_pearson_matrix_cpp`, X_)
 }
 
+rmcorr_pair_cpp <- function(x, y, subject, conf_level = 0.95) {
+    .Call(`_matrixCorr_rmcorr_pair_cpp`, x, y, subject, conf_level)
+}
+
+rmcorr_matrix_cpp <- function(x, y, subject, symmetric = FALSE, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_rmcorr_matrix_cpp`, x, y, subject, symmetric, conf_level, n_threads)
+}
+
+pbcor_matrix_cpp <- function(X, beta = 0.2, n_threads = 1L) {
+    .Call(`_matrixCorr_pbcor_matrix_cpp`, X, beta, n_threads)
+}
+
+pbcor_matrix_pairwise_cpp <- function(X, beta = 0.2, min_n = 5L, n_threads = 1L) {
+    .Call(`_matrixCorr_pbcor_matrix_pairwise_cpp`, X, beta, min_n, n_threads)
+}
+
+wincor_matrix_cpp <- function(X, tr = 0.2, n_threads = 1L) {
+    .Call(`_matrixCorr_wincor_matrix_cpp`, X, tr, n_threads)
+}
+
+wincor_matrix_pairwise_cpp <- function(X, tr = 0.2, min_n = 5L, n_threads = 1L) {
+    .Call(`_matrixCorr_wincor_matrix_pairwise_cpp`, X, tr, min_n, n_threads)
+}
+
+skipcor_matrix_cpp <- function(X, method_int = 0L, stand = TRUE, use_mad = FALSE, gval = 2.717803, min_n = 5L, n_threads = 1L) {
+    .Call(`_matrixCorr_skipcor_matrix_cpp`, X, method_int, stand, use_mad, gval, min_n, n_threads)
+}
+
 sss_cor_cpp <- function(X_) {
     .Call(`_matrixCorr_sss_cor_cpp`, X_)
 }
@@ -143,14 +171,6 @@ matrixCorr_polyserial_negloglik_cpp <- function(z, y, pars, maxcor = 0.9999) {
 
 matrixCorr_polydi_mle_cpp <- function(tab, correct = 0.5) {
     .Call(`_matrixCorr_matrixCorr_polydi_mle_cpp`, tab, correct)
-}
-
-rmcorr_pair_cpp <- function(x, y, subject, conf_level = 0.95) {
-    .Call(`_matrixCorr_rmcorr_pair_cpp`, x, y, subject, conf_level)
-}
-
-rmcorr_matrix_cpp <- function(x, y, subject, symmetric = FALSE, conf_level = 0.95, n_threads = 1L) {
-    .Call(`_matrixCorr_rmcorr_matrix_cpp`, x, y, subject, symmetric, conf_level, n_threads)
 }
 
 validate_corr_input_cpp <- function(data, check_na = TRUE) {

@@ -28,9 +28,10 @@ common interface and consistent outputs, so methods can be extended,
 compared, and used without repeated translation across packages.
 
 Supported measures include Pearson, Spearman, Kendall, distance
-correlation, partial correlation, robust biweight mid-correlation, and
-latent categorical/ordinal correlations (tetrachoric, polychoric,
-polyserial, and biserial), plus repeated-measures correlation
+correlation, partial correlation, robust biweight mid-correlation,
+percentage bend, Winsorized, skipped correlation, and latent
+categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
+and biserial), plus repeated-measures correlation
 (`rmcorr()`); agreement tools cover Bland-Altman (two-method and
 repeated-measures) and Lin's concordance correlation coefficient (including
 repeated-measures LMM/REML extensions).
@@ -39,7 +40,7 @@ repeated-measures LMM/REML extensions).
 
 - High-performance C++ backend using `Rcpp`
 - General correlations such as `pearson_corr()`, `spearman_rho()`, `kendall_tau()`
-- Robust correlation metrics (`bicor()`)
+- Robust correlation metrics (`bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`)
 - Distance correlation (`dcor()`)
 - Partial correlation (`pcorr()`)
 - Latent categorical/ordinal correlations (`tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()`)
@@ -91,6 +92,20 @@ Y$V1[sample.int(nrow(Y), 8)] <- Y$V1[sample.int(nrow(Y), 8)] + 8
 R_bicor <- bicor(Y)
 print(R_bicor, digits = 2)
 ```
+
+### Other robust correlations
+
+``` r
+R_pb <- pbcor(Y)
+R_win <- wincor(Y)
+R_skip <- skipped_corr(Y)
+
+print(R_pb, digits = 2)
+```
+
+`skipped_corr()` is typically slower than `pbcor()` and `wincor()`
+because it performs pairwise bivariate outlier detection before
+computing the final correlation.
 
 ### High-dimensional shrinkage correlation ($p >> n$)
 

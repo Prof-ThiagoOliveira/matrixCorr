@@ -9,7 +9,10 @@ test_that("matrix-style correlation summaries use the standard compact format", 
     kendall_tau(X),
     dcor(X),
     schafer_corr(X),
-    bicor(X)
+    bicor(X),
+    pbcor(X),
+    wincor(X),
+    skipped_corr(X)
   )
 
   for (obj in objs) {

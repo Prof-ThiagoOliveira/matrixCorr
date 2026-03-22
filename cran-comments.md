@@ -11,6 +11,8 @@ Main changes in this submission:
 - Shortened several public function names for a more concise API:
   `ba()`, `ba_rm()`, `ccc_rm_reml()`, `ccc_rm_ustat()`, `pcorr()`,
   `bicor()`, and `dcor()` are now the primary exported names.
+- Added robust correlation methods `pbcor()`, `wincor()`, and
+  `skipped_corr()`.
 - Added latent correlation methods such as `tetrachoric()`, 
 `polychoric()`, `polyserial()`, and `biserial()`.
 - Added standard `summary()` methods across the matrix-style 

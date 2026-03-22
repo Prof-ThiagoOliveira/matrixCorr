@@ -1,9 +1,9 @@
 Package: matrixCorr
 Type: Package
 Title: Collection of Correlation and Association Estimators
-Version: 0.9.5
-Authors@R: person(given = "Thiago de Paula", family = "Oliveira", 
-    email = "thiago.paula.oliveira@gmail.com", role = c("aut", "cre"), 
+Version: 0.10.0
+Authors@R: person(given = "Thiago de Paula", family = "Oliveira",
+    email = "thiago.paula.oliveira@gmail.com", role = c("aut", "cre"),
     comment = c(ORCID = "0000-0002-4555-2584"))
 Description: Compute correlation and other association matrices from
     small to high-dimensional datasets with relative simple functions and
@@ -14,14 +14,17 @@ Description: Compute correlation and other association matrices from
     matrices and data frames, returning standard R objects via a consistent S3
     interface. Useful across genomics, agriculture, and machine-learning
     workflows. Supports Pearson, Spearman, Kendall, distance correlation,
-    partial correlation, and robust biweight mid-correlation; Bland–Altman
-    analyses and Lin's concordance correlation coefficient (including
-    repeated-measures extensions). Methods based on Ledoit and Wolf (2004)
-    <doi:10.1016/S0047-259X(03)00096-4>; Schäfer and Strimmer (2005)
-    <doi:10.2202/1544-6115.1175>; Lin (1989) <doi:10.2307/2532051>.
+    partial correlation, and robust biweight mid-correlation, percentage bend,
+    Winsorized, and skipped correlations; Bland-Altman analyses and Lin's
+    concordance correlation coefficient (including repeated-measures
+    extensions). Methods based on Ledoit and Wolf (2004)
+    <doi:10.1016/S0047-259X(03)00096-4>; Schafer and Strimmer (2005)
+    <doi:10.2202/1544-6115.1175>; Lin (1989) <doi:10.2307/2532051>; Wilcox
+    (1994) <doi:10.1007/BF02294395>; Wilcox (2004)
+    <doi:10.1080/0266476032000148821>.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LinkingTo: 
+LinkingTo:
     cpp11,
     Rcpp,
     RcppArmadillo
