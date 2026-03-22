@@ -245,7 +245,24 @@ summary(ba_rep)
 # plot(ba_rep)  # faceted BA scatter by pair
 ```
 
-### Lin's concordance correlation coefficient (repeated-measures LMM/REML)
+### Lin's concordance correlation coefficient
+
+``` r
+set.seed(6)
+x <- rnorm(80, 100, 8)
+y <- x + 0.4 + rnorm(80, 0, 3)
+
+fit_ccc <- ccc(data.frame(A = x, B = y), ci = TRUE)
+summary(fit_ccc)
+```
+
+Use `ccc_rm_ustat()` when you have repeated measurements on the same
+subjects across methods and want a direct non-parametric
+repeated-measures CCC. Use `ccc_rm_reml()` when you want a model-based
+estimate from variance components, especially when subject effects, time
+effects, or within-subject correlation need to be modeled explicitly.
+
+### Repeated-measures Lin's concordance correlation coefficient (LMM/REML)
 
 ``` r
 set.seed(6)
@@ -260,9 +277,9 @@ g  <- g[(as.integer(id) - 1L) * Tm + as.integer(time)]
 y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
 
 dat_ccc <- data.frame(y, id, method, time)
-fit_ccc <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
-                       method = "method", time = "time")
-summary(fit_ccc)  # overall CCC, variance components, SEs/CI
+fit_ccc_rm <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
+                          method = "method", time = "time")
+summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
 ```
 
 ## Contributing
