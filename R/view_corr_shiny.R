@@ -3,8 +3,8 @@
 #' Launches an interactive Shiny gadget that displays correlation heatmaps with
 #' filtering, clustering, and hover inspection. The viewer accepts any
 #' matrixCorr correlation result (for example the outputs from
-#' [pearson_corr()], [spearman_rho()], [kendall_tau()], [biweight_mid_corr()],
-#' [partial_correlation()], [distance_corr()], or [schafer_corr()]), a plain
+#' [pearson_corr()], [spearman_rho()], [kendall_tau()], [bicor()],
+#' [pcorr()], [dcor()], or [schafer_corr()]), a plain
 #' matrix, or a named list of such objects. When a list is supplied the gadget
 #' offers a picker to switch between results.
 #' @param x A correlation result, a numeric matrix, or a named list of those

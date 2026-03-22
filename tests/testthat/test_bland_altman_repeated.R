@@ -66,7 +66,7 @@ sim_multi_method <- function(S = 30L, Tm = 15L, seed = 11L) {
 test_that("two-method contrast matches factor order (method2 - method1)", {
   dat <- sim_two_method_known(S = 50, Tm = 20, mu = 1.0, sig_s = 1.2, sig_e = 1.5, seed = 1)
   dat$method <- factor(dat$method, levels = c("M1","M2"))
-  fit <- bland_altman_repeated(data = dat, response="y", subject="subject",
+  fit <- ba_rm(data = dat, response="y", subject="subject",
                                method="method", time="time", use_ar1=FALSE)
   expect_gt(as.numeric(fit$mean.diffs), 0)  # should be ~ +1.0
 })
@@ -76,7 +76,7 @@ test_that("Two-method BA recovers bias and sd_loa under i.i.d. residuals", {
                               sig_e = 2.3, rho = NULL, seed = 100)
   truth_sd <- sqrt(1.7^2 + 2.3^2)
 
-  fit <- bland_altman_repeated(
+  fit <- ba_rm(
     data = dat,
     response = "y", subject = "subject", method = "method", time = "time",
     include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
@@ -109,7 +109,7 @@ test_that("Two-method BA with AR(1) honours supplied rho and recovers truth", {
   dat <- sim_two_method_known(S = 70, Tm = 40, mu = mu, sig_s = sig_s, sig_e = sig_e, rho = rho, seed = 200)
   truth_sd <- sqrt(sig_s^2 + sig_e^2)  # definition of sd_loa in docs
 
-  fit <- bland_altman_repeated(
+  fit <- ba_rm(
     data = dat,
     response = "y", subject = "subject", method = "method", time = "time",
     include_slope = FALSE, use_ar1 = TRUE, ar1_rho = rho, two = 2.0, conf_level = 0.9
@@ -138,7 +138,7 @@ test_that("Edge case: constant difference gives zero sd_loa and degenerate LoA",
                     time = rep(time, 2))
   dat$method <- factor(dat$method, levels = c("A","B"))
 
-  fit <- bland_altman_repeated(
+  fit <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time",
     include_slope = FALSE, use_ar1 = FALSE
   )
@@ -151,7 +151,7 @@ test_that("Edge case: constant difference gives zero sd_loa and degenerate LoA",
 test_that("Pairwise matrix algebraic invariants hold", {
   dat <- sim_multi_method(S = 24, Tm = 12, seed = 99)
 
-  fit <- bland_altman_repeated(
+  fit <- ba_rm(
     data = dat,
     response = "y", subject = "subject", method = "method", time = "time",
     include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
@@ -182,12 +182,12 @@ test_that("Pairwise result equals two-method fit for the same pair", {
   # Compare M1 vs M2
   dat12 <- subset(dat, method %in% c("M1","M2"))
 
-  fit2 <- bland_altman_repeated(
+  fit2 <- ba_rm(
     data = dat12, response = "y", subject = "subject", method = "method", time = "time",
     include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
   )
 
-  fitN <- bland_altman_repeated(
+  fitN <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time",
     include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
   )
@@ -208,7 +208,7 @@ test_that("n matrix equals number of subject-time complete pairs per contrast", 
   rm <- sample(drop_idx, size = floor(0.15 * length(drop_idx)))
   dat2 <- dat[-rm, ]
 
-  fit <- bland_altman_repeated(
+  fit <- ba_rm(
     data = dat2, response = "y", subject = "subject", method = "method", time = "time",
     include_slope = FALSE, use_ar1 = FALSE
   )
@@ -227,13 +227,13 @@ test_that("n matrix equals number of subject-time complete pairs per contrast", 
 test_that("Column mapping works both with data= and with vectors", {
   dat <- sim_multi_method(S = 10, Tm = 6, seed = 42)
   # With data=
-  fit1 <- bland_altman_repeated(
+  fit1 <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time"
   )
   expect_true(inherits(fit1, "ba_repeated_matrix"))
 
   # With vectors (no data=)
-  fit2 <- bland_altman_repeated(
+  fit2 <- ba_rm(
     response = dat$y, subject = dat$subject, method = dat$method, time = dat$time
   )
   expect_true(inherits(fit2, "ba_repeated_matrix"))
@@ -246,7 +246,7 @@ test_that("Column mapping works both with data= and with vectors", {
 test_that("summary/print produce expected classes and do not error", {
   dat <- sim_multi_method(S = 10, Tm = 6, seed = 2)
 
-  fit_mat <- bland_altman_repeated(
+  fit_mat <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time"
   )
   sm_mat <- summary(fit_mat)
@@ -255,7 +255,7 @@ test_that("summary/print produce expected classes and do not error", {
 
   # Two-method
   dat12 <- subset(dat, method %in% c("M1","M2"))
-  fit2  <- bland_altman_repeated(
+  fit2  <- ba_rm(
     data = dat12, response = "y", subject = "subject", method = droplevels(dat12$method), time = "time"
   )
   sm2 <- summary(fit2)
@@ -268,7 +268,7 @@ test_that("plot methods return a ggplot object and do not error", {
   dat <- sim_multi_method(S = 12, Tm = 8, seed = 5)
 
   # Matrix plot
-  fit_mat <- bland_altman_repeated(
+  fit_mat <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time",
     include_slope = TRUE
   )
@@ -277,7 +277,7 @@ test_that("plot methods return a ggplot object and do not error", {
 
   # Two-method plot
   dat12 <- subset(dat, method %in% c("M1","M2"))
-  fit2  <- bland_altman_repeated(
+  fit2  <- ba_rm(
     data = dat12, response = "y", subject = "subject", method = droplevels(dat12$method), time = "time",
     include_slope = TRUE
   )
@@ -290,21 +290,21 @@ test_that("Input argument validation works", {
 
   # bad 'two'
   expect_error(
-    bland_altman_repeated(data = dat, response = "y", subject = "subject", method = "method", time = "time",
+    ba_rm(data = dat, response = "y", subject = "subject", method = "method", time = "time",
                           two = -1),
     "`two` must be a positive scalar.", fixed = TRUE
   )
 
   # bad conf_level
   expect_error(
-    bland_altman_repeated(data = dat, response = "y", subject = "subject", method = "method", time = "time",
+    ba_rm(data = dat, response = "y", subject = "subject", method = "method", time = "time",
                           conf_level = 1.1),
     "`conf_level` must be in (0,1).", fixed = TRUE
   )
 
   # AR1 rho bounds when use_ar1 = TRUE
   expect_error(
-    bland_altman_repeated(data = dat, response = "y", subject = "subject", method = "method", time = "time",
+    ba_rm(data = dat, response = "y", subject = "subject", method = "method", time = "time",
                           use_ar1 = TRUE, ar1_rho = 1.2),
     "`ar1_rho` must be in (-0.999, 0.999).", fixed = TRUE
   )
@@ -312,13 +312,13 @@ test_that("Input argument validation works", {
   # Need at least 2 methods
   dat1 <- subset(dat, method == "M1")
   expect_error(
-    bland_altman_repeated(data = dat1, response = "y", subject = "subject", method = "method", time = "time"),
+    ba_rm(data = dat1, response = "y", subject = "subject", method = "method", time = "time"),
     "Need at least 2 distinct methods in `method`.", fixed = TRUE
   )
 
   # Wrong column name
   expect_error(
-    bland_altman_repeated(data = dat, response = "y", subject = "subject", method = "NOPE", time = "time"),
+    ba_rm(data = dat, response = "y", subject = "subject", method = "NOPE", time = "time"),
     "Column 'NOPE' not found in `data`.", fixed = TRUE
   )
 })
@@ -333,7 +333,7 @@ test_that("two-method path requires at least two matched pairs", {
   )
 
   expect_error(
-    bland_altman_repeated(dat$y, dat$subject, dat$method, dat$time,
+    ba_rm(dat$y, dat$subject, dat$method, dat$time,
                           include_slope = FALSE, use_ar1 = FALSE),
     "at least two subject-time matched pairs",
     fixed = FALSE
@@ -349,7 +349,7 @@ test_that("pairwise matrix drops contrasts with <2 matched pairs", {
     check.names = FALSE
   )
 
-  fit <- bland_altman_repeated(dat$y, dat$subject, dat$method, dat$time,
+  fit <- ba_rm(dat$y, dat$subject, dat$method, dat$time,
                                include_slope = FALSE, use_ar1 = FALSE)
 
   expect_true(is.na(fit$bias["A", "B"]))

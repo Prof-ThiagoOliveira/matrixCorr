@@ -8,6 +8,9 @@ This is a new release of `matrixCorr`.
 
 Main changes in this submission:
 
+- Shortened several public function names for a more concise API:
+  `ba()`, `ba_rm()`, `ccc_rm_reml()`, `ccc_rm_ustat()`, `pcorr()`,
+  `bicor()`, and `dcor()` are now the primary exported names.
 - Added latent correlation methods such as `tetrachoric()`, 
 `polychoric()`, `polyserial()`, and `biserial()`.
 - Added standard `summary()` methods across the matrix-style 

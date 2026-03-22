@@ -108,7 +108,7 @@
 #'
 #' For **unbalanced** or **complex hierarchical** data (e.g.,
 #' missing timepoints, covariate adjustments), consider using
-#' \code{\link{ccc_lmm_reml}}, which uses a variance components approach
+#' \code{\link{ccc_rm_reml}}, which uses a variance components approach
 #' via linear mixed models.
 #'
 #' @references
@@ -121,7 +121,7 @@
 #' Carrasco JL, Jover L (2003). Estimating the concordance correlation coefficient:
 #' a new approach. \emph{Computational Statistics & Data Analysis}, 47(4): 519-539.
 #'
-#' @seealso \code{\link{ccc}}, \code{\link{ccc_lmm_reml}},
+#' @seealso \code{\link{ccc}}, \code{\link{ccc_rm_reml}},
 #' \code{\link{plot.ccc}}, \code{\link{print.ccc}}
 #'
 #' @examples
@@ -132,14 +132,14 @@
 #' df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
 #'
 #' # CCC matrix (no CIs)
-#' ccc1 <- ccc_pairwise_u_stat(df, response = "y", method = "method",
+#' ccc1 <- ccc_rm_ustat(df, response = "y", method = "method",
 #'                             subject = "subject", time = "time")
 #' print(ccc1)
 #' summary(ccc1)
 #' plot(ccc1)
 #'
 #' # With confidence intervals
-#' ccc2 <- ccc_pairwise_u_stat(df, response = "y", method = "method",
+#' ccc2 <- ccc_rm_ustat(df, response = "y", method = "method",
 #'                             subject = "subject", time = "time", ci = TRUE)
 #' print(ccc2)
 #' summary(ccc2)
@@ -154,20 +154,20 @@
 #' # Choosing delta based on distance sensitivity
 #' #------------------------------------------------------------------------
 #' # Absolute distance (L1 norm) - robust
-#' ccc_pairwise_u_stat(df, response = "y", method = "method",
+#' ccc_rm_ustat(df, response = "y", method = "method",
 #'                     subject = "subject", time = "time", delta = 1)
 #'
 #' # Squared distance (L2 norm) - amplifies large deviations
-#' ccc_pairwise_u_stat(df, response = "y", method = "method",
+#' ccc_rm_ustat(df, response = "y", method = "method",
 #'                     subject = "subject", time = "time", delta = 2)
 #'
 #' # Presence/absence of disagreement (like kappa)
-#' ccc_pairwise_u_stat(df, response = "y", method = "method",
+#' ccc_rm_ustat(df, response = "y", method = "method",
 #'                     subject = "subject", time = "time", delta = 0)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export
-ccc_pairwise_u_stat <- function(data,
+ccc_rm_ustat <- function(data,
                         response,
                         method,
                         subject,
@@ -787,7 +787,7 @@ ccc_pairwise_u_stat <- function(data,
 #' \pkg{matrixCorr}.
 #'
 #' @seealso \code{build_L_Dm_Z_cpp}
-#' for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_pairwise_u_stat}}
+#' for constructing \eqn{L}/\eqn{D_m}/\eqn{Z}; \code{\link{ccc_rm_ustat}}
 #' for a U-statistic alternative; and \pkg{cccrm} for a reference approach via
 #' \pkg{nlme}.
 #'
@@ -848,7 +848,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_both <- data.frame(y, id, method, time)
 #'
 #' # Both sigma2_subject_method and sigma2_subject_time are identifiable here
-#' fit_both <- ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
+#' fit_both <- ccc_rm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'                          vc_select = "auto", verbose = TRUE)
 #' summary(fit_both)
 #' plot(fit_both)
@@ -881,7 +881,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_sag <- data.frame(y, id, method, time)
 #'
 #' # sigma_AT should be retained; sigma_AM may be dropped (since w_{i,m}=0)
-#' fit_sag <- ccc_lmm_reml(dat_sag, "y", "id", method = "method", time = "time",
+#' fit_sag <- ccc_rm_reml(dat_sag, "y", "id", method = "method", time = "time",
 #'                         vc_select = "auto", verbose = TRUE)
 #' summary(fit_sag)
 #' plot(fit_sag)
@@ -912,14 +912,14 @@ ccc_pairwise_u_stat <- function(data,
 #' y   <- (method == "B") * biasB + u + w + g + rnorm(length(id), 0, sqrt(sigE))
 #' dat_both <- data.frame(y, id, method, time)
 #'
-#' fit_both <- ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
+#' fit_both <- ccc_rm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'                          vc_select = "auto", verbose = TRUE, ci = TRUE)
 #' summary(fit_both)
 #' plot(fit_both)
 #'
 #' # If you want to force-include both VCs (skip testing):
 #' fit_both_forced <-
-#'  ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
+#'  ccc_rm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'               vc_select = "none", include_subj_method  = TRUE,
 #'               include_subj_time  = TRUE, verbose = TRUE)
 #' summary(fit_both_forced)
@@ -929,12 +929,12 @@ ccc_pairwise_u_stat <- function(data,
 #' # 4) D_m choices: time-averaged (default) vs typical visit
 #' # ====================================================================
 #' # Time-average
-#' ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
+#' ccc_rm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'              vc_select = "none", include_subj_method  = TRUE,
 #'              include_subj_time  = TRUE, Dmat_type = "time-avg")
 #'
 #' # Typical visit
-#' ccc_lmm_reml(dat_both, "y", "id", method = "method", time = "time",
+#' ccc_rm_reml(dat_both, "y", "id", method = "method", time = "time",
 #'              vc_select = "none", include_subj_method  = TRUE,
 #'              include_subj_time  = TRUE, Dmat_type = "typical-visit")
 #'
@@ -976,7 +976,7 @@ ccc_pairwise_u_stat <- function(data,
 #' y <- mu + u + e
 #' dat_ar4 <- data.frame(y = y, id = id, method = method, time = time)
 #'
-#' ccc_lmm_reml(dat_ar4,
+#' ccc_rm_reml(dat_ar4,
 #'              response = "y", rind = "id", method = "method", time = "time",
 #'              ar = "ar1", ar_rho = 0.6, verbose = TRUE)
 #' }
@@ -1001,7 +1001,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_s <- data.frame(y, id, method, time = tim)
 #' dat_s$t_num <- as.integer(dat_s$time)
 #' dat_s$t_c   <- ave(dat_s$t_num, dat_s$id, FUN = function(v) v - mean(v))
-#' ccc_lmm_reml(dat_s, "y", "id", method = "method", time = "time",
+#' ccc_rm_reml(dat_s, "y", "id", method = "method", time = "time",
 #'              slope = "subject", slope_var = "t_c", verbose = TRUE)
 #'
 #' ## By METHOD
@@ -1018,7 +1018,7 @@ ccc_pairwise_u_stat <- function(data,
 #' dat_m <- data.frame(y, id, method, time = tim)
 #' dat_m$t_num <- as.integer(dat_m$time)
 #' dat_m$t_c   <- ave(dat_m$t_num, dat_m$id, FUN = function(v) v - mean(v))
-#' ccc_lmm_reml(dat_m, "y", "id", method = "method", time = "time",
+#' ccc_rm_reml(dat_m, "y", "id", method = "method", time = "time",
 #'              slope = "method", slope_var = "t_c", verbose = TRUE)
 #'
 #' ## SUBJECT + METHOD random slopes (custom Z)
@@ -1043,7 +1043,7 @@ ccc_pairwise_u_stat <- function(data,
 #'   subj_slope = dat_bothRS$t_c,
 #'   MM * dat_bothRS$t_c
 #' )
-#' ccc_lmm_reml(dat_bothRS, "y", "id", method = "method", time = "time",
+#' ccc_rm_reml(dat_bothRS, "y", "id", method = "method", time = "time",
 #'              slope = "custom", slope_Z = Z_custom, verbose = TRUE)
 #' }
 #'
@@ -1064,7 +1064,7 @@ ccc_pairwise_u_stat <- function(data,
 #' averaging operates when translating variance components into CCC summaries.
 #'
 #' @export
-ccc_lmm_reml <- function(data, response, rind,
+ccc_rm_reml <- function(data, response, rind,
                          method = NULL, time = NULL, interaction = FALSE,
                          max_iter = 100, tol = 1e-6,
                          Dmat = NULL,
@@ -1324,7 +1324,7 @@ num_or_na_vec <- function(x) {
   v <- function(s, x) sprintf("  %-*s : %s", colw, s, fmt(x))
 
   out <- c(
-    sprintf("---- matrixCorr::ccc_lmm_reml - variance-components (%s) ----", label),
+    sprintf("---- matrixCorr::ccc_rm_reml - variance-components (%s) ----", label),
     sprintf("Design: methods nm = %d, times nt = %d", nm, nt)
   )
   if (identical(ar, "ar1")) {
@@ -1858,7 +1858,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     diag(lwr_mat) <- NA_real_
     diag(upr_mat) <- NA_real_
     out <- structure(list(est = est_mat, lwr.ci = lwr_mat, upr.ci = upr_mat),
-                     class = c("ccc_lmm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc"))
+                     class = c("ccc_rm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc"))
     attr(out, "method")      <- "Variance Components REML - pairwise"
     attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
     attr(out, "package")     <- "matrixCorr"
@@ -1882,7 +1882,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
 
     return(out)
   } else {
-    out <- structure(est_mat, class = c("ccc_lmm_reml", "matrixCorr_ccc", "ccc", "matrix"))
+    out <- structure(est_mat, class = c("ccc_rm_reml", "matrixCorr_ccc", "ccc", "matrix"))
     attr(out, "method")      <- "Variance Components REML - pairwise"
     attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
     attr(out, "package")     <- "matrixCorr"
@@ -2081,12 +2081,12 @@ print.ccc_ci <- function(x, ...) {
   print.matrixCorr_ccc(x, ...)
 }
 
-#' @title Summary Method for `ccc_lmm_reml` Objects
+#' @title Summary Method for `ccc_rm_reml` Objects
 #'
-#' @description Produces a detailed summary of a `"ccc_lmm_reml"` object, including
+#' @description Produces a detailed summary of a `"ccc_rm_reml"` object, including
 #' Lin's CCC estimates and associated variance component estimates per method pair.
 #'
-#' @param object An object of class `"ccc_lmm_reml"`, as returned by [ccc_lmm_reml()].
+#' @param object An object of class `"ccc_rm_reml"`, as returned by [ccc_rm_reml()].
 #' @param digits Integer; number of decimal places to round CCC estimates and components.
 #' @param ci_digits Integer; decimal places for confidence interval bounds.
 #' @param show_ci Character string indicating whether to show confidence intervals:
@@ -2094,14 +2094,14 @@ print.ccc_ci <- function(x, ...) {
 #'   `"no"` never shows them.
 #' @param ... Additional arguments (ignored).
 #'
-#' @return A data frame of class `"summary.ccc_lmm_reml"` with columns:
+#' @return A data frame of class `"summary.ccc_rm_reml"` with columns:
 #'   \code{method1}, \code{method2}, \code{estimate}, and optionally \code{lwr}, \code{upr},
 #'   as well as variance component estimates: \code{sigma2_subject}, \code{sigma2_subject_method},
 #'   \code{sigma2_subject_time}, \code{sigma2_error}, \code{sigma2_extra}, \code{SB}, \code{se_ccc}.
 #'
 #' @export
-#' @method summary ccc_lmm_reml
-summary.ccc_lmm_reml <- function(object,
+#' @method summary ccc_rm_reml
+summary.ccc_rm_reml <- function(object,
                                  digits = 4,
                                  ci_digits = 2,
                                  show_ci = c("auto", "yes", "no"),
@@ -2325,5 +2325,5 @@ summary.ccc_lmm_reml <- function(object,
   attr(out, "has_ci")     <- attr(base_summary, "has_ci")
   attr(out, "digits")     <- digits
   attr(out, "ci_digits")  <- ci_digits
-  structure(out, class = c("summary.ccc_lmm_reml", "data.frame"))
+  structure(out, class = c("summary.ccc_rm_reml", "data.frame"))
 }

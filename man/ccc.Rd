@@ -101,7 +101,7 @@ and results are often similar to intraclass correlation coefficients.
 CCC provides a single summary of agreement, but it may not capture
 systematic bias; a Bland–Altman plot (differences vs. means) is recommended
 to visualize bias, proportional trends, and heteroscedasticity (see
-\code{\link{bland_altman}}).
+\code{\link{ba}}).
 }
 \details{
 Lin's CCC is defined as
@@ -164,10 +164,10 @@ between two methods of clinical measurement. The Lancet 327: 307-310.
 }
 \seealso{
 \code{\link{print.ccc}}, \code{\link{plot.ccc}},
-\code{\link{bland_altman}}
+\code{\link{ba}}
 
-For repeated measurements look at \code{\link{ccc_lmm_reml}},
-\code{\link{ccc_pairwise_u_stat}} or \code{\link{bland_altman_repeated}}
+For repeated measurements look at \code{\link{ccc_rm_reml}},
+\code{\link{ccc_rm_ustat}} or \code{\link{ba_rm}}
 }
 \author{
 Thiago de Paula Oliveira

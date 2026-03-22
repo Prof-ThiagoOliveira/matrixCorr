@@ -1,4 +1,4 @@
-test_that("ccc_pairwise_u_stat: basic structure, symmetry, CI container", {
+test_that("ccc_rm_ustat: basic structure, symmetry, CI container", {
   set.seed(123)
   n_subj <- 600L
   id     <- factor(rep(seq_len(n_subj), each = 2L))
@@ -18,7 +18,7 @@ test_that("ccc_pairwise_u_stat: basic structure, symmetry, CI container", {
   ccc_theory <- sigA / (sigA + biasB^2 + sigE)
 
   # estimates only
-  c1 <- ccc_pairwise_u_stat(df, response = "y", method = "method", subject = "id")
+  c1 <- ccc_rm_ustat(df, response = "y", method = "method", subject = "id")
   expect_s3_class(c1, "ccc")
   expect_true(is.matrix(c1) && all(rownames(c1) == c("A","B")))
   expect_equal(as.numeric(diag(c1)), c(1,1))
@@ -29,7 +29,7 @@ test_that("ccc_pairwise_u_stat: basic structure, symmetry, CI container", {
   expect_lt(abs(c1["A","B"] - ccc_theory), 0.05)
 
   # with CI container
-  c2 <- ccc_pairwise_u_stat(df, response = "y", method = "method", subject = "id", ci = TRUE, conf_level = 0.95)
+  c2 <- ccc_rm_ustat(df, response = "y", method = "method", subject = "id", ci = TRUE, conf_level = 0.95)
   expect_s3_class(c2, "ccc_ci")
   expect_named(c2, c("est","lwr.ci","upr.ci"))
   expect_equal(dim(c2$est), c(2,2))
@@ -38,7 +38,7 @@ test_that("ccc_pairwise_u_stat: basic structure, symmetry, CI container", {
   expect_true(lwr <= est && est <= upr)
 })
 
-test_that("ccc_lmm_reml (pairwise, no time): matches simple theory and returns VCs", {
+test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VCs", {
   set.seed(123)
   n_subj <- 500L
   id     <- factor(rep(seq_len(n_subj), each = 2L))
@@ -52,9 +52,9 @@ test_that("ccc_lmm_reml (pairwise, no time): matches simple theory and returns V
   y <- (method == "B") * biasB + u + e
   df <- data.frame(y, id, method)
 
-  cfit <- ccc_lmm_reml(df, response = "y", rind = "id",
+  cfit <- ccc_rm_reml(df, response = "y", rind = "id",
                        method = "method", ci = TRUE)
-  expect_s3_class(cfit, "ccc_lmm_reml")
+  expect_s3_class(cfit, "ccc_rm_reml")
   expect_named(cfit, c("est","lwr.ci","upr.ci"))
   expect_equal(rownames(cfit$est), c("A","B"))
   expect_equal(colnames(cfit$est), c("A","B"))
@@ -75,7 +75,7 @@ test_that("ccc_lmm_reml (pairwise, no time): matches simple theory and returns V
 
   # summary data frame columns present
   sm <- summary(cfit, show_ci = "yes", digits = 4)
-  expect_s3_class(sm, "summary.ccc_lmm_reml")
+  expect_s3_class(sm, "summary.ccc_rm_reml")
   expect_true(all(c("method1","method2","estimate","lwr","upr",
                     "sigma2_subject","sigma2_subject_method","sigma2_subject_time",
                     "sigma2_error","SB","se_ccc") %in% names(sm)))
@@ -108,9 +108,9 @@ test_that("Dmat_type affects CCC as expected when biases flip over time", {
   y  <- bias + u + g + rnorm(length(id), 0, sqrt(sigE))
   df <- data.frame(y, id, method, time)
 
-  fit_avg <- ccc_lmm_reml(df, "y", "id", method = "method", time = "time",
+  fit_avg <- ccc_rm_reml(df, "y", "id", method = "method", time = "time",
                           Dmat_type = "time-avg")
-  fit_typ <- ccc_lmm_reml(df, "y", "id", method = "method", time = "time",
+  fit_typ <- ccc_rm_reml(df, "y", "id", method = "method", time = "time",
                           Dmat_type = "typical-visit")
 
   # With alternating biases, squared-average is ~0, average of squares > 0,
@@ -130,7 +130,7 @@ test_that("Supplying a wrong-sized Dmat errors clearly", {
 
   badD <- diag(5L)   # wrong dimension
   expect_error(
-    ccc_lmm_reml(df, "y", "id", method = "method", time = "time", Dmat = badD),
+    ccc_rm_reml(df, "y", "id", method = "method", time = "time", Dmat = badD),
     "Dmat has incompatible dimension", fixed = FALSE
   )
 })
@@ -153,7 +153,7 @@ test_that("summary adds sigma2_extra* columns when slope is enabled", {
 
   df <- data.frame(y, id, method, time, t_c = t_c)
 
-  fit_slope <- ccc_lmm_reml(df, "y", "id", method = "method", time = "time",
+  fit_slope <- ccc_rm_reml(df, "y", "id", method = "method", time = "time",
                             slope = "subject", slope_var = "t_c", ci = TRUE)
 
   # Summary should expose sigma2_extra columns
@@ -163,7 +163,7 @@ test_that("summary adds sigma2_extra* columns when slope is enabled", {
   expect_true(any(is.finite(sm[[extra_cols[1]]])))
 
   # In the no-slope case, those columns should not be present
-  fit_noslope <- ccc_lmm_reml(df, "y", "id", method = "method", time = "time", ci = TRUE)
+  fit_noslope <- ccc_rm_reml(df, "y", "id", method = "method", time = "time", ci = TRUE)
   sm0 <- summary(fit_noslope, show_ci = "yes")
   expect_length(grep("^sigma2_extra", names(sm0), value = TRUE), 0)
 })
@@ -187,7 +187,7 @@ test_that("AR(1) path: fixed rho is carried in attributes", {
   }
   df <- data.frame(y, id, method, time)
 
-  fit_ar <- ccc_lmm_reml(df, "y", "id", method = "method", time = "time",
+  fit_ar <- ccc_rm_reml(df, "y", "id", method = "method", time = "time",
                          ar = "ar1", ar_rho = rho_true)
   rr <- attr(fit_ar, "ar_rho")
   expect_true(is.matrix(rr))
@@ -214,7 +214,7 @@ ccc_lin <- function(x, y, na.rm = TRUE) {
   2 * sxy / den
 }
 
-test_that("ccc_pairwise_u_stat reduces to Lin's CCC when T = 1", {
+test_that("ccc_rm_ustat reduces to Lin's CCC when T = 1", {
   set.seed(123)
   n <- 1500L
   u  <- rnorm(n, 0, 1.0)
@@ -236,14 +236,14 @@ test_that("ccc_pairwise_u_stat reduces to Lin's CCC when T = 1", {
   # INTERLEAVE A,B per subject (A1,B1,A2,B2,...)
   df$y <- c(rbind(xA, xB))
 
-  c_us <- ccc_pairwise_u_stat(df, response = "y", method = "method", subject = "id")
+  c_us <- ccc_rm_ustat(df, response = "y", method = "method", subject = "id")
   c_us_AB <- unname(c_us["A","B"])
 
   # should match Lin very closely
   expect_equal(c_us_AB, c_lin, tolerance = 5e-3)
 })
 
-test_that("ccc_lmm_reml (no time) approximates Lin's CCC when T = 1", {
+test_that("ccc_rm_reml (no time) approximates Lin's CCC when T = 1", {
   set.seed(124)
   n <- 1500L
   u  <- rnorm(n, 0, 1.0)
@@ -260,7 +260,7 @@ test_that("ccc_lmm_reml (no time) approximates Lin's CCC when T = 1", {
     y      = c(rbind(xA, xB))
   )
 
-  fit <- ccc_lmm_reml(df, response = "y", rind = "id", method = "method")
+  fit <- ccc_rm_reml(df, response = "y", rind = "id", method = "method")
   c_reml <- unname(fit["A","B"])
 
   expect_equal(c_reml, c_lin, tolerance = 1e-2)

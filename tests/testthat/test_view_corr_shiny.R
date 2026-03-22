@@ -3,10 +3,10 @@ test_that("viewer helpers coerce package outputs", {
 
   pearson <- pearson_corr(mtcars)
   spearman <- spearman_rho(mtcars)
-  distance <- distance_corr(mtcars)
-  partial <- partial_correlation(mtcars, method = "ridge", lambda = 1e-2)
+  distance <- dcor(mtcars)
+  partial <- pcorr(mtcars, method = "ridge", lambda = 1e-2)
   kendall <- kendall_tau(mtcars)
-  biweight <- biweight_mid_corr(mtcars)
+  biweight <- bicor(mtcars)
   schafer <- schafer_corr(mtcars)
 
   res <- matrixCorr:::`.mc_prepare_corr_inputs`(list(

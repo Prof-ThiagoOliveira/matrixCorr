@@ -15,7 +15,7 @@
 #' CCC provides a single summary of agreement, but it may not capture
 #' systematic bias; a Bland–Altman plot (differences vs. means) is recommended
 #' to visualize bias, proportional trends, and heteroscedasticity (see
-#' \code{\link{bland_altman}}).
+#' \code{\link{ba}}).
 #'
 #' @details
 #' Lin's CCC is defined as
@@ -63,10 +63,10 @@
 #'         \code{lwr.ci}, \code{upr.ci}.
 #'
 #' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}},
-#' \code{\link{bland_altman}}
+#' \code{\link{ba}}
 #'
-#' @seealso For repeated measurements look at \code{\link{ccc_lmm_reml}},
-#' \code{\link{ccc_pairwise_u_stat}} or \code{\link{bland_altman_repeated}}
+#' @seealso For repeated measurements look at \code{\link{ccc_rm_reml}},
+#' \code{\link{ccc_rm_ustat}} or \code{\link{ba_rm}}
 #'
 #' @examples
 #' # Example with multivariate normal data

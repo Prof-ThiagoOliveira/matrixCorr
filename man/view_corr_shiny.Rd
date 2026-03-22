@@ -23,8 +23,8 @@ effect of launching a Shiny gadget.
 Launches an interactive Shiny gadget that displays correlation heatmaps with
 filtering, clustering, and hover inspection. The viewer accepts any
 matrixCorr correlation result (for example the outputs from
-\code{\link[=pearson_corr]{pearson_corr()}}, \code{\link[=spearman_rho]{spearman_rho()}}, \code{\link[=kendall_tau]{kendall_tau()}}, \code{\link[=biweight_mid_corr]{biweight_mid_corr()}},
-\code{\link[=partial_correlation]{partial_correlation()}}, \code{\link[=distance_corr]{distance_corr()}}, or \code{\link[=schafer_corr]{schafer_corr()}}), a plain
+\code{\link[=pearson_corr]{pearson_corr()}}, \code{\link[=spearman_rho]{spearman_rho()}}, \code{\link[=kendall_tau]{kendall_tau()}}, \code{\link[=bicor]{bicor()}},
+\code{\link[=pcorr]{pcorr()}}, \code{\link[=dcor]{dcor()}}, or \code{\link[=schafer_corr]{schafer_corr()}}), a plain
 matrix, or a named list of such objects. When a list is supplied the gadget
 offers a picker to switch between results.
 }

@@ -47,15 +47,15 @@ repeated-measures LMM/REML extensions).
 
 - High-performance C++ backend using `Rcpp`
 - General correlations such as `pearson_corr()`, `spearman_rho()`, `kendall_tau()`
-- Robust correlation metrics (`biweight_mid_corr()`)
-- Distance correlation (`distance_corr()`)
-- Partial correlation (`partial_correlation()`)
+- Robust correlation metrics (`bicor()`)
+- Distance correlation (`dcor()`)
+- Partial correlation (`pcorr()`)
 - Latent categorical/ordinal correlations (`tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()`)
 - Repeated-measures correlation (`rmcorr()`)
 - Shrinkage for $p >> n$ (`schafer_corr()`)
 - Agreement metrics
-    * Bland-Altman (two-method `bland_altman()` and repeated-measures `bland_altman_repeated()`),
-    * Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_lmm_reml()` and non-parametric `ccc_pairwise_u_stat()`)
+    * Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
+    * Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric `ccc_rm_ustat()`)
 - Interactive Shiny viewers for matrix-style outputs with a dedicated repeated-measures correlation viewer (`view_rmcorr_shiny()`)
 
 ## Installation
@@ -96,7 +96,7 @@ Y <- X
 # inject outliers
 Y$V1[sample.int(nrow(Y), 8)] <- Y$V1[sample.int(nrow(Y), 8)] + 8
 
-R_bicor <- biweight_mid_corr(Y)
+R_bicor <- bicor(Y)
 print(R_bicor, digits = 2)
 ```
 
@@ -115,18 +115,18 @@ print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
 ### Partial correlation matrix
 
 ```{r}
-R_part <- partial_correlation(X)
+R_part <- pcorr(X)
 print(R_part, digits = 2)
 ```
 
 ### Distance correlation matrix
 
 ```{r}
-R_dcor <- distance_corr(X)
+R_dcor <- dcor(X)
 print(R_dcor, digits = 2)
 ```
 
-`distance_corr()` uses an unbiased estimator with a fast univariate
+`dcor()` uses an unbiased estimator with a fast univariate
 \(O(n \log n)\) dispatch and an exact \(O(n^2)\) fallback for robustness.
 
 ### Latent categorical and ordinal correlations
@@ -208,6 +208,9 @@ plot(fit_mat)
 
 ## Agreement analyses
 
+Here we look at agreement analyses for Bland-Altman and repeated-measures
+concordance workflows.
+
 ### Two-method Bland-Altman
 
 ```{r}
@@ -215,9 +218,9 @@ set.seed(4)
 x <- rnorm(120, 100, 10)
 y <- x + 0.5 + rnorm(120, 0, 8)
 
-ba <- bland_altman(x, y)
-print(ba)
-plot(ba)
+ba_fit <- ba(x, y)
+print(ba_fit)
+plot(ba_fit)
 ```
 
 ### Repeated-measures Bland-Altman (pairwise matrix)
@@ -240,7 +243,7 @@ dat <- rbind(
 )
 dat$method <- factor(dat$method, levels = c("A","B","C"))
 
-ba_rep <- bland_altman_repeated(
+ba_rep <- ba_rm(
   data = dat, response = "y", subject = "subject",
   method = "method", time = "time",
   include_slope = FALSE, use_ar1 = FALSE
@@ -264,8 +267,8 @@ g  <- g[(as.integer(id) - 1L) * Tm + as.integer(time)]
 y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
 
 dat_ccc <- data.frame(y, id, method, time)
-fit_ccc <- ccc_lmm_reml(dat_ccc, response = "y", rind = "id",
-                        method = "method", time = "time")
+fit_ccc <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
+                       method = "method", time = "time")
 summary(fit_ccc)  # overall CCC, variance components, SEs/CI
 ```
 

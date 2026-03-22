@@ -7,9 +7,9 @@ test_that("matrix-style correlation summaries use the standard compact format", 
     pearson_corr(X),
     spearman_rho(X),
     kendall_tau(X),
-    distance_corr(X),
+    dcor(X),
     schafer_corr(X),
-    biweight_mid_corr(X)
+    bicor(X)
   )
 
   for (obj in objs) {
@@ -32,7 +32,7 @@ test_that("partial correlation summary follows the same matrix-style contract", 
   X <- matrix(rnorm(160), nrow = 40, ncol = 4)
   colnames(X) <- paste0("P", seq_len(ncol(X)))
 
-  pc <- partial_correlation(X, method = "ridge", lambda = 1e-2)
+  pc <- pcorr(X, method = "ridge", lambda = 1e-2)
   sm <- summary(pc)
 
   expect_s3_class(sm, "summary_partial_corr")

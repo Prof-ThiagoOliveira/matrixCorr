@@ -23,12 +23,12 @@ oas_shrink_R <- function(X) {
   list(Sigma = Sigma, rho = rho)
 }
 
-test_that("partial_correlation returns expected components for each method", {
+test_that("pcorr returns expected components for each method", {
   set.seed(111)
   X <- matrix(rnorm(200), nrow = 40, ncol = 5)
   colnames(X) <- paste0("V", seq_len(5))
 
-  samp <- partial_correlation(X, method = "sample", return_cov_precision = TRUE)
+  samp <- pcorr(X, method = "sample", return_cov_precision = TRUE)
   expect_s3_class(samp, "partial_corr")
   expect_equal(dim(samp$pcor), c(5, 5))
   expect_true(all(diag(samp$pcor) == 1))
@@ -38,24 +38,24 @@ test_that("partial_correlation returns expected components for each method", {
   expect_true(is.na(samp$lambda))
   expect_true(is.na(samp$rho))
 
-  ridge <- partial_correlation(X, method = "ridge", lambda = 1e-2, return_cov_precision = TRUE)
+  ridge <- pcorr(X, method = "ridge", lambda = 1e-2, return_cov_precision = TRUE)
   expect_equal(ridge$method, "ridge")
   expect_equal(ridge$lambda, 1e-2)
   expect_true(is.na(ridge$rho))
 
-  oas <- partial_correlation(X, method = "oas", return_cov_precision = TRUE)
+  oas <- pcorr(X, method = "oas", return_cov_precision = TRUE)
   expect_equal(oas$method, "oas")
   expect_true(is.na(oas$lambda))
   expect_true(oas$rho >= 0 && oas$rho <= 1)
 })
 
-test_that("partial_correlation print and plot methods cover options", {
+test_that("pcorr print and plot methods cover options", {
   skip_if_not_installed("ggplot2")
 
   set.seed(222)
   X <- matrix(rnorm(150), nrow = 30, ncol = 5)
   colnames(X) <- paste0("G", seq_len(5))
-  pc <- partial_correlation(X, method = "ridge", lambda = 5e-3, return_cov_precision = TRUE)
+  pc <- pcorr(X, method = "ridge", lambda = 5e-3, return_cov_precision = TRUE)
 
   out1 <- capture.output(print(pc, digits = 4, max_rows = 3, max_cols = 4))
   expect_true(any(grepl("omitted", out1)))
@@ -68,17 +68,17 @@ test_that("partial_correlation print and plot methods cover options", {
   expect_s3_class(p, "ggplot")
 })
 
-test_that("partial_correlation validates lambda", {
+test_that("pcorr validates lambda", {
   set.seed(1)
   X <- matrix(rnorm(40), nrow = 10, ncol = 4)
-  expect_error(partial_correlation(X, method = "ridge", lambda = -1), "must be >=")
+  expect_error(pcorr(X, method = "ridge", lambda = -1), "must be >=")
 })
 
-test_that("partial_correlation exposes shrinkage metadata without cov/precision", {
+test_that("pcorr exposes shrinkage metadata without cov/precision", {
   set.seed(333)
   X <- matrix(rnorm(120), nrow = 30, ncol = 4)
 
-  oas <- partial_correlation(X, method = "oas")
+  oas <- pcorr(X, method = "oas")
   expect_true(is.numeric(oas$rho))
   expect_true(isTRUE(oas$rho >= 0 && oas$rho <= 1))
   expect_true(is.numeric(oas$jitter))
@@ -86,7 +86,7 @@ test_that("partial_correlation exposes shrinkage metadata without cov/precision"
   expect_null(oas$cov)
   expect_null(oas$precision)
 
-  samp <- partial_correlation(X, method = "sample")
+  samp <- pcorr(X, method = "sample")
   expect_true(is.na(samp$rho))
   expect_true(is.na(samp$lambda))
   expect_true(is.numeric(samp$jitter))
@@ -106,7 +106,7 @@ test_that("sample partial correlation is close to truth in a structured MVN mode
   X <- MASS::mvrnorm(n, mu = rep(0, p), Sigma = Sigma)
   colnames(X) <- paste0("V", seq_len(p))
 
-  ours <- partial_correlation(X, method = "sample", return_cov_precision = FALSE)$pcor
+  ours <- pcorr(X, method = "sample", return_cov_precision = FALSE)$pcor
   truth <- pcor_from_precision(Theta)
 
   ut <- upper.tri(ours, diag = FALSE)
@@ -131,7 +131,7 @@ test_that("sample method equals the base-R precision construction", {
   X <- matrix(rnorm(n * p), n, p)
   colnames(X) <- paste0("V", seq_len(p))
 
-  ours <- partial_correlation(X, method = "sample", return_cov_precision = TRUE)
+  ours <- pcorr(X, method = "sample", return_cov_precision = TRUE)
 
   S_unb <- stats::cov(X)
   Theta <- solve(S_unb)
@@ -150,7 +150,7 @@ test_that("ridge method equals the base-R ridge construction", {
   colnames(X) <- paste0("V", seq_len(p))
   lambda <- 5e-3
 
-  ours <- partial_correlation(X, method = "ridge", lambda = lambda,
+  ours <- pcorr(X, method = "ridge", lambda = lambda,
                               return_cov_precision = TRUE)
 
   S_unb <- stats::cov(X)
@@ -171,7 +171,7 @@ test_that("OAS method matches an R implementation of the same formula", {
   X <- matrix(rnorm(n * p), n, p)
   colnames(X) <- paste0("V", seq_len(p))
 
-  ours <- partial_correlation(X, method = "oas", return_cov_precision = TRUE)
+  ours <- pcorr(X, method = "oas", return_cov_precision = TRUE)
 
   oas <- oas_shrink_R(X)
   Sigma <- oas$Sigma
@@ -190,7 +190,7 @@ test_that("p >> n: OAS returns a finite, well-formed matrix", {
   X <- matrix(rnorm(n * p), n, p)
   colnames(X) <- paste0("V", seq_len(p))
 
-  oas <- partial_correlation(X, method = "oas", return_cov_precision = TRUE)
+  oas <- pcorr(X, method = "oas", return_cov_precision = TRUE)
   M <- oas$pcor
   expect_true(is.matrix(M))
   expect_true(isSymmetric(M, tol = 1e-12))
@@ -215,7 +215,7 @@ test_that("non-numeric columns are ignored and dimnames propagate", {
   )
   cols <- c("a", "b", "c")
 
-  pc <- partial_correlation(X, method = "oas", return_cov_precision = FALSE)$pcor
+  pc <- pcorr(X, method = "oas", return_cov_precision = FALSE)$pcor
   expect_equal(dim(pc), c(3L, 3L))
   expect_equal(dimnames(pc), list(cols, cols))
 })
