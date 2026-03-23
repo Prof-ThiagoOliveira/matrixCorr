@@ -53,3 +53,4 @@ src/Makevars.libatomic
 
 # local package library used for ad hoc installs/tests
 .local-lib/
+.tmp_lib/

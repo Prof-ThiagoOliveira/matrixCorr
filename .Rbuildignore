@@ -11,3 +11,4 @@
 ^CONTRIBUTING\.md$
 ^codemeta\.json$
 ^\.local-lib$
+^\.tmp_lib$

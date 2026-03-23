@@ -11,6 +11,9 @@ Main changes in this submission:
 - Shortened several public function names for a more concise API:
   `ba()`, `ba_rm()`, `ccc_rm_reml()`, `ccc_rm_ustat()`, `pcorr()`,
   `bicor()`, and `dcor()` are now the primary exported names.
+- Added `pcorr(method = "glasso")` for sparse graphical-lasso partial
+  correlation estimation, alongside the existing sample, ridge, and OAS
+  options.
 - Added robust correlation methods `pbcor()`, `wincor()`, and
   `skipped_corr()`.
 - Added latent correlation methods such as `tetrachoric()`, 

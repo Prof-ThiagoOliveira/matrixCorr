@@ -6,11 +6,11 @@
 \alias{summary.partial_corr}
 \alias{print.summary_partial_corr}
 \alias{plot.partial_corr}
-\title{Partial correlation matrix (sample / ridge / OAS)}
+\title{Partial correlation matrix (sample / ridge / OAS / graphical lasso)}
 \usage{
 pcorr(
   data,
-  method = c("oas", "ridge", "sample"),
+  method = c("sample", "oas", "ridge", "glasso"),
   lambda = 0.001,
   return_cov_precision = FALSE
 )
@@ -37,11 +37,14 @@ pcorr(
 \item{data}{A numeric matrix or data frame with at least two numeric columns.
 Non-numeric columns are ignored.}
 
-\item{method}{Character; one of \code{"oas"}, \code{"ridge"}, \code{"sample"}.
-Default \code{"oas"}.}
+\item{method}{Character; one of \code{"sample"}, \code{"oas"},
+\code{"ridge"}, or \code{"glasso"}. Default \code{"sample"}.}
 
-\item{lambda}{Numeric \eqn{\ge 0}; ridge penalty added to the covariance
-diagonal when \code{method = "ridge"}. Ignored otherwise. Default \code{1e-3}.}
+\item{lambda}{Numeric \eqn{\ge 0}; regularisation strength. For
+\code{method = "ridge"}, this is the penalty added to the covariance
+diagonal. For \code{method = "glasso"}, this is the off-diagonal
+precision-matrix \eqn{\ell_1} penalty. Ignored otherwise. Default
+\code{1e-3}.}
 
 \item{return_cov_precision}{Logical; if \code{TRUE}, also return the
 covariance (\code{cov}) and precision (\code{precision}) matrices used to
@@ -88,8 +91,9 @@ An object of class \code{"partial_corr"} (a list) with elements:
 \item \code{cov} (if requested): covariance matrix used.
 \item \code{precision} (if requested): precision matrix \eqn{\Theta}.
 \item \code{method}: the estimator used (\code{"oas"}, \code{"ridge"},
-or \code{"sample"}).
-\item \code{lambda}: ridge penalty (or \code{NA_real_}).
+\code{"sample"}, or \code{"glasso"}).
+\item \code{lambda}: ridge or graphical-lasso penalty
+(or \code{NA_real_}).
 \item \code{rho}: OAS shrinkage weight in \eqn{[0,1]} (or \code{NA_real_}).
 \item \code{jitter}: diagonal jitter added (if any) to ensure positive
 definiteness.
@@ -112,6 +116,8 @@ penalty to improve stability when the covariance matrix is near-singular.
 \item \strong{OAS shrinkage to a scaled identity}: recommended when
 \eqn{p \gg n}, as it reduces estimation error by shrinking towards a
 scaled identity matrix.
+\item \strong{Graphical lasso}: estimates a sparse precision matrix using
+an \eqn{\ell_1} penalty on off-diagonal precision entries.
 }
 
 The method uses a high-performance 'C++' backend.
@@ -155,6 +161,12 @@ The data-driven weight \eqn{\rho \in [0,1]} is
         \right)\right\},}
 and
 \deqn{\Sigma = (1-\rho)\,\hat\Sigma_{\mathrm{MLE}} + \rho\,\mu_I I_p.}
+\item \emph{Graphical lasso:} estimate a sparse precision matrix
+\eqn{\Theta} by maximising
+\deqn{\log\det(\Theta) - \mathrm{tr}(\hat\Sigma_{\mathrm{MLE}}\Theta)
+        - \lambda\sum_{i \ne j} |\theta_{ij}|,}
+with \eqn{\lambda \ge 0}. The returned covariance matrix is
+\eqn{\Sigma = \Theta^{-1}}.
 }
 
 The method then ensures positive definiteness of \eqn{\Sigma} (adding a very
@@ -181,6 +193,17 @@ well-conditioned \eqn{\Sigma}. Ridge adds a fixed \eqn{\lambda} on the
 diagonal, whereas OAS shrinks adaptively towards \eqn{\mu_I I_p} with a
 weight chosen to minimise (approximately) the Frobenius risk under a
 Gaussian model, often improving mean–square accuracy in high dimension.
+
+\strong{Why glasso?} Glasso is useful when the goal is not just to
+stabilise a covariance estimate, but to recover a manageable network of
+direct relationships rather than a dense matrix of overall associations. In
+Gaussian models, zeros in the precision matrix correspond to conditional
+independences, so glasso can suppress indirect associations that are
+explained by the other variables and return a smaller, more interpretable
+conditional-dependence graph. This is especially practical in
+high-dimensional settings, where the sample covariance may be unstable or
+singular. Glasso yields a positive-definite precision estimate and supports
+edge selection, graph recovery, and downstream network analysis.
 
 \strong{Computational notes.} The implementation forms \eqn{S} using 'BLAS'
 \code{syrk} when available and constructs partial correlations by traversing
@@ -211,7 +234,7 @@ Z <- matrix(rnorm(n * p), n, p)
 X <- Z \%*\% L
 colnames(X) <- sprintf("V\%02d", seq_len(p))
 
-pc <- pcorr(X, method = "oas")
+pc <- pcorr(X)
 summary(pc)
 
 # Interactive viewing (requires shiny)
@@ -229,6 +252,43 @@ round(pcor_true[1:5, 1:5], 2)
 
 ## Plot method
 plot(pc)
+
+## Graphical-lasso example
+set.seed(100)
+p <- 20; n <- 250
+Theta_g <- diag(p)
+Theta_g[cbind(1:5, 2:6)] <- -0.25
+Theta_g[cbind(2:6, 1:5)] <- -0.25
+Theta_g[cbind(8:11, 9:12)] <- -0.20
+Theta_g[cbind(9:12, 8:11)] <- -0.20
+diag(Theta_g) <- rowSums(abs(Theta_g)) + 0.2
+
+Sigma_g <- solve(Theta_g)
+X_g <- matrix(rnorm(n * p), n, p) \%*\% chol(Sigma_g)
+colnames(X_g) <- paste0("Node", seq_len(p))
+
+gfit_1 <- pcorr(X_g, method = "glasso", lambda = 0.02,
+                return_cov_precision = TRUE)
+gfit_2 <- pcorr(X_g, method = "glasso", lambda = 0.08,
+                return_cov_precision = TRUE)
+
+## Larger lambda gives a sparser conditional-dependence graph
+edge_count <- function(M, tol = 1e-8) {
+  sum(abs(M[upper.tri(M, diag = FALSE)]) > tol)
+}
+
+c(edges_lambda_002 = edge_count(gfit_1$precision),
+  edges_lambda_008 = edge_count(gfit_2$precision))
+
+## Inspect strongest estimated conditional associations
+pcor_g <- gfit_1$pcor
+idx <- which(upper.tri(pcor_g), arr.ind = TRUE)
+ord <- order(abs(pcor_g[idx]), decreasing = TRUE)
+head(data.frame(
+  i = rownames(pcor_g)[idx[ord, 1]],
+  j = colnames(pcor_g)[idx[ord, 2]],
+  pcor = round(pcor_g[idx][ord], 2)
+))
 
 ## High-dimensional case p >> n
 set.seed(7)
@@ -257,11 +317,15 @@ pc_ridge <-
                      return_cov_precision = TRUE)
 pc_samp  <-
  pcorr(X_hd, method = "sample", return_cov_precision = TRUE)
+pc_glasso <-
+ pcorr(X_hd, method = "glasso", lambda = 5e-3,
+                     return_cov_precision = TRUE)
 
 ## Show how much diagonal regularisation was used
 c(oas_jitter = pc_oas$jitter,
   ridge_lambda = pc_ridge$lambda,
-  sample_jitter = pc_samp$jitter)
+  sample_jitter = pc_samp$jitter,
+  glasso_lambda = pc_glasso$lambda)
 
 ## Compare conditioning of the estimated covariance matrices
 c(kappa_oas = kappa(pc_oas$cov),
@@ -282,6 +346,10 @@ head(data.frame(i = colnames(pcor)[edges[,1]],
 Chen, Y., Wiesel, A., & Hero, A. O. III (2011).
 Robust Shrinkage Estimation of High-dimensional Covariance Matrices.
 IEEE Transactions on Signal Processing.
+
+Friedman, J., Hastie, T., & Tibshirani, R. (2007).
+Sparse inverse covariance estimation with the graphical lasso.
+Biostatistics.
 
 Ledoit, O., & Wolf, M. (2004).
 A well-conditioned estimator for large-dimensional covariance matrices.

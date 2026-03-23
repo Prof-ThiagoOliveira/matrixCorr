@@ -523,6 +523,21 @@ inline arma::mat apply(const arma::mat& X, Metric metric){
 //------------------------------------------------------------------------------
 namespace linalg {
 
+// Copy the stored upper triangle into the lower triangle without allocating a
+// temporary full matrix.
+inline void copy_upper_to_lower_inplace(arma::mat& M) {
+  const arma::uword p = M.n_cols;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+  for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
+    const arma::uword uj = static_cast<arma::uword>(j);
+    for (arma::uword i = 0; i < uj; ++i) {
+      M(uj, i) = M(i, uj);
+    }
+  }
+}
+
 // X'X (upper triangle via BLAS SYRK) then symmetrize.
 // Returns p x p matrix XtX = X'X.
 inline arma::mat crossprod_no_copy(const arma::mat& X) {
@@ -539,7 +554,7 @@ inline arma::mat crossprod_no_copy(const arma::mat& X) {
   arma::blas::syrk<double>(&uplo, &trans, &N, &K,
                            &alpha, X.memptr(), &K,
                            &beta,  XtX.memptr(), &N);
-                           XtX = arma::symmatu(XtX);
+  copy_upper_to_lower_inplace(XtX);
 }
 #else
 XtX = X.t() * X;
@@ -563,8 +578,14 @@ inline void subtract_n_outer_mu(arma::mat& M, const arma::rowvec& mu, double n) 
       M(i, uj) += fj * mu[i];       // -= n * mu_i * mu_j
     }
   }
-  M = arma::symmatu(M);
+  copy_upper_to_lower_inplace(M);
 }
+
+// M := scale * (M - n * mu * mu') on the upper triangle, optionally adding a
+// diagonal shift, then symmetrize once.
+
+// M := scale * (M - n * mu * mu') on the upper triangle, optionally adding a
+// diagonal shift, then symmetrize once.
 
 // Ensure positive definiteness by geometric diagonal jitter until chol succeeds.
 inline void make_pd_inplace(arma::mat& S, double& jitter, const double max_jitter = 1e-2) {
@@ -577,6 +598,52 @@ inline void make_pd_inplace(arma::mat& S, double& jitter, const double max_jitte
       Rcpp::stop("Covariance not positive definite; jitter exceeded limit.");
     S.diag() += jitter;
   }
+}
+
+// Invert an SPD matrix in place using Cholesky + POTRI when LAPACK is
+// available. The matrix contents are undefined if this returns false.
+inline bool invert_spd_inplace(arma::mat& A) {
+  if (A.n_rows != A.n_cols) return false;
+  if (A.n_rows == 0) return true;
+#if defined(ARMA_USE_LAPACK)
+  arma::blas_int n = static_cast<arma::blas_int>(A.n_rows);
+  arma::blas_int info = 0;
+  char uplo = 'U';
+  arma::lapack::potrf(&uplo, &n, A.memptr(), &n, &info);
+  if (info != 0) return false;
+  arma::lapack::potri(&uplo, &n, A.memptr(), &n, &info);
+  if (info != 0) return false;
+  copy_upper_to_lower_inplace(A);
+  return A.is_finite();
+#else
+  arma::mat out;
+  if (!arma::inv_sympd(out, A)) return false;
+  A = std::move(out);
+  return A.is_finite();
+#endif
+}
+
+// Convert a precision matrix to partial correlations in place.
+inline bool precision_to_pcor_inplace(arma::mat& Theta) {
+  arma::vec d = Theta.diag();
+  if (d.min() <= 0.0 || !d.is_finite()) return false;
+  d = 1.0 / arma::sqrt(d);
+
+  const arma::uword p = Theta.n_cols;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+  for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
+    const arma::uword uj = static_cast<arma::uword>(j);
+    const double sj = d[uj];
+    for (arma::uword i = 0; i < uj; ++i) {
+      const double val = -Theta(i, uj) * (d[i] * sj);
+      Theta(i, uj) = val;
+      Theta(uj, i) = val;
+    }
+    Theta(uj, uj) = 1.0;
+  }
+  return true;
 }
 
 // Robust inverse of SPD/SPSD with geometric diagonal jitter; SVD fallback.
@@ -699,7 +766,174 @@ inline arma::mat oas_shrink(const arma::mat& cov_mle, double n, double& rho_out)
   return Sigma;
 }
 
+// In-place variant that reuses the covariance work matrix.
+inline void oas_shrink_inplace(arma::mat& cov_mle, double n, double& rho_out) {
+  const arma::uword p = cov_mle.n_cols;
+  const double trS  = arma::trace(cov_mle);
+  const double trS2 = arma::accu(cov_mle % cov_mle);
+  const double mu   = trS / static_cast<double>(p);
+
+  const double pd  = static_cast<double>(p);
+  const double num = (1.0 - 2.0 / pd) * trS2 + trS * trS;
+  const double den = (n + 1.0 - 2.0 / pd) * (trS2 - (trS * trS) / pd);
+
+  double rho = (den > 0.0) ? (num / den) : 1.0;
+  rho = std::max(0.0, std::min(1.0, rho));
+  rho_out = rho;
+
+  cov_mle *= (1.0 - rho);
+  cov_mle.diag() += rho * mu;
+}
+
 } // namespace cov_shrinkage
+
+//------------------------------------------------------------------------------
+// ---------- graphical lasso (complete-data Gaussian case) ----------
+//------------------------------------------------------------------------------
+namespace sparse_precision {
+
+inline double soft_threshold(double z, double rho) noexcept {
+  if (z > rho) return z - rho;
+  if (z < -rho) return z + rho;
+  return 0.0;
+}
+
+// Graphical lasso for a single penalty value on complete Gaussian data.
+// Input S is the MLE covariance (1/n scaling). On success, W is the estimated
+// covariance dual variable and Theta the sparse precision estimate.
+inline bool graphical_lasso(const arma::mat& S,
+                            double rho,
+                            arma::mat& W,
+                            arma::mat& Theta,
+                            arma::uword max_outer = 100,
+                            arma::uword max_inner = 1000,
+                            double tol = 1e-4)
+{
+  const arma::uword p = S.n_cols;
+  if (S.n_rows != p) return false;
+  if (p == 0) {
+    W.reset();
+    Theta.reset();
+    return true;
+  }
+  if (p == 1) {
+    const double d = S(0, 0);
+    if (!(d > 0.0) || !std::isfinite(d)) return false;
+    W.set_size(1, 1);
+    Theta.set_size(1, 1);
+    W(0, 0) = d;
+    Theta(0, 0) = 1.0 / d;
+    return true;
+  }
+
+  W = S;
+  Theta.zeros(p, p);
+  arma::mat Beta(p, p, arma::fill::zeros);
+
+  arma::vec beta(p - 1);
+  arma::vec resid(p - 1);
+  arma::vec w12(p - 1);
+  arma::vec old_w12(p - 1);
+
+  bool converged = false;
+  for (arma::uword outer = 0; outer < max_outer; ++outer) {
+    double max_change = 0.0;
+
+    for (arma::uword j = 0; j < p; ++j) {
+      arma::uword k = 0;
+      for (arma::uword i = 0; i < p; ++i) {
+        if (i == j) continue;
+        beta[k] = Beta(i, j);
+        old_w12[k] = W(i, j);
+        ++k;
+      }
+
+      k = 0;
+      for (arma::uword i = 0; i < p; ++i) {
+        if (i == j) continue;
+        double acc = S(i, j);
+        arma::uword l = 0;
+        for (arma::uword ii = 0; ii < p; ++ii) {
+          if (ii == j) continue;
+          acc -= W(i, ii) * beta[l];
+          ++l;
+        }
+        resid[k] = acc;
+        ++k;
+      }
+
+      for (arma::uword inner = 0; inner < max_inner; ++inner) {
+        double max_delta = 0.0;
+        k = 0;
+        for (arma::uword i = 0; i < p; ++i) {
+          if (i == j) continue;
+          const double old = beta[k];
+          const double denom = W(i, i);
+          if (!(denom > 0.0) || !std::isfinite(denom)) return false;
+          const double c = resid[k] + denom * old;
+          const double neu = soft_threshold(c, rho) / denom;
+          const double delta = neu - old;
+          if (delta != 0.0) {
+            beta[k] = neu;
+            arma::uword l = 0;
+            for (arma::uword ii = 0; ii < p; ++ii) {
+              if (ii == j) continue;
+              resid[l] -= W(ii, i) * delta;
+              ++l;
+            }
+            max_delta = std::max(max_delta, std::abs(delta));
+          }
+          ++k;
+        }
+        if (max_delta < tol) break;
+      }
+
+      w12 = S.col(j);
+      w12.shed_row(j);
+      w12 -= resid;
+
+      k = 0;
+      for (arma::uword i = 0; i < p; ++i) {
+        if (i == j) continue;
+        W(i, j) = w12[k];
+        W(j, i) = w12[k];
+        Beta(i, j) = beta[k];
+        max_change = std::max(max_change, std::abs(w12[k] - old_w12[k]));
+        ++k;
+      }
+    }
+
+    if (max_change < tol) {
+      converged = true;
+      break;
+    }
+  }
+
+  if (!converged) return false;
+
+  Theta.zeros(p, p);
+  for (arma::uword j = 0; j < p; ++j) {
+    double quad = 0.0;
+    arma::uword k = 0;
+    for (arma::uword i = 0; i < p; ++i) {
+      if (i == j) continue;
+      quad += W(i, j) * Beta(i, j);
+      ++k;
+    }
+    const double denom = W(j, j) - quad;
+    if (!(denom > 0.0) || !std::isfinite(denom)) return false;
+    const double theta_jj = 1.0 / denom;
+    Theta(j, j) = theta_jj;
+    for (arma::uword i = 0; i < j; ++i) {
+      Theta(i, j) = -Beta(i, j) * theta_jj;
+      Theta(j, i) = Theta(i, j);
+    }
+  }
+
+  return Theta.is_finite() && W.is_finite();
+}
+
+} // namespace sparse_precision
 
 //------------------------------------------------------------------------------
 // ---------- moments ----------

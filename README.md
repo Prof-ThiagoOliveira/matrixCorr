@@ -126,6 +126,10 @@ R_part <- pcorr(X)
 print(R_part, digits = 2)
 ```
 
+`pcorr()` defaults to the sample partial correlation and also supports
+`method = "oas"`, `method = "ridge"`, and `method = "glasso"` for
+regularized estimation.
+
 ### Distance correlation matrix
 
 ``` r

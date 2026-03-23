@@ -23,6 +23,40 @@ oas_shrink_R <- function(X) {
   list(Sigma = Sigma, rho = rho)
 }
 
+glasso_reference_case <- function() {
+  vars <- paste0("V", seq_len(6))
+
+  Sigma <- structure(
+    c(0.892577511863956, -3.47460427750079e-05, -0.048912146675666,
+      0.00145719602008398, 0.00184184223658341, 7.32384941200259e-08,
+      -3.47460427750079e-05, 1.18178348379229, 0.000607657901650682,
+      -1.81034106257749e-05, -0.0211063204776342, -0.00249098993197849,
+      -0.048912146675666, 0.000607657901650682, 0.855402516097313,
+      -0.0254842452589996, -0.0322111497962843, -1.28083505639143e-06,
+      0.00145719602008398, -1.81034106257749e-05, -0.0254842452589996,
+      1.08365876399129, 0.000959638095557692, 3.81587780019788e-08,
+      0.00184184223658341, -0.0211063204776342, -0.0322111497962843,
+      0.000959638095557692, 1.11881841527388, 4.44883792437081e-05,
+      7.32384941200259e-08, -0.00249098993197849, -1.28083505639143e-06,
+      3.81587780019788e-08, 4.44883792437081e-05, 0.894638069650798),
+    dim = c(6L, 6L),
+    dimnames = list(vars, vars)
+  )
+
+  Theta <- structure(
+    c(1.12387243015938, 0, 0.0642633288004597, 0, 0, 0,
+      0, 0.846468847136127, 0, 0, 0.0159683981780265, 0.0023560756458958,
+      0.0642633288004597, 0, 1.1748032714163, 0.0275114249784953,
+      0.033693582191095, 0, 0, 0, 0.0275114249784953, 0.923446698493756, 0, 0,
+      0, 0.0159683981780265, 0.033693582191095, 0, 0.895071380200203, 0,
+      0, 0.0023560756458958, 0, 0, 0, 1.11777701272096),
+    dim = c(6L, 6L),
+    dimnames = list(vars, vars)
+  )
+
+  list(lambda = 0.08, Sigma = Sigma, Theta = Theta)
+}
+
 test_that("pcorr returns expected components for each method", {
   set.seed(111)
   X <- matrix(rnorm(200), nrow = 40, ncol = 5)
@@ -47,6 +81,11 @@ test_that("pcorr returns expected components for each method", {
   expect_equal(oas$method, "oas")
   expect_true(is.na(oas$lambda))
   expect_true(oas$rho >= 0 && oas$rho <= 1)
+
+  glasso <- pcorr(X, method = "glasso", lambda = 0.05, return_cov_precision = TRUE)
+  expect_equal(glasso$method, "glasso")
+  expect_equal(glasso$lambda, 0.05)
+  expect_true(is.na(glasso$rho))
 })
 
 test_that("pcorr print and plot methods cover options", {
@@ -72,6 +111,12 @@ test_that("pcorr validates lambda", {
   set.seed(1)
   X <- matrix(rnorm(40), nrow = 10, ncol = 4)
   expect_error(pcorr(X, method = "ridge", lambda = -1), "must be >=")
+})
+
+test_that("pcorr rejects non-finite matrix inputs without an R-side copy", {
+  X <- matrix(rnorm(16), nrow = 4)
+  X[3] <- Inf
+  expect_error(pcorr(X, method = "sample"), "finite values")
 })
 
 test_that("pcorr exposes shrinkage metadata without cov/precision", {
@@ -181,6 +226,26 @@ test_that("OAS method matches an R implementation of the same formula", {
   expect_equal(ours$pcor, ref, tolerance = 1e-10)
   expect_true(isSymmetric(ours$pcor))
   expect_equal(as.numeric(diag(ours$pcor)), rep(1, p))
+})
+
+test_that("glasso method matches fixed graphical-lasso reference values", {
+  set.seed(1234)
+  n <- 120
+  p <- 6
+  X <- matrix(rnorm(n * p), n, p)
+  colnames(X) <- paste0("V", seq_len(p))
+  ref <- glasso_reference_case()
+  lambda <- ref$lambda
+
+  ours <- pcorr(X, method = "glasso", lambda = lambda, return_cov_precision = TRUE)
+  ref_pcor <- pcor_from_precision(ref$Theta)
+  dimnames(ref_pcor) <- dimnames(ours$pcor)
+
+  expect_equal(ours$precision, ref$Theta, tolerance = 2e-4)
+  expect_equal(ours$cov, ref$Sigma, tolerance = 2e-4)
+  expect_equal(ours$pcor, ref_pcor, tolerance = 2e-4)
+  expect_true(isSymmetric(ours$pcor, tol = 1e-12))
+  expect_equal(as.numeric(diag(ours$pcor)), rep(1, p), tolerance = 1e-12)
 })
 
 test_that("p >> n: OAS returns a finite, well-formed matrix", {

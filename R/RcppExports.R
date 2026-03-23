@@ -89,7 +89,7 @@ kendall_tau2_from_mat_cpp <- function(mat) {
     .Call(`_matrixCorr_kendall_tau2_from_mat_cpp`, mat)
 }
 
-partial_correlation_cpp <- function(X_, method = "oas", lambda = 1e-3, return_cov_precision = TRUE) {
+partial_correlation_cpp <- function(X_, method = "sample", lambda = 1e-3, return_cov_precision = TRUE) {
     .Call(`_matrixCorr_partial_correlation_cpp`, X_, method, lambda, return_cov_precision)
 }
 
