@@ -17,6 +17,11 @@
 #'
 #' The method uses a high-performance 'C++' backend.
 #'
+#' This help page also documents the associated S3 methods.
+#' \code{print.partial_corr()} prints a \code{pcorr()} result directly,
+#' whereas \code{print.summary_partial_corr()} prints the compact object
+#' returned by \code{summary()}.
+#'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #'   Non-numeric columns are ignored.
 #' @param method Character; one of \code{"sample"}, \code{"oas"},
@@ -29,12 +34,18 @@
 #' @param return_cov_precision Logical; if \code{TRUE}, also return the
 #'   covariance (\code{cov}) and precision (\code{precision}) matrices used to
 #'   form the partial correlations. Default to \code{FALSE}
+#' @param return_p_value Logical; if \code{TRUE}, also return the matrix of
+#'   two-sided p-values for testing whether each sample partial correlation is
+#'   zero. This option is available only for \code{method = "sample"} and
+#'   requires \eqn{n > p}. Default to \code{FALSE}.
 #'
 #' @return An object of class \code{"partial_corr"} (a list) with elements:
 #'   \itemize{
 #'     \item \code{pcor}: \eqn{p \times p} partial correlation matrix.
 #'     \item \code{cov} (if requested): covariance matrix used.
 #'     \item \code{precision} (if requested): precision matrix \eqn{\Theta}.
+#'     \item \code{p_value} (if requested): matrix of two-sided p-values for
+#'     the sample partial correlations.
 #'     \item \code{method}: the estimator used (\code{"oas"}, \code{"ridge"},
 #'     \code{"sample"}, or \code{"glasso"}).
 #'     \item \code{lambda}: ridge or graphical-lasso penalty
@@ -87,6 +98,14 @@
 #' \deqn{\mathrm{pcor}_{ij} \;=\;
 #'       -\,\frac{\theta_{ij}}{\sqrt{\theta_{ii}\,\theta_{jj}}}, \qquad
 #'       \mathrm{pcor}_{ii}=1.}
+#'
+#' If \code{return_p_value = TRUE}, the function also reports the classical
+#' two-sided test p-values for the sample partial correlations, using
+#' \deqn{t_{ij} = \mathrm{pcor}_{ij}
+#'   \sqrt{\frac{n - p}{1 - \mathrm{pcor}_{ij}^2}}}
+#' with \eqn{n - p} degrees of freedom. These p-values are returned only for
+#' \code{method = "sample"}, where they match the standard full-model partial
+#' correlation test.
 #'
 #' \strong{Interpretation.} For Gaussian data, \eqn{\mathrm{pcor}_{ij}} equals
 #' the correlation between residuals from regressing variable \eqn{i} and
@@ -275,11 +294,13 @@
 #'
 #' @export
 pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
-                                lambda = 1e-3, return_cov_precision = FALSE) {
+                                lambda = 1e-3, return_cov_precision = FALSE,
+                                return_p_value = FALSE) {
   method <- match.arg(method)
   lambda <- check_scalar_numeric(lambda, arg = "lambda", lower = 0, closed_lower = TRUE)
   lambda <- as.numeric(lambda)
   check_bool(return_cov_precision, arg = "return_cov_precision")
+  check_bool(return_p_value, arg = "return_p_value")
 
   numeric_data <-
     if (is.matrix(data) && is.double(data)) {
@@ -289,12 +310,30 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
       validate_corr_input(data)
     }
 
-  res <- partial_correlation_cpp(numeric_data, method, lambda, return_cov_precision)
+  if (isTRUE(return_p_value) && !identical(method, "sample")) {
+    cli::cli_abort(
+      "{.arg return_p_value} is available only for {.code method = \"sample\"}."
+    )
+  }
+  if (isTRUE(return_p_value) && nrow(numeric_data) <= ncol(numeric_data)) {
+    cli::cli_abort(
+      "{.arg return_p_value} requires {.code n > p} so that the sample partial-correlation test has positive degrees of freedom."
+    )
+  }
+
+  res <- partial_correlation_cpp(
+    numeric_data,
+    method,
+    lambda,
+    return_cov_precision,
+    return_p_value
+  )
 
   # set dimnames (cheap; attributes only)
   dn <- list(colnames(numeric_data), colnames(numeric_data))
   if (!is.null(res$pcor)) {
     dimnames(res$pcor) <- dn
+    if (!is.null(res$p_value))   dimnames(res$p_value)   <- dn
     if (!is.null(res$cov))       dimnames(res$cov)       <- dn
     if (!is.null(res$precision)) dimnames(res$precision) <- dn
   } else {
@@ -400,7 +439,8 @@ print.partial_corr <- function(
 #' @description
 #' Prints the same compact matrix summary used by the other correlation
 #' methods, based on the partial-correlation matrix stored in
-#' \code{object$pcor}.
+#' \code{object$pcor}. This method is used for the object returned by
+#' \code{summary(pcorr(...))}, not for the direct \code{pcorr()} result.
 #'
 #' @param object An object of class \code{partial_corr}.
 #' @param ... Unused.

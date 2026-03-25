@@ -135,6 +135,61 @@ test_that("pcorr exposes shrinkage metadata without cov/precision", {
   expect_true(is.na(samp$rho))
   expect_true(is.na(samp$lambda))
   expect_true(is.numeric(samp$jitter))
+  expect_null(samp$p_value)
+})
+
+test_that("sample partial-correlation p-values match the reference example", {
+  y.data <- data.frame(
+    hl = c(7, 15, 19, 15, 21, 22, 57, 15, 20, 18),
+    disp = c(0.000, 0.964, 0.000, 0.000, 0.921, 0.000, 0.000, 1.006, 0.000, 1.011),
+    deg = c(9, 2, 3, 4, 1, 3, 1, 3, 6, 1),
+    BC = c(1.78e-02, 1.05e-06, 1.37e-05, 7.18e-03, 0.00e+00,
+           0.00e+00, 0.00e+00, 4.48e-03, 2.10e-06, 0.00e+00)
+  )
+
+  ours <- pcorr(y.data, method = "sample", return_p_value = TRUE)
+
+  vars <- c("hl", "disp", "deg", "BC")
+  expected_pcor <- structure(
+    c(
+      1.0000000, -0.6720863, -0.6161163,  0.1148459,
+     -0.6720863,  1.0000000, -0.7215522,  0.2855420,
+     -0.6161163, -0.7215522,  1.0000000,  0.6940953,
+      0.1148459,  0.2855420,  0.6940953,  1.0000000
+    ),
+    dim = c(4L, 4L),
+    dimnames = list(vars, vars)
+  )
+
+  expected_p_value <- structure(
+    c(
+      0.00000000, 0.06789202, 0.10383620, 0.78654997,
+      0.06789202, 0.00000000, 0.04332869, 0.49299871,
+      0.10383620, 0.04332869, 0.00000000, 0.05615021,
+      0.78654997, 0.49299871, 0.05615021, 0.00000000
+    ),
+    dim = c(4L, 4L),
+    dimnames = list(vars, vars)
+  )
+
+  expect_equal(ours$pcor, expected_pcor, tolerance = 1e-7)
+  expect_equal(ours$p_value, expected_p_value, tolerance = 1e-8)
+  expect_equal(unname(diag(ours$p_value)), rep(0, ncol(y.data)))
+})
+
+test_that("pcorr p-values are restricted to the classical sample setting", {
+  X <- matrix(rnorm(60), nrow = 20, ncol = 3)
+
+  expect_error(
+    pcorr(X, method = "ridge", return_p_value = TRUE),
+    "available only for"
+  )
+
+  X_wide <- matrix(rnorm(36), nrow = 6, ncol = 6)
+  expect_error(
+    pcorr(X_wide, method = "sample", return_p_value = TRUE),
+    "requires .*n > p"
+  )
 })
 
 test_that("sample partial correlation is close to truth in a structured MVN model", {

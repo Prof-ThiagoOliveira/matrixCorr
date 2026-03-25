@@ -12,7 +12,8 @@ pcorr(
   data,
   method = c("sample", "oas", "ridge", "glasso"),
   lambda = 0.001,
-  return_cov_precision = FALSE
+  return_cov_precision = FALSE,
+  return_p_value = FALSE
 )
 
 \method{print}{partial_corr}(x, digits = 3, show_method = TRUE, max_rows = NULL, max_cols = NULL, ...)
@@ -49,6 +50,11 @@ precision-matrix \eqn{\ell_1} penalty. Ignored otherwise. Default
 \item{return_cov_precision}{Logical; if \code{TRUE}, also return the
 covariance (\code{cov}) and precision (\code{precision}) matrices used to
 form the partial correlations. Default to \code{FALSE}}
+
+\item{return_p_value}{Logical; if \code{TRUE}, also return the matrix of
+two-sided p-values for testing whether each sample partial correlation is
+zero. This option is available only for \code{method = "sample"} and
+requires \eqn{n > p}. Default to \code{FALSE}.}
 
 \item{x}{An object of class \code{partial_corr}.}
 
@@ -90,6 +96,8 @@ An object of class \code{"partial_corr"} (a list) with elements:
 \item \code{pcor}: \eqn{p \times p} partial correlation matrix.
 \item \code{cov} (if requested): covariance matrix used.
 \item \code{precision} (if requested): precision matrix \eqn{\Theta}.
+\item \code{p_value} (if requested): matrix of two-sided p-values for
+the sample partial correlations.
 \item \code{method}: the estimator used (\code{"oas"}, \code{"ridge"},
 \code{"sample"}, or \code{"glasso"}).
 \item \code{lambda}: ridge or graphical-lasso penalty
@@ -122,12 +130,18 @@ an \eqn{\ell_1} penalty on off-diagonal precision entries.
 
 The method uses a high-performance 'C++' backend.
 
+This help page also documents the associated S3 methods.
+\code{print.partial_corr()} prints a \code{pcorr()} result directly,
+whereas \code{print.summary_partial_corr()} prints the compact object
+returned by \code{summary()}.
+
 Prints only the partial correlation matrix (no attribute spam),
 with an optional one-line header stating the estimator used.
 
 Prints the same compact matrix summary used by the other correlation
 methods, based on the partial-correlation matrix stored in
-\code{object$pcor}.
+\code{object$pcor}. This method is used for the object returned by
+\code{summary(pcorr(...))}, not for the direct \code{pcorr()} result.
 
 Produces a \pkg{ggplot2}-based heatmap of the partial correlation matrix
 stored in \code{x$pcor}. Optionally masks the diagonal and/or reorders
@@ -176,6 +190,14 @@ standardising the off-diagonals of \eqn{\Theta}:
 \deqn{\mathrm{pcor}_{ij} \;=\;
       -\,\frac{\theta_{ij}}{\sqrt{\theta_{ii}\,\theta_{jj}}}, \qquad
       \mathrm{pcor}_{ii}=1.}
+
+If \code{return_p_value = TRUE}, the function also reports the classical
+two-sided test p-values for the sample partial correlations, using
+\deqn{t_{ij} = \mathrm{pcor}_{ij}
+  \sqrt{\frac{n - p}{1 - \mathrm{pcor}_{ij}^2}}}
+with \eqn{n - p} degrees of freedom. These p-values are returned only for
+\code{method = "sample"}, where they match the standard full-model partial
+correlation test.
 
 \strong{Interpretation.} For Gaussian data, \eqn{\mathrm{pcor}_{ij}} equals
 the correlation between residuals from regressing variable \eqn{i} and

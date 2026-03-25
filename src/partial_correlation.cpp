@@ -20,20 +20,59 @@ using matrixCorr_detail::linalg::precision_to_pcor_inplace;
 using matrixCorr_detail::cov_shrinkage::oas_shrink_inplace;
 using matrixCorr_detail::sparse_precision::graphical_lasso;
 
+namespace {
+
+arma::mat partial_correlation_p_values(const arma::mat& pcor,
+                                       const arma::uword n,
+                                       const arma::uword p) {
+  if (n <= p) {
+    Rcpp::stop("return_p_value requires n > p for the sample partial-correlation test.");
+  }
+
+  const double df = static_cast<double>(n - p);
+  arma::mat p_value(p, p, arma::fill::zeros);
+
+  for (arma::uword j = 0; j < p; ++j) {
+    for (arma::uword i = 0; i < j; ++i) {
+      double r = pcor(i, j);
+      if (!std::isfinite(r)) {
+        Rcpp::stop("Partial correlation matrix must contain only finite values when return_p_value = TRUE.");
+      }
+
+      r = std::max(-1.0, std::min(1.0, r));
+      const double denom = 1.0 - (r * r);
+      const double p_ij =
+        (denom <= 0.0)
+          ? 0.0
+          : 2.0 * R::pt(-std::abs(r * std::sqrt(df / denom)), df, /*lower_tail*/ 1, /*log_p*/ 0);
+
+      p_value(i, j) = p_ij;
+      p_value(j, i) = p_ij;
+    }
+  }
+
+  return p_value;
+}
+
+} // namespace
+
 // Partial correlation matrix with sample / ridge / OAS / graphical-lasso estimators
 // @param X_ Numeric double matrix (n x p). No NAs.
 // @param method One of "sample", "ridge", "oas", "glasso". Default "sample".
 // @param lambda Penalty parameter for "ridge" (covariance diagonal inflation) or
 //        "glasso" (L1 penalty on off-diagonal precision entries). Ignored for "sample" and "oas".
 // @param return_cov_precision If TRUE, return covariance and precision matrices.
+// @param return_p_value If TRUE, also return two-sided p-values for the sample
+//        partial correlations. Supported only for method = "sample" with n > p.
 // @return A list with elements: \code{pcor}, and optionally \code{cov}, \code{precision},
-//         \code{method}, \code{lambda}, \code{rho} (for OAS).
+//         \code{p_value}, \code{method}, \code{lambda}, \code{rho} (for OAS).
 // @export
 // [[Rcpp::export]]
  Rcpp::List partial_correlation_cpp(SEXP X_,
                                     const std::string method = "sample",
                                     const double lambda = 1e-3,
-                                    const bool return_cov_precision = true) {
+                                    const bool return_cov_precision = true,
+                                    const bool return_p_value = false) {
    if (!Rf_isReal(X_) || !Rf_isMatrix(X_))
      Rcpp::stop("Numeric double matrix required.");
 
@@ -80,6 +119,10 @@ using matrixCorr_detail::sparse_precision::graphical_lasso;
      Rcpp::stop("Unknown method: '%s' (use 'sample', 'ridge', 'oas', or 'glasso').", method.c_str());
    }
 
+   if (return_p_value && method != "sample") {
+     Rcpp::stop("return_p_value is available only for method = 'sample'.");
+   }
+
    double jitter = 0.0;
    arma::mat Theta;
 
@@ -115,10 +158,16 @@ using matrixCorr_detail::sparse_precision::graphical_lasso;
        Rcpp::stop("Precision diagonal must be positive and finite.");
      }
 
+     arma::mat p_value;
+     if (return_p_value) {
+       p_value = partial_correlation_p_values(pcor, n, p);
+     }
+
      Rcpp::List out = Rcpp::List::create(
        Rcpp::Named("pcor")      = pcor,
        Rcpp::Named("cov")       = Sigma,
        Rcpp::Named("precision") = Theta,
+       Rcpp::Named("p_value")   = return_p_value ? Rcpp::wrap(p_value) : R_NilValue,
        Rcpp::Named("method")    = method,
        Rcpp::Named("lambda")    = (method == "ridge" ? lambda : NA_REAL),
        Rcpp::Named("rho")       = (method == "oas"   ? rho    : NA_REAL),
@@ -135,11 +184,17 @@ using matrixCorr_detail::sparse_precision::graphical_lasso;
        Rcpp::stop("Precision diagonal must be positive and finite.");
      }
 
+     arma::mat p_value;
+     if (return_p_value) {
+       p_value = partial_correlation_p_values(Sigma, n, p);
+     }
+
      return Rcpp::List::create(
-       Rcpp::Named("pcor")   = Sigma,
-       Rcpp::Named("lambda") = (method == "ridge" ? lambda : NA_REAL),
-       Rcpp::Named("rho")    = (method == "oas"   ? rho    : NA_REAL),
-       Rcpp::Named("jitter") = jitter
+       Rcpp::Named("pcor")    = Sigma,
+       Rcpp::Named("p_value") = return_p_value ? Rcpp::wrap(p_value) : R_NilValue,
+       Rcpp::Named("lambda")  = (method == "ridge" ? lambda : NA_REAL),
+       Rcpp::Named("rho")     = (method == "oas"   ? rho    : NA_REAL),
+       Rcpp::Named("jitter")  = jitter
      );
    }
  }
