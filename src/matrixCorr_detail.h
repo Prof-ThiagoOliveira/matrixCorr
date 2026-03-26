@@ -1250,6 +1250,63 @@ inline double quantile_sorted(const arma::vec &s, double p) {
 //------------------------------------------------------------------------------
 namespace standardise_bicor {
 
+inline double median_inplace(std::vector<double>& values) {
+  const std::size_t n = values.size();
+  if (n == 0) return std::numeric_limits<double>::quiet_NaN();
+
+  const std::size_t mid = n / 2;
+  auto begin = values.begin();
+  auto mid_it = begin + static_cast<std::ptrdiff_t>(mid);
+  auto end = values.end();
+
+  std::nth_element(begin, mid_it, end);
+  const double hi = *mid_it;
+  if ((n & 1u) != 0u) return hi;
+
+  const double lo = *std::max_element(begin, mid_it);
+  return 0.5 * (lo + hi);
+}
+
+inline double quantile_sorted_std(const std::vector<double>& sorted, double p) {
+  const std::size_t n = sorted.size();
+  if (n == 0) return std::numeric_limits<double>::quiet_NaN();
+  if (p <= 0.0) return sorted.front();
+  if (p >= 1.0) return sorted.back();
+
+  const double pos = p * static_cast<double>(n - 1);
+  const std::size_t lo = static_cast<std::size_t>(std::floor(pos));
+  const std::size_t hi = static_cast<std::size_t>(std::ceil(pos));
+  const double frac = pos - static_cast<double>(lo);
+  return (1.0 - frac) * sorted[lo] + frac * sorted[hi];
+}
+
+inline bool standardise_pearson_column(const arma::vec& x, arma::vec& z) {
+  const std::size_t n = x.n_elem;
+  if (z.n_elem != n) z.set_size(n);
+
+  const double* x_ptr = x.memptr();
+  double sum = 0.0;
+  for (std::size_t i = 0; i < n; ++i) sum += x_ptr[i];
+  const double mu = sum / static_cast<double>(n);
+
+  double denom2 = 0.0;
+  double* z_ptr = z.memptr();
+  for (std::size_t i = 0; i < n; ++i) {
+    const double centered = x_ptr[i] - mu;
+    z_ptr[i] = centered;
+    denom2 += centered * centered;
+  }
+
+  if (!(denom2 > 0.0)) {
+    z.fill(arma::datum::nan);
+    return false;
+  }
+
+  const double inv_norm = 1.0 / std::sqrt(denom2);
+  for (std::size_t i = 0; i < n; ++i) z_ptr[i] *= inv_norm;
+  return true;
+}
+
 // Standardise one column with *weights* (no NA, already subset if needed).
 inline void standardise_bicor_column_weighted(const arma::vec& x,
                                               const arma::vec& wobs,
@@ -1365,86 +1422,73 @@ inline void standardise_bicor_column(const arma::vec& x,
   if (z.n_elem != n) z.set_size(n);
   z.zeros();
   col_is_valid = false;
+  const double* x_ptr = x.memptr();
+  double* z_ptr = z.memptr();
 
   // Force Pearson for this column
   if (pearson_fallback_mode == 2) {
-    const double mu = arma::mean(x);
-    arma::vec centered = x - mu;
-    const double denom2 = arma::dot(centered, centered);
-    if (denom2 > 0.0) {
-      z = centered / std::sqrt(denom2);
-      col_is_valid = true;
-    } else {
-      z.fill(arma::datum::nan);
-    }
+    col_is_valid = standardise_pearson_column(x, z);
     return;
   }
 
-  // Median and MAD (use sorted copies for determinism)
-  arma::vec xc = arma::sort(x);
-  const double med = arma::median(xc);
-  arma::vec absdev = arma::abs(x - med);
-  const double mad = arma::median(arma::sort(absdev));
+  std::vector<double> work(n);
+  for (std::size_t i = 0; i < n; ++i) work[i] = x_ptr[i];
+  const double med = median_inplace(work);
+
+  for (std::size_t i = 0; i < n; ++i) work[i] = std::abs(x_ptr[i] - med);
+  const double mad = median_inplace(work);
 
   // If MAD == 0, either NA or Pearson fallback
   if (!(mad > 0.0)) {
     if (pearson_fallback_mode == 0) { z.fill(arma::datum::nan); return; }
-    const double mu = arma::mean(x);
-    arma::vec centered = x - mu;
-    const double denom2 = arma::dot(centered, centered);
-    if (!(denom2 > 0.0)) { z.fill(arma::datum::nan); return; }
-    z = centered / std::sqrt(denom2);
-    col_is_valid = true;
+    col_is_valid = standardise_pearson_column(x, z);
     return;
   }
 
   // Side-cap quantiles so chosen tails map to |u| = 1 (Langfelder & Horvath)
   double scale_neg = 1.0, scale_pos = 1.0;
   if (maxPOutliers < 1.0) {
-    const double qL = matrixCorr_detail::quantile_utils::quantile_sorted(xc, maxPOutliers);
-    const double qU = matrixCorr_detail::quantile_utils::quantile_sorted(xc, 1.0 - maxPOutliers);
+    for (std::size_t i = 0; i < n; ++i) work[i] = x_ptr[i];
+    std::sort(work.begin(), work.end());
+    const double qL = quantile_sorted_std(work, maxPOutliers);
+    const double qU = quantile_sorted_std(work, 1.0 - maxPOutliers);
     const double uL = (qL - med) / (c_const * mad);
     const double uU = (qU - med) / (c_const * mad);
     if (std::abs(uL) > 1.0) scale_neg = std::abs(uL);
     if (std::abs(uU) > 1.0) scale_pos = std::abs(uU);
   }
 
-  arma::vec xm = x - med;
-  arma::vec u  = xm / (c_const * mad);
-  if (maxPOutliers < 1.0 && (scale_neg > 1.0 || scale_pos > 1.0)) {
-    for (std::size_t i = 0; i < n; ++i) {
-      if (xm[i] < 0.0)      u[i] /= scale_neg;
-      else if (xm[i] > 0.0) u[i] /= scale_pos;
-    }
-  }
-
-  arma::vec w(n, arma::fill::zeros);
+  const double inv_cmad = 1.0 / (c_const * mad);
+  const bool use_side_cap = maxPOutliers < 1.0 && (scale_neg > 1.0 || scale_pos > 1.0);
+  double denom2 = 0.0;
   for (std::size_t i = 0; i < n; ++i) {
-    const double a = u[i];
-    if (std::abs(a) < 1.0) {
-      const double t = (1.0 - a*a);
-      w[i] = t * t;
+    const double xm = x_ptr[i] - med;
+    double u = xm * inv_cmad;
+    if (use_side_cap) {
+      if (xm < 0.0) u /= scale_neg;
+      else if (xm > 0.0) u /= scale_pos;
     }
-  }
-  arma::vec r = xm % w;
 
-  const double denom2 = arma::dot(r, r);
+    double zi = 0.0;
+    if (std::abs(u) < 1.0) {
+      const double t = 1.0 - u * u;
+      zi = xm * t * t;
+    }
+    z_ptr[i] = zi;
+    denom2 += zi * zi;
+  }
+
   if (!(denom2 > 0.0)) {
     if (pearson_fallback_mode >= 1) {
-      const double mu = arma::mean(x);
-      arma::vec centered = x - mu;
-      const double d2 = arma::dot(centered, centered);
-      if (d2 > 0.0) {
-        z = centered / std::sqrt(d2);
-        col_is_valid = true;
-        return;
-      }
+      col_is_valid = standardise_pearson_column(x, z);
+      if (col_is_valid) return;
     }
     z.fill(arma::datum::nan);
     return;
   }
 
-  z = r / std::sqrt(denom2);
+  const double inv_norm = 1.0 / std::sqrt(denom2);
+  for (std::size_t i = 0; i < n; ++i) z_ptr[i] *= inv_norm;
   col_is_valid = true;
 }
 
