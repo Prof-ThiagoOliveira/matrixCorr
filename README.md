@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# matrixCorr
+# matrixCorr <img src="man/figures/logo.png" align="right" height="160" />
 
 <!-- badges: start -->
 
@@ -16,7 +16,7 @@ downloads](https://cranlogs.r-pkg.org/badges/grand-total/matrixCorr)
 `matrixCorr` computes correlation and related association matrices from
 small to high-dimensional data using simple, consistent functions and
 sensible defaults. It includes shrinkage and robust options for noisy or
-**p >= n** settings, plus convenient print/plot/summary methods.
+**p \>= n** settings, plus convenient print/plot/summary methods.
 Performance-critical paths are implemented in C++ with BLAS/OpenMP and
 memory-aware symmetric updates. The API accepts base matrices and data
 frames and returns standard R objects via a consistent S3 interface.
@@ -31,25 +31,31 @@ Supported measures include Pearson, Spearman, Kendall, distance
 correlation, partial correlation, robust biweight mid-correlation,
 percentage bend, Winsorized, skipped correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
-and biserial), plus repeated-measures correlation
-(`rmcorr()`); agreement tools cover Bland-Altman (two-method and
-repeated-measures) and Lin's concordance correlation coefficient (including
+and biserial), plus repeated-measures correlation (`rmcorr()`);
+agreement tools cover Bland-Altman (two-method and repeated-measures)
+and Lin’s concordance correlation coefficient (including
 repeated-measures LMM/REML extensions).
 
 ## Features
 
 - High-performance C++ backend using `Rcpp`
-- General correlations such as `pearson_corr()`, `spearman_rho()`, `kendall_tau()`
-- Robust correlation metrics (`bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`)
+- General correlations such as `pearson_corr()`, `spearman_rho()`,
+  `kendall_tau()`
+- Robust correlation metrics (`bicor()`, `pbcor()`, `wincor()`,
+  `skipped_corr()`)
 - Distance correlation (`dcor()`)
 - Partial correlation (`pcorr()`)
-- Latent categorical/ordinal correlations (`tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()`)
+- Latent categorical/ordinal correlations (`tetrachoric()`,
+  `polychoric()`, `polyserial()`, `biserial()`)
 - Repeated-measures correlation (`rmcorr()`)
 - Shrinkage for $p >> n$ (`schafer_corr()`)
 - Agreement metrics
   - Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
-  - Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric `ccc_rm_ustat()`)
-- Interactive Shiny viewers for matrix-style outputs with a dedicated repeated-measures correlation viewer (`view_rmcorr_shiny()`)
+  - Lin’s concordance correlation coefficient (pairwise `ccc()`,
+    repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric
+    `ccc_rm_ustat()`)
+- Interactive Shiny viewers for matrix-style outputs with a dedicated
+  repeated-measures correlation viewer (`view_rmcorr_shiny()`)
 
 ## Installation
 
@@ -78,8 +84,18 @@ R_spr  <- spearman_rho(X)
 R_ken  <- kendall_tau(X)
 
 print(R_pear, digits = 2)
+#> Pearson correlation matrix: 
+#>       V1    V2    V3    V4    V5    V6
+#> V1  1.00  0.02  0.04 -0.02 -0.07  0.01
+#> V2  0.02  1.00  0.04  0.03 -0.05  0.13
+#> V3  0.04  0.04  1.00 -0.06  0.08 -0.14
+#> V4 -0.02  0.03 -0.06  1.00  0.07  0.03
+#> V5 -0.07 -0.05  0.08  0.07  1.00  0.04
+#> V6  0.01  0.13 -0.14  0.03  0.04  1.00
 plot(R_spr)   # heatmap
 ```
+
+<img src="man/figures/README-unnamed-chunk-3-1.png" alt="" width="100%" />
 
 ### Robust correlation (biweight mid-correlation)
 
@@ -91,16 +107,32 @@ Y$V1[sample.int(nrow(Y), 8)] <- Y$V1[sample.int(nrow(Y), 8)] + 8
 
 R_bicor <- bicor(Y)
 print(R_bicor, digits = 2)
+#> Biweight mid-correlation matrix (bicor): 
+#>       V1    V2    V3    V4    V5    V6
+#> V1  1.00  0.05  0.03 -0.02 -0.07  0.02
+#> V2  0.05  1.00  0.05  0.03 -0.04  0.14
+#> V3  0.03  0.05  1.00 -0.06  0.05 -0.16
+#> V4 -0.02  0.03 -0.06  1.00  0.08  0.04
+#> V5 -0.07 -0.04  0.05  0.08  1.00  0.05
+#> V6  0.02  0.14 -0.16  0.04  0.05  1.00
 ```
 
 ### Other robust correlations
 
 ``` r
-R_pb <- pbcor(Y)
-R_win <- wincor(Y)
+R_pb   <- pbcor(Y)
+R_win  <- wincor(Y)
 R_skip <- skipped_corr(Y)
 
 print(R_pb, digits = 2)
+#> Percentage bend correlation matrix: 
+#>       V1    V2    V3    V4    V5    V6
+#> V1  1.00  0.03  0.02  0.01 -0.05  0.04
+#> V2  0.03  1.00  0.06  0.02 -0.02  0.14
+#> V3  0.02  0.06  1.00 -0.06  0.03 -0.16
+#> V4  0.01  0.02 -0.06  1.00  0.07  0.05
+#> V5 -0.05 -0.02  0.03  0.07  1.00  0.05
+#> V6  0.04  0.14 -0.16  0.05  0.05  1.00
 ```
 
 `skipped_corr()` is typically slower than `pbcor()` and `wincor()`
@@ -117,6 +149,15 @@ colnames(Xd) <- paste0("G", seq_len(p))
 
 R_shr <- schafer_corr(Xd)
 print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
+#> Schafer-Strimmer shrinkage correlation matrix: 
+#>       G1    G2 G3 G4 G5 G6
+#> G1  1.00 -0.01  0  0  0  0
+#> G2 -0.01  1.00  0  0  0  0
+#> G3  0.00  0.00  1  0  0  0
+#> G4  0.00  0.00  0  1  0  0
+#> G5  0.00  0.00  0  0  1  0
+#> G6  0.00  0.00  0  0  0  1
+#> ... omitted: 194 rows, 194 cols
 ```
 
 ### Partial correlation matrix
@@ -124,6 +165,14 @@ print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
 ``` r
 R_part <- pcorr(X)
 print(R_part, digits = 2)
+#> Partial correlation (sample covariance)
+#>       V1    V2    V3    V4    V5    V6
+#> V1  1.00  0.02  0.05 -0.01 -0.07  0.02
+#> V2  0.02  1.00  0.07  0.04 -0.06  0.14
+#> V3  0.05  0.07  1.00 -0.06  0.10 -0.15
+#> V4 -0.01  0.04 -0.06  1.00  0.08  0.02
+#> V5 -0.07 -0.06  0.10  0.08  1.00  0.06
+#> V6  0.02  0.14 -0.15  0.02  0.06  1.00
 ```
 
 `pcorr()` defaults to the sample partial correlation and also supports
@@ -135,11 +184,18 @@ regularized estimation.
 ``` r
 R_dcor <- dcor(X)
 print(R_dcor, digits = 2)
+#> Distance correlation (dCor) matrix: 
+#>    V1   V2   V3 V4 V5   V6
+#> V1  1 0.00 0.00  0  0 0.00
+#> V2  0 1.00 0.00  0  0 0.02
+#> V3  0 0.00 1.00  0  0 0.02
+#> V4  0 0.00 0.00  1  0 0.00
+#> V5  0 0.00 0.00  0  1 0.00
+#> V6  0 0.02 0.02  0  0 1.00
 ```
 
-`dcor()` uses an unbiased estimator with a fast univariate
-\(O(n \log n)\) dispatch and an exact \(O(n^2)\) fallback for
-robustness.
+`dcor()` uses an unbiased estimator with a fast univariate $O(n \log n)$
+dispatch and an exact $O(n^2)$ fallback for robustness.
 
 ### Latent categorical and ordinal correlations
 
@@ -176,9 +232,25 @@ R_ps  <- polyserial(X_cont, X_ord)
 R_bis <- biserial(X_cont, X_bin[, 1:2])
 
 print(R_tet, digits = 2)
+#> Tetrachoric correlation matrix: 
+#>      b1   b2   b3
+#> b1 1.00 0.55 0.39
+#> b2 0.55 1.00 0.33
+#> b3 0.39 0.33 1.00
 summary(R_ps)
+#> Latent correlation summary:
+#>   class      : polyserial_corr
+#>   method     : polyserial
+#>   dimensions : 2 x 2
+#>   n_pairs    : 4
+#>   symmetric  : no
+#>   missing    : 0
+#>   min        : 0.2298
+#>   max        : 0.5523
 plot(R_pol)
 ```
+
+<img src="man/figures/README-unnamed-chunk-9-1.png" alt="" width="100%" />
 
 ### Repeated-measures correlation
 
@@ -202,9 +274,33 @@ fit_xy <- rmcorr(dat_rm, response = c("x", "y"), subject = "subject")
 fit_mat <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "subject")
 
 print(fit_xy)
+#> Repeated-measures correlation:
+#>   responses : x vs y
+#>   based.on  : 80
+#>   subjects  : 20
+#>   df        : 59
+#>   r         : 0.9448
+#>   slope     : 0.7991
+#>   p_value   : 2.769e-30
+#>   CI 95.0%   : [0.9094, 0.9667]
 print(fit_mat, digits = 2)
+#> Repeated-measures correlation matrix: 
+#>       x     y     z
+#> x  1.00  0.94 -0.63
+#> y  0.94  1.00 -0.62
+#> z -0.63 -0.62  1.00
 plot(fit_xy)
+```
+
+<img src="man/figures/README-unnamed-chunk-10-1.png" alt="" width="100%" />
+
+``` r
 plot(fit_mat)
+```
+
+<img src="man/figures/README-unnamed-chunk-10-2.png" alt="" width="100%" />
+
+``` r
 
 # Dedicated Shiny viewer for repeated-measures correlation matrices
 # if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -220,8 +316,8 @@ plot(fit_mat)
 
 ## Agreement analyses
 
-Here we look at agreement analyses for Bland-Altman and repeated-measures
-concordance workflows.
+Here we look at agreement analyses for Bland-Altman and
+repeated-measures concordance workflows.
 
 ### Two-method Bland-Altman
 
@@ -232,8 +328,26 @@ y <- x + 0.5 + rnorm(120, 0, 8)
 
 ba_fit <- ba(x, y)
 print(ba_fit)
+#> Bland-Altman (n = 120) - LoA = mean +/- 1.96 * SD, 95% CI
+#> 
+#>  quantity        estimate lwr     upr    
+#>  Mean difference 0.001    -1.450  1.453  
+#>  Lower LoA       -15.741  -18.255 -13.226
+#>  Upper LoA       15.743   13.229  18.258 
+#> 
+#> SD(differences): 8.032   LoA width: 31.484
 plot(ba_fit)
+#> Warning: Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
+#> ℹ Please use `linewidth` instead.
+#> ℹ The deprecated feature was likely used in the matrixCorr package.
+#>   Please report the issue at
+#>   <https://github.com/Prof-ThiagoOliveira/matrixCorr/issues>.
+#> This warning is displayed once per session.
+#> Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
+#> generated.
 ```
+
+<img src="man/figures/README-unnamed-chunk-11-1.png" alt="" width="100%" />
 
 ### Repeated-measures Bland-Altman (pairwise matrix)
 
@@ -261,10 +375,20 @@ ba_rep <- ba_rm(
   include_slope = FALSE, use_ar1 = FALSE
 )
 summary(ba_rep)
+#> Bland-Altman (pairwise), 95% CI
+#> 
+#>  method1 method2 bias   sd_loa loa_low loa_up width  n   sigma2_subject
+#>  A       B        0.875 3.021  -5.045  6.796  11.841 120 0.000         
+#>  A       C       -2.609 3.144  -8.771  3.554  12.325 120 0.038         
+#>  B       C       -3.484 3.154  -9.666  2.698  12.364 120 0.438         
+#>  sigma2_resid bias_lwr bias_upr lo_lwr  lo_upr up_lwr up_upr
+#>  9.124         0.394    1.357    -6.024 -4.066 5.817  7.775 
+#>  9.848        -3.156   -2.061    -9.660 -7.883 2.665  4.443 
+#>  9.511        -4.124   -2.845   -10.704 -8.629 1.661  3.735
 # plot(ba_rep)  # faceted BA scatter by pair
 ```
 
-### Lin's concordance correlation coefficient
+### Lin’s concordance correlation coefficient
 
 ``` r
 set.seed(6)
@@ -273,6 +397,10 @@ y <- x + 0.4 + rnorm(80, 0, 3)
 
 fit_ccc <- ccc(data.frame(A = x, B = y), ci = TRUE)
 summary(fit_ccc)
+#> Concordance pairs (Lin's CCC, 95% CI)
+#> 
+#>  method1 method2 estimate lwr  upr 
+#>  A       B       0.9262   0.89 0.95
 ```
 
 Use `ccc_rm_ustat()` when you have repeated measurements on the same
@@ -281,7 +409,7 @@ repeated-measures CCC. Use `ccc_rm_reml()` when you want a model-based
 estimate from variance components, especially when subject effects, time
 effects, or within-subject correlation need to be modeled explicitly.
 
-### Repeated-measures Lin's concordance correlation coefficient (LMM/REML)
+### Repeated-measures Lin’s concordance correlation coefficient (LMM/REML)
 
 ``` r
 set.seed(6)
@@ -299,6 +427,12 @@ dat_ccc <- data.frame(y, id, method, time)
 fit_ccc_rm <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
                           method = "method", time = "time")
 summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
+#>   method1 method2 estimate sigma2_subject sigma2_subject_method
+#> 1       A       B   0.8987         0.8149                     0
+#>   sigma2_subject_time sigma2_error     SB se_ccc ar1_rho ar1_rho_lag1
+#> 1              0.2965       0.4267 0.0427 0.0172 -0.0533      -0.0533
+#>   ar1_rho_mom ar1_pairs ar1_pval use_ar1 ar1_recommend
+#> 1     -0.0533       420   0.2747   FALSE         FALSE
 ```
 
 ## Contributing

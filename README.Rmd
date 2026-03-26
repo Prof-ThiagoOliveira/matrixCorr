@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-# matrixCorr
+# matrixCorr <img src="man/figures/logo.png" align="right" height="160" />
 
 <!-- badges: start -->
 [![CRAN version](https://www.r-pkg.org/badges/version/matrixCorr)](https://CRAN.R-project.org/package=matrixCorr)
