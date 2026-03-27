@@ -70,7 +70,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   app_title <- title %||% "matrixCorr repeated-measures correlation viewer"
 
   heatmap_widget <- if (use_plotly) {
-    plotly::plotlyOutput("heatmap", height = "650px")
+    .mc_plotly_fn("plotlyOutput")("heatmap", height = "650px")
   } else {
     shiny::plotOutput("heatmap", height = "650px")
   }
@@ -287,7 +287,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
     })
 
     if (use_plotly) {
-      output$heatmap <- plotly::renderPlotly({
+      output$heatmap <- .mc_plotly_fn("renderPlotly")({
         heatmap_plot()
       })
     } else {

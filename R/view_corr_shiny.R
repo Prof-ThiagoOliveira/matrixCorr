@@ -56,7 +56,7 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   app_title <- title %||% "matrixCorr correlation viewer"
 
   plot_widget <- if (use_plotly) {
-    plotly::plotlyOutput("heatmap", height = "650px")
+    .mc_plotly_fn("plotlyOutput")("heatmap", height = "650px")
   } else {
     shiny::plotOutput("heatmap", height = "650px")
   }
@@ -232,7 +232,7 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
     })
 
     if (use_plotly) {
-      output$heatmap <- plotly::renderPlotly({
+      output$heatmap <- .mc_plotly_fn("renderPlotly")({
         plot_data()$plot
       })
     } else {
@@ -433,8 +433,15 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
     )
   }
   if (use_plotly) {
-    plotly::ggplotly(p, tooltip = c("x", "y", "fill"))
+    .mc_plotly_fn("ggplotly")(p, tooltip = c("x", "y", "fill"))
   } else {
     p
   }
+}
+
+.mc_plotly_fn <- function(name) {
+  if (!requireNamespace("plotly", quietly = TRUE)) {
+    cli::cli_abort("Package {.pkg plotly} is required for {.arg use_plotly} = TRUE.")
+  }
+  getExportedValue("plotly", name)
 }
