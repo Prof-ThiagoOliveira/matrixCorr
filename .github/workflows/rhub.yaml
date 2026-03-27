@@ -19,7 +19,7 @@ on:
       config:
         description: "Comma-separated R-hub platforms"
         type: string
-        default: "ubuntu-clang,ubuntu-release,windows-x86_64-devel"
+        default: "ubuntu-clang,ubuntu-next,ubuntu-release,macos,macos-arm64,windows"
       name:
         description: "Run name (optional)"
         type: string
@@ -42,10 +42,9 @@ jobs:
       - uses: r-hub/actions/setup@v1
         id: rhub-setup
         with:
-          # r-hub/actions uses the newer action platform IDs rather than the
-          # older rhub package aliases. These are the closest CRAN-like defaults:
-          # ubuntu-clang (R-devel clang), ubuntu-release, and Windows x86_64-devel.
-          config: ${{ github.event.inputs.config || 'ubuntu-clang,ubuntu-release,windows-x86_64-devel' }}
+          # Valid r-hub/actions platform IDs that map most closely to CRAN's
+          # regular check flavors.
+          config: ${{ github.event.inputs.config || 'ubuntu-clang,ubuntu-next,ubuntu-release,macos,macos-arm64,windows' }}
 
   linux-containers:
     needs: setup
