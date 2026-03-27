@@ -155,6 +155,11 @@ print(R, digits = 2)
 summary(R)
 plot(R)
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(R)
+}
+
 }
 \references{
 Wilcox, R. R. (2004). Inferences based on a skipped correlation coefficient.

@@ -68,96 +68,196 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
 
   use_plotly <- requireNamespace("plotly", quietly = TRUE)
   app_title <- title %||% "matrixCorr repeated-measures correlation viewer"
+  logo_src <- .mc_register_logo_resource(.mc_logo_path())
 
   heatmap_widget <- if (use_plotly) {
     .mc_plotly_fn("plotlyOutput")("heatmap", height = "650px")
   } else {
-    shiny::plotOutput("heatmap", height = "650px")
+    shiny::plotOutput("heatmap", click = "heatmap_click", height = "650px")
   }
 
   ui <- shiny::fluidPage(
-    shiny::titlePanel(app_title),
-    shiny::sidebarLayout(
-      shiny::sidebarPanel(
-        shinyWidgets::pickerInput(
-          inputId = "matrix_choice",
-          label = "Repeated-measures correlation object",
-          choices = names(prepared),
-          selected = names(prepared)[[1L]],
-          multiple = FALSE,
-          options = list(`live-search` = TRUE)
-        ),
-        shinyWidgets::pickerInput(
-          inputId = "var_choice",
-          label = "Heatmap variables",
-          choices = colnames(prepared[[1L]]$matrix),
-          selected = .mc_default_vars(prepared[[1L]]$matrix, default_max_vars),
-          multiple = TRUE,
-          options = list(`live-search` = TRUE, `actions-box` = TRUE)
-        ),
-        shiny::sliderInput(
-          inputId = "threshold",
-          label = "Hide cells with |value| below",
-          min = 0,
-          max = 1,
-          step = 0.05,
-          value = 0
-        ),
-        shiny::checkboxInput("use_abs", "Colour by absolute value", value = FALSE),
-        shiny::checkboxInput("mask_diag", "Hide diagonal", value = FALSE),
-        shiny::selectInput(
-          inputId = "cluster_mode",
-          label = "Cluster variables",
-          choices = c(
-            "None" = "none",
-            "Absolute correlation (|r|)" = "abs",
-            "Signed correlation (r)" = "signed"
-          ),
-          selected = "none"
-        ),
-        shiny::conditionalPanel(
-          condition = "input.cluster_mode !== 'none'",
-          shiny::selectInput(
-            inputId = "cluster_method",
-            label = "Linkage method",
-            choices = c(
-              "Complete" = "complete",
-              "Average" = "average",
-              "Single" = "single",
-              "Ward (D2)" = "ward.D2"
+    .mc_viewer_head(),
+    shiny::div(
+      class = "mc-app-shell",
+      .mc_viewer_header(
+        title = app_title,
+        subtitle = "Inspect repeated-measures correlation matrices with linked heatmap, pairwise fit, and distribution summaries.",
+        logo_src = logo_src,
+        badges = list(
+          .mc_header_badge("Repeated Measures", tone = "neutral"),
+          .mc_header_badge(
+            if (use_plotly) "Interactive heatmap" else "Static heatmap",
+            tone = if (use_plotly) "accent" else "neutral"
+          )
+        )
+      ),
+      shiny::sidebarLayout(
+        shiny::sidebarPanel(
+          width = 4,
+          .mc_control_section(
+            title = "Data",
+            shinyWidgets::pickerInput(
+              inputId = "matrix_choice",
+              label = "Repeated-measures correlation object",
+              choices = names(prepared),
+              selected = names(prepared)[[1L]],
+              multiple = FALSE,
+              options = list(`live-search` = TRUE)
             ),
-            selected = "complete"
+            shinyWidgets::pickerInput(
+              inputId = "var_choice",
+              label = "Heatmap variables",
+              choices = colnames(prepared[[1L]]$matrix),
+              selected = .mc_default_vars(prepared[[1L]]$matrix, default_max_vars),
+              multiple = TRUE,
+              options = list(`live-search` = TRUE, `actions-box` = TRUE)
+            )
+          ),
+          .mc_control_section(
+            title = "Heatmap",
+            shiny::sliderInput(
+              inputId = "threshold",
+              label = "Hide cells with |value| below",
+              min = 0,
+              max = 1,
+              step = 0.05,
+              value = 0
+            ),
+            shiny::sliderInput(
+              inputId = "corr_range",
+              label = "Keep variables with correlation in range",
+              min = -1,
+              max = 1,
+              step = 0.05,
+              value = c(-1, 1)
+            ),
+            shiny::checkboxInput("use_abs", "Colour by absolute value", value = FALSE),
+            shiny::checkboxInput("mask_diag", "Hide diagonal", value = FALSE),
+            shiny::selectInput(
+              inputId = "cluster_mode",
+              label = "Cluster variables",
+              choices = c(
+                "None" = "none",
+                "Absolute correlation (|r|)" = "abs",
+                "Signed correlation (r)" = "signed"
+              ),
+              selected = "none"
+            ),
+            shiny::conditionalPanel(
+              condition = "input.cluster_mode !== 'none'",
+              shiny::selectInput(
+                inputId = "cluster_method",
+                label = "Linkage method",
+                choices = c(
+                  "Complete" = "complete",
+                  "Average" = "average",
+                  "Single" = "single",
+                  "Ward (D2)" = "ward.D2"
+                ),
+                selected = "complete"
+              )
+            ),
+            shiny::checkboxInput("show_values", "Show heatmap cell labels", value = TRUE)
+          ),
+          .mc_control_section(
+            title = "Pair Plot",
+            shiny::selectInput(
+              inputId = "pair_x",
+              label = "Pair plot X variable",
+              choices = colnames(prepared[[1L]]$matrix),
+              selected = colnames(prepared[[1L]]$matrix)[[1L]]
+            ),
+            shiny::selectInput(
+              inputId = "pair_y",
+              label = "Pair plot Y variable",
+              choices = colnames(prepared[[1L]]$matrix),
+              selected = colnames(prepared[[1L]]$matrix)[[2L]]
+            ),
+            shiny::checkboxInput("pair_show_legend", "Show subject legend", value = FALSE)
+          ),
+          .mc_control_section(
+            title = "Actions",
+            shiny::div(
+              class = "mc-viewer-controls",
+              shiny::actionButton("reset_controls", "Reset controls"),
+              shiny::downloadButton("download_matrix", "Download displayed matrix")
+            )
           )
         ),
-        shiny::checkboxInput("show_values", "Show heatmap cell labels", value = TRUE),
-        shiny::tags$hr(),
-        shiny::selectInput(
-          inputId = "pair_x",
-          label = "Pair plot X variable",
-          choices = colnames(prepared[[1L]]$matrix),
-          selected = colnames(prepared[[1L]]$matrix)[[1L]]
-        ),
-        shiny::selectInput(
-          inputId = "pair_y",
-          label = "Pair plot Y variable",
-          choices = colnames(prepared[[1L]]$matrix),
-          selected = colnames(prepared[[1L]]$matrix)[[2L]]
-        ),
-        shiny::checkboxInput("pair_show_legend", "Show subject legend", value = FALSE)
-      ),
-      shiny::mainPanel(
-        shiny::tabsetPanel(
-          id = "rmcorr_view",
-          shiny::tabPanel(
-            title = "Heatmap",
-            heatmap_widget,
-            shiny::uiOutput("cluster_alert"),
-            shiny::htmlOutput("heatmap_meta")
-          ),
-          shiny::tabPanel(
-            title = "Pair Plot",
-            shiny::plotOutput("pair_plot", height = "650px"),
-            shiny::htmlOutput("pair_meta")
+        shiny::mainPanel(
+          width = 8,
+          shiny::div(
+            class = "mc-tabset-shell",
+            shiny::tabsetPanel(
+              id = "rmcorr_view",
+              shiny::tabPanel(
+                title = "Heatmap",
+                shiny::div(
+                  class = "mc-card mc-main-card",
+                  .mc_card_header(
+                    title = "Heatmap",
+                    subtitle = "Click a cell to open the corresponding repeated-measures pair plot."
+                  ),
+                  heatmap_widget,
+                  shiny::uiOutput("status_alerts")
+                ),
+                shiny::div(
+                  class = "mc-card mc-meta-card",
+                  .mc_card_header(
+                    title = "Summary",
+                    subtitle = "Current repeated-measures matrix and display state."
+                  ),
+                  shiny::uiOutput("heatmap_meta")
+                )
+              ),
+              shiny::tabPanel(
+                title = "Distribution",
+                shiny::fluidRow(
+                  shiny::column(
+                    width = 7,
+                    shiny::div(
+                      class = "mc-card mc-main-card",
+                      .mc_card_header(
+                        title = "Correlation Distribution",
+                        subtitle = "Boxplot of displayed off-diagonal values using unique variable pairs."
+                      ),
+                      shiny::plotOutput("dist_plot", height = "430px")
+                    )
+                  ),
+                  shiny::column(
+                    width = 5,
+                    shiny::div(
+                      class = "mc-card mc-meta-card",
+                      .mc_card_header(
+                        title = "Summary Table",
+                        subtitle = "Computed from the currently displayed upper triangle."
+                      ),
+                      shiny::tableOutput("dist_summary")
+                    )
+                  )
+                )
+              ),
+              shiny::tabPanel(
+                title = "Pair Plot",
+                shiny::div(
+                  class = "mc-card mc-main-card",
+                  .mc_card_header(
+                    title = "Pair Plot",
+                    subtitle = "Repeated-measures fit for the currently selected variable pair."
+                  ),
+                  shiny::plotOutput("pair_plot", height = "650px")
+                ),
+                shiny::div(
+                  class = "mc-card mc-meta-card",
+                  .mc_card_header(
+                    title = "Pair Summary",
+                    subtitle = "Model estimates for the selected repeated-measures pair."
+                  ),
+                  shiny::uiOutput("pair_meta")
+                )
+              )
+            )
           )
         )
       )
@@ -165,6 +265,15 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   )
 
   server <- function(input, output, session) {
+    shiny::observe({
+      .mc_update_corr_range_slider(
+        session = session,
+        input_id = "corr_range",
+        use_abs = isTRUE(input$use_abs),
+        value = input$corr_range
+      )
+    })
+
     shiny::observeEvent(input$matrix_choice, {
       info <- prepared[[input$matrix_choice]]
       vars <- colnames(info$matrix)
@@ -186,6 +295,33 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
       )
     }, ignoreNULL = FALSE)
 
+    shiny::observeEvent(input$reset_controls, {
+      info <- current_info()
+      vars <- colnames(info$matrix)
+      pair_default <- .mc_rmcorr_default_pair(vars)
+      shinyWidgets::updatePickerInput(
+        session,
+        inputId = "var_choice",
+        choices = vars,
+        selected = .mc_default_vars(info$matrix, default_max_vars)
+      )
+      shiny::updateSliderInput(session, "threshold", value = 0)
+      shiny::updateCheckboxInput(session, "use_abs", value = FALSE)
+      shiny::updateCheckboxInput(session, "mask_diag", value = FALSE)
+      shiny::updateSelectInput(session, "cluster_mode", selected = "none")
+      shiny::updateSelectInput(session, "cluster_method", selected = "complete")
+      shiny::updateCheckboxInput(session, "show_values", value = TRUE)
+      shiny::updateSelectInput(session, "pair_x", choices = vars, selected = pair_default[[1L]])
+      shiny::updateSelectInput(session, "pair_y", choices = vars, selected = pair_default[[2L]])
+      shiny::updateCheckboxInput(session, "pair_show_legend", value = FALSE)
+      .mc_update_corr_range_slider(
+        session = session,
+        input_id = "corr_range",
+        use_abs = FALSE,
+        value = c(-1, 1)
+      )
+    })
+
     current_info <- shiny::reactive({
       prepared[[input$matrix_choice]]
     })
@@ -199,14 +335,24 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
       vars <- intersect(vars, colnames(info$matrix))
       shiny::validate(shiny::need(length(vars) >= 2L, "Select at least two variables."))
       M <- info$matrix[vars, vars, drop = FALSE]
+      range_filter <- .mc_filter_matrix_by_range(
+        mat = M,
+        corr_range = input$corr_range,
+        use_abs = isTRUE(input$use_abs)
+      )
+      M <- range_filter$matrix
+      shiny::validate(shiny::need(
+        ncol(M) >= 2L,
+        "Correlation range filter left fewer than two variables. Widen the range or select more variables."
+      ))
       diag_map <- diag(M)
       if (!is.null(colnames(M))) names(diag_map) <- colnames(M)
       cluster_mode <- input$cluster_mode %||% "none"
       cluster_method <- input$cluster_method %||% "complete"
-      cluster_message <- NULL
+      status_messages <- range_filter$message
       if (!identical(cluster_mode, "none")) {
         if (nrow(M) < 3L) {
-          cluster_message <- "Clustering requires at least three variables."
+          status_messages <- c(status_messages, "Clustering requires at least three variables.")
         } else {
           res <- .mc_reorder_matrix(M, mode = cluster_mode, method = cluster_method)
           M <- res$matrix
@@ -218,7 +364,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
               names(diag_map) <- colnames(M)
             }
           }
-          cluster_message <- res$message
+          status_messages <- c(status_messages, res$message)
         }
       }
       thr <- input$threshold %||% 0
@@ -235,7 +381,17 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
           diag(M) <- diag_map
         }
       }
-      list(matrix = M, meta = info, cluster_message = cluster_message)
+      if (isTRUE(input$show_values) && prod(dim(M)) > .mc_heatmap_label_limit(use_plotly = use_plotly)) {
+        status_messages <- c(
+          status_messages,
+          "Cell labels are hidden automatically for larger heatmaps to keep the viewer responsive."
+        )
+      }
+      list(
+        matrix = M,
+        meta = info,
+        status_messages = status_messages[!is.na(status_messages) & nzchar(status_messages)]
+      )
     })
 
     pair_fit <- shiny::reactive({
@@ -249,31 +405,61 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
       .mc_rmcorr_view_pair_fit(info, x_var = x_var, y_var = y_var)
     })
 
+    heatmap_click_pair <- shiny::reactive({
+      if (use_plotly) {
+        .mc_plotly_click_pair(
+          plotly::event_data("plotly_click", source = "matrixcorr-rmcorr-heatmap"),
+          vars = colnames(filtered_heatmap()$matrix)
+        )
+      } else {
+        .mc_static_click_pair(
+          .mc_heatmap_df(if (isTRUE(input$use_abs)) abs(filtered_heatmap()$matrix) else filtered_heatmap()$matrix),
+          input$heatmap_click
+        )
+      }
+    })
+
+    shiny::observeEvent(heatmap_click_pair(), {
+      pair <- heatmap_click_pair()
+      if (is.null(pair) || length(pair) != 2L) {
+        return()
+      }
+      shiny::updateSelectInput(session, "pair_x", selected = pair[[1L]])
+      shiny::updateSelectInput(session, "pair_y", selected = pair[[2L]])
+      shiny::updateTabsetPanel(session, "rmcorr_view", selected = "Pair Plot")
+    }, ignoreInit = TRUE)
+
     output$heatmap_meta <- shiny::renderUI({
-      info <- filtered_heatmap()$meta
-      dims <- dim(info$matrix)
+      res <- filtered_heatmap()
+      info <- res$meta
+      dims <- dim(res$matrix)
+      total_vars <- ncol(info$matrix)
       diag_attr <- attr(info$matrix, "diagnostics", exact = TRUE)
       conf_level <- diag_attr$conf_level %||% info$conf_level
-      shiny::HTML(sprintf(
-        paste0(
-          "<b>%s</b><br/>Class: %s<br/>Variables: %d<br/>",
-          "Subjects: %d<br/>Confidence level: %s"
-        ),
-        info$label,
-        info$class,
-        dims[[1L]],
-        info$n_subjects,
-        format(signif(conf_level, digits = 3))
+      .mc_meta_grid(c(
+        "Result" = info$label,
+        "Object class" = info$class,
+        "Displayed variables" = sprintf("%d of %d", dims[[1L]], total_vars),
+        "Subjects" = as.character(info$n_subjects),
+        "Confidence level" = format(signif(conf_level, digits = 3))
       ))
     })
 
-    output$cluster_alert <- shiny::renderUI({
-      msg <- filtered_heatmap()$cluster_message
-      if (is.null(msg) || identical(msg, "")) {
-        return(NULL)
-      }
-      shiny::div(class = "alert alert-warning", style = "margin-top: 10px;", msg)
+    output$status_alerts <- shiny::renderUI({
+      .mc_status_notices(filtered_heatmap()$status_messages)
     })
+
+    output$download_matrix <- shiny::downloadHandler(
+      filename = function() {
+        sprintf(
+          "%s-displayed-matrix.csv",
+          .mc_sanitize_filename(input$matrix_choice %||% "matrixCorr-rmcorr")
+        )
+      },
+      content = function(file) {
+        utils::write.csv(filtered_heatmap()$matrix, file = file, row.names = TRUE)
+      }
+    )
 
     heatmap_plot <- shiny::reactive({
       res <- filtered_heatmap()
@@ -282,7 +468,15 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
         signed = TRUE,
         show_values = isTRUE(input$show_values),
         use_abs = isTRUE(input$use_abs),
-        use_plotly = use_plotly
+        use_plotly = use_plotly,
+        plotly_source = "matrixcorr-rmcorr-heatmap"
+      )
+    })
+
+    distribution_values <- shiny::reactive({
+      .mc_corr_distribution_values(
+        mat = filtered_heatmap()$matrix,
+        use_abs = isTRUE(input$use_abs)
       )
     })
 
@@ -296,25 +490,40 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
       })
     }
 
+    output$dist_plot <- shiny::renderPlot({
+      values <- distribution_values()
+      shiny::validate(shiny::need(
+        length(values) > 0L,
+        "No off-diagonal correlations are visible after filtering."
+      ))
+      .mc_build_corr_boxplot(values = values, use_abs = isTRUE(input$use_abs))
+    })
+
+    output$dist_summary <- shiny::renderTable(
+      {
+        .mc_corr_summary_table(distribution_values())
+      },
+      striped = TRUE,
+      bordered = FALSE,
+      spacing = "s",
+      width = "100%",
+      rownames = FALSE
+    )
+
     output$pair_plot <- shiny::renderPlot({
       print(plot(pair_fit(), show_legend = isTRUE(input$pair_show_legend)))
     })
 
     output$pair_meta <- shiny::renderUI({
       fit <- pair_fit()
-      shiny::HTML(sprintf(
-        paste0(
-          "<b>%s vs %s</b><br/>r = %s<br/>Slope = %s<br/>",
-          "p-value = %s<br/>df = %s<br/>Subjects = %d<br/>Based on = %d"
-        ),
-        fit$responses[[1L]],
-        fit$responses[[2L]],
-        format(signif(fit$r, digits = 4)),
-        format(signif(fit$slope, digits = 4)),
-        format(signif(fit$p_value, digits = 4)),
-        format(signif(fit$df, digits = 4)),
-        fit$n_subjects,
-        fit$based.on
+      .mc_meta_grid(c(
+        "Pair" = sprintf("%s vs %s", fit$responses[[1L]], fit$responses[[2L]]),
+        "Correlation" = format(signif(fit$r, digits = 4)),
+        "Slope" = format(signif(fit$slope, digits = 4)),
+        "P-value" = format(signif(fit$p_value, digits = 4)),
+        "Degrees of freedom" = format(signif(fit$df, digits = 4)),
+        "Subjects" = as.character(fit$n_subjects),
+        "Based on" = as.character(fit$based.on)
       ))
     })
   }

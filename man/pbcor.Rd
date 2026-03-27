@@ -119,6 +119,11 @@ print(R, digits = 2)
 summary(R)
 plot(R)
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(R)
+}
+
 }
 \references{
 Wilcox, R. R. (1994). The percentage bend correlation coefficient.

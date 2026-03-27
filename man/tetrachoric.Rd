@@ -141,6 +141,11 @@ print(tc, digits = 3)
 summary(tc)
 plot(tc)
 
+# Interactive viewing (requires shiny)
+if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+  view_corr_shiny(tc)
+}
+
 # latent Pearson correlations used to generate the binary items
 round(stats::cor(Z), 2)
 \dontshow{\}) # examplesIf}

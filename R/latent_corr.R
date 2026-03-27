@@ -802,6 +802,11 @@
 #' summary(tc)
 #' plot(tc)
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(tc)
+#' }
+#'
 #' # latent Pearson correlations used to generate the binary items
 #' round(stats::cor(Z), 2)
 #'
@@ -1071,6 +1076,11 @@ summary.tetrachoric_corr <- function(object, ...) {
 #' print(pc, digits = 3)
 #' summary(pc)
 #' plot(pc)
+#'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(pc)
+#' }
 #'
 #' # latent Pearson correlations used to generate the ordinal variables
 #' round(stats::cor(Z), 2)

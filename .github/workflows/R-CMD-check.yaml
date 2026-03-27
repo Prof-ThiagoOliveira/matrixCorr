@@ -43,8 +43,13 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
+      - name: Remove stale pak lockfile
+        run: rm -f .github/pkg.lock
+        shell: bash
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
+          cache-version: 2
           extra-packages: any::rcmdcheck
           needs: check
 

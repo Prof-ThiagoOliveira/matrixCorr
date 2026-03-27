@@ -114,6 +114,11 @@
 #' summary(R)
 #' plot(R)
 #'
+#' # Interactive viewing (requires shiny)
+#' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
+#'   view_corr_shiny(R)
+#' }
+#'
 #' @author Thiago de Paula Oliveira
 #' @export
 skipped_corr <- function(data,
