@@ -19,7 +19,7 @@ on:
       config:
         description: "Comma-separated R-hub platforms"
         type: string
-        default: "ubuntu-release,ubuntu-next"
+        default: "fedora-clang-devel,ubuntu-gcc-release,windows-x86_64-devel"
       name:
         description: "Run name (optional)"
         type: string
@@ -42,10 +42,11 @@ jobs:
       - uses: r-hub/actions/setup@v1
         id: rhub-setup
         with:
-          # Use CRAN-relevant release/patched Linux checks by default.
-          # R-devel sanitizer platforms are still available via manual dispatch,
-          # but are excluded from automatic CI while upstream dependencies are catching up.
-          config: ${{ github.event.inputs.config || 'ubuntu-release,ubuntu-next' }}
+          # As documented by R-hub, these are the closest default platforms for
+          # CRAN submission checks: Fedora clang devel, Ubuntu GCC release, and
+          # Windows x86_64 devel. Sanitizer-only checks remain opt-in because
+          # upstream R-devel dependency breakage is currently causing false CI failures.
+          config: ${{ github.event.inputs.config || 'fedora-clang-devel,ubuntu-gcc-release,windows-x86_64-devel' }}
 
   linux-containers:
     needs: setup
