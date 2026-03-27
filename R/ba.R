@@ -186,6 +186,7 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
 
 #' @rdname ba
 #' @method summary ba
+#' @param object A \code{"ba"} object.
 #' @export
 summary.ba <- function(object,
                        digits = 3,

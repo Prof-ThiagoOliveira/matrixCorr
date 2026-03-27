@@ -2362,7 +2362,9 @@ summary.ccc_rm_reml <- function(object,
   invisible(NULL)
 }
 
+#' @rdname summary.ccc_rm_reml
 #' @method print summary.ccc_rm_reml
+#' @param x An object of class \code{"summary.ccc_rm_reml"}.
 #' @param ... Passed to \code{\link[base]{print.data.frame}}.
 #' @export
 print.summary.ccc_rm_reml <- function(x, ...) {

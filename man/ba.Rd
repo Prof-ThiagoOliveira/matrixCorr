@@ -58,6 +58,8 @@ intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.}
 
 \item{...}{Passed to \code{ggplot2::theme()} (ggplot path) or \code{plot()}.}
 
+\item{object}{A \code{"ba"} object.}
+
 \item{title}{Plot title.}
 
 \item{subtitle}{Optional subtitle. If NULL, shows n and LoA summary.}

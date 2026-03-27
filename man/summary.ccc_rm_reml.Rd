@@ -2,6 +2,7 @@
 % Please edit documentation in R/ccc_repeated.R
 \name{summary.ccc_rm_reml}
 \alias{summary.ccc_rm_reml}
+\alias{print.summary.ccc_rm_reml}
 \title{Summary Method for \code{ccc_rm_reml} Objects}
 \usage{
 \method{summary}{ccc_rm_reml}(
@@ -11,6 +12,8 @@
   show_ci = c("auto", "yes", "no"),
   ...
 )
+
+\method{print}{summary.ccc_rm_reml}(x, ...)
 }
 \arguments{
 \item{object}{An object of class \code{"ccc_rm_reml"}, as returned by \code{\link[=ccc_rm_reml]{ccc_rm_reml()}}.}
@@ -23,7 +26,9 @@
 \code{"auto"} (default) shows only if non-NA CIs exist, \code{"yes"} always shows CIs,
 \code{"no"} never shows them.}
 
-\item{...}{Additional arguments (ignored).}
+\item{...}{Passed to \code{\link[base]{print.data.frame}}.}
+
+\item{x}{An object of class \code{"summary.ccc_rm_reml"}.}
 }
 \value{
 A data frame of class \code{"summary.ccc_rm_reml"} with columns:
