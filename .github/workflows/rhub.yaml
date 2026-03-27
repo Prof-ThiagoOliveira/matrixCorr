@@ -12,12 +12,14 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
     inputs:
       config:
         description: "Comma-separated R-hub platforms"
         type: string
-        default: "clang-asan,clang-ubsan"
+        default: "ubuntu-release,ubuntu-next"
       name:
         description: "Run name (optional)"
         type: string
@@ -40,11 +42,10 @@ jobs:
       - uses: r-hub/actions/setup@v1
         id: rhub-setup
         with:
-          # As of March 27, 2026, upstream packages such as rlang are failing to
-          # compile on the current R-devel ASAN/UBSAN toolchains because PREXPR
-          # has been removed. Keep these checks manual until the dependency stack
-          # catches up, instead of failing regular package CI for upstream breakage.
-          config: ${{ github.event.inputs.config || 'clang-asan,clang-ubsan' }}
+          # Use CRAN-relevant release/patched Linux checks by default.
+          # R-devel sanitizer platforms are still available via manual dispatch,
+          # but are excluded from automatic CI while upstream dependencies are catching up.
+          config: ${{ github.event.inputs.config || 'ubuntu-release,ubuntu-next' }}
 
   linux-containers:
     needs: setup
