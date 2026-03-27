@@ -79,6 +79,9 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
   expect_true(all(c("method1","method2","estimate","lwr","upr",
                     "sigma2_subject","sigma2_subject_method","sigma2_subject_time",
                     "sigma2_error","SB","se_ccc") %in% names(sm)))
+  out <- capture.output(print(sm))
+  expect_true(any(grepl("^Concordance estimates$", out)))
+  expect_true(any(grepl("^Variance components$", out)))
 })
 
 # helper to center time within subject
@@ -196,6 +199,8 @@ test_that("AR(1) path: fixed rho is carried in attributes", {
   # summary returns AR1 diagnostics columns (may have NAs but should exist)
   sm <- summary(fit_ar)
   expect_true("ar1_rho" %in% names(sm) || "ar1_rho_lag1" %in% names(sm))
+  out <- capture.output(print(sm))
+  expect_true(any(grepl("^AR\\(1\\) diagnostics$", out)))
 })
 
 

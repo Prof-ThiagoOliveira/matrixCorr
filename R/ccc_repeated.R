@@ -2327,3 +2327,56 @@ summary.ccc_rm_reml <- function(object,
   attr(out, "ci_digits")  <- ci_digits
   structure(out, class = c("summary.ccc_rm_reml", "data.frame"))
 }
+
+.print_ccc_rm_reml_summary_blocks <- function(x, ...) {
+  extra_cols <- grep("^sigma2_extra", names(x), value = TRUE)
+
+  sections <- list(
+    list(
+      title = "Concordance estimates",
+      cols = c("method1", "method2", "estimate", "lwr", "upr", "SB", "se_ccc")
+    ),
+    list(
+      title = "Variance components",
+      cols = c("sigma2_subject", "sigma2_subject_method", "sigma2_subject_time",
+               "sigma2_error", extra_cols)
+    ),
+    list(
+      title = "AR(1) diagnostics",
+      cols = c("ar1_rho", "ar1_rho_lag1", "ar1_rho_mom", "ar1_pairs",
+               "ar1_pval", "use_ar1", "ar1_recommend")
+    )
+  )
+
+  printed <- 0L
+  for (section in sections) {
+    cols <- unique(section$cols[section$cols %in% names(x)])
+    if (!length(cols)) next
+
+    if (printed > 0L) cat("\n")
+    cat(section$title, "\n\n", sep = "")
+    print.data.frame(x[cols], row.names = FALSE, right = FALSE, ...)
+    printed <- printed + 1L
+  }
+
+  invisible(NULL)
+}
+
+#' @method print summary.ccc_rm_reml
+#' @param ... Passed to \code{\link[base]{print.data.frame}}.
+#' @export
+print.summary.ccc_rm_reml <- function(x, ...) {
+  has_ci <- isTRUE(attr(x, "has_ci")) ||
+    all(c("lwr", "upr") %in% names(x))
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+  if (!is.finite(cl)) cl <- NA_real_
+
+  if (has_ci && is.finite(cl)) {
+    cat(sprintf("Repeated-measures concordance (REML), %g%% CI\n\n", 100 * cl))
+  } else {
+    cat("Repeated-measures concordance (REML)\n\n")
+  }
+
+  .print_ccc_rm_reml_summary_blocks(x, ...)
+  invisible(x)
+}
