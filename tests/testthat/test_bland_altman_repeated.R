@@ -79,17 +79,17 @@ test_that("Two-method BA recovers bias and sd_loa under i.i.d. residuals", {
   fit <- ba_rm(
     data = dat,
     response = "y", subject = "subject", method = "method", time = "time",
-    include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
+    include_slope = FALSE, use_ar1 = FALSE, loa_multiplier = 1.96, conf_level = 0.95
   )
 
   expect_s3_class(fit, "ba_repeated")
 
   # Bias and sd_loa close to truth
   expect_equal(as.numeric(fit$mean.diffs), 1.25, tolerance = 0.08)
-  expect_equal(as.numeric(fit$critical.diff) / as.numeric(fit$two), truth_sd, tolerance = 0.08)
+  expect_equal(as.numeric(fit$critical.diff) / as.numeric(fit$loa_multiplier), truth_sd, tolerance = 0.08)
 
-  # LoA consistent with sd and 'two'
-  sd_hat <- as.numeric(fit$critical.diff) / as.numeric(fit$two)
+  # LoA consistent with sd and 'loa_multiplier'
+  sd_hat <- as.numeric(fit$critical.diff) / as.numeric(fit$loa_multiplier)
   expect_equal(as.numeric(fit$upper.limit) - as.numeric(fit$mean.diffs), 1.96 * sd_hat, tolerance = 1e-6)
   expect_equal(as.numeric(fit$mean.diffs) - as.numeric(fit$lower.limit), 1.96 * sd_hat, tolerance = 1e-6)
 
@@ -112,7 +112,7 @@ test_that("Two-method BA with AR(1) honours supplied rho and recovers truth", {
   fit <- ba_rm(
     data = dat,
     response = "y", subject = "subject", method = "method", time = "time",
-    include_slope = FALSE, use_ar1 = TRUE, ar1_rho = rho, two = 2.0, conf_level = 0.9
+    include_slope = FALSE, use_ar1 = TRUE, ar1_rho = rho, loa_multiplier = 2.0, conf_level = 0.9
   )
 
   expect_true(isTRUE(fit$use_ar1))
@@ -154,7 +154,7 @@ test_that("Pairwise matrix algebraic invariants hold", {
   fit <- ba_rm(
     data = dat,
     response = "y", subject = "subject", method = "method", time = "time",
-    include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
+    include_slope = FALSE, use_ar1 = FALSE, loa_multiplier = 1.96, conf_level = 0.95
   )
 
   expect_s3_class(fit, "ba_repeated_matrix")
@@ -173,8 +173,8 @@ test_that("Pairwise matrix algebraic invariants hold", {
     expect_equal(fit$loa_upper[j,i], -fit$loa_lower[i,j], tolerance = 1e-10)
   }
 
-  # Width equals 2*two*sd_loa
-  expect_equal(fit$width, 2 * fit$two * fit$sd_loa, tolerance = 1e-10)
+  # Width equals 2 * loa_multiplier * sd_loa
+  expect_equal(fit$width, 2 * fit$loa_multiplier * fit$sd_loa, tolerance = 1e-10)
 })
 
 test_that("Pairwise result equals two-method fit for the same pair", {
@@ -184,17 +184,17 @@ test_that("Pairwise result equals two-method fit for the same pair", {
 
   fit2 <- ba_rm(
     data = dat12, response = "y", subject = "subject", method = "method", time = "time",
-    include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
+    include_slope = FALSE, use_ar1 = FALSE, loa_multiplier = 1.96, conf_level = 0.95
   )
 
   fitN <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time",
-    include_slope = FALSE, use_ar1 = FALSE, two = 1.96, conf_level = 0.95
+    include_slope = FALSE, use_ar1 = FALSE, loa_multiplier = 1.96, conf_level = 0.95
   )
 
   i <- match("M1", fitN$methods); j <- match("M2", fitN$methods)
   expect_equal(as.numeric(fit2$mean.diffs), fitN$bias[i,j], tolerance = 1e-8)
-  expect_equal(as.numeric(fit2$critical.diff) / as.numeric(fit2$two), fitN$sd_loa[i,j], tolerance = 1e-8)
+  expect_equal(as.numeric(fit2$critical.diff) / as.numeric(fit2$loa_multiplier), fitN$sd_loa[i,j], tolerance = 1e-8)
   expect_equal(as.numeric(fit2$lower.limit), fitN$loa_lower[i,j], tolerance = 1e-8)
   expect_equal(as.numeric(fit2$upper.limit), fitN$loa_upper[i,j], tolerance = 1e-8)
 })
@@ -288,11 +288,11 @@ test_that("plot methods return a ggplot object and do not error", {
 test_that("Input argument validation works", {
   dat <- sim_multi_method(S = 6, Tm = 4, seed = 1)
 
-  # bad 'two'
+  # bad 'loa_multiplier'
   expect_error(
     ba_rm(data = dat, response = "y", subject = "subject", method = "method", time = "time",
-                          two = -1),
-    "`two` must be a positive scalar.", fixed = TRUE
+                          loa_multiplier = -1),
+    "`loa_multiplier` must be a positive scalar.", fixed = TRUE
   )
 
   # bad conf_level

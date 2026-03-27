@@ -91,17 +91,17 @@ BEGIN_RCPP
 END_RCPP
 }
 // bland_altman_cpp
-List bland_altman_cpp(NumericVector group1, NumericVector group2, double two, int mode, double conf_level);
-RcppExport SEXP _matrixCorr_bland_altman_cpp(SEXP group1SEXP, SEXP group2SEXP, SEXP twoSEXP, SEXP modeSEXP, SEXP conf_levelSEXP) {
+List bland_altman_cpp(NumericVector group1, NumericVector group2, double loa_multiplier, int mode, double conf_level);
+RcppExport SEXP _matrixCorr_bland_altman_cpp(SEXP group1SEXP, SEXP group2SEXP, SEXP loa_multiplierSEXP, SEXP modeSEXP, SEXP conf_levelSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type group1(group1SEXP);
     Rcpp::traits::input_parameter< NumericVector >::type group2(group2SEXP);
-    Rcpp::traits::input_parameter< double >::type two(twoSEXP);
+    Rcpp::traits::input_parameter< double >::type loa_multiplier(loa_multiplierSEXP);
     Rcpp::traits::input_parameter< int >::type mode(modeSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
-    rcpp_result_gen = Rcpp::wrap(bland_altman_cpp(group1, group2, two, mode, conf_level));
+    rcpp_result_gen = Rcpp::wrap(bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -116,8 +116,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // bland_altman_repeated_em_ext_cpp
-Rcpp::List bland_altman_repeated_em_ext_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, bool include_slope, bool use_ar1, double ar1_rho, int max_iter, double tol, double conf_level, double two_arg, bool use_cov_su_se);
-RcppExport SEXP _matrixCorr_bland_altman_repeated_em_ext_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP include_slopeSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP two_argSEXP, SEXP use_cov_su_seSEXP) {
+Rcpp::List bland_altman_repeated_em_ext_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, bool include_slope, bool use_ar1, double ar1_rho, int max_iter, double tol, double conf_level, double loa_multiplier_arg, bool use_cov_su_se);
+RcppExport SEXP _matrixCorr_bland_altman_repeated_em_ext_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP include_slopeSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP loa_multiplier_argSEXP, SEXP use_cov_su_seSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -131,9 +131,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
-    Rcpp::traits::input_parameter< double >::type two_arg(two_argSEXP);
+    Rcpp::traits::input_parameter< double >::type loa_multiplier_arg(loa_multiplier_argSEXP);
     Rcpp::traits::input_parameter< bool >::type use_cov_su_se(use_cov_su_seSEXP);
-    rcpp_result_gen = Rcpp::wrap(bland_altman_repeated_em_ext_cpp(y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, two_arg, use_cov_su_se));
+    rcpp_result_gen = Rcpp::wrap(bland_altman_repeated_em_ext_cpp(y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, loa_multiplier_arg, use_cov_su_se));
     return rcpp_result_gen;
 END_RCPP
 }

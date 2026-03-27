@@ -28,7 +28,7 @@
 #'   a single character string giving the column name in `data`.
 #' @param time Integer/numeric replicate/time index (pairs within subject) **or**
 #'   a single character string giving the column name in `data`.
-#' @param two Positive scalar; LoA multiple of SD (default 1.96).
+#' @param loa_multiplier Positive scalar; LoA multiple of SD (default 1.96).
 #' @param conf_level Confidence level for CIs (default 0.95).
 #' @param include_slope Logical. If \code{TRUE}, the model includes the pair mean
 #'  as a fixed effect and estimates a proportional-bias slope.
@@ -54,11 +54,11 @@
 #'         subject intercept and (if enabled) AR(1) correlation.
 #'   \item \code{loa_lower}, \code{loa_upper} \eqn{(m \times m)}; limits of agreement
 #'         for a single measurement pair, computed as
-#'         \eqn{\mathrm{bias} \pm \mathrm{two}\times \mathrm{sd\_loa}}.
+#'         \eqn{\mathrm{bias} \pm \mathrm{loa\_multiplier}\times \mathrm{sd\_loa}}.
 #'         Signs follow the row - column convention
 #'         (e.g., \code{loa_lower[j,i] = -loa_upper[i,j]}).
 #'   \item \code{width} \eqn{(m \times m)}; LoA width,
-#'         \code{loa_upper - loa_lower} (= \code{2 * two * sd_loa}).
+#'         \code{loa_upper - loa_lower} (= \code{2 * loa_multiplier * sd_loa}).
 #'   \item \code{n} \eqn{(m \times m)}; number of subject-time pairs used in each
 #'         pairwise BA (complete cases where both methods are present).
 #'
@@ -88,7 +88,7 @@
 #'
 #'   \item \code{methods} \emph{(character)}; method level names; matrix rows/columns
 #'         follow this order.
-#'   \item \code{two} \emph{(scalar)}; LoA multiplier used (default \code{1.96}).
+#'   \item \code{loa_multiplier} \emph{(scalar)}; LoA multiplier used (default \code{1.96}).
 #'   \item \code{conf_level} \emph{(scalar)}; nominal confidence level used for CIs.
 #'
 #'   \item \code{data_long} \emph{(data.frame)}; the long data used for fitting
@@ -100,9 +100,9 @@
 #' \itemize{
 #'   \item \code{mean.diffs} \emph{(scalar)}; estimated bias (method 2 - method 1).
 #'   \item \code{lower.limit}, \code{upper.limit} \emph{(scalars)}; LoA
-#'         \eqn{\mu \pm \mathrm{two}\times \mathrm{SD}} for a single new pair.
-#'   \item \code{critical.diff} \emph{(scalar)}; \code{two * SD}; LoA half-width.
-#'   \item \code{two}, \code{conf_level} \emph{(scalars)}; as above.
+#'         \eqn{\mu \pm \mathrm{loa\_multiplier}\times \mathrm{SD}} for a single new pair.
+#'   \item \code{critical.diff} \emph{(scalar)}; \code{loa_multiplier * SD}; LoA half-width.
+#'   \item \code{loa_multiplier}, \code{conf_level} \emph{(scalars)}; as above.
 #'   \item \code{CI.lines} \emph{(named numeric)}; CI bounds for bias and both LoA
 #'         (\code{*.ci.lower}, \code{*.ci.upper}) at \code{conf_level}.
 #'   \item \code{means}, \code{diffs} \emph{(vectors)}; per-pair means and differences
@@ -238,8 +238,8 @@
 #' A \emph{single new paired measurement} for a random subject has variance
 #' \deqn{\mathrm{Var}(d^\star) \;=\; \sigma_u^2 + \sigma_e^2,}
 #' so the LoA are
-#' \deqn{\mathrm{LoA} \;=\; \mu_0 \;\pm\; \texttt{two}\,\sqrt{\sigma_u^2 + \sigma_e^2}.}
-#' The argument \code{two} is the SD multiplier (default \eqn{z_{1-\alpha/2}}
+#' \deqn{\mathrm{LoA} \;=\; \mu_0 \;\pm\; \texttt{loa\_multiplier}\,\sqrt{\sigma_u^2 + \sigma_e^2}.}
+#' The argument \code{loa_multiplier} is the SD multiplier (default \eqn{z_{1-\alpha/2}}
 #' implied by \code{conf_level}, e.g., \eqn{1.96} at \eqn{95\%}).
 #' }
 #'
@@ -259,9 +259,9 @@
 #' of \eqn{A_i} and \eqn{B_i} (with replicate-size weighting for \eqn{B_i}) and
 #' their covariance yield \eqn{\mathrm{Var}(\hat\sigma_u^2)},
 #' \eqn{\mathrm{Var}(\hat\sigma_e^2)} and \eqn{\mathrm{Cov}(\hat\sigma_u^2,\hat\sigma_e^2)}.
-#' For a LoA bound \eqn{L_\pm = \mu_0 \pm \texttt{two}\cdot \mathrm{sd}}, the
+#' For a LoA bound \eqn{L_\pm = \mu_0 \pm \texttt{loa\_multiplier}\cdot \mathrm{sd}}, the
 #' working variance is
-#' \deqn{\mathrm{Var}(L_\pm) \;\approx\; \mathrm{Var}(\mu_0) + \texttt{two}^2\,\mathrm{Var}(\mathrm{sd}),}
+#' \deqn{\mathrm{Var}(L_\pm) \;\approx\; \mathrm{Var}(\mu_0) + \texttt{loa\_multiplier}^2\,\mathrm{Var}(\mathrm{sd}),}
 #' and Wald CIs use the normal quantile at \code{conf_level}. These are
 #' large-sample approximations; with very small \eqn{m} they may be conservative.
 #' }
@@ -343,7 +343,7 @@
 #' ba4 <- ba_rm(
 #'   data = data,
 #'   response = "y", subject = "subject", method = "method", time = "time",
-#'   two = 1.96, conf_level = 0.95,
+#'   loa_multiplier = 1.96, conf_level = 0.95,
 #'   include_slope = FALSE, use_ar1 = FALSE
 #' )
 #' summary(ba4)
@@ -392,7 +392,7 @@
 #' # -------- Repeated BA (pairwise matrix) ---------------------
 #' baN <- ba_rm(
 #'   response = data$y, subject = data$subject, method = data$method, time = data$time,
-#'   two = 1.96, conf_level = 0.95,
+#'   loa_multiplier = 1.96, conf_level = 0.95,
 #'   include_slope = FALSE,         # estimate proportional bias per pair
 #'   use_ar1 = TRUE # model AR(1) within-subject
 #' )
@@ -417,7 +417,7 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 ba_rm <- function(data = NULL, response, subject, method, time,
-                                  two = 1.96, conf_level = 0.95,
+                                  loa_multiplier = 1.96, conf_level = 0.95,
                                   include_slope = FALSE,
                                   use_ar1 = FALSE, ar1_rho = NA_real_,
                                   max_iter = 200L, tol = 1e-6,
@@ -527,9 +527,9 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   }
   t <- as.integer(t)
 
-  if (!is.numeric(two) || length(two) != 1L || !is.finite(two) || two <= 0) {
-    abort_bad_arg("two",
-      message = "`two` must be a positive scalar."
+  if (!is.numeric(loa_multiplier) || length(loa_multiplier) != 1L || !is.finite(loa_multiplier) || loa_multiplier <= 0) {
+    abort_bad_arg("loa_multiplier",
+      message = "`loa_multiplier` must be a positive scalar."
     )
   }
   if (!is.numeric(conf_level) || length(conf_level) != 1L ||
@@ -557,7 +557,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       subject  = s[idx],
       method12 = as.integer(m[idx] == mlev[2L]) + 1L,
       time     = t[idx],
-      two = two, conf_level = conf_level, include_slope = include_slope,
+      loa_multiplier = loa_multiplier, conf_level = conf_level, include_slope = include_slope,
       use_ar1 = use_ar1, ar1_rho = ar1_rho, max_iter = max_iter, tol = tol
     )
     # attach mapping/data_long for downstream plotting
@@ -624,7 +624,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       include_slope = include_slope,
       use_ar1 = use_ar1, ar1_rho = ar1_rho,
       max_iter = max_iter, tol = tol, conf_level = conf_level,
-      two_arg = two
+      loa_multiplier_arg = loa_multiplier
     )
     n_pair <- as.integer(fit$n_pairs)
     n_mat[j,k] <- n_mat[k,j] <- n_pair
@@ -710,7 +710,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     loa_upper_ci_high = hi_ci_high,
     slope = slope_mat,
     methods = methods,
-    two = two,
+    loa_multiplier = loa_multiplier,
     conf_level = conf_level,
     use_ar1 = use_ar1,
     ar1_rho = if (use_ar1) ar1_rho else NA_real_,
@@ -732,14 +732,14 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 #' two-method helper
 #' @keywords internal
 .ba_rep_two_methods <- function(response, subject, method12, time,
-                                two, conf_level, include_slope,
+                                loa_multiplier, conf_level, include_slope,
                                 use_ar1, ar1_rho, max_iter, tol) {
   fit <- bland_altman_repeated_em_ext_cpp(
     y = response, subject = subject, method = method12, time = time,
     include_slope = include_slope,
     use_ar1 = use_ar1, ar1_rho = ar1_rho,
     max_iter = max_iter, tol = tol, conf_level = conf_level,
-    two_arg = two
+    loa_multiplier_arg = loa_multiplier
   )
   n_pairs <- as.integer(fit$n_pairs)
   if (n_pairs < 2L) {
@@ -776,8 +776,8 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     upper.limit   = loa_upper,
     lines         = c(lower = loa_lower, mean = md, upper = loa_upper),
     CI.lines      = CI.lines,
-    two           = two,
-    critical.diff = two * sdL,
+    loa_multiplier = loa_multiplier,
+    critical.diff = loa_multiplier * sdL,
     include_slope = include_slope,
     beta_slope    = if (include_slope) as.numeric(fit$beta_slope) else NA_real_,
     sigma2_subject= as.numeric(fit$sigma2_subject),
@@ -805,14 +805,14 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
   check_inherits(x, "ba_repeated")
   n   <- as.integer(x$based.on)
-  two <- as.numeric(x$two)
+  loa_multiplier <- as.numeric(x$loa_multiplier)
   cl  <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   if (!is.finite(cl)) cl <- NA_real_
 
   md    <- as.numeric(x$mean.diffs)
   loaL  <- as.numeric(x$lower.limit)
   loaU  <- as.numeric(x$upper.limit)
-  sd_d  <- as.numeric(x$critical.diff) / two
+  sd_d  <- as.numeric(x$critical.diff) / loa_multiplier
   width <- loaU - loaL
 
   cil <- function(nm) as.numeric(x$CI.lines[[nm]])
@@ -821,7 +821,7 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
   hi_l   <- cil("upper.limit.ci.lower"); hi_u <- cil("upper.limit.ci.upper")
 
   head <- sprintf("Repeated-measures Bland-Altman (pairs = %d) - LoA = mean \u00B1 %.3g | SD%s\n\n",
-                  n, two, if (is.finite(cl)) sprintf(", %g%% CI", 100*cl) else "")
+                  n, loa_multiplier, if (is.finite(cl)) sprintf(", %g%% CI", 100*cl) else "")
   cat(head)
 
   df <- data.frame(
@@ -941,7 +941,7 @@ summary.ba_repeated <- function(object,
     method1   = "method 1",
     method2   = "method 2",
     bias      = round(num_or_na_ba(object$mean.diffs), digits),
-    sd_loa    = round(num_or_na_ba(object$critical.diff) / num_or_na_ba(object$two), digits),
+    sd_loa    = round(num_or_na_ba(object$critical.diff) / num_or_na_ba(object$loa_multiplier), digits),
     loa_low   = round(num_or_na_ba(object$lower.limit), digits),
     loa_up    = round(num_or_na_ba(object$upper.limit), digits),
     width     = round(num_or_na_ba(object$upper.limit - object$lower.limit), digits),
@@ -1131,7 +1131,7 @@ plot.ba_repeated <- function(x,
   md    <- as.numeric(x$mean.diffs)
   loaL  <- as.numeric(x$lower.limit)
   loaU  <- as.numeric(x$upper.limit)
-  two   <- as.numeric(x$two)
+  loa_multiplier <- as.numeric(x$loa_multiplier)
   n     <- as.integer(x$based.on)
   cl    <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   ci_val <- function(nm) if (!is.null(x$CI.lines)) suppressWarnings(as.numeric(x$CI.lines[[nm]])) else NA_real_

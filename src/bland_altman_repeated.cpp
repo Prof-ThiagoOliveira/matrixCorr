@@ -445,7 +445,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     int    max_iter = 200,
     double tol = 1e-6,
     double conf_level = 0.95,
-    double two_arg = NA_REAL,
+    double loa_multiplier_arg = NA_REAL,
     bool   use_cov_su_se = true
 ) {
   if (y.size()==0) stop("Empty input.");
@@ -524,16 +524,16 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   // 7) LoA for a single new paired measurement
   const double alpha = 1.0 - std::min(std::max(conf_level, 0.0), 1.0);
   const double z     = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0); // CI multiplier
-  double two         = two_arg;                                     // LoA multiplier
-  if (!std::isfinite(two) || two <= 0.0) {
+  double loa_multiplier = loa_multiplier_arg;                       // LoA multiplier
+  if (!std::isfinite(loa_multiplier) || loa_multiplier <= 0.0) {
     // Fallback: use the conf_level-implied width (e.g., 1.96 at 95%)
-    two = z;
+    loa_multiplier = z;
   }
 
   const double V_loa = nan_preserve(su2 + se2, 0.0, 1e12);
   const double sd_loa = std::sqrt(V_loa);
-  const double loa_lower = mu0 - two * sd_loa;
-  const double loa_upper = mu0 + two * sd_loa;
+  const double loa_lower = mu0 - loa_multiplier * sd_loa;
+  const double loa_upper = mu0 + loa_multiplier * sd_loa;
 
   // 8) Delta-method CIs
   // Var(mu0) = var(subject means)/m  (equal-weight)
@@ -576,8 +576,8 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   double var_V = var_su + var_se + 2.0 * cov_su_se;
   double var_sd = (V_loa > 0.0 ? var_V / (4.0 * V_loa) : 0.0);
 
-  // ---- FIX: 'two' inside, 'z' outside ----
-  double var_Lpm = var_mu0 + (two * two) * var_sd;
+  // ---- FIX: LoA multiplier inside, CI z outside ----
+  double var_Lpm = var_mu0 + (loa_multiplier * loa_multiplier) * var_sd;
 
   const double se_bias  = std::sqrt(std::max(0.0, var_mu0));
   const double se_Lpm   = std::sqrt(std::max(0.0, var_Lpm));
@@ -617,6 +617,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     _["ar1_rho"]     = (use_ar1 ? rho_used : NA_REAL),
     _["ar1_estimated"] = (use_ar1 ? ar1_estimated : false),
     // misc
+    _["loa_multiplier"] = loa_multiplier,
     _["conf_level"]  = conf_level,
     _["converged"]   = fit.converged,
     _["iter"]        = fit.iter,

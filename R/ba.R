@@ -16,7 +16,7 @@
 #' \eqn{m_i = (x_i + y_i)/2}. The mean difference \eqn{\bar d} estimates bias.
 #' The limits of agreement (LoA) are \eqn{\bar d \pm z \cdot s_d}, where
 #' \eqn{s_d} is the sample standard deviation of \eqn{d_i} and \eqn{z}
-#' (argument \code{two}) is typically 1.96 for nominal 95% LoA.
+#' (argument \code{loa_multiplier}) is typically 1.96 for nominal 95% LoA.
 #'
 #' Confidence intervals use Student's \eqn{t} distribution with \eqn{n-1}
 #' degrees of freedom, with
@@ -34,7 +34,7 @@
 #' calling the C++ backend).
 #'
 #' @param group1,group2 Numeric vectors of equal length.
-#' @param two Positive scalar; the multiple of the standard deviation used to
+#' @param loa_multiplier Positive scalar; the multiple of the standard deviation used to
 #'   define the LoA (default 1.96 for nominal 95\% agreement). The confidence
 #'   intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.
 #' @param mode Integer; 1 uses \code{group1 - group2}, 2 uses \code{group2 - group1}.
@@ -49,7 +49,7 @@
 #'   \item \code{lower.limit}, \code{mean.diffs}, \code{upper.limit}
 #'   \item \code{lines}: named numeric vector (lower, mean, upper)
 #'   \item \code{CI.lines}: named numeric vector for CIs of those lines
-#'   \item \code{two}, \code{critical.diff}
+#'   \item \code{loa_multiplier}, \code{critical.diff}
 #' }
 #'
 #' @seealso \code{\link{print.ba}}, \code{\link{plot.ba}},
@@ -76,7 +76,7 @@
 #' @export
 ba <- function(group1,
                group2,
-               two = 1.96,
+               loa_multiplier = 1.96,
                mode = 1L,
                conf_level = 0.95,
                verbose = FALSE) {
@@ -87,8 +87,8 @@ ba <- function(group1,
     )
   }
   check_same_length(group1, group2, arg_x = "group1", arg_y = "group2")
-  if (!is.numeric(two) || length(two) != 1L || !is.finite(two) || two <= 0) {
-    abort_bad_arg("two",
+  if (!is.numeric(loa_multiplier) || length(loa_multiplier) != 1L || !is.finite(loa_multiplier) || loa_multiplier <= 0) {
+    abort_bad_arg("loa_multiplier",
       message = "`{arg}` must be a positive scalar."
     )
   }
@@ -118,7 +118,7 @@ ba <- function(group1,
   if (isTRUE(verbose)) cat("Using", ba_openmp_threads(), "OpenMP threads\n")
 
   # -- compute in C++ ---------------------------------------------------------
-  ba_out <- bland_altman_cpp(group1, group2, two, mode, conf_level)
+  ba_out <- bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level)
 
   ba_out <- structure(ba_out, class = "ba")
   attr(ba_out, "method")      <- "Bland-Altman"
@@ -140,7 +140,7 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
   check_inherits(x, "ba")
 
   n   <- as.integer(x$based.on)
-  two <- as.numeric(x$two)
+  loa_multiplier <- as.numeric(x$loa_multiplier)
   cl  <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   if (!is.finite(cl)) cl <- NA_real_
 
@@ -148,7 +148,7 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
   bias   <- as.numeric(x$mean.diffs)
   loa_lo <- as.numeric(x$lower.limit)
   loa_hi <- as.numeric(x$upper.limit)
-  sd_d   <- as.numeric(x$critical.diff) / two
+  sd_d   <- as.numeric(x$critical.diff) / loa_multiplier
   width  <- loa_hi - loa_lo
 
   # CIs (robust extraction by name)
@@ -159,9 +159,9 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
 
   # header
   if (is.finite(cl)) {
-    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD, %g%% CI\n\n", n, two, 100*cl))
+    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD, %g%% CI\n\n", n, loa_multiplier, 100*cl))
   } else {
-    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD\n\n", n, two))
+    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD\n\n", n, loa_multiplier))
   }
 
   # nicely aligned three-row table
@@ -222,9 +222,9 @@ plot.ba <- function(x,
   md    <- as.numeric(x$mean.diffs)
   loaL  <- as.numeric(x$lower.limit)
   loaU  <- as.numeric(x$upper.limit)
-  two   <- as.numeric(x$two)
+  loa_multiplier <- as.numeric(x$loa_multiplier)
   n     <- as.integer(x$based.on)
-  sd_d  <- as.numeric(x$critical.diff) / two
+  sd_d  <- as.numeric(x$critical.diff) / loa_multiplier
   cl    <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   ci    <- function(nm) as.numeric(x$CI.lines[[nm]])
 

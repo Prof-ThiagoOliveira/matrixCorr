@@ -8,7 +8,7 @@ test_that("structure, classes and lengths are correct", {
   expect_s3_class(ba, "ba")
   expect_true(all(c("means","diffs","groups","based.on",
                     "lower.limit","mean.diffs","upper.limit",
-                    "lines","CI.lines","two","critical.diff") %in% names(ba)))
+                    "lines","CI.lines","loa_multiplier","critical.diff") %in% names(ba)))
 
   # basic size checks
   expect_equal(length(ba$means), ba$based.on)
@@ -53,20 +53,20 @@ test_that("matches known output on the 12-row example (exact numbers)", {
   }
 })
 
-test_that("'two' scales the LoA correctly", {
+test_that("'loa_multiplier' scales the LoA correctly", {
   set.seed(2)
   x <- rnorm(50, 100, 10)
   y <- x + rnorm(50, 0, 8)
 
-  a <- ba(x, y, two = 1.96)
-  b <- ba(x, y, two = 2.00)
+  a <- ba(x, y, loa_multiplier = 1.96)
+  b <- ba(x, y, loa_multiplier = 2.00)
 
-  # the LoA width is 2 * two * sd_diffs -> so proportional to 'two'
+  # the LoA width is 2 * loa_multiplier * sd_diffs -> so proportional to 'loa_multiplier'
   width_a <- as.numeric(a$upper.limit - a$lower.limit)
   width_b <- as.numeric(b$upper.limit - b$lower.limit)
   expect_equal(width_b / width_a, 2.00 / 1.96, tolerance = 1e-12)
 
-  # 'critical.diff' equals two*sd_diffs
+  # 'critical.diff' equals loa_multiplier * sd_diffs
   sd_a <- as.numeric(a$critical.diff) / 1.96
   sd_b <- as.numeric(b$critical.diff) / 2.00
   expect_equal(sd_a, sd_b, tolerance = 1e-12)
@@ -129,7 +129,7 @@ test_that("constant difference yields zero SD and zero-width LoA/CI", {
 test_that("errors on invalid inputs", {
   expect_error(ba(1:3, 1:2), "same length")
   expect_error(ba(letters[1:3], 1:3), "numeric", ignore.case = TRUE)
-  expect_error(ba(1:3, 1:3, two = 0), "positive")
+  expect_error(ba(1:3, 1:3, loa_multiplier = 0), "positive")
   expect_error(ba(1:3, 1:3, mode = 0), "1 or 2")
 
   expect_error(ba(1:3, 1:3, conf_level = 1.5), "in \\(0, 1\\)")

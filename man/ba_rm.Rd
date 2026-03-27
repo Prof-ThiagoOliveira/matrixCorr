@@ -14,7 +14,7 @@ ba_rm(
   subject,
   method,
   time,
-  two = 1.96,
+  loa_multiplier = 1.96,
   conf_level = 0.95,
   include_slope = FALSE,
   use_ar1 = FALSE,
@@ -74,7 +74,7 @@ a single character string giving the column name in \code{data}.}
 \item{time}{Integer/numeric replicate/time index (pairs within subject) \strong{or}
 a single character string giving the column name in \code{data}.}
 
-\item{two}{Positive scalar; LoA multiple of SD (default 1.96).}
+\item{loa_multiplier}{Positive scalar; LoA multiple of SD (default 1.96).}
 
 \item{conf_level}{Confidence level for CIs (default 0.95).}
 
@@ -175,11 +175,11 @@ difference for the (row, column) methods, accounting for the random
 subject intercept and (if enabled) AR(1) correlation.
 \item \code{loa_lower}, \code{loa_upper} \eqn{(m \times m)}; limits of agreement
 for a single measurement pair, computed as
-\eqn{\mathrm{bias} \pm \mathrm{two}\times \mathrm{sd\_loa}}.
+\eqn{\mathrm{bias} \pm \mathrm{loa\_multiplier}\times \mathrm{sd\_loa}}.
 Signs follow the row - column convention
 (e.g., \code{loa_lower[j,i] = -loa_upper[i,j]}).
 \item \code{width} \eqn{(m \times m)}; LoA width,
-\code{loa_upper - loa_lower} (= \code{2 * two * sd_loa}).
+\code{loa_upper - loa_lower} (= \code{2 * loa_multiplier * sd_loa}).
 \item \code{n} \eqn{(m \times m)}; number of subject-time pairs used in each
 pairwise BA (complete cases where both methods are present).
 
@@ -209,7 +209,7 @@ if \eqn{\rho} was estimated internally; \code{FALSE} if supplied.
 
 \item \code{methods} \emph{(character)}; method level names; matrix rows/columns
 follow this order.
-\item \code{two} \emph{(scalar)}; LoA multiplier used (default \code{1.96}).
+\item \code{loa_multiplier} \emph{(scalar)}; LoA multiplier used (default \code{1.96}).
 \item \code{conf_level} \emph{(scalar)}; nominal confidence level used for CIs.
 
 \item \code{data_long} \emph{(data.frame)}; the long data used for fitting
@@ -221,9 +221,9 @@ facilitate plotting/reproducibility; not required for summary methods.
 \itemize{
 \item \code{mean.diffs} \emph{(scalar)}; estimated bias (method 2 - method 1).
 \item \code{lower.limit}, \code{upper.limit} \emph{(scalars)}; LoA
-\eqn{\mu \pm \mathrm{two}\times \mathrm{SD}} for a single new pair.
-\item \code{critical.diff} \emph{(scalar)}; \code{two * SD}; LoA half-width.
-\item \code{two}, \code{conf_level} \emph{(scalars)}; as above.
+\eqn{\mu \pm \mathrm{loa\_multiplier}\times \mathrm{SD}} for a single new pair.
+\item \code{critical.diff} \emph{(scalar)}; \code{loa_multiplier * SD}; LoA half-width.
+\item \code{loa_multiplier}, \code{conf_level} \emph{(scalars)}; as above.
 \item \code{CI.lines} \emph{(named numeric)}; CI bounds for bias and both LoA
 (\code{*.ci.lower}, \code{*.ci.upper}) at \code{conf_level}.
 \item \code{means}, \code{diffs} \emph{(vectors)}; per-pair means and differences
@@ -379,8 +379,8 @@ level variability \eqn{\mathrm{Var}(\theta_{it})} increases.
 A \emph{single new paired measurement} for a random subject has variance
 \deqn{\mathrm{Var}(d^\star) \;=\; \sigma_u^2 + \sigma_e^2,}
 so the LoA are
-\deqn{\mathrm{LoA} \;=\; \mu_0 \;\pm\; \texttt{two}\,\sqrt{\sigma_u^2 + \sigma_e^2}.}
-The argument \code{two} is the SD multiplier (default \eqn{z_{1-\alpha/2}}
+\deqn{\mathrm{LoA} \;=\; \mu_0 \;\pm\; \texttt{loa\_multiplier}\,\sqrt{\sigma_u^2 + \sigma_e^2}.}
+The argument \code{loa_multiplier} is the SD multiplier (default \eqn{z_{1-\alpha/2}}
 implied by \code{conf_level}, e.g., \eqn{1.96} at \eqn{95\%}).
 }
 
@@ -400,9 +400,9 @@ The per-subject contributions used to approximate these terms are:
 of \eqn{A_i} and \eqn{B_i} (with replicate-size weighting for \eqn{B_i}) and
 their covariance yield \eqn{\mathrm{Var}(\hat\sigma_u^2)},
 \eqn{\mathrm{Var}(\hat\sigma_e^2)} and \eqn{\mathrm{Cov}(\hat\sigma_u^2,\hat\sigma_e^2)}.
-For a LoA bound \eqn{L_\pm = \mu_0 \pm \texttt{two}\cdot \mathrm{sd}}, the
+For a LoA bound \eqn{L_\pm = \mu_0 \pm \texttt{loa\_multiplier}\cdot \mathrm{sd}}, the
 working variance is
-\deqn{\mathrm{Var}(L_\pm) \;\approx\; \mathrm{Var}(\mu_0) + \texttt{two}^2\,\mathrm{Var}(\mathrm{sd}),}
+\deqn{\mathrm{Var}(L_\pm) \;\approx\; \mathrm{Var}(\mu_0) + \texttt{loa\_multiplier}^2\,\mathrm{Var}(\mathrm{sd}),}
 and Wald CIs use the normal quantile at \code{conf_level}. These are
 large-sample approximations; with very small \eqn{m} they may be conservative.
 }
@@ -484,7 +484,7 @@ with(data, {
 ba4 <- ba_rm(
   data = data,
   response = "y", subject = "subject", method = "method", time = "time",
-  two = 1.96, conf_level = 0.95,
+  loa_multiplier = 1.96, conf_level = 0.95,
   include_slope = FALSE, use_ar1 = FALSE
 )
 summary(ba4)
@@ -533,7 +533,7 @@ data$method <- factor(data$method, levels = methods)
 # -------- Repeated BA (pairwise matrix) ---------------------
 baN <- ba_rm(
   response = data$y, subject = data$subject, method = data$method, time = data$time,
-  two = 1.96, conf_level = 0.95,
+  loa_multiplier = 1.96, conf_level = 0.95,
   include_slope = FALSE,         # estimate proportional bias per pair
   use_ar1 = TRUE # model AR(1) within-subject
 )

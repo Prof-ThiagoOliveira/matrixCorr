@@ -9,7 +9,7 @@
   subject,
   method12,
   time,
-  two,
+  loa_multiplier,
   conf_level,
   include_slope,
   use_ar1,

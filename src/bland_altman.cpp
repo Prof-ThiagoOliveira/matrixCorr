@@ -20,13 +20,13 @@ inline double mean_ba(const std::vector<double>& x) {
 // [[Rcpp::export]]
 List bland_altman_cpp(NumericVector group1,
                       NumericVector group2,
-                      double two        = 1.96,
+                      double loa_multiplier = 1.96,
                       int    mode       = 1,
                       double conf_level = 0.95) {
   if (group1.size() != group2.size())
     stop("Error in bland.altman.stats: groups differ in length.");
-  if (two <= 0.0)
-    stop("Error in bland.altman.stats: improper value of 'two'.");
+  if (loa_multiplier <= 0.0)
+    stop("Error in bland.altman.stats: improper value of 'loa_multiplier'.");
   if (mode != 1 && mode != 2)
     stop("Error in bland.altman.stats: mode must be either 1 or 2.");
   if (!(conf_level > 0.0 && conf_level < 1.0))
@@ -66,7 +66,7 @@ List bland_altman_cpp(NumericVector group1,
     sd_diffs = std::sqrt(sample_var(diffs_view));
   }
 
-  const double critical   = two * sd_diffs;
+  const double critical   = loa_multiplier * sd_diffs;
   const double lower      = mean_diffs - critical;
   const double upper      = mean_diffs + critical;
 
@@ -110,7 +110,7 @@ List bland_altman_cpp(NumericVector group1,
     _["upper.limit"]   = upper,
     _["lines"]         = lines,
     _["CI.lines"]      = CI_lines,
-    _["two"]           = two,
+    _["loa_multiplier"] = loa_multiplier,
     _["critical.diff"] = critical
   );
 }

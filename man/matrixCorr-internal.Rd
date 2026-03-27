@@ -24,6 +24,8 @@ will handle missingness per pair.}
 A numeric matrix (type \code{double}) with column names preserved.
 }
 \description{
+\if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
+
 Compute correlation and other association matrices from small to high-dimensional datasets with relative simple functions and sensible defaults. Includes options for shrinkage and robustness to improve results in noisy or high-dimensional settings (p >= n), plus convenient print/plot methods for inspection. Implemented with optimised C++ backends using BLAS/OpenMP and memory-aware symmetric updates. Works with base matrices and data frames, returning standard R objects via a consistent S3 interface. Useful across genomics, agriculture, and machine-learning workflows. Supports Pearson, Spearman, Kendall, distance correlation, partial correlation, and robust biweight mid-correlation, percentage bend, Winsorized, and skipped correlations; Bland-Altman analyses and Lin's concordance correlation coefficient (including repeated-measures extensions). Methods based on Ledoit and Wolf (2004) \doi{10.1016/S0047-259X(03)00096-4}; Schafer and Strimmer (2005) \doi{10.2202/1544-6115.1175}; Lin (1989) \doi{10.2307/2532051}; Wilcox (1994) \doi{10.1007/BF02294395}; Wilcox (2004) \doi{10.1080/0266476032000148821}.
 
 Validates and normalises input for correlation computations. Accepts either a
