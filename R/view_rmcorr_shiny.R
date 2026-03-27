@@ -66,7 +66,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
     cli::cli_abort("{.fn view_rmcorr_shiny} did not find a usable {.cls rmcorr_matrix} object.")
   }
 
-  use_plotly <- requireNamespace("plotly", quietly = TRUE)
+  use_plotly <- .mc_has_namespace("plotly")
   app_title <- title %||% "matrixCorr repeated-measures correlation viewer"
   logo_src <- .mc_register_logo_resource(.mc_logo_path())
 

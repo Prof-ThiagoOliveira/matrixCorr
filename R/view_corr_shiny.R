@@ -52,7 +52,7 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
     cli::cli_abort("{.fn view_corr_shiny} did not find a usable correlation matrix.")
   }
 
-  use_plotly <- requireNamespace("plotly", quietly = TRUE)
+  use_plotly <- .mc_has_namespace("plotly")
   app_title <- title %||% "matrixCorr correlation viewer"
   logo_src <- .mc_register_logo_resource(.mc_logo_path())
 
@@ -923,8 +923,12 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   }
 }
 
+.mc_has_namespace <- function(pkg) {
+  !inherits(try(getNamespace(pkg), silent = TRUE), "try-error")
+}
+
 .mc_plotly_fn <- function(name) {
-  if (!requireNamespace("plotly", quietly = TRUE)) {
+  if (!.mc_has_namespace("plotly")) {
     cli::cli_abort("Package {.pkg plotly} is required for {.arg use_plotly} = TRUE.")
   }
   getExportedValue("plotly", name)

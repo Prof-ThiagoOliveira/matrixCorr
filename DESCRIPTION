@@ -39,6 +39,7 @@ Suggests:
     rmarkdown,
     MASS,
     mnormt,
+    plotly,
     shiny,
     shinyWidgets,
     viridisLite,
