@@ -19,7 +19,7 @@ on:
       config:
         description: "Comma-separated R-hub platforms"
         type: string
-        default: "ubuntu-clang,ubuntu-next,ubuntu-release,macos,macos-arm64,windows"
+        default: "ubuntu-next,ubuntu-release"
       name:
         description: "Run name (optional)"
         type: string
@@ -42,9 +42,12 @@ jobs:
       - uses: r-hub/actions/setup@v1
         id: rhub-setup
         with:
-          # Valid r-hub/actions platform IDs that map most closely to CRAN's
-          # regular check flavors.
-          config: ${{ github.event.inputs.config || 'ubuntu-clang,ubuntu-next,ubuntu-release,macos,macos-arm64,windows' }}
+          # Keep automatic R-hub checks on patched/release Linux only.
+          # As of March 27, 2026, the available devel-style flavors in
+          # r-hub/actions are surfacing upstream plotly/lazyeval breakage that
+          # is unrelated to this package. Release macOS/Windows remain covered
+          # by the regular R-CMD-check workflow.
+          config: ${{ github.event.inputs.config || 'ubuntu-next,ubuntu-release' }}
 
   linux-containers:
     needs: setup
