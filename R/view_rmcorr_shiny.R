@@ -408,7 +408,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
     heatmap_click_pair <- shiny::reactive({
       if (use_plotly) {
         .mc_plotly_click_pair(
-          plotly::event_data("plotly_click", source = "matrixcorr-rmcorr-heatmap"),
+          .mc_plotly_fn("event_data")("plotly_click", source = "matrixcorr-rmcorr-heatmap"),
           vars = colnames(filtered_heatmap()$matrix)
         )
       } else {
