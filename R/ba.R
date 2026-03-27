@@ -185,6 +185,75 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
 }
 
 #' @rdname ba
+#' @method summary ba
+#' @export
+summary.ba <- function(object,
+                       digits = 3,
+                       ci_digits = 3,
+                       ...) {
+  check_inherits(object, "ba")
+
+  cil <- function(nm) as.numeric(object$CI.lines[[nm]])
+
+  out <- data.frame(
+    n              = as.integer(object$based.on),
+    bias           = round(as.numeric(object$mean.diffs), digits),
+    sd_loa         = round(as.numeric(object$critical.diff) / as.numeric(object$loa_multiplier), digits),
+    loa_low        = round(as.numeric(object$lower.limit), digits),
+    loa_up         = round(as.numeric(object$upper.limit), digits),
+    width          = round(as.numeric(object$upper.limit - object$lower.limit), digits),
+    loa_multiplier = round(as.numeric(object$loa_multiplier), digits),
+    bias_lwr       = round(cil("mean.diff.ci.lower"), ci_digits),
+    bias_upr       = round(cil("mean.diff.ci.upper"), ci_digits),
+    lo_lwr         = round(cil("lower.limit.ci.lower"), ci_digits),
+    lo_upr         = round(cil("lower.limit.ci.upper"), ci_digits),
+    up_lwr         = round(cil("upper.limit.ci.lower"), ci_digits),
+    up_upr         = round(cil("upper.limit.ci.upper"), ci_digits),
+    check.names = FALSE
+  )
+
+  out <- structure(out, class = c("summary.ba", "data.frame"))
+  attr(out, "conf.level") <- suppressWarnings(as.numeric(attr(object, "conf.level")))
+  attr(out, "digits") <- digits
+  attr(out, "ci_digits") <- ci_digits
+  out
+}
+
+#' @rdname ba
+#' @method print summary.ba
+#' @param ... Passed to \code{\link[base]{print.data.frame}}.
+#' @export
+print.summary.ba <- function(x, ...) {
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+  if (is.finite(cl)) cat(sprintf("Bland-Altman (two methods), %g%% CI\n\n", 100 * cl))
+  else               cat("Bland-Altman (two methods)\n\n")
+
+  sections <- list(
+    list(
+      title = "Agreement estimates",
+      cols = c("n", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
+    ),
+    list(
+      title = "Confidence intervals",
+      cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+    )
+  )
+
+  printed <- 0L
+  for (section in sections) {
+    cols <- section$cols[section$cols %in% names(x)]
+    if (!length(cols)) next
+
+    if (printed > 0L) cat("\n")
+    cat(section$title, "\n\n", sep = "")
+    print.data.frame(x[cols], row.names = FALSE, right = FALSE, ...)
+    printed <- printed + 1L
+  }
+
+  invisible(x)
+}
+
+#' @rdname ba
 #' @method plot ba
 #' @param x A \code{"ba"} object.
 #' @param title Plot title.
@@ -230,10 +299,10 @@ plot.ba <- function(x,
 
   if (is.null(subtitle)) {
     subtitle <- if (is.finite(cl)) {
-      sprintf("n = %d  *  mean diff = %.2f  *  LoA = [%.2f, %.2f]  *  %g%% CI shown",
+      sprintf("n = %d; mean diff = %.2f; LoA = [%.2f, %.2f]; %g%% CI shown",
               n, md, loaL, loaU, 100*cl)
     } else {
-      sprintf("n = %d  *  mean diff = %.2f  *  LoA = [%.2f, %.2f]",
+      sprintf("n = %d; mean diff = %.2f; LoA = [%.2f, %.2f]",
               n, md, loaL, loaU)
     }
   }
@@ -316,10 +385,10 @@ plot.ba <- function(x,
 
   p <- p +
     ggplot2::geom_point(alpha = point_alpha, size = point_size) +
-    ggplot2::geom_hline(yintercept = 0, size = 0.4, linetype = "dotted", color = "grey40") +
-    ggplot2::geom_hline(yintercept = md,   size = line_size) +
-    ggplot2::geom_hline(yintercept = loaL, size = line_size) +
-    ggplot2::geom_hline(yintercept = loaU, size = line_size)
+    ggplot2::geom_hline(yintercept = 0, linewidth = 0.4, linetype = "dotted", color = "grey40") +
+    ggplot2::geom_hline(yintercept = md,   linewidth = line_size) +
+    ggplot2::geom_hline(yintercept = loaL, linewidth = line_size) +
+    ggplot2::geom_hline(yintercept = loaU, linewidth = line_size)
 
   if (smoother == "lm") {
     p <- p + ggplot2::geom_smooth(method = "lm", se = FALSE, linewidth = 0.7)

@@ -53,6 +53,24 @@ test_that("matches known output on the 12-row example (exact numbers)", {
   }
 })
 
+test_that("summary.ba returns a compact summary object and prints grouped sections", {
+  set.seed(11)
+  x <- rnorm(40, 100, 10)
+  y <- x + rnorm(40, 0, 8)
+
+  fit <- ba(x, y)
+  sm <- summary(fit)
+
+  expect_s3_class(sm, "summary.ba")
+  expect_true(all(c("n", "bias", "sd_loa", "loa_low", "loa_up", "width",
+                    "loa_multiplier", "bias_lwr", "bias_upr",
+                    "lo_lwr", "lo_upr", "up_lwr", "up_upr") %in% names(sm)))
+
+  out <- capture.output(print(sm))
+  expect_true(any(grepl("^Agreement estimates$", out)))
+  expect_true(any(grepl("^Confidence intervals$", out)))
+})
+
 test_that("'loa_multiplier' scales the LoA correctly", {
   set.seed(2)
   x <- rnorm(50, 100, 10)
@@ -142,5 +160,18 @@ test_that("requires at least two complete pairs", {
     ba(x, y),
     "at least two complete pairs",
     fixed = FALSE
+  )
+})
+
+test_that("plot.ba returns a ggplot without line-size deprecation warnings", {
+  skip_if_not_installed("ggplot2")
+
+  set.seed(5)
+  x <- rnorm(40, 100, 10)
+  y <- x + rnorm(40, 0, 8)
+  fit <- ba(x, y)
+
+  expect_no_warning(
+    expect_s3_class(plot(fit), "ggplot")
   )
 })

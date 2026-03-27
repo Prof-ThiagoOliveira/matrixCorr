@@ -3,6 +3,8 @@
 \name{ba}
 \alias{ba}
 \alias{print.ba}
+\alias{summary.ba}
+\alias{print.summary.ba}
 \alias{plot.ba}
 \title{Bland-Altman statistics with confidence intervals}
 \usage{
@@ -16,6 +18,10 @@ ba(
 )
 
 \method{print}{ba}(x, digits = 3, ci_digits = 3, ...)
+
+\method{summary}{ba}(object, digits = 3, ci_digits = 3, ...)
+
+\method{print}{summary.ba}(x, ...)
 
 \method{plot}{ba}(
   x,
