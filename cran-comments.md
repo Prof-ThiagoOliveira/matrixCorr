@@ -22,6 +22,9 @@ Main changes in this submission:
 correlation objects.
 - Added repeated-measures correlation via `rmcorr()` for within-subject
   association, with pairwise and matrix outputs.
+- Updated `summary(ba_rm())` console printing to show repeated-measures
+  Bland-Altman results in grouped blocks, keeping all reported outputs
+  while improving readability in the console.
 - Added a dedicated repeated-measures correlation Shiny viewer via
   `view_rmcorr_shiny()`.
 

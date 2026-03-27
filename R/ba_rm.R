@@ -1034,6 +1034,38 @@ summary.ba_repeated_matrix <- function(object,
   df
 }
 
+.print_ba_summary_blocks <- function(x, ...) {
+  sections <- list(
+    list(
+      title = "Agreement estimates",
+      cols = c("method1", "method2", "n", "bias", "sd_loa",
+               "loa_low", "loa_up", "width", "slope")
+    ),
+    list(
+      title = "Confidence intervals",
+      cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+    ),
+    list(
+      title = "Model details",
+      cols = c("sigma2_subject", "sigma2_resid", "use_ar1",
+               "ar1_rho", "ar1_estimated")
+    )
+  )
+
+  printed <- 0L
+  for (section in sections) {
+    cols <- section$cols[section$cols %in% names(x)]
+    if (!length(cols)) next
+
+    if (printed > 0L) cat("\n")
+    cat(section$title, "\n\n", sep = "")
+    print.data.frame(x[cols], row.names = FALSE, right = FALSE, ...)
+    printed <- printed + 1L
+  }
+
+  invisible(NULL)
+}
+
 
 #' @method print summary.ba_repeated
 #' @export
@@ -1041,7 +1073,7 @@ print.summary.ba_repeated <- function(x, ...) {
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   if (is.finite(cl)) cat(sprintf("Bland-Altman (two methods), %g%% CI\n\n", 100*cl))
   else               cat("Bland-Altman (two methods)\n\n")
-  print.data.frame(x, row.names = FALSE, right = FALSE, ...)
+  .print_ba_summary_blocks(x, ...)
   invisible(x)
 }
 
@@ -1051,7 +1083,7 @@ print.summary.ba_repeated_matrix <- function(x, ...) {
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   if (is.finite(cl)) cat(sprintf("Bland-Altman (pairwise), %g%% CI\n\n", 100*cl))
   else               cat("Bland-Altman (pairwise)\n\n")
-  print.data.frame(x, row.names = FALSE, right = FALSE, ...)
+  .print_ba_summary_blocks(x, ...)
   invisible(x)
 }
 

@@ -252,6 +252,10 @@ test_that("summary/print produce expected classes and do not error", {
   sm_mat <- summary(fit_mat)
   expect_s3_class(sm_mat, "summary.ba_repeated_matrix")
   expect_true(all(c("method1","method2","bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm_mat)))
+  out_mat <- capture.output(print(sm_mat))
+  expect_true(any(grepl("^Agreement estimates$", out_mat)))
+  expect_true(any(grepl("^Confidence intervals$", out_mat)))
+  expect_true(any(grepl("^Model details$", out_mat)))
 
   # Two-method
   dat12 <- subset(dat, method %in% c("M1","M2"))
@@ -261,6 +265,10 @@ test_that("summary/print produce expected classes and do not error", {
   sm2 <- summary(fit2)
   expect_s3_class(sm2, "summary.ba_repeated")
   expect_true(all(c("bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm2)))
+  out2 <- capture.output(print(sm2))
+  expect_true(any(grepl("^Agreement estimates$", out2)))
+  expect_true(any(grepl("^Confidence intervals$", out2)))
+  expect_true(any(grepl("^Model details$", out2)))
 })
 
 test_that("plot methods return a ggplot object and do not error", {
