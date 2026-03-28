@@ -2,9 +2,11 @@
 // [[Rcpp::plugins(openmp)]]
 // [[Rcpp::depends(RcppArmadillo)]]
 #include <RcppArmadillo.h>
+#include <R_ext/Applic.h>
 #include <cmath>
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <vector>
 
 #include "matrixCorr_detail.h"
@@ -18,6 +20,195 @@ using matrixCorr_detail::bvn_fast::Phi2;
 using matrixCorr_detail::bvn_fast::rect_prob;
 
 using namespace Rcpp;
+
+namespace {
+
+struct PolyserialPrepared {
+  std::vector<double> x;
+  std::vector<int> y;
+};
+
+struct PolyserialOptimData {
+  const std::vector<double>* z;
+  const std::vector<int>* y;
+  double maxcor;
+};
+
+inline double polyserial_penalty() {
+  return std::numeric_limits<double>::infinity();
+}
+
+bool polyserial_prepare_xy(const NumericVector& x,
+                           const IntegerVector& y,
+                           bool pairwise_complete,
+                           PolyserialPrepared& out) {
+  const int n = x.size();
+  if (n != y.size()) return false;
+
+  out.x.clear();
+  out.y.clear();
+  out.x.reserve(n);
+  out.y.reserve(n);
+
+  for (int i = 0; i < n; ++i) {
+    const double xi = x[i];
+    const int yi = y[i];
+    const bool bad_x = NumericVector::is_na(xi) || !std::isfinite(xi);
+    const bool bad_y = IntegerVector::is_na(yi);
+    if (bad_x || bad_y) {
+      if (pairwise_complete) continue;
+      return false;
+    }
+    out.x.push_back(xi);
+    out.y.push_back(yi);
+  }
+
+  const int n_complete = static_cast<int>(out.x.size());
+  if (n_complete < 2) return false;
+
+  std::vector<int> levels = out.y;
+  std::sort(levels.begin(), levels.end());
+  levels.erase(std::unique(levels.begin(), levels.end()), levels.end());
+  if (levels.size() < 2) return false;
+
+  for (int& yi : out.y) {
+    yi = static_cast<int>(std::lower_bound(levels.begin(), levels.end(), yi) - levels.begin()) + 1;
+  }
+
+  return true;
+}
+
+double polyserial_negloglik_core(const std::vector<double>& z,
+                                 const std::vector<int>& y,
+                                 const double* pars,
+                                 const int ncat,
+                                 const double maxcor) {
+  if (ncat < 2) return NA_REAL;
+
+  double rho = pars[0];
+  if (std::abs(rho) > maxcor) rho = (rho > 0.0 ? maxcor : -maxcor);
+  if (std::abs(rho) >= 1.0) return polyserial_penalty();
+
+  const double denom_sq = 1.0 - rho * rho;
+  if (!(denom_sq > 0.0) || !std::isfinite(denom_sq)) return polyserial_penalty();
+  const double denom = std::sqrt(denom_sq);
+
+  double out = 0.0;
+  for (int i = 0, n = static_cast<int>(z.size()); i < n; ++i) {
+    const int yi = y[i];
+    if (yi < 1 || yi > ncat) return polyserial_penalty();
+
+    double lower_cut = (yi == 1) ? -INFINITY : pars[yi - 1];
+    double upper_cut = (yi == ncat) ? INFINITY : pars[yi];
+    if (upper_cut < lower_cut) return polyserial_penalty();
+
+    const double upper = (upper_cut - rho * z[i]) / denom;
+    const double lower = (lower_cut - rho * z[i]) / denom;
+    const double p = Phi(upper) - Phi(lower);
+    if (!(p > 0.0) || !std::isfinite(p)) return polyserial_penalty();
+
+    const double dens = phi(z[i]);
+    if (!(dens > 0.0) || !std::isfinite(dens)) return polyserial_penalty();
+
+    out -= std::log(dens * p);
+  }
+
+  return out;
+}
+
+double polyserial_optim_fn(int n, double* par, void* ex) {
+  PolyserialOptimData* data = static_cast<PolyserialOptimData*>(ex);
+  return polyserial_negloglik_core(*data->z, *data->y, par, n, data->maxcor);
+}
+
+double polyserial_fit_full_mle(const std::vector<double>& x,
+                               const std::vector<int>& y,
+                               const double maxcor = 0.9999) {
+  const int n = static_cast<int>(x.size());
+  if (n != static_cast<int>(y.size()) || n < 2) return NA_REAL;
+
+  double mx = 0.0;
+  double my = 0.0;
+  for (int i = 0; i < n; ++i) {
+    mx += x[i];
+    my += y[i];
+  }
+  mx /= n;
+  my /= n;
+
+  double sxx = 0.0;
+  double syy = 0.0;
+  double sxy = 0.0;
+  std::vector<double> z(n);
+  for (int i = 0; i < n; ++i) {
+    const double dx = x[i] - mx;
+    const double dy = y[i] - my;
+    sxx += dx * dx;
+    syy += dy * dy;
+    sxy += dx * dy;
+    z[i] = dx;
+  }
+
+  if (!(sxx > 0.0) || !(syy > 0.0)) return NA_REAL;
+
+  const double sx = std::sqrt(sxx / (n - 1));
+  const double sy = std::sqrt(syy / (n - 1));
+  if (!(sx > 0.0) || !(sy > 0.0)) return NA_REAL;
+
+  for (double& zi : z) zi /= sx;
+
+  const int ncat = *std::max_element(y.begin(), y.end());
+  if (ncat < 2) return NA_REAL;
+
+  std::vector<double> freq(ncat, 0.0);
+  for (int yi : y) freq[yi - 1] += 1.0;
+  if (std::count_if(freq.begin(), freq.end(), [](double f) { return f > 0.0; }) < 2) {
+    return NA_REAL;
+  }
+
+  std::vector<double> par(ncat);
+  double acc = 0.0;
+  for (int k = 0; k < ncat - 1; ++k) {
+    acc += freq[k] / n;
+    par[k + 1] = qnorm01(nan_preserve(acc, 1e-12, 1.0 - 1e-12));
+  }
+
+  double denom = 0.0;
+  for (int k = 1; k < ncat; ++k) denom += phi(par[k]);
+  if (!(denom > 0.0) || !std::isfinite(denom)) return NA_REAL;
+
+  double rho = std::sqrt(static_cast<double>(n - 1) / n) * sy * (sxy / std::sqrt(sxx * syy)) / denom;
+  if (std::abs(rho) > maxcor) rho = (rho > 0.0 ? maxcor : -maxcor);
+  par[0] = rho;
+
+  std::vector<double> opt_par = par;
+  double fmin = polyserial_penalty();
+  int fail = 0;
+  int fncount = 0;
+  PolyserialOptimData opt_data{&z, &y, maxcor};
+  nmmin(
+    ncat,
+    par.data(),
+    opt_par.data(),
+    &fmin,
+    polyserial_optim_fn,
+    &fail,
+    R_NegInf,
+    std::sqrt(std::numeric_limits<double>::epsilon()),
+    &opt_data,
+    1.0,
+    0.5,
+    2.0,
+    0,
+    &fncount,
+    500
+  );
+
+  if (fail != 0 || !std::isfinite(opt_par[0])) return NA_REAL;
+  return nan_preserve(opt_par[0], -maxcor, maxcor);
+}
+
+} // namespace
 
 static inline NumericMatrix drop_zero_margins(const NumericMatrix& tab) {
   const int nr = tab.nrow();
@@ -620,102 +811,28 @@ double matrixCorr_biserial_latent_cpp(NumericVector x, LogicalVector y) {
   return nan_preserve(r, -1.0, 1.0);
 }
 
-// Legacy fixed-threshold 1D optimizer kept as a low-level helper.
 // [[Rcpp::export]]
 double matrixCorr_polyserial_mle_cpp(NumericVector x, IntegerVector y) {
-  const int n = x.size();
-  if (n != y.size() || n < 2) return NA_REAL;
-
-  double mx = 0.0;
-  for (int i = 0; i < n; ++i) mx += x[i];
-  mx /= n;
-
-  double v = 0.0;
-  for (int i = 0; i < n; ++i) {
-    const double d = x[i] - mx;
-    v += d * d;
-  }
-  if (v <= 0.0) return NA_REAL;
-  const double sx = std::sqrt(v / (n - 1));
-
-  std::vector<double> z(n);
-  for (int i = 0; i < n; ++i) z[i] = (x[i] - mx) / sx;
-
-  IntegerVector yu = clone(y);
-  int ymin = yu[0], ymax = yu[0];
-  for (int i = 1; i < n; ++i) {
-    if (yu[i] < ymin) ymin = yu[i];
-    if (yu[i] > ymax) ymax = yu[i];
-  }
-  for (int i = 0; i < n; ++i) yu[i] = yu[i] - ymin + 1;
-
-  const int K = ymax - ymin + 1;
-  if (K < 2) return NA_REAL;
-
-  std::vector<double> beta(K + 1);
-  beta[0] = -INFINITY;
-  beta[K] = INFINITY;
-  std::vector<double> freq(K, 0.0);
-  for (int i = 0; i < n; ++i) freq[yu[i] - 1] += 1.0;
-
-  double acc = 0.0;
-  for (int k = 1; k <= K - 1; ++k) {
-    acc += freq[k - 1] / n;
-    beta[k] = qnorm01(nan_preserve(acc, 1e-12, 1.0 - 1e-12));
-  }
-
-  auto nll = [&](double rho) {
-    rho = nan_preserve(rho, -0.999999, 0.999999);
-    const double sig = std::sqrt(1.0 - rho * rho);
-    double negLL = 0.0;
-    for (int i = 0; i < n; ++i) {
-      const int k = yu[i];
-      const double u = (beta[k] - rho * z[i]) / sig;
-      const double l = (beta[k - 1] - rho * z[i]) / sig;
-      const double pk = std::max(Phi(u) - Phi(l), 1e-16);
-      negLL += -std::log(pk);
-    }
-    return negLL;
-  };
-
-  const double est = optimize(nll, -0.99999, 0.99999, 1e-6, 100);
-  return nan_preserve(est, -1.0, 1.0);
+  PolyserialPrepared prep;
+  if (!polyserial_prepare_xy(x, y, false, prep)) return NA_REAL;
+  return polyserial_fit_full_mle(prep.x, prep.y);
 }
 
 // [[Rcpp::export]]
 double matrixCorr_polyserial_negloglik_cpp(NumericVector z, IntegerVector y,
                                            NumericVector pars, double maxcor = 0.9999) {
   const int n = z.size();
-  if (n != y.size()) return NA_REAL;
-  const int s = pars.size();
-  if (s < 2) return NA_REAL;
+  const int ncat = pars.size();
+  if (n != y.size() || ncat < 2) return NA_REAL;
 
-  double rho = pars[0];
-  if (std::abs(rho) > maxcor) rho = (rho > 0.0 ? maxcor : -maxcor);
-  if (std::abs(rho) >= 1.0) return R_PosInf;
-
-  std::vector<double> cuts(s + 1);
-  cuts[0] = -INFINITY;
-  for (int j = 1; j < s; ++j) cuts[j] = pars[j];
-  cuts[s] = INFINITY;
-  for (int j = 1; j < s; ++j) {
-    if (cuts[j] < cuts[j - 1]) return R_PosInf;
-  }
-
-  const double denom = std::sqrt(1.0 - rho * rho);
-  double out = 0.0;
+  std::vector<double> z_std(n);
+  std::vector<int> y_int(n);
   for (int i = 0; i < n; ++i) {
-    const int yi = y[i];
-    if (yi < 1 || yi > s) return R_PosInf;
-    const double upper = (cuts[yi] - rho * z[i]) / denom;
-    const double lower = (cuts[yi - 1] - rho * z[i]) / denom;
-    const double p = Phi(upper) - Phi(lower);
-    if (!(p > 0.0) || !std::isfinite(p)) return R_PosInf;
-    const double dens = phi(z[i]);
-    if (!(dens > 0.0) || !std::isfinite(dens)) return R_PosInf;
-    out -= std::log(dens * p);
+    z_std[i] = z[i];
+    y_int[i] = y[i];
   }
-  return out;
+
+  return polyserial_negloglik_core(z_std, y_int, REAL(pars), ncat, maxcor);
 }
 
 // [[Rcpp::export]]

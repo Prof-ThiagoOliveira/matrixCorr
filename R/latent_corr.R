@@ -560,45 +560,10 @@
   if (length(unique(pair$y[!is.na(pair$y)])) < 2L) {
     return(NA_real_)
   }
-  x <- as.numeric(pair$x)
-  y <- as.integer(as.factor(pair$y))
-  z <- as.numeric(scale(x))
-  tab <- table(y)
-  n <- sum(tab)
-  s <- length(tab)
-  if (s < 2L || sum(tab != 0L) < 2L) {
-    return(NA_real_)
-  }
-
-  cuts <- stats::qnorm(cumsum(tab) / n)[-s]
-  indices <- seq_len(n)
-  rho <- sqrt((n - 1) / n) * stats::sd(y) * stats::cor(x, y) /
-    sum(stats::dnorm(cuts))
-  maxcor <- 0.9999
-
-  if (abs(rho) > maxcor) {
-    rho <- sign(rho) * maxcor
-  }
-
-  fn <- function(pars) {
-    matrixCorr_polyserial_negloglik_cpp(z, y, pars, maxcor = maxcor)
-  }
-
-  out <- suppressWarnings(
-    tryCatch(
-      stats::optim(c(rho, cuts), fn)$par[1L],
-      error = function(e) NA_real_
-    )
+  matrixCorr_polyserial_mle_cpp(
+    x = as.numeric(pair$x),
+    y = as.integer(as.factor(pair$y))
   )
-  if (is.na(out)) {
-    return(NA_real_)
-  }
-  if (out > 1) {
-    out <- maxcor
-  } else if (out < -1) {
-    out <- -maxcor
-  }
-  as.numeric(out)
 }
 
 .mc_pair_biserial <- function(x, y, check_na) {
@@ -1373,6 +1338,10 @@ polyserial <- function(data, y, check_na = TRUE) {
     arg = "data"
   )
 
+  if (scalar) {
+    return(.mc_pair_polyserial(x_mat[, 1L], y_enc[[1L]]$code, check_na))
+  }
+
   out <- matrix(NA_real_, nrow = ncol(x_mat), ncol = length(y_enc),
                 dimnames = list(colnames(x_mat), names(y_enc)))
 
@@ -1381,11 +1350,6 @@ polyserial <- function(data, y, check_na = TRUE) {
     for (k in seq_along(y_enc)) {
       out[j, k] <- .mc_pair_polyserial(xj, y_enc[[k]]$code, check_na)
     }
-  }
-
-  out <- .mc_scalar_or_matrix(out, scalar = scalar)
-  if (scalar) {
-    return(out)
   }
 
   .mc_structure_corr_matrix(

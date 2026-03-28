@@ -26,6 +26,57 @@ expect_equal_abs <- function(object, expected, tolerance = latent_reg_tol) {
   )
 }
 
+polyserial_reference_old <- function(x, y, check_na = TRUE) {
+  if (!check_na) {
+    keep <- stats::complete.cases(x, y)
+    x <- x[keep]
+    y <- y[keep]
+  }
+
+  if (length(x) < 2L || length(unique(y[!is.na(y)])) < 2L) {
+    return(NA_real_)
+  }
+
+  x <- as.numeric(x)
+  y <- as.integer(as.factor(y))
+  z <- as.numeric(scale(x))
+  tab <- table(y)
+  n <- sum(tab)
+  s <- length(tab)
+  if (s < 2L || sum(tab != 0L) < 2L) {
+    return(NA_real_)
+  }
+
+  cuts <- stats::qnorm(cumsum(tab) / n)[-s]
+  rho <- sqrt((n - 1) / n) * stats::sd(y) * stats::cor(x, y) /
+    sum(stats::dnorm(cuts))
+  maxcor <- 0.9999
+
+  if (abs(rho) > maxcor) {
+    rho <- sign(rho) * maxcor
+  }
+
+  out <- suppressWarnings(
+    tryCatch(
+      stats::optim(
+        c(rho, cuts),
+        function(pars) matrixCorr_polyserial_negloglik_cpp(z, y, pars, maxcor = maxcor)
+      )$par[1L],
+      error = function(e) NA_real_
+    )
+  )
+
+  if (is.na(out)) {
+    return(NA_real_)
+  }
+  if (out > 1) {
+    out <- maxcor
+  } else if (out < -1) {
+    out <- -maxcor
+  }
+  as.numeric(out)
+}
+
 test_that("tetrachoric pair and matrix modes match fixed regression values", {
   set.seed(1001)
   x <- sample(c(FALSE, TRUE), 300, replace = TRUE)
@@ -109,6 +160,44 @@ test_that("polyserial pair and matrix modes match fixed regression values", {
       -0.0127484729795922, -0.0159091216414217,
       0.0706339051579041, -0.0149611262803363
     ),
+    tolerance = 1e-12
+  )
+})
+
+test_that("polyserial matches the previous R optim reference path", {
+  set.seed(2468)
+  x <- rnorm(240)
+  y <- ordered(sample(c(1, 2, 4), 240, replace = TRUE))
+
+  expect_equal(
+    polyserial(x, y),
+    polyserial_reference_old(x, y),
+    tolerance = 1e-12
+  )
+
+  x[c(5, 19)] <- NA_real_
+  y[c(11, 19)] <- NA
+  expect_equal(
+    polyserial(x, y, check_na = FALSE),
+    polyserial_reference_old(x, y, check_na = FALSE),
+    tolerance = 1e-12
+  )
+
+  X <- data.frame(x1 = rnorm(240), x2 = rnorm(240))
+  Y <- data.frame(
+    y1 = ordered(sample(1:4, 240, replace = TRUE)),
+    y2 = ordered(sample(c(1, 3, 4), 240, replace = TRUE))
+  )
+  ref_mat <- outer(
+    seq_len(ncol(X)),
+    seq_len(ncol(Y)),
+    Vectorize(function(j, k) polyserial_reference_old(X[[j]], Y[[k]]))
+  )
+  dimnames(ref_mat) <- list(names(X), names(Y))
+
+  expect_equal(
+    as.numeric(polyserial(X, Y)),
+    as.numeric(ref_mat),
     tolerance = 1e-12
   )
 })
