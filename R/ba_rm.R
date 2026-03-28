@@ -886,44 +886,14 @@ print.ba_repeated_matrix <- function(x,
     return(invisible(x))
   }
 
-  methods <- x$methods
-  m <- length(methods)
-  rows <- vector("list", m * (m-1) / 2L)
-  k <- 0L
-  for (i in 1:(m-1)) for (j in (i+1):m) {
-    k <- k + 1L
-    row <- list(
-      method1 = methods[i],
-      method2 = methods[j],
-      bias    = round(x$bias[i,j],     digits),
-      sd_loa  = round(x$sd_loa[i,j],   digits),
-      loa_low = round(x$loa_lower[i,j],digits),
-      loa_up  = round(x$loa_upper[i,j],digits),
-      width   = round(x$width[i,j],    digits),
-      n       = suppressWarnings(as.integer(x$n[i,j]))
-    )
-    if (has_ci && is.finite(cl)) {
-      row$bias_lwr <- round(x$mean_ci_low[i,j],       ci_digits)
-      row$bias_upr <- round(x$mean_ci_high[i,j],      ci_digits)
-      row$lo_lwr   <- round(x$loa_lower_ci_low[i,j],  ci_digits)
-      row$lo_upr   <- round(x$loa_lower_ci_high[i,j], ci_digits)
-      row$up_lwr   <- round(x$loa_upper_ci_low[i,j],  ci_digits)
-      row$up_upr   <- round(x$loa_upper_ci_high[i,j], ci_digits)
-    }
-    row$sigma2_subject <- round(x$sigma2_subject[i,j], digits)
-    row$sigma2_resid   <- round(x$sigma2_resid[i,j],   digits)
-    if (isTRUE(x$use_ar1)) {
-      rho_ij <- if (!is.null(x$ar1_rho_pair)) x$ar1_rho_pair[i,j] else NA_real_
-      est_ij <- if (!is.null(x$ar1_estimated)) isTRUE(x$ar1_estimated[i,j]) else NA
-      row$ar1_rho       <- round(rho_ij, digits)
-      row$ar1_estimated <- est_ij
-    }
-    rows[[k]] <- row
-  }
-  df <- do.call(rbind.data.frame, rows)
+  sm <- summary(x, digits = digits, ci_digits = ci_digits)
+  cols <- c("method1", "method2", "bias", "sd_loa", "loa_low", "loa_up", "width", "n")
+  if ("slope" %in% names(sm)) cols <- c(cols, "slope")
+  df <- as.data.frame(sm)[, cols[cols %in% names(sm)], drop = FALSE]
+
   if (is.finite(cl)) cat(sprintf("Bland-Altman (row \u2212 column), %g%% CI\n\n", 100*cl))
   else               cat("Bland-Altman (row \u2212 column)\n\n")
-  print(df, row.names = FALSE, right = FALSE)
+  print.data.frame(df, row.names = FALSE, right = FALSE)
   invisible(x)
 }
 

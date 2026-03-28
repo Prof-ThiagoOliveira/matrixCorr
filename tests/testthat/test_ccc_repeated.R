@@ -73,6 +73,10 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
     expect_equal(dim(v), c(2,2))
   }
 
+  out_print <- capture.output(print(cfit))
+  expect_false(any(grepl("sigma2_subject|sigma2_subject_method|sigma2_subject_time|sigma2_error|SB|se_ccc|Variance components|AR\\(1\\) diagnostics",
+                         out_print)))
+
   # summary data frame columns present
   sm <- summary(cfit, show_ci = "yes", digits = 4)
   expect_s3_class(sm, "summary.ccc_rm_reml")
@@ -86,6 +90,30 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
 
 # helper to center time within subject
 center_by_id <- function(x, id) ave(x, id, FUN = function(v) v - mean(v))
+
+sim_ccc_rm_dat <- function(seed, rho = 0, n_subj = 120L, n_time = 6L,
+                           sig_subject = 1, sig_error = 0.7, bias_b = 0.2) {
+  set.seed(seed)
+  id <- factor(rep(seq_len(n_subj), each = 2L * n_time))
+  time <- factor(rep(rep(seq_len(n_time), times = 2L), times = n_subj))
+  method <- factor(rep(rep(c("A", "B"), each = n_time), times = n_subj))
+  subj_eff <- rnorm(n_subj, 0, sig_subject)
+  y <- numeric(length(id))
+
+  for (s in seq_len(n_subj)) {
+    for (m in c("A", "B")) {
+      idx <- which(id == levels(id)[s] & method == m)
+      eps <- if (abs(rho) < 1e-12) {
+        rnorm(n_time, 0, sig_error)
+      } else {
+        as.numeric(stats::arima.sim(list(ar = rho), n = n_time, sd = sig_error))
+      }
+      y[idx] <- subj_eff[s] + (m == "B") * bias_b + eps
+    }
+  }
+
+  data.frame(y = y, id = id, method = method, time = time)
+}
 
 test_that("Dmat_type affects CCC as expected when biases flip over time", {
   set.seed(42)
@@ -201,6 +229,25 @@ test_that("AR(1) path: fixed rho is carried in attributes", {
   expect_true("ar1_rho" %in% names(sm) || "ar1_rho_lag1" %in% names(sm))
   out <- capture.output(print(sm))
   expect_true(any(grepl("^AR\\(1\\) diagnostics$", out)))
+})
+
+test_that("AR(1) recommendation distinguishes IID from positive serial correlation", {
+  dat_iid <- sim_ccc_rm_dat(seed = 7, rho = 0)
+  fit_iid <- expect_no_message(
+    ccc_rm_reml(dat_iid, "y", "id", method = "method", time = "time", ar = "none")
+  )
+  sm_iid <- as.data.frame(summary(fit_iid))
+  expect_false(isTRUE(sm_iid$use_ar1[1]))
+  expect_lt(sm_iid$ar1_rho_lag1[1], 0)
+
+  dat_ar1 <- sim_ccc_rm_dat(seed = 1, rho = 0.6)
+  expect_message(
+    fit_ar1_diag <- ccc_rm_reml(dat_ar1, "y", "id", method = "method", time = "time", ar = "none"),
+    "Positive lag-1 residual correlation detected"
+  )
+  sm_ar1 <- as.data.frame(summary(fit_ar1_diag))
+  expect_true(isTRUE(sm_ar1$use_ar1[1]))
+  expect_gt(sm_ar1$ar1_rho_lag1[1], 0.1)
 })
 
 

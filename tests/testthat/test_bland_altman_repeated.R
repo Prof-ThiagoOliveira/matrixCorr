@@ -249,6 +249,10 @@ test_that("summary/print produce expected classes and do not error", {
   fit_mat <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time"
   )
+  out_fit_mat <- capture.output(print(fit_mat))
+  expect_false(any(grepl("bias_lwr|sigma2_subject|ar1_rho|Confidence intervals|Model details",
+                         out_fit_mat)))
+
   sm_mat <- summary(fit_mat)
   expect_s3_class(sm_mat, "summary.ba_repeated_matrix")
   expect_true(all(c("method1","method2","bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm_mat)))

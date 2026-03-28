@@ -1379,7 +1379,11 @@ Rcpp::List ccc_vc_cpp(
       ar1_rho_mom  = rho_pool;
       ar1_pval     = pval;
       ar1_pairs    = pairs_pool;
-      ar1_recommend = (std::fabs(rho_pool) >= thr && pval < p_thr);
+      // Conditional residuals can show mild negative lag-1 correlation under
+      // IID errors because the BLUP step induces shrinkage within subject.
+      // Recommend AR(1) only for positive serial persistence, which is the
+      // pattern the residual AR(1) option is meant to capture in practice.
+      ar1_recommend = (rho_pool >= thr && pval < p_thr);
     } else {
       ar1_rho_mom = NA_REAL; ar1_pval = NA_REAL; ar1_pairs = 0; ar1_recommend = false;
     }

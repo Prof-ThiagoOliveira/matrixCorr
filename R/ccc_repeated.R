@@ -1847,7 +1847,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   if (!identical(ar, "ar1")) {
     if (any(ar1_reco_mat == TRUE, na.rm = TRUE)) {
       inform_if_verbose(
-        "AR(1) residual model recommended (lag-1 autocorrelation detected in at least one pair). Use `ar = \"ar1\"` to account for serial correlation.",
+        "Positive lag-1 residual correlation detected in at least one pair. Consider `ar = \"ar1\"` to model within-subject serial correlation.",
         .verbose = TRUE
       )
     }
