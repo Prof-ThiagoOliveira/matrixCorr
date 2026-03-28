@@ -28,6 +28,9 @@ correlation objects.
 - Updated `summary(ccc_rm_reml())` console printing to show repeated-measures
   concordance results in grouped blocks, keeping all reported outputs
   while improving readability in the console.
+- Corrected a false-positive AR(1) recommendation in `ccc_rm_reml()`
+  when repeated-measures data have no serial correlation, and clarified
+  the corresponding console message.
 - Added a dedicated repeated-measures correlation Shiny viewer via
   `view_rmcorr_shiny()`.
 

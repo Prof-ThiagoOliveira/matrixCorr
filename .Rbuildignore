@@ -12,3 +12,7 @@
 ^codemeta\.json$
 ^\.local-lib$
 ^\.tmp_lib$
+^\.tmp_install_lib$
+^.*\.Rcheck$
+^artifact\.zip$
+^matrixCorr_[0-9.-]+\.tar\.gz$
