@@ -73,8 +73,15 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
-      - name: Reinstall rlang for current R
-        run: Rscript -e "install.packages('rlang', repos='https://cloud.r-project.org')"
+      - name: Refresh packages built under older R
+        run: |
+          Rscript -e "options(repos = c(CRAN = 'https://cloud.r-project.org')); \
+            ip <- installed.packages(); \
+            cur <- paste0(R.version$major, '.', strsplit(R.version$minor, '\\\\.')[[1]][1]); \
+            built <- ip[, 'Built']; \
+            priority <- ip[, 'Priority']; \
+            pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)]; \
+            if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))"
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
@@ -106,8 +113,15 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
-      - name: Reinstall rlang for current R
-        run: Rscript -e "install.packages('rlang', repos='https://cloud.r-project.org')"
+      - name: Refresh packages built under older R
+        run: |
+          Rscript -e "options(repos = c(CRAN = 'https://cloud.r-project.org')); \
+            ip <- installed.packages(); \
+            cur <- paste0(R.version$major, '.', strsplit(R.version$minor, '\\\\.')[[1]][1]); \
+            built <- ip[, 'Built']; \
+            priority <- ip[, 'Priority']; \
+            pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)]; \
+            if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))"
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
