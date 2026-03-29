@@ -6,9 +6,7 @@
 #include <limits>
 #include <cmath>
 #include <algorithm>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include "matrixCorr_omp.h"
 
 #include "matrixCorr_detail.h"
 

@@ -7,9 +7,7 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include "matrixCorr_omp.h"
 
 // Fenwick-tree utilities for prefix sums over ranked y values.
 inline void bit_add(std::vector<double>& bit, const int idx, const double val) {

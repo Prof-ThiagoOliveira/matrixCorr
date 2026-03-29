@@ -1,8 +1,6 @@
 // Thiago de Paula Oliveira
 #include <RcppArmadillo.h>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include "matrixCorr_omp.h"
 using namespace Rcpp;
 
 // [[Rcpp::plugins(openmp)]]

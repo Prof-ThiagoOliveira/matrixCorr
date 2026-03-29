@@ -6,9 +6,7 @@
 #include <limits>     // for std::numeric_limits
 #include <cmath>      // for std::floor, std::ceil
 #include <algorithm>  // for std::max
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include "matrixCorr_omp.h"
 
 // only what we use from matrixCorr_detail
 #include "matrixCorr_detail.h"

@@ -7,9 +7,7 @@
 #include <vector>
 #include <algorithm>
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include "matrixCorr_omp.h"
 
 using namespace Rcpp;
 

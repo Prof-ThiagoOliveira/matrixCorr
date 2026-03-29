@@ -9,8 +9,8 @@
 #include <cctype>
 #include <string>
 
+#include "matrixCorr_omp.h"
 #ifdef _OPENMP
-#include <omp.h>
 #if defined(__unix__) || defined(__APPLE__)
 #include <dlfcn.h>
 #endif
