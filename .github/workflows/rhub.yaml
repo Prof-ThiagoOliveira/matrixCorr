@@ -73,6 +73,8 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
+      - name: Reinstall rlang for current R
+        run: Rscript -e "install.packages('rlang', repos='https://cloud.r-project.org')"
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
@@ -104,6 +106,8 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
+      - name: Reinstall rlang for current R
+        run: Rscript -e "install.packages('rlang', repos='https://cloud.r-project.org')"
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
