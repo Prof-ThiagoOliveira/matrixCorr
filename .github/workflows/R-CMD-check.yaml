@@ -54,13 +54,13 @@ jobs:
 
       - name: Refresh packages built under older R
         run: |
-          Rscript -e "options(repos = c(CRAN = 'https://cloud.r-project.org')); \
+          Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org")); \
             ip <- installed.packages(); \
-            cur <- paste0(R.version$major, '.', strsplit(R.version$minor, '\\\\.')[[1]][1]); \
-            built <- ip[, 'Built']; \
-            priority <- ip[, 'Priority']; \
+            cur <- paste0(R.version$major, ".", strsplit(R.version$minor, "\\\\.")[[1]][1]); \
+            built <- ip[, "Built"]; \
+            priority <- ip[, "Priority"]; \
             pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)]; \
-            if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))"
+            if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))'
         shell: bash
 
       - uses: r-lib/actions/check-r-package@v2
