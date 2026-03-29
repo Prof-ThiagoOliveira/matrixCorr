@@ -23,6 +23,15 @@ using matrixCorr_detail::moments::sample_var;
 using matrixCorr_detail::moments::sample_cov;
 using matrixCorr_detail::indexing::reindex;
 
+namespace {
+constexpr const char* BA_RM_IDENTIFIABILITY_ERROR =
+  "The repeated-measures Bland-Altman mixed model is not separately identifiable on the supplied paired data because there is insufficient within-subject replication after pairing to separate the residual and subject-level variance components.";
+constexpr const char* BA_RM_SLOPE_SCALE_ERROR =
+  "The proportional-bias slope is not estimable because the paired means are near-degenerate on the observed data scale.";
+constexpr const char* BA_RM_CONVERGENCE_ERROR =
+  "The repeated-measures Bland-Altman model is conceptually estimable on the supplied paired data, but the EM/GLS algorithm failed to converge to admissible finite variance-component estimates.";
+} // namespace
+
 // ---------- local helpers ----------
 static inline bool all_finite(const arma::vec& v) {
   for (arma::uword i = 0; i < v.n_elem; ++i) if (!std::isfinite(v[i])) return false;
@@ -55,8 +64,8 @@ static std::vector<double> ba_rm_collect_finite_means(const std::vector<double>&
 static double ba_rm_iqr_scale(std::vector<double> sorted) {
   if (sorted.empty()) return NA_REAL;
   std::sort(sorted.begin(), sorted.end());
-  const double q1 = matrixCorr_detail::quantile_utils::quantile_sorted_std(sorted, 0.25);
-  const double q3 = matrixCorr_detail::quantile_utils::quantile_sorted_std(sorted, 0.75);
+  const double q1 = matrixCorr_detail::standardise_bicor::quantile_sorted_std(sorted, 0.25);
+  const double q3 = matrixCorr_detail::standardise_bicor::quantile_sorted_std(sorted, 0.75);
   return (q3 - q1) / 1.349;
 }
 
@@ -91,9 +100,10 @@ static BaRMSlopeScaleInfo ba_rm_choose_slope_scale(const std::vector<double>& me
   info.s_iqr = ba_rm_iqr_scale(sorted);
   info.s_mad = ba_rm_mad_scale(sorted);
 
-  if (ba_rm_is_finite_positive(info.s_iqr)) info.s_ref = info.s_iqr;
-  if (ba_rm_is_finite_positive(info.s_mad)) {
-    info.s_ref = ba_rm_is_finite_positive(info.s_ref) ? std::max(info.s_ref, info.s_mad) : info.s_mad;
+  const double scales[] = {info.s_sd, info.s_iqr, info.s_mad};
+  for (double scale : scales) {
+    if (!ba_rm_is_finite_positive(scale)) continue;
+    info.s_ref = ba_rm_is_finite_positive(info.s_ref) ? std::max(info.s_ref, scale) : scale;
   }
 
   if (!ba_rm_is_near_zero(info.s_sd, info.s_ref, info.tau)) {
@@ -114,7 +124,7 @@ static BaRMSlopeScaleInfo ba_rm_choose_slope_scale(const std::vector<double>& me
     return info;
   }
 
-  stop("Paired means have essentially no variation; the proportional-bias slope is not estimable on the observed data scale.");
+  stop(BA_RM_SLOPE_SCALE_ERROR);
 }
 
 // [[Rcpp::export]]
@@ -135,10 +145,6 @@ Rcpp::List ba_rm_slope_scale_cpp(Rcpp::NumericVector mean_values) {
 static double ba_rm_slope_scale_denom(const std::vector<double>& mean_values,
                                       double tau = std::sqrt(std::numeric_limits<double>::epsilon())) {
   return ba_rm_choose_slope_scale(mean_values, tau).s_m_star;
-}
-  if (values.empty()) return NA_REAL;
-  const double med = matrixCorr_detail::standardise_bicor::median_inplace(dev);
-  return matrixCorr_detail::standardise_bicor::median_inplace(values);
 }
 
 // ---- AR(1) block precision (STRICT contiguity: t_{k+1} = t_k + 1) ----
@@ -329,7 +335,7 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   int n_replicated_subjects = 0;
   for (int i=0;i<m;++i) if (cnt_s[i] >= 2) ++n_replicated_subjects;
   if (used_mu < 2 || n_replicated_subjects < 1) {
-    stop("The repeated-measures Bland-Altman mixed model is not estimable after pairing because within-subject replication is insufficient to separate the residual and subject-level variance components.");
+    stop(BA_RM_IDENTIFIABILITY_ERROR);
   }
   arma::vec mu_s_vec(used_mu, arma::fill::zeros);
   { int k=0; for (int i=0;i<m;++i) if (cnt_s[i]>0) mu_s_vec[k++] = mu_s[i]; }
@@ -346,8 +352,9 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
       den_w += ((int)yi.n_elem - 1);
     }
   }
-  // If the model is estimable but no finite positive pooled within-subject
-  // variance can be formed, use 0.5 * vref only as a positive EM start.
+  // If the model is separately identifiable but no finite positive pooled
+  // within-subject variance can be formed, use 0.5 * vref only as a temporary
+  // positive EM start. A valid converged solution is still required later.
   double se2_init = NA_REAL;
   if (den_w > 0.5) {
     se2_init = num_w / den_w;
@@ -371,8 +378,8 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   vec su_term(m, fill::zeros);
   vec se_term(m, fill::zeros);
 
-  bool ok = true;
-  int   it = 0;
+  bool converged = false;
+  int   it = -1;
   std::string init_warn;
   if (se2_init_fallback) {
     init_warn = "Residual-variance initialization used 0.5 * v_ref only as a positive EM starting heuristic because no finite positive pooled within-subject variance could be formed after pairing.";
@@ -407,9 +414,9 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
 
     // (2) GLS beta
     mat XtViX_inv;
-    if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) { ok=false; break; }
+    if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) break;
     beta = XtViX_inv * XtViy;
-    if (!all_finite(beta)) { ok=false; break; }
+    if (!all_finite(beta)) break;
 
     // (3) M-step (stabilized)
     double su_acc = 0.0;
@@ -460,33 +467,35 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
     su2_new = nan_preserve(su2_new, 0.0, MAXV);
     se2_new = nan_preserve(se2_new, EPS, MAXV);
 
-    if (!std::isfinite(su2_new) || !std::isfinite(se2_new)) { ok=false; break; }
+    const bool admissible =
+      std::isfinite(su2_new) &&
+      std::isfinite(se2_new) &&
+      su2_new >= 0.0 &&
+      se2_new >= EPS;
+    if (!admissible) break;
 
     double diff = std::fabs(su2_new - su2) + std::fabs(se2_new - se2);
     su2 = su2_new; se2 = se2_new;
-    if (diff < tol) { ok = true; break; }
+    if (diff < tol) {
+      converged = true;
+      break;
+    }
+  }
+
+  if (!converged || !all_finite(beta) || !std::isfinite(su2) || !std::isfinite(se2) ||
+      su2 < 0.0 || se2 < EPS) {
+    stop(BA_RM_CONVERGENCE_ERROR);
   }
 
   FitOut out;
-  if (!all_finite(beta)) beta.zeros();
   out.beta = beta;
   out.su2 = su2;
   out.se2 = se2;
   out.su_term = su_term;
   out.se_term = se_term;
   out.iter = it + 1;
-  out.converged = ok;
+  out.converged = true;
   out.warn = init_warn;
-
-  if (!ok) {
-    out.warn = init_warn.empty() ?
-      "EM did not converge cleanly; stabilized updates applied." :
-      init_warn + " EM did not converge cleanly; stabilized updates applied.";
-    if (!std::isfinite(out.su2) || !std::isfinite(out.se2)) {
-      out.su2 = nan_preserve(std::max(0.0, 0.1 * vref), 0.0, MAXV);
-      out.se2 = nan_preserve(std::max(0.0, 0.9 * vref), 1e-12, MAXV);
-    }
-  }
   return out;
 }
 
@@ -606,8 +615,9 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   if (include_slope) {
     x2 = vec(P.mean.data(), P.mean.size(), /*copy*/ false);
     x2_mean  = arma::mean(x2);
-    // Prefer sd(m); if it is near-zero relative to the robust reference scale,
-    // fall back to IQR(m)/1.349, then MAD(m), otherwise stop as non-estimable.
+    // Prefer sd(m); if it is near-zero relative to the paired-mean reference
+    // scale, fall back to IQR(m)/1.349, then MAD(m), otherwise error because
+    // the paired means are too near-degenerate for the slope term.
     x2_scale = ba_rm_slope_scale_denom(P.mean);
     vec x2c = (x2 - x2_mean) / x2_scale;
     X.col(1) = x2c;

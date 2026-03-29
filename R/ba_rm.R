@@ -80,11 +80,15 @@
 #'   \item \code{use_ar1} \emph{(scalar logical)}; whether AR(1) modeling was requested.
 #'   \item \code{ar1_rho} \emph{(scalar numeric or \code{NA})}; user-supplied \eqn{\rho}
 #'         if a single common value was provided; \code{NA} otherwise.
+#'   \item \code{residual_model} (\eqn{m \times m}; optional); residual model
+#'         actually used for each pair, either \code{"ar1"} or \code{"iid"}.
 #'   \item \code{ar1_rho_pair} (\eqn{m \times m}; optional); \eqn{\rho} actually used per pair
-#'         (may be estimated from data or equal to the supplied value). AR(1) blocks
-#'         require consecutive integer time indices for each subject.
+#'         (may be estimated from data or equal to the supplied value); \code{NA}
+#'         where the final fit used iid residuals. AR(1) blocks require consecutive
+#'         integer time indices for each subject.
 #'   \item \code{ar1_estimated} (\eqn{m \times m}; optional logical); for each pair, \code{TRUE}
-#'         if \eqn{\rho} was estimated internally; \code{FALSE} if supplied.
+#'         if \eqn{\rho} was estimated internally; \code{FALSE} if supplied; \code{NA}
+#'         where the final fit used iid residuals.
 #'
 #'   \item \code{methods} \emph{(character)}; method level names; matrix rows/columns
 #'         follow this order.
@@ -111,8 +115,8 @@
 #'   \item \code{include_slope}, \code{beta_slope}; whether a proportional-bias slope
 #'         was estimated and its value (if requested).
 #'   \item \code{sigma2_subject}, \code{sigma2_resid}; variance components as above.
-#'   \item \code{use_ar1}, \code{ar1_rho}, \code{ar1_estimated}; AR(1) settings/results
-#'         as above (scalars for the two-method fit).
+#'   \item \code{use_ar1}, \code{residual_model}, \code{ar1_rho}, \code{ar1_estimated};
+#'         AR(1) settings/results as above (scalars for the two-method fit).
 #' }
 #'
 #' @details
@@ -163,7 +167,11 @@
 #' residuals within each contiguous block (remove block-specific intercept and
 #' linear time), form lag-1 correlations, apply a small-sample bias adjustment
 #' \eqn{(1-\rho^2)/L}, pool with Fisher's \eqn{z} (weights \eqn{\approx L-3}),
-#' and refit with the pooled \eqn{\hat\rho}.
+#' and refit with the pooled \eqn{\hat\rho}. If AR(1) is requested for a pair
+#' but that AR(1)-based fit fails to converge while the corresponding i.i.d.
+#' repeated-measures fit converges, the pair is simplified to i.i.d. with a
+#' warning; in that case the reported \code{residual_model} is \code{"iid"}
+#' and the corresponding \code{ar1_rho} value is \code{NA}.
 #' }
 #'
 #' \subsection{Estimation by stabilised EM/GLS}{
@@ -174,31 +182,36 @@
 #' the robust IQR scale \eqn{s_{\mathrm{iqr}} = \mathrm{IQR}(m_{it}) / 1.349},
 #' and the robust MAD scale
 #' \eqn{s_{\mathrm{mad}} = 1.4826\,\mathrm{MAD}(m_{it})}. Let
-#' \eqn{S_{\mathrm{ref}} = \max(s_{\mathrm{iqr}}, s_{\mathrm{mad}})} over the
-#' finite positive robust scales. A candidate scale is treated as near-zero if
+#' \eqn{S_{\mathrm{ref}} = \max(s_{\mathrm{sd}}, s_{\mathrm{iqr}}, s_{\mathrm{mad}})}
+#' over the finite positive candidate scales. A candidate scale is treated as near-zero if
 #' it is non-finite or \eqn{\le \tau S_{\mathrm{ref}}}, with
 #' \eqn{\tau \approx \sqrt{\epsilon_{\mathrm{mach}}}}. The backend uses
 #' \eqn{s_{\mathrm{sd}}} if it is not near-zero, otherwise
 #' \eqn{s_{\mathrm{iqr}}}, otherwise \eqn{s_{\mathrm{mad}}}; if all candidate
-#' scales are near-zero the proportional-bias slope is treated as not estimable
-#' on the observed data scale and the fit stops with an error. Estimates are
-#' back-transformed to the original units afterwards.
+#' scales are near-zero the paired means are treated as near-degenerate, the
+#' proportional-bias slope is not estimable on the observed data scale, and the
+#' fit stops with an error. Estimates are back-transformed to the original units
+#' afterwards.
 #'
-#' Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the marginal precision of
-#' \eqn{d_i} integrates \eqn{u_i} via a Woodbury/Sherman-Morrison identity:
+#' Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the algorithm alternates
+#' between a GLS update for the fixed effects and an EM update for the variance
+#' components. Integrating out \eqn{u_i} yields the marginal precision of
+#' \eqn{d_i} via a Woodbury/Sherman-Morrison identity:
 #' \deqn{\mathbf{V}_i^{-1} \;=\; \sigma_e^{-2}\mathbf{C}_i \;-\;
 #' \sigma_e^{-2}\mathbf{C}_i \mathbf{1}\,
 #' \Big(\sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big)^{-1}
 #' \mathbf{1}^\top \mathbf{C}_i \sigma_e^{-2}.}
-#' The GLS update is
+#' With \eqn{\mathbf{V}_i^{-1}} in hand, the fixed effects are updated by GLS:
 #' \deqn{\hat\beta \;=\; \Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} \mathbf{X}_i\Big)^{-1}
 #' \Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} d_i\Big).}
-#' Writing \eqn{r_i = d_i - \mathbf{X}_i\hat\beta}, the E-step gives the BLUP of
-#' the random intercept and its conditional second moment:
+#' Writing \eqn{r_i = d_i - \mathbf{X}_i\hat\beta}, the E-step summarizes the
+#' random intercept through its conditional mean (the BLUP) and conditional
+#' second moment:
 #' \deqn{M_i \;=\; \sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1},\qquad
 #' \tilde u_i \;=\; M_i^{-1}\,\sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i r_i,\qquad
 #' \mathbb{E}[u_i^2\mid y] \;=\; \tilde u_i^2 + M_i^{-1}.}
-#' The M-step updates the variance components by
+#' The M-step then refreshes the variance components by averaging these
+#' conditional quantities across subjects:
 #' \deqn{\hat\sigma_u^2 \;=\; \frac{1}{m}\sum_i \mathbb{E}[u_i^2\mid y], \qquad
 #' \hat\sigma_e^2 \;=\; \frac{1}{n}\sum_i \Big\{(r_i - \mathbf{1}\tilde u_i)^\top
 #' \mathbf{C}_i (r_i - \mathbf{1}\tilde u_i) + M_i^{-1}\,\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big\}.}
@@ -227,9 +240,10 @@
 #' denominator \eqn{s_m^\ast}, using the priority order
 #' \eqn{s_{\mathrm{sd}} \rightarrow s_{\mathrm{iqr}} \rightarrow s_{\mathrm{mad}}}
 #' under the relative near-zero rule described above. If all candidate scales
-#' are near-zero, the function errors because the proportional-bias slope is
-#' not estimable on the observed data scale. The reported \code{beta_slope} and
-#' intercept are back-transformed to the original scale.
+#' are near-zero, the function errors because the paired means are
+#' near-degenerate and the proportional-bias slope is not estimable on the
+#' observed data scale. The reported \code{beta_slope} and intercept are
+#' back-transformed to the original scale.
 #'
 #' \eqn{\beta_1 \neq 0} indicates level-dependent (proportional)
 #' bias, where the difference between methods changes with the overall measurement level.
@@ -303,14 +317,16 @@
 #' AR(1) structure is applied only over contiguous time sequences within
 #' subject; gaps break contiguity and revert those positions to i.i.d.
 #' Separate estimation of residual and subject-level variance components
-#' requires at least two subjects overall and within-subject replication after
-#' pairing; otherwise the mixed model is treated as non-estimable and stops
-#' with an error. When the model is estimable but no finite positive pooled
-#' within-subject variance can be formed from the subject-level variances,
-#' \eqn{0.5\,v_{\mathrm{ref}}} is used only as a positive EM starting heuristic.
-#' Numerically, inverses use a positive-definite solver with adaptive ridge and
-#' pseudo-inverse fallback; variance updates are clamped and ratio-damped;
-#' \eqn{\rho} is clipped to \eqn{(-0.999,0.999)}.
+#' requires at least two subjects overall and enough within-subject replication
+#' after pairing; otherwise the model is not separately identifiable on the
+#' supplied data and the fit stops with an error. When the model is estimable
+#' but no finite positive pooled within-subject variance can be formed,
+#' \eqn{0.5\,v_{\mathrm{ref}}} is used only as a temporary positive EM starting
+#' heuristic. Variance updates are ratio-damped and clipped during the
+#' iterations, and if the EM/GLS routine still fails to reach admissible finite
+#' variance-component estimates the fit stops with an explicit convergence
+#' error rather than returning fallback final values. When used, \eqn{\rho} is
+#' clipped to \eqn{(-0.999,0.999)}.
 #' }
 #'
 #' @examples
@@ -417,7 +433,7 @@
 #'   response = data$y, subject = data$subject, method = data$method, time = data$time,
 #'   loa_multiplier = 1.96, conf_level = 0.95,
 #'   include_slope = FALSE,         # estimate proportional bias per pair
-#'   use_ar1 = TRUE # model AR(1) within-subject
+#'   use_ar1 = TRUE, ar1_rho = rho
 #' )
 #'
 #' # Matrices (row - column orientation)
@@ -427,7 +443,7 @@
 #' # Faceted BA scatter by pair
 #' plot(baN, smoother = "lm", facet_scales = "free_y")
 #'
-#' # -------- Two-method path (A vs B only) -----------------------------------
+#' # -------- Two-method AR(1) path (A vs B only) ------------------------------
 #' data_AB <- subset(data, method %in% c("A","B"))
 #' baAB <- ba_rm(
 #'   response = data_AB$y, subject = data_AB$subject,
@@ -615,11 +631,13 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   vc_subject   <- .make_named_matrix_ba(methods)
   vc_resid     <- .make_named_matrix_ba(methods)
   ar1_rho_mat   <- if (isTRUE(use_ar1)) .make_named_matrix_ba(methods) else NULL
+  residual_model <- matrix(NA_character_, mm, mm, dimnames = list(methods, methods))
   ar1_estimated <- if (isTRUE(use_ar1)) {
     z <- matrix(NA, mm, mm, dimnames = list(methods, methods))
     storage.mode(z) <- "logical"
     z
   } else NULL
+  ar1_simplified_pairs <- character()
 
   .recompose_pair <- function(fit) {
     list(
@@ -641,16 +659,9 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     sel <- m %in% c(lev_j, lev_k) & is.finite(y) & !is.na(s) & !is.na(t)
     if (!any(sel)) next
     m12 <- ifelse(m[sel] == lev_j, 1L, 2L)
-
-    fit <- bland_altman_repeated_em_ext_cpp(
-      y = y[sel], subject = s[sel], method = m12, time = t[sel],
-      include_slope = include_slope,
-      use_ar1 = use_ar1, ar1_rho = ar1_rho,
-      max_iter = max_iter, tol = tol, conf_level = conf_level,
-      loa_multiplier_arg = loa_multiplier
-    )
-    n_pair <- as.integer(fit$n_pairs)
+    n_pair <- .count_ba_rm_complete_pairs(y[sel], s[sel], m12, t[sel])
     n_mat[j,k] <- n_mat[k,j] <- n_pair
+
     if (n_pair < 2L) {
       bias[j,k]      <- bias[k,j]      <- NA_real_
       sd_loa[j,k]    <- sd_loa[k,j]    <- NA_real_
@@ -667,6 +678,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
       vc_subject[j,k] <- vc_subject[k,j] <- NA_real_
       vc_resid[j,k]   <- vc_resid[k,j]   <- NA_real_
+      residual_model[j,k] <- residual_model[k,j] <- NA_character_
 
       if (!is.null(slope_mat)) {
         slope_mat[j,k] <- slope_mat[k,j] <- NA_real_
@@ -682,6 +694,15 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       )
       next
     }
+
+    pair_label <- paste(lev_j, lev_k, sep = "-")
+    fit_info <- .fit_ba_rm_pair_model(
+      response = y[sel], subject = s[sel], method12 = m12, time = t[sel],
+      include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
+      max_iter = max_iter, tol = tol, conf_level = conf_level,
+      loa_multiplier = loa_multiplier, pair_label = pair_label
+    )
+    fit <- fit_info$fit
     comp <- .recompose_pair(fit)
 
     bias[j,k]      <- comp$md;  bias[k,j]      <- -comp$md
@@ -699,11 +720,15 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
     vc_subject[j,k] <- vc_subject[k,j] <- as.numeric(fit$sigma2_subject)
     vc_resid[j,k]   <- vc_resid[k,j]   <- as.numeric(fit$sigma2_resid)
+    residual_model[j,k] <- residual_model[k,j] <- fit_info$residual_model
 
     if (isTRUE(use_ar1)) {
-      ar1_rho_used <- as.numeric(fit$ar1_rho)
+      ar1_rho_used <- if (identical(fit_info$residual_model, "ar1")) as.numeric(fit$ar1_rho) else NA_real_
       ar1_rho_mat[j,k] <- ar1_rho_mat[k,j] <- ar1_rho_used
-      ar1_estimated[j,k] <- ar1_estimated[k,j] <- isTRUE(fit$ar1_estimated)
+      ar1_estimated[j,k] <- ar1_estimated[k,j] <- if (identical(fit_info$residual_model, "ar1")) isTRUE(fit$ar1_estimated) else NA
+      if (isTRUE(fit_info$ar1_simplified)) {
+        ar1_simplified_pairs <- c(ar1_simplified_pairs, pair_label)
+      }
     }
 
     if (!is.null(slope_mat)) {
@@ -737,6 +762,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     conf_level = conf_level,
     use_ar1 = use_ar1,
     ar1_rho = if (use_ar1) ar1_rho else NA_real_,
+    residual_model = residual_model,
     sigma2_subject = vc_subject,
     sigma2_resid   = vc_resid,
     ar1_rho_pair   = if (use_ar1) ar1_rho_mat else NULL,
@@ -746,10 +772,109 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   )
   ba_repeated <- structure(ba_repeated, class = c("ba_repeated_matrix","list"))
   attr(ba_repeated, "conf.level") <- conf_level
+  if (length(ar1_simplified_pairs)) {
+    warning(
+      sprintf(
+        "AR(1) was simplified to iid for pair(s): %s.",
+        paste(unique(ar1_simplified_pairs), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
   ba_repeated
 }
 
 
+
+
+#' @keywords internal
+.count_ba_rm_complete_pairs <- function(response, subject, method12, time) {
+  keep <- is.finite(response) & !is.na(subject) & !is.na(method12) & !is.na(time)
+  if (!any(keep)) {
+    return(0L)
+  }
+
+  dat <- data.frame(
+    subject = subject[keep],
+    method = method12[keep],
+    time = time[keep],
+    stringsAsFactors = FALSE
+  )
+  keys <- paste(dat$subject, dat$time, sep = "\r")
+  method_by_key <- split(dat$method, keys)
+  n_pairs <- sum(vapply(method_by_key, function(x) {
+    ux <- unique(x)
+    length(ux) >= 2L && all(c(1L, 2L) %in% ux)
+  }, logical(1)))
+  as.integer(n_pairs)
+}
+
+
+.ba_rm_is_ar1_convergence_failure <- function(cnd) {
+  grepl(
+    "failed to converge to admissible finite variance-component estimates",
+    conditionMessage(cnd),
+    fixed = TRUE
+  )
+}
+
+
+.fit_ba_rm_pair_model <- function(response, subject, method12, time,
+                                  include_slope, use_ar1, ar1_rho,
+                                  max_iter, tol, conf_level, loa_multiplier,
+                                  pair_label = NULL) {
+  run_backend <- function(use_ar1_fit, ar1_rho_fit = NA_real_) {
+    bland_altman_repeated_em_ext_cpp(
+      y = response, subject = subject, method = method12, time = time,
+      include_slope = include_slope,
+      use_ar1 = use_ar1_fit, ar1_rho = ar1_rho_fit,
+      max_iter = max_iter, tol = tol, conf_level = conf_level,
+      loa_multiplier_arg = loa_multiplier
+    )
+  }
+
+  if (!isTRUE(use_ar1)) {
+    return(list(
+      fit = run_backend(FALSE),
+      residual_model = "iid",
+      ar1_simplified = FALSE,
+      ar1_simplification_reason = NA_character_
+    ))
+  }
+
+  fit_ar1 <- tryCatch(
+    run_backend(TRUE, ar1_rho),
+    error = identity
+  )
+  if (!inherits(fit_ar1, "error")) {
+    return(list(
+      fit = fit_ar1,
+      residual_model = "ar1",
+      ar1_simplified = FALSE,
+      ar1_simplification_reason = NA_character_
+    ))
+  }
+
+  if (!.ba_rm_is_ar1_convergence_failure(fit_ar1)) {
+    stop(fit_ar1)
+  }
+
+  fit_iid <- tryCatch(
+    run_backend(FALSE),
+    error = identity
+  )
+  if (inherits(fit_iid, "error")) {
+    stop(fit_iid)
+  }
+
+  list(
+    fit = fit_iid,
+    residual_model = "iid",
+    ar1_simplified = TRUE,
+    ar1_simplification_reason = "ar1_fit_failed_then_iid_succeeded",
+    pair_label = pair_label
+  )
+}
 
 
 #' two-method helper
@@ -757,20 +882,22 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 .ba_rep_two_methods <- function(response, subject, method12, time,
                                 loa_multiplier, conf_level, include_slope,
                                 use_ar1, ar1_rho, max_iter, tol) {
-  fit <- bland_altman_repeated_em_ext_cpp(
-    y = response, subject = subject, method = method12, time = time,
-    include_slope = include_slope,
-    use_ar1 = use_ar1, ar1_rho = ar1_rho,
-    max_iter = max_iter, tol = tol, conf_level = conf_level,
-    loa_multiplier_arg = loa_multiplier
-  )
-  n_pairs <- as.integer(fit$n_pairs)
+  n_pairs <- .count_ba_rm_complete_pairs(response, subject, method12, time)
   if (n_pairs < 2L) {
     abort_bad_arg("response",
       message = "must provide at least two subject-time matched pairs after removing missing observations; only {n_pairs} available.",
       n_pairs = n_pairs
     )
   }
+
+  fit_info <- .fit_ba_rm_pair_model(
+    response = response, subject = subject, method12 = method12, time = time,
+    include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
+    max_iter = max_iter, tol = tol, conf_level = conf_level,
+    loa_multiplier = loa_multiplier
+  )
+  fit <- fit_info$fit
+  n_pairs <- as.integer(fit$n_pairs)
 
   md  <- as.numeric(fit$bias_mu0)
   sdL <- as.numeric(fit$sd_loa)
@@ -806,11 +933,18 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     sigma2_subject= as.numeric(fit$sigma2_subject),
     sigma2_resid  = as.numeric(fit$sigma2_resid),
     use_ar1       = use_ar1,
-    ar1_rho       = if (use_ar1) as.numeric(fit$ar1_rho) else NA_real_,
-    ar1_estimated = if (use_ar1) isTRUE(fit$ar1_estimated) else NA
+    residual_model = fit_info$residual_model,
+    ar1_rho       = if (identical(fit_info$residual_model, "ar1")) as.numeric(fit$ar1_rho) else NA_real_,
+    ar1_estimated = if (identical(fit_info$residual_model, "ar1")) isTRUE(fit$ar1_estimated) else NA
   )
   ba_repeated <- structure(ba_repeated, class = c("ba_repeated","list"))
   attr(ba_repeated, "conf.level") <- conf_level
+  if (isTRUE(fit_info$ar1_simplified)) {
+    warning(
+      "AR(1) was simplified to iid for this fit.",
+      call. = FALSE
+    )
+  }
   ba_repeated
 }
 
@@ -961,8 +1095,9 @@ summary.ba_repeated <- function(object,
   ba_repeated$sigma2_subject <- round(num_or_na_ba(object$sigma2_subject), digits)
   ba_repeated$sigma2_resid   <- round(num_or_na_ba(object$sigma2_resid),   digits)
   ba_repeated$use_ar1        <- isTRUE(object$use_ar1)
+  ba_repeated$residual_model <- if (!is.null(object$residual_model)) object$residual_model else if (isTRUE(object$use_ar1)) "ar1" else "iid"
   ba_repeated$ar1_rho        <- if (isTRUE(object$use_ar1)) round(num_or_na_ba(object$ar1_rho), digits) else NA_real_
-  ba_repeated$ar1_estimated  <- if (isTRUE(object$use_ar1)) isTRUE(object$ar1_estimated) else NA
+  ba_repeated$ar1_estimated  <- if (isTRUE(object$use_ar1)) object$ar1_estimated else NA
 
   ba_repeated <- structure(ba_repeated, class = c("summary.ba_repeated","data.frame"))
   attr(ba_repeated, "conf.level") <- cl
@@ -1013,9 +1148,12 @@ summary.ba_repeated_matrix <- function(object,
       row$up_lwr   <- round(object$loa_upper_ci_low[i, j],  ci_digits)
       row$up_upr   <- round(object$loa_upper_ci_high[i, j], ci_digits)
     }
+    if (!is.null(object$residual_model)) {
+      row$residual_model <- object$residual_model[i, j]
+    }
     if (isTRUE(object$use_ar1)) {
       rho_ij <- if (!is.null(object$ar1_rho_pair)) object$ar1_rho_pair[i, j] else NA_real_
-      est_ij <- if (!is.null(object$ar1_estimated)) isTRUE(object$ar1_estimated[i, j]) else NA
+      est_ij <- if (!is.null(object$ar1_estimated)) object$ar1_estimated[i, j] else NA
       row$ar1_rho       <- round(rho_ij, digits)
       row$ar1_estimated <- est_ij
     }
@@ -1040,7 +1178,8 @@ summary.ba_repeated_matrix <- function(object,
     ),
     list(
       title = "Model details",
-      cols = c("sigma2_subject", "sigma2_resid", "use_ar1",
+      cols = c("sigma2_subject", "sigma2_resid",
+               "residual_model",
                "ar1_rho", "ar1_estimated")
     )
   )

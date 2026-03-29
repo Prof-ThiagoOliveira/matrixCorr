@@ -140,6 +140,56 @@ test_that("Two-method BA with AR(1) honours supplied rho and recovers truth", {
   expect_equal(as.numeric(fit$critical.diff) / 2.0, truth_sd, tolerance = 0.09)
 })
 
+test_that("AR(1) requests simplify to iid with a warning when needed for some pairs", {
+  set.seed(123)
+  S <- 40L
+  Tm <- 50L
+  methods <- c("A", "B", "C")
+  rho <- 0.4
+
+  ar1_sim <- function(n, rho, sd = 1) {
+    z <- rnorm(n)
+    e <- numeric(n)
+    e[1] <- z[1] * sd
+    if (n > 1) for (t in 2:n) e[t] <- rho * e[t - 1] + sqrt(1 - rho^2) * z[t] * sd
+    e
+  }
+
+  subj <- rep(seq_len(S), each = Tm)
+  time <- rep(seq_len(Tm), times = S)
+  mu_s <- rnorm(S, 50, 7)
+  trend <- rep(seq_len(Tm) - mean(seq_len(Tm)), times = S) * 0.8
+  true <- mu_s[subj] + trend
+  bias <- c(A = 0, B = 1.5, C = -0.5)
+  prop <- c(A = 0.00, B = 0.00, C = 0.10)
+
+  make_method <- function(meth, sd = 3) {
+    e <- unlist(lapply(split(seq_along(time), subj),
+                       function(ix) ar1_sim(length(ix), rho, sd)))
+    y <- true * (1 + prop[meth]) + bias[meth] + e
+    data.frame(y = y, subject = subj, method = meth, time = time,
+               check.names = FALSE)
+  }
+
+  dat <- do.call(rbind, lapply(methods, make_method))
+  dat$method <- factor(dat$method, levels = methods)
+
+  expect_warning({
+    fit <- ba_rm(
+      response = dat$y, subject = dat$subject, method = dat$method, time = dat$time,
+      include_slope = FALSE, use_ar1 = TRUE, ar1_rho = rho
+    )
+  }, "AR\\(1\\) was simplified to iid")
+
+  expect_s3_class(fit, "ba_repeated_matrix")
+  simplified <- fit$residual_model == "iid"
+  expect_true(any(simplified, na.rm = TRUE))
+  expect_true(all(is.na(fit$ar1_rho_pair[simplified])))
+
+  sm <- summary(fit)
+  expect_true(all(c("residual_model", "ar1_rho") %in% names(sm)))
+})
+
 test_that("Edge case: constant difference gives zero sd_loa and degenerate LoA", {
   # Small jitter to avoid numerical singularities in optimisers; still near-zero SD
   set.seed(1)
@@ -178,12 +228,12 @@ test_that("ba_rm errors when pairing leaves insufficient within-subject replicat
       response = "y", subject = "subject", method = "method", time = "time",
       include_slope = TRUE, use_ar1 = FALSE
     ),
-    "The repeated-measures Bland-Altman mixed model is not estimable after pairing because within-subject replication is insufficient to separate the residual and subject-level variance components.",
+    "The repeated-measures Bland-Altman mixed model is not separately identifiable on the supplied paired data because there is insufficient within-subject replication after pairing to separate the residual and subject-level variance components.",
     fixed = TRUE
   )
 })
 
-test_that("Residual-variance fallback is used only as an EM starting heuristic", {
+test_that("Temporary positive residual-variance initialization remains only an EM starting heuristic", {
   S <- 10L
   Tm <- 2L
   subject_means <- seq(12, 30, length.out = S)
@@ -205,6 +255,9 @@ test_that("Residual-variance fallback is used only as an EM starting heuristic",
     "Residual-variance initialization used 0.5 \\* v_ref only as a positive EM starting heuristic",
     perl = TRUE
   )
+  expect_true(isTRUE(fit_cpp$converged))
+  expect_true(is.finite(as.numeric(fit_cpp$sigma2_subject)))
+  expect_true(is.finite(as.numeric(fit_cpp$sigma2_resid)))
 
   fit <- ba_rm(
     data = dat,
@@ -264,7 +317,7 @@ test_that("Slope fit is recovered when pair means have ordinary spread", {
 test_that("Slope scaling errors when paired means are fully degenerate", {
   expect_error(
     matrixCorr:::ba_rm_slope_scale_cpp(rep(25, 32)),
-    "Paired means have essentially no variation; the proportional-bias slope is not estimable on the observed data scale.",
+    "The proportional-bias slope is not estimable because the paired means are near-degenerate on the observed data scale.",
     fixed = TRUE
   )
 
@@ -282,9 +335,101 @@ test_that("Slope scaling errors when paired means are fully degenerate", {
       response = "y", subject = "subject", method = "method", time = "time",
       include_slope = TRUE, use_ar1 = FALSE
     ),
-    "Paired means have essentially no variation; the proportional-bias slope is not estimable on the observed data scale.",
+    "The proportional-bias slope is not estimable because the paired means are near-degenerate on the observed data scale.",
     fixed = TRUE
   )
+})
+
+test_that("Convergence failure raises an explicit EM/GLS error instead of returning rescue values", {
+  dat <- sim_two_method_known(S = 12L, Tm = 5L, mu = 0.9, sig_s = 0.7, sig_e = 0.4, seed = 812)
+  backend_msg <- "The repeated-measures Bland-Altman model is conceptually estimable on the supplied paired data, but the EM/GLS algorithm failed to converge to admissible finite variance-component estimates."
+
+  expect_error(
+    matrixCorr:::bland_altman_repeated_em_ext_cpp(
+      y = dat$y,
+      subject = dat$subject,
+      method = as.integer(dat$method == "M2") + 1L,
+      time = dat$time,
+      include_slope = FALSE,
+      use_ar1 = FALSE,
+      max_iter = 0L
+    ),
+    backend_msg,
+    fixed = TRUE
+  )
+
+  expect_error(
+    ba_rm(
+      data = dat,
+      response = "y", subject = "subject", method = "method", time = "time",
+      include_slope = FALSE, use_ar1 = FALSE, max_iter = 0L
+    ),
+    backend_msg,
+    fixed = TRUE
+  )
+})
+
+test_that("Ordinary repeated-measures cases still converge successfully", {
+  dat <- sim_two_method_known(S = 40L, Tm = 12L, mu = 1.1, sig_s = 1.0, sig_e = 0.8, seed = 913)
+
+  fit_cpp <- matrixCorr:::bland_altman_repeated_em_ext_cpp(
+    y = dat$y,
+    subject = dat$subject,
+    method = as.integer(dat$method == "M2") + 1L,
+    time = dat$time,
+    include_slope = FALSE,
+    use_ar1 = FALSE
+  )
+
+  expect_true(isTRUE(fit_cpp$converged))
+  expect_true(is.finite(as.numeric(fit_cpp$sigma2_subject)))
+  expect_true(is.finite(as.numeric(fit_cpp$sigma2_resid)))
+
+  fit <- ba_rm(
+    data = dat,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = FALSE, use_ar1 = FALSE
+  )
+
+  expect_s3_class(fit, "ba_repeated")
+  expect_true(is.finite(as.numeric(fit$mean.diffs)))
+  expect_true(is.finite(as.numeric(fit$critical.diff)))
+  expect_gt(as.numeric(fit$critical.diff), 0)
+  expect_true(is.finite(as.numeric(fit$sigma2_subject)))
+  expect_true(is.finite(as.numeric(fit$sigma2_resid)))
+})
+
+test_that("Ordinary slope cases still converge successfully", {
+  set.seed(914)
+  S <- 18L
+  Tm <- 4L
+  n <- S * Tm
+  means <- seq(10, 40, length.out = n)
+  subj_eff <- rep(rnorm(S, 0, 0.15), each = Tm)
+  slope_true <- 0.35
+  diffs <- 0.75 + slope_true * (means - mean(means)) + subj_eff + rnorm(n, 0, 0.04)
+  dat <- sim_two_method_from_pairs(means, diffs, S = S, Tm = Tm)
+
+  fit_cpp <- matrixCorr:::bland_altman_repeated_em_ext_cpp(
+    y = dat$y,
+    subject = dat$subject,
+    method = as.integer(dat$method == "B") + 1L,
+    time = dat$time,
+    include_slope = TRUE,
+    use_ar1 = FALSE
+  )
+
+  expect_true(isTRUE(fit_cpp$converged))
+  expect_true(is.finite(as.numeric(fit_cpp$beta_slope)))
+
+  fit <- ba_rm(
+    data = dat,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = TRUE, use_ar1 = FALSE
+  )
+
+  expect_true(is.finite(as.numeric(fit$beta_slope)))
+  expect_equal(as.numeric(fit$beta_slope), slope_true, tolerance = 0.05)
 })
 
 test_that("Pairwise matrix algebraic invariants hold", {
@@ -421,7 +566,7 @@ test_that("plot methods return a ggplot object and do not error", {
   # Matrix plot
   fit_mat <- ba_rm(
     data = dat, response = "y", subject = "subject", method = "method", time = "time",
-    include_slope = TRUE
+    include_slope = FALSE
   )
   p_mat <- plot(fit_mat, smoother = "lm", facet_scales = "free_y")
   expect_s3_class(p_mat, "ggplot")
@@ -493,10 +638,10 @@ test_that("two-method path requires at least two matched pairs", {
 
 test_that("pairwise matrix drops contrasts with <2 matched pairs", {
   dat <- data.frame(
-    y = c(1, 2, 3, 4, 5, 6),
-    subject = c(1L, 1L, 1L, 1L, 1L, 1L),
-    method = factor(c("A", "B", "C", "A", "B", "C"), levels = c("A", "B", "C")),
-    time = c(1L, 1L, 1L, 2L, NA, 2L),
+    y = c(1, 2, 3, 4, 5, 6, 7),
+    subject = c(1L, 1L, 1L, 1L, 1L, 2L, 2L),
+    method = factor(c("A", "B", "C", "A", "C", "A", "C"), levels = c("A", "B", "C")),
+    time = c(1L, 1L, 1L, 2L, 2L, 1L, 1L),
     check.names = FALSE
   )
 
@@ -508,4 +653,6 @@ test_that("pairwise matrix drops contrasts with <2 matched pairs", {
   expect_true(is.na(fit$sd_loa["A", "B"]))
   expect_true(is.na(fit$loa_lower["A", "B"]))
   expect_true(is.na(fit$loa_upper["A", "B"]))
+  expect_equal(fit$n["A", "C"], 3L)
+  expect_true(is.finite(fit$bias["A", "C"]))
 })

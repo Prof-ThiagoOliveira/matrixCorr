@@ -201,11 +201,15 @@ single difference after accounting for the random intercept (and AR(1), if used)
 \item \code{use_ar1} \emph{(scalar logical)}; whether AR(1) modeling was requested.
 \item \code{ar1_rho} \emph{(scalar numeric or \code{NA})}; user-supplied \eqn{\rho}
 if a single common value was provided; \code{NA} otherwise.
+\item \code{residual_model} (\eqn{m \times m}; optional); residual model
+actually used for each pair, either \code{"ar1"} or \code{"iid"}.
 \item \code{ar1_rho_pair} (\eqn{m \times m}; optional); \eqn{\rho} actually used per pair
-(may be estimated from data or equal to the supplied value). AR(1) blocks
-require consecutive integer time indices for each subject.
+(may be estimated from data or equal to the supplied value); \code{NA}
+where the final fit used iid residuals. AR(1) blocks require consecutive
+integer time indices for each subject.
 \item \code{ar1_estimated} (\eqn{m \times m}; optional logical); for each pair, \code{TRUE}
-if \eqn{\rho} was estimated internally; \code{FALSE} if supplied.
+if \eqn{\rho} was estimated internally; \code{FALSE} if supplied; \code{NA}
+where the final fit used iid residuals.
 
 \item \code{methods} \emph{(character)}; method level names; matrix rows/columns
 follow this order.
@@ -232,8 +236,8 @@ used by plotting helpers.
 \item \code{include_slope}, \code{beta_slope}; whether a proportional-bias slope
 was estimated and its value (if requested).
 \item \code{sigma2_subject}, \code{sigma2_resid}; variance components as above.
-\item \code{use_ar1}, \code{ar1_rho}, \code{ar1_estimated}; AR(1) settings/results
-as above (scalars for the two-method fit).
+\item \code{use_ar1}, \code{residual_model}, \code{ar1_rho}, \code{ar1_estimated};
+AR(1) settings/results as above (scalars for the two-method fit).
 }
 }
 \description{
@@ -304,7 +308,11 @@ estimated in two passes (i) fit the i.i.d. model; (ii) compute detrended
 residuals within each contiguous block (remove block-specific intercept and
 linear time), form lag-1 correlations, apply a small-sample bias adjustment
 \eqn{(1-\rho^2)/L}, pool with Fisher's \eqn{z} (weights \eqn{\approx L-3}),
-and refit with the pooled \eqn{\hat\rho}.
+and refit with the pooled \eqn{\hat\rho}. If AR(1) is requested for a pair
+but that AR(1)-based fit fails to converge while the corresponding i.i.d.
+repeated-measures fit converges, the pair is simplified to i.i.d. with a
+warning; in that case the reported \code{residual_model} is \code{"iid"}
+and the corresponding \code{ar1_rho} value is \code{NA}.
 }
 
 \subsection{Estimation by stabilised EM/GLS}{
@@ -315,31 +323,36 @@ regressor is centred by \eqn{\bar m} and scaled by an effective denominator
 the robust IQR scale \eqn{s_{\mathrm{iqr}} = \mathrm{IQR}(m_{it}) / 1.349},
 and the robust MAD scale
 \eqn{s_{\mathrm{mad}} = 1.4826\,\mathrm{MAD}(m_{it})}. Let
-\eqn{S_{\mathrm{ref}} = \max(s_{\mathrm{iqr}}, s_{\mathrm{mad}})} over the
-finite positive robust scales. A candidate scale is treated as near-zero if
+\eqn{S_{\mathrm{ref}} = \max(s_{\mathrm{sd}}, s_{\mathrm{iqr}}, s_{\mathrm{mad}})}
+over the finite positive candidate scales. A candidate scale is treated as near-zero if
 it is non-finite or \eqn{\le \tau S_{\mathrm{ref}}}, with
 \eqn{\tau \approx \sqrt{\epsilon_{\mathrm{mach}}}}. The backend uses
 \eqn{s_{\mathrm{sd}}} if it is not near-zero, otherwise
 \eqn{s_{\mathrm{iqr}}}, otherwise \eqn{s_{\mathrm{mad}}}; if all candidate
-scales are near-zero the proportional-bias slope is treated as not estimable
-on the observed data scale and the fit stops with an error. Estimates are
-back-transformed to the original units afterwards.
+scales are near-zero the paired means are treated as near-degenerate, the
+proportional-bias slope is not estimable on the observed data scale, and the
+fit stops with an error. Estimates are back-transformed to the original units
+afterwards.
 
-Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the marginal precision of
-\eqn{d_i} integrates \eqn{u_i} via a Woodbury/Sherman-Morrison identity:
+Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the algorithm alternates
+between a GLS update for the fixed effects and an EM update for the variance
+components. Integrating out \eqn{u_i} yields the marginal precision of
+\eqn{d_i} via a Woodbury/Sherman-Morrison identity:
 \deqn{\mathbf{V}_i^{-1} \;=\; \sigma_e^{-2}\mathbf{C}_i \;-\;
 \sigma_e^{-2}\mathbf{C}_i \mathbf{1}\,
 \Big(\sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big)^{-1}
 \mathbf{1}^\top \mathbf{C}_i \sigma_e^{-2}.}
-The GLS update is
+With \eqn{\mathbf{V}_i^{-1}} in hand, the fixed effects are updated by GLS:
 \deqn{\hat\beta \;=\; \Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} \mathbf{X}_i\Big)^{-1}
 \Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} d_i\Big).}
-Writing \eqn{r_i = d_i - \mathbf{X}_i\hat\beta}, the E-step gives the BLUP of
-the random intercept and its conditional second moment:
+Writing \eqn{r_i = d_i - \mathbf{X}_i\hat\beta}, the E-step summarizes the
+random intercept through its conditional mean (the BLUP) and conditional
+second moment:
 \deqn{M_i \;=\; \sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1},\qquad
 \tilde u_i \;=\; M_i^{-1}\,\sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i r_i,\qquad
 \mathbb{E}[u_i^2\mid y] \;=\; \tilde u_i^2 + M_i^{-1}.}
-The M-step updates the variance components by
+The M-step then refreshes the variance components by averaging these
+conditional quantities across subjects:
 \deqn{\hat\sigma_u^2 \;=\; \frac{1}{m}\sum_i \mathbb{E}[u_i^2\mid y], \qquad
 \hat\sigma_e^2 \;=\; \frac{1}{n}\sum_i \Big\{(r_i - \mathbf{1}\tilde u_i)^\top
 \mathbf{C}_i (r_i - \mathbf{1}\tilde u_i) + M_i^{-1}\,\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big\}.}
@@ -368,9 +381,10 @@ Internally \eqn{m_{it}} is centred by its mean and divided by the selected
 denominator \eqn{s_m^\ast}, using the priority order
 \eqn{s_{\mathrm{sd}} \rightarrow s_{\mathrm{iqr}} \rightarrow s_{\mathrm{mad}}}
 under the relative near-zero rule described above. If all candidate scales
-are near-zero, the function errors because the proportional-bias slope is
-not estimable on the observed data scale. The reported \code{beta_slope} and
-intercept are back-transformed to the original scale.
+are near-zero, the function errors because the paired means are
+near-degenerate and the proportional-bias slope is not estimable on the
+observed data scale. The reported \code{beta_slope} and intercept are
+back-transformed to the original scale.
 
 \eqn{\beta_1 \neq 0} indicates level-dependent (proportional)
 bias, where the difference between methods changes with the overall measurement level.
@@ -444,14 +458,16 @@ Pairs are formed only where both methods are observed at the same
 AR(1) structure is applied only over contiguous time sequences within
 subject; gaps break contiguity and revert those positions to i.i.d.
 Separate estimation of residual and subject-level variance components
-requires at least two subjects overall and within-subject replication after
-pairing; otherwise the mixed model is treated as non-estimable and stops
-with an error. When the model is estimable but no finite positive pooled
-within-subject variance can be formed from the subject-level variances,
-\eqn{0.5\,v_{\mathrm{ref}}} is used only as a positive EM starting heuristic.
-Numerically, inverses use a positive-definite solver with adaptive ridge and
-pseudo-inverse fallback; variance updates are clamped and ratio-damped;
-\eqn{\rho} is clipped to \eqn{(-0.999,0.999)}.
+requires at least two subjects overall and enough within-subject replication
+after pairing; otherwise the model is not separately identifiable on the
+supplied data and the fit stops with an error. When the model is estimable
+but no finite positive pooled within-subject variance can be formed,
+\eqn{0.5\,v_{\mathrm{ref}}} is used only as a temporary positive EM starting
+heuristic. Variance updates are ratio-damped and clipped during the
+iterations, and if the EM/GLS routine still fails to reach admissible finite
+variance-component estimates the fit stops with an explicit convergence
+error rather than returning fallback final values. When used, \eqn{\rho} is
+clipped to \eqn{(-0.999,0.999)}.
 }
 }
 \examples{
@@ -558,7 +574,7 @@ baN <- ba_rm(
   response = data$y, subject = data$subject, method = data$method, time = data$time,
   loa_multiplier = 1.96, conf_level = 0.95,
   include_slope = FALSE,         # estimate proportional bias per pair
-  use_ar1 = TRUE # model AR(1) within-subject
+  use_ar1 = TRUE, ar1_rho = rho
 )
 
 # Matrices (row - column orientation)
@@ -568,7 +584,7 @@ summary(baN)
 # Faceted BA scatter by pair
 plot(baN, smoother = "lm", facet_scales = "free_y")
 
-# -------- Two-method path (A vs B only) -----------------------------------
+# -------- Two-method AR(1) path (A vs B only) ------------------------------
 data_AB <- subset(data, method \%in\% c("A","B"))
 baAB <- ba_rm(
   response = data_AB$y, subject = data_AB$subject,
