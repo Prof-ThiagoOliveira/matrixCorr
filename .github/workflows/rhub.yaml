@@ -82,6 +82,7 @@ jobs:
             priority <- ip[, 'Priority']; \
             pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)]; \
             if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))"
+        shell: bash
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
@@ -122,6 +123,7 @@ jobs:
             priority <- ip[, 'Priority']; \
             pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)]; \
             if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))"
+        shell: bash
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}

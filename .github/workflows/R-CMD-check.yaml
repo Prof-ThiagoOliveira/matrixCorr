@@ -61,6 +61,7 @@ jobs:
             priority <- ip[, 'Priority']; \
             pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)]; \
             if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))"
+        shell: bash
 
       - uses: r-lib/actions/check-r-package@v2
         with:
