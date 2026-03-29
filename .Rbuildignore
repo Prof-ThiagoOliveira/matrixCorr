@@ -11,6 +11,7 @@
 ^CONTRIBUTING\.md$
 ^codemeta\.json$
 ^\.local-lib$
+^\.tmp_build$
 ^\.tmp_lib$
 ^\.tmp_install_lib$
 ^.*\.Rcheck$
