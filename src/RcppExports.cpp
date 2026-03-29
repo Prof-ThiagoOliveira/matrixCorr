@@ -137,6 +137,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ba_rm_slope_scale_cpp
+Rcpp::List ba_rm_slope_scale_cpp(Rcpp::NumericVector mean_values);
+RcppExport SEXP _matrixCorr_ba_rm_slope_scale_cpp(SEXP mean_valuesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mean_values(mean_valuesSEXP);
+    rcpp_result_gen = Rcpp::wrap(ba_rm_slope_scale_cpp(mean_values));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cccUst_rcpp
 List cccUst_rcpp(NumericVector y_vec, IntegerVector met_vec, IntegerVector time_vec, IntegerVector subj_vec, int nmet0, int nmet1, int ntime, int ns, NumericMatrix Dmat, double delta, double cl);
 RcppExport SEXP _matrixCorr_cccUst_rcpp(SEXP y_vecSEXP, SEXP met_vecSEXP, SEXP time_vecSEXP, SEXP subj_vecSEXP, SEXP nmet0SEXP, SEXP nmet1SEXP, SEXP ntimeSEXP, SEXP nsSEXP, SEXP DmatSEXP, SEXP deltaSEXP, SEXP clSEXP) {
@@ -639,6 +650,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 5},
     {"_matrixCorr_ba_openmp_threads", (DL_FUNC) &_matrixCorr_ba_openmp_threads, 0},
     {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 12},
+    {"_matrixCorr_ba_rm_slope_scale_cpp", (DL_FUNC) &_matrixCorr_ba_rm_slope_scale_cpp, 1},
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 11},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},

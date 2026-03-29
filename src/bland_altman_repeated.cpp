@@ -29,6 +29,118 @@ static inline bool all_finite(const arma::vec& v) {
   return true;
 }
 
+struct BaRMSlopeScaleInfo {
+  double s_sd = NA_REAL;
+  double s_iqr = NA_REAL;
+  double s_mad = NA_REAL;
+  double s_ref = NA_REAL;
+  double s_m_star = NA_REAL;
+  double tau = std::sqrt(std::numeric_limits<double>::epsilon());
+  std::string source;
+};
+
+static inline bool ba_rm_is_finite_positive(double x) {
+  return std::isfinite(x) && x > 0.0;
+}
+
+static std::vector<double> ba_rm_collect_finite_means(const std::vector<double>& mean_values) {
+  std::vector<double> sorted;
+  sorted.reserve(mean_values.size());
+  for (double value : mean_values) {
+    if (std::isfinite(value)) sorted.push_back(value);
+  }
+  return sorted;
+}
+
+static double ba_rm_iqr_scale(std::vector<double> sorted) {
+  if (sorted.empty()) return NA_REAL;
+  std::sort(sorted.begin(), sorted.end());
+  const double q1 = matrixCorr_detail::quantile_utils::quantile_sorted_std(sorted, 0.25);
+  const double q3 = matrixCorr_detail::quantile_utils::quantile_sorted_std(sorted, 0.75);
+  return (q3 - q1) / 1.349;
+}
+
+static double ba_rm_mad_scale(const std::vector<double>& sorted) {
+  if (sorted.empty()) return NA_REAL;
+  std::vector<double> med_work = sorted;
+  const double med = matrixCorr_detail::standardise_bicor::median_inplace(med_work);
+  if (!std::isfinite(med)) return NA_REAL;
+
+  std::vector<double> dev = sorted;
+  for (double& value : dev) value = std::fabs(value - med);
+  return 1.4826 * matrixCorr_detail::standardise_bicor::median_inplace(dev);
+}
+
+static bool ba_rm_is_near_zero(double scale, double s_ref, double tau) {
+  return !ba_rm_is_finite_positive(scale) ||
+    !ba_rm_is_finite_positive(s_ref) ||
+    scale <= tau * s_ref;
+}
+
+static BaRMSlopeScaleInfo ba_rm_choose_slope_scale(const std::vector<double>& mean_values,
+                                                   double tau = std::sqrt(std::numeric_limits<double>::epsilon())) {
+  BaRMSlopeScaleInfo info;
+  info.tau = tau;
+
+  std::vector<double> sorted = ba_rm_collect_finite_means(mean_values);
+  if (sorted.size() >= 2u) {
+    arma::vec mean_vec(sorted.data(), sorted.size(), /*copy_aux_mem*/ true);
+    info.s_sd = arma::stddev(mean_vec);
+  }
+
+  info.s_iqr = ba_rm_iqr_scale(sorted);
+  info.s_mad = ba_rm_mad_scale(sorted);
+
+  if (ba_rm_is_finite_positive(info.s_iqr)) info.s_ref = info.s_iqr;
+  if (ba_rm_is_finite_positive(info.s_mad)) {
+    info.s_ref = ba_rm_is_finite_positive(info.s_ref) ? std::max(info.s_ref, info.s_mad) : info.s_mad;
+  }
+
+  if (!ba_rm_is_near_zero(info.s_sd, info.s_ref, info.tau)) {
+    info.s_m_star = info.s_sd;
+    info.source = "sd";
+    return info;
+  }
+
+  if (!ba_rm_is_near_zero(info.s_iqr, info.s_ref, info.tau)) {
+    info.s_m_star = info.s_iqr;
+    info.source = "iqr";
+    return info;
+  }
+
+  if (!ba_rm_is_near_zero(info.s_mad, info.s_ref, info.tau)) {
+    info.s_m_star = info.s_mad;
+    info.source = "mad";
+    return info;
+  }
+
+  stop("Paired means have essentially no variation; the proportional-bias slope is not estimable on the observed data scale.");
+}
+
+// [[Rcpp::export]]
+Rcpp::List ba_rm_slope_scale_cpp(Rcpp::NumericVector mean_values) {
+  std::vector<double> mean_vec(mean_values.begin(), mean_values.end());
+  BaRMSlopeScaleInfo info = ba_rm_choose_slope_scale(mean_vec);
+  return Rcpp::List::create(
+    _["s_sd"] = info.s_sd,
+    _["s_iqr"] = info.s_iqr,
+    _["s_mad"] = info.s_mad,
+    _["s_ref"] = info.s_ref,
+    _["s_m_star"] = info.s_m_star,
+    _["tau"] = info.tau,
+    _["source"] = info.source
+  );
+}
+
+static double ba_rm_slope_scale_denom(const std::vector<double>& mean_values,
+                                      double tau = std::sqrt(std::numeric_limits<double>::epsilon())) {
+  return ba_rm_choose_slope_scale(mean_values, tau).s_m_star;
+}
+  if (values.empty()) return NA_REAL;
+  const double med = matrixCorr_detail::standardise_bicor::median_inplace(dev);
+  return matrixCorr_detail::standardise_bicor::median_inplace(values);
+}
+
 // ---- AR(1) block precision (STRICT contiguity: t_{k+1} = t_k + 1) ----
 static inline void ar1_precision_from_time_ba(const std::vector<int>& tim, double rho, mat& Cinv) {
   const int n = (int)tim.size();
@@ -208,23 +320,41 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   const double EPS  = std::max(1e-12, vref * 1e-12);
   const double MAXV = std::max(10.0 * vref, 1.0); // tight, model-based cap
 
-  // method-of-moments-ish init
+  // Method-of-moments-ish initialization.
+  // Separate residual vs subject-level variance estimation needs at least
+  // two subjects overall and some within-subject replication after pairing.
   std::vector<double> mu_s(m, 0.0); std::vector<int> cnt_s(m, 0);
   for (int i=0;i<m;++i) for (int r : S.rows[i]) { mu_s[i] += y[r]; ++cnt_s[i]; }
   int used_mu = 0; for (int i=0;i<m;++i) if (cnt_s[i]>0){ mu_s[i] /= (double)cnt_s[i]; ++used_mu; }
+  int n_replicated_subjects = 0;
+  for (int i=0;i<m;++i) if (cnt_s[i] >= 2) ++n_replicated_subjects;
+  if (used_mu < 2 || n_replicated_subjects < 1) {
+    stop("The repeated-measures Bland-Altman mixed model is not estimable after pairing because within-subject replication is insufficient to separate the residual and subject-level variance components.");
+  }
   arma::vec mu_s_vec(used_mu, arma::fill::zeros);
   { int k=0; for (int i=0;i<m;++i) if (cnt_s[i]>0) mu_s_vec[k++] = mu_s[i]; }
   double var_mu = (used_mu>=2 ? arma::var(mu_s_vec, /*unbiased*/true) : 0.0);
 
   double num_w = 0.0, den_w = 0.0;
+  bool se2_init_fallback = false;
   for (int i=0;i<m;++i) if ((int)S.rows[i].size() >= 2) {
     arma::vec yi(S.rows[i].size());
     for (size_t k=0;k<S.rows[i].size();++k) yi[k] = y[ S.rows[i][k] ];
     double vsi = arma::var(yi, /*unbiased*/true);
-    num_w += ((int)yi.n_elem - 1) * vsi;
-    den_w += ((int)yi.n_elem - 1);
+    if (std::isfinite(vsi) && vsi > 0.0) {
+      num_w += ((int)yi.n_elem - 1) * vsi;
+      den_w += ((int)yi.n_elem - 1);
+    }
   }
-  double se2_init = (den_w > 0.5 ? num_w / den_w : std::max(0.0, vref * 0.5));
+  // If the model is estimable but no finite positive pooled within-subject
+  // variance can be formed, use 0.5 * vref only as a positive EM start.
+  double se2_init = NA_REAL;
+  if (den_w > 0.5) {
+    se2_init = num_w / den_w;
+  } else {
+    se2_init_fallback = true;
+    se2_init = std::max(EPS, 0.5 * std::max(vref, 0.0));
+  }
   double su2_init = std::max(0.0, var_mu - se2_init / std::max(1.0, arma::mean(arma::conv_to<arma::vec>::from(cnt_s))));
   se2_init = nan_preserve(se2_init, EPS, MAXV);
   su2_init = nan_preserve(su2_init, 0.0, MAXV);
@@ -243,6 +373,10 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
 
   bool ok = true;
   int   it = 0;
+  std::string init_warn;
+  if (se2_init_fallback) {
+    init_warn = "Residual-variance initialization used 0.5 * v_ref only as a positive EM starting heuristic because no finite positive pooled within-subject variance could be formed after pairing.";
+  }
 
   for (it=0; it<max_iter; ++it) {
     // (1) Assemble XtViX, XtViy
@@ -342,9 +476,12 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   out.se_term = se_term;
   out.iter = it + 1;
   out.converged = ok;
+  out.warn = init_warn;
 
   if (!ok) {
-    out.warn = "EM did not converge cleanly; stabilized updates applied.";
+    out.warn = init_warn.empty() ?
+      "EM did not converge cleanly; stabilized updates applied." :
+      init_warn + " EM did not converge cleanly; stabilized updates applied.";
     if (!std::isfinite(out.su2) || !std::isfinite(out.se2)) {
       out.su2 = nan_preserve(std::max(0.0, 0.1 * vref), 0.0, MAXV);
       out.se2 = nan_preserve(std::max(0.0, 0.9 * vref), 1e-12, MAXV);
@@ -469,8 +606,9 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   if (include_slope) {
     x2 = vec(P.mean.data(), P.mean.size(), /*copy*/ false);
     x2_mean  = arma::mean(x2);
-    x2_scale = arma::stddev(x2);
-    if (!std::isfinite(x2_scale) || x2_scale < 1e-9) x2_scale = 1.0;
+    // Prefer sd(m); if it is near-zero relative to the robust reference scale,
+    // fall back to IQR(m)/1.349, then MAD(m), otherwise stop as non-estimable.
+    x2_scale = ba_rm_slope_scale_denom(P.mean);
     vec x2c = (x2 - x2_mean) / x2_scale;
     X.col(1) = x2c;
   }
@@ -507,7 +645,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   double beta0 = beta[0];
   double beta1 = (p==2 ? beta[1] : NA_REAL);
   if (include_slope) {
-    // Undo centering/scaling: beta1_orig = beta1 / x2_scale
+    // Undo centering/scale-aware standardisation: beta1_orig = beta1 / x2_scale
     // intercept_orig = beta0 - beta1_orig * x2_mean
     double beta1_orig = beta1 / x2_scale;
     double beta0_orig = beta0 - beta1_orig * x2_mean;

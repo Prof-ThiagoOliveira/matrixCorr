@@ -63,6 +63,22 @@ sim_multi_method <- function(S = 30L, Tm = 15L, seed = 11L) {
   out
 }
 
+sim_two_method_from_pairs <- function(means, diffs, S, Tm) {
+  stopifnot(length(means) == length(diffs), length(means) == S * Tm)
+  subj <- rep(seq_len(S), each = Tm)
+  time <- rep(seq_len(Tm), times = S)
+  y1 <- means - diffs / 2
+  y2 <- means + diffs / 2
+
+  data.frame(
+    y = c(y1, y2),
+    subject = rep(subj, 2),
+    method = factor(rep(c("A", "B"), each = length(y1)), levels = c("A", "B")),
+    time = rep(time, 2),
+    check.names = FALSE
+  )
+}
+
 test_that("two-method contrast matches factor order (method2 - method1)", {
   dat <- sim_two_method_known(S = 50, Tm = 20, mu = 1.0, sig_s = 1.2, sig_e = 1.5, seed = 1)
   dat$method <- factor(dat$method, levels = c("M1","M2"))
@@ -146,6 +162,129 @@ test_that("Edge case: constant difference gives zero sd_loa and degenerate LoA",
   expect_equal(as.numeric(fit$mean.diffs), mu, tolerance = 1e-3)
   expect_lt(as.numeric(fit$critical.diff), 1e-2)  # ~ zero
   expect_equal(as.numeric(fit$lower.limit), as.numeric(fit$upper.limit), tolerance = 1e-2)
+})
+
+test_that("ba_rm errors when pairing leaves insufficient within-subject replication", {
+  dat <- sim_two_method_from_pairs(
+    means = c(10, 20, 30),
+    diffs = c(0.2, 0.4, 0.6),
+    S = 3L,
+    Tm = 1L
+  )
+
+  expect_error(
+    ba_rm(
+      data = dat,
+      response = "y", subject = "subject", method = "method", time = "time",
+      include_slope = TRUE, use_ar1 = FALSE
+    ),
+    "The repeated-measures Bland-Altman mixed model is not estimable after pairing because within-subject replication is insufficient to separate the residual and subject-level variance components.",
+    fixed = TRUE
+  )
+})
+
+test_that("Residual-variance fallback is used only as an EM starting heuristic", {
+  S <- 10L
+  Tm <- 2L
+  subject_means <- seq(12, 30, length.out = S)
+  means <- rep(subject_means, each = Tm)
+  slope_true <- 0.25
+  diffs <- rep(0.8 + slope_true * (subject_means - mean(subject_means)), each = Tm)
+  dat <- sim_two_method_from_pairs(means, diffs, S = S, Tm = Tm)
+
+  fit_cpp <- matrixCorr:::bland_altman_repeated_em_ext_cpp(
+    y = dat$y,
+    subject = dat$subject,
+    method = as.integer(dat$method == "B") + 1L,
+    time = dat$time,
+    include_slope = TRUE,
+    use_ar1 = FALSE
+  )
+  expect_match(
+    fit_cpp$warn,
+    "Residual-variance initialization used 0.5 \\* v_ref only as a positive EM starting heuristic",
+    perl = TRUE
+  )
+
+  fit <- ba_rm(
+    data = dat,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = TRUE, use_ar1 = FALSE
+  )
+  expect_true(is.finite(as.numeric(fit$beta_slope)))
+  expect_equal(as.numeric(fit$beta_slope), slope_true, tolerance = 0.05)
+})
+
+test_that("Slope scale selection uses SD when paired means have ordinary spread", {
+  normal_m <- seq(1, 8)
+  info_normal <- matrixCorr:::ba_rm_slope_scale_cpp(normal_m)
+  expect_identical(info_normal$source, "sd")
+  expect_equal(info_normal$s_sd, stats::sd(normal_m), tolerance = 1e-15)
+  expect_equal(info_normal$s_iqr, stats::IQR(normal_m) / 1.349, tolerance = 1e-15)
+  expect_equal(
+    info_normal$s_mad,
+    stats::mad(normal_m, center = stats::median(normal_m), constant = 1.4826, na.rm = TRUE),
+    tolerance = 1e-15
+  )
+  expect_equal(info_normal$s_m_star, info_normal$s_sd, tolerance = 1e-15)
+})
+
+test_that("Slope scale selection falls back to IQR when SD is near zero", {
+  near_constant_m <- c(rep(0, 16), rep(5e-324, 16))
+  info_near <- matrixCorr:::ba_rm_slope_scale_cpp(near_constant_m)
+
+  expect_identical(info_near$source, "iqr")
+  expect_equal(info_near$s_sd, 0, tolerance = 0)
+  expect_true(is.finite(info_near$s_iqr) && info_near$s_iqr > 0)
+  expect_equal(info_near$s_m_star, info_near$s_iqr, tolerance = 0)
+  expect_true(info_near$s_sd <= info_near$tau * info_near$s_ref)
+})
+
+test_that("Slope fit is recovered when pair means have ordinary spread", {
+  set.seed(321)
+  S <- 18L
+  Tm <- 4L
+  n <- S * Tm
+  means <- seq(10, 40, length.out = n)
+  subj_eff <- rep(rnorm(S, 0, 0.15), each = Tm)
+  slope_true <- 0.35
+  diffs <- 0.75 + slope_true * (means - mean(means)) + subj_eff + rnorm(n, 0, 0.04)
+  dat <- sim_two_method_from_pairs(means, diffs, S = S, Tm = Tm)
+
+  fit <- ba_rm(
+    data = dat,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = TRUE, use_ar1 = FALSE
+  )
+
+  expect_true(is.finite(as.numeric(fit$beta_slope)))
+  expect_equal(as.numeric(fit$beta_slope), slope_true, tolerance = 0.05)
+})
+
+test_that("Slope scaling errors when paired means are fully degenerate", {
+  expect_error(
+    matrixCorr:::ba_rm_slope_scale_cpp(rep(25, 32)),
+    "Paired means have essentially no variation; the proportional-bias slope is not estimable on the observed data scale.",
+    fixed = TRUE
+  )
+
+  set.seed(323)
+  S <- 14L
+  Tm <- 4L
+  n <- S * Tm
+  means <- rep(25, n)
+  diffs <- 1.1 + rep(rnorm(S, 0, 0.12), each = Tm) + rnorm(n, 0, 0.03)
+  dat <- sim_two_method_from_pairs(means, diffs, S = S, Tm = Tm)
+
+  expect_error(
+    ba_rm(
+      data = dat,
+      response = "y", subject = "subject", method = "method", time = "time",
+      include_slope = TRUE, use_ar1 = FALSE
+    ),
+    "Paired means have essentially no variation; the proportional-bias slope is not estimable on the observed data scale.",
+    fixed = TRUE
+  )
 })
 
 test_that("Pairwise matrix algebraic invariants hold", {

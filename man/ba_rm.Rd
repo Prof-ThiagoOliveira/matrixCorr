@@ -310,8 +310,20 @@ and refit with the pooled \eqn{\hat\rho}.
 \subsection{Estimation by stabilised EM/GLS}{
 Let \eqn{\mathbf{X}_i} be the fixed-effects design for subject \eqn{i}
 (intercept, and optionally the pair mean). Internally, the pair mean
-regressor is centred and scaled before fitting to stabilise the slope;
-estimates are back-transformed to the original units afterwards.
+regressor is centred by \eqn{\bar m} and scaled by an effective denominator
+\eqn{s_m^\ast}. Candidate scales are the sample SD \eqn{s_{\mathrm{sd}}},
+the robust IQR scale \eqn{s_{\mathrm{iqr}} = \mathrm{IQR}(m_{it}) / 1.349},
+and the robust MAD scale
+\eqn{s_{\mathrm{mad}} = 1.4826\,\mathrm{MAD}(m_{it})}. Let
+\eqn{S_{\mathrm{ref}} = \max(s_{\mathrm{iqr}}, s_{\mathrm{mad}})} over the
+finite positive robust scales. A candidate scale is treated as near-zero if
+it is non-finite or \eqn{\le \tau S_{\mathrm{ref}}}, with
+\eqn{\tau \approx \sqrt{\epsilon_{\mathrm{mach}}}}. The backend uses
+\eqn{s_{\mathrm{sd}}} if it is not near-zero, otherwise
+\eqn{s_{\mathrm{iqr}}}, otherwise \eqn{s_{\mathrm{mad}}}; if all candidate
+scales are near-zero the proportional-bias slope is treated as not estimable
+on the observed data scale and the fit stops with an error. Estimates are
+back-transformed to the original units afterwards.
 
 Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the marginal precision of
 \eqn{d_i} integrates \eqn{u_i} via a Woodbury/Sherman-Morrison identity:
@@ -344,16 +356,21 @@ differences,
 which is robust to unbalanced replicate counts (\eqn{n_i}) and coincides with
 the GLS intercept when subjects contribute equally. If \code{include_slope =
 TRUE}, the proportional-bias slope is estimated against the pair mean
-\eqn{m_{it}}; internally \eqn{m_{it}} is centred and scaled and the slope is
-returned on the original scale.
+\eqn{m_{it}}; internally \eqn{m_{it}} is centred by \eqn{\bar m} and scaled
+by the selected \eqn{s_m^\ast}, and the slope is returned on the original scale.
 }
 
 \subsection{Proportional bias slope (\code{include_slope})}{
 When \code{include_slope = TRUE}, the model augments the mean difference with
 the pair mean \eqn{m_{it} = \tfrac{1}{2}(y_{itb}+y_{ita})}:
 \deqn{d_{it} = \beta_0 + \beta_1 m_{it} + u_i + \varepsilon_{it}.}
-Internally \eqn{m_{it}} is centred and scaled for numerical stability; the
-reported \code{beta_slope} and intercept are back-transformed to the original scale.
+Internally \eqn{m_{it}} is centred by its mean and divided by the selected
+denominator \eqn{s_m^\ast}, using the priority order
+\eqn{s_{\mathrm{sd}} \rightarrow s_{\mathrm{iqr}} \rightarrow s_{\mathrm{mad}}}
+under the relative near-zero rule described above. If all candidate scales
+are near-zero, the function errors because the proportional-bias slope is
+not estimable on the observed data scale. The reported \code{beta_slope} and
+intercept are back-transformed to the original scale.
 
 \eqn{\beta_1 \neq 0} indicates level-dependent (proportional)
 bias, where the difference between methods changes with the overall measurement level.
@@ -426,6 +443,12 @@ Pairs are formed only where both methods are observed at the same
 \code{subject} and \code{time}; other records do not influence that pair.
 AR(1) structure is applied only over contiguous time sequences within
 subject; gaps break contiguity and revert those positions to i.i.d.
+Separate estimation of residual and subject-level variance components
+requires at least two subjects overall and within-subject replication after
+pairing; otherwise the mixed model is treated as non-estimable and stops
+with an error. When the model is estimable but no finite positive pooled
+within-subject variance can be formed from the subject-level variances,
+\eqn{0.5\,v_{\mathrm{ref}}} is used only as a positive EM starting heuristic.
 Numerically, inverses use a positive-definite solver with adaptive ridge and
 pseudo-inverse fallback; variance updates are clamped and ratio-damped;
 \eqn{\rho} is clipped to \eqn{(-0.999,0.999)}.
