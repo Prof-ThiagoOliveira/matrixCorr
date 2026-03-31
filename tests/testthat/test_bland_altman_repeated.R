@@ -140,6 +140,38 @@ test_that("Two-method BA with AR(1) honours supplied rho and recovers truth", {
   expect_equal(as.numeric(fit$critical.diff) / 2.0, truth_sd, tolerance = 0.09)
 })
 
+test_that("Two-method BA estimates positive AR(1) dependence on short panels", {
+  skip_on_cran()
+
+  mu <- 0.35
+  sig_s <- sqrt(0.28^2 + 0.38^2)
+  sig_e <- sqrt(0.45^2 + 0.60^2)
+  rho <- 0.60
+  dat <- sim_two_method_known(
+    S = 120,
+    Tm = 5,
+    mu = mu,
+    sig_s = sig_s,
+    sig_e = sig_e,
+    rho = rho,
+    seed = 20260401L
+  )
+
+  fit <- ba_rm(
+    data = dat,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = FALSE, use_ar1 = TRUE, ar1_rho = NA_real_,
+    loa_multiplier = 1.96, conf_level = 0.95
+  )
+
+  expect_true(isTRUE(fit$use_ar1))
+  expect_true(isTRUE(fit$ar1_estimated))
+  expect_gt(as.numeric(fit$ar1_rho), 0.30)
+  expect_equal(as.numeric(fit$ar1_rho), rho, tolerance = 0.20)
+  expect_equal(as.numeric(fit$mean.diffs), mu, tolerance = 0.08)
+  expect_equal(as.numeric(fit$critical.diff) / 1.96, sqrt(sig_s^2 + sig_e^2), tolerance = 0.08)
+})
+
 test_that("AR(1) requests simplify to iid with a warning when needed for some pairs", {
   set.seed(123)
   S <- 40L

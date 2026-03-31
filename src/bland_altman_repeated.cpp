@@ -18,6 +18,7 @@ using namespace arma;
 // ---- use selected helpers from matrixCorr_detail ----
 using matrixCorr_detail::clamp_policy::nan_preserve;
 using matrixCorr_detail::linalg::inv_sympd_safe;
+using matrixCorr_detail::linalg::logdet_spd_safe;
 using matrixCorr_detail::linalg::solve_sympd_safe;
 using matrixCorr_detail::moments::sample_var;
 using matrixCorr_detail::moments::sample_cov;
@@ -516,6 +517,25 @@ static inline double bias_subject_equal_weight(const std::vector<double>& d,
   return acc / (double)used;
 }
 
+static inline double loa_var_subject_equal_weight(const arma::vec& d,
+                                                  const BySubjBA& S,
+                                                  double mu0) {
+  double acc = 0.0;
+  int used = 0;
+  for (const auto& rows_i : S.rows) {
+    if (rows_i.empty()) continue;
+    double ss_i = 0.0;
+    for (int row : rows_i) {
+      const double dev = d[row] - mu0;
+      ss_i += dev * dev;
+    }
+    acc += ss_i / static_cast<double>(rows_i.size());
+    ++used;
+  }
+  if (used == 0) stop("No data per subject to compute LoA variance.");
+  return acc / static_cast<double>(used);
+}
+
 // ----- AR(1) rho from residuals (robust for short L)
 static double estimate_rho_moments(const FitOut& fit,
                                    const arma::mat& X,
@@ -578,6 +598,138 @@ static double estimate_rho_moments(const FitOut& fit,
   return nan_preserve(std::tanh(z_sum / w_sum), -0.999, 0.999);
 }
 
+static double ba_rm_reml_loglik(const arma::mat& X,
+                                const arma::vec& y,
+                                const std::vector<Precomp>& PC,
+                                const FitOut& fit) {
+  const int p = X.n_cols;
+  const int n = y.n_rows;
+  const double eps = 1e-12;
+  const double su2 = std::max(fit.su2, 0.0);
+  const double se2 = std::max(fit.se2, eps);
+  const double inv_su = 1.0 / std::max(su2, eps);
+  const double inv_se = 1.0 / se2;
+
+  arma::mat XtViX(p, p, arma::fill::zeros);
+  arma::vec XtViy(p, arma::fill::zeros);
+  double sum_logdetV = 0.0;
+  double yViY = 0.0;
+
+  for (const Precomp& P : PC) {
+    if (P.n_i == 0) continue;
+
+    const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
+    const double Minv = 1.0 / M;
+
+    const arma::vec S_ux = inv_se * P.UTCX;
+    const arma::vec XTRinvY = inv_se * P.XTCy;
+    const arma::mat XTRinvX = inv_se * P.XTCX;
+    const double S_uy = inv_se * P.UTCy;
+    const double Z_y = Minv * S_uy;
+    const arma::vec Z_X = Minv * S_ux;
+
+    XtViy += XTRinvY - S_ux * Z_y;
+    XtViX += XTRinvX - S_ux * Z_X.t();
+
+    const arma::vec r_i = P.y_i - P.X_i * fit.beta;
+    const double UTCr = P.UTCy - arma::dot(P.UTCX, fit.beta);
+    const double rTCr = arma::as_scalar(r_i.t() * (P.Cinv * r_i));
+    const double quad = inv_se * rTCr - (inv_se * inv_se) * UTCr * UTCr * Minv;
+    if (!std::isfinite(quad)) return -std::numeric_limits<double>::infinity();
+    yViY += quad;
+
+    const double logdetV_i =
+      P.n_i * std::log(se2) -
+      logdet_spd_safe(P.Cinv) +
+      std::log1p((su2 / se2) * P.UCU);
+    if (!std::isfinite(logdetV_i)) return -std::numeric_limits<double>::infinity();
+    sum_logdetV += logdetV_i;
+  }
+
+  arma::mat XtViX_inv;
+  if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) {
+    return -std::numeric_limits<double>::infinity();
+  }
+
+  const double logdetXtViX = logdet_spd_safe(XtViX);
+  const double yPy = yViY - arma::as_scalar(XtViy.t() * (XtViX_inv * XtViy));
+  if (!std::isfinite(logdetXtViX) || !std::isfinite(yPy)) {
+    return -std::numeric_limits<double>::infinity();
+  }
+
+  const double two_pi = 2.0 * M_PI;
+  return -0.5 * (
+    (static_cast<double>(n) - static_cast<double>(p)) * std::log(two_pi) +
+    sum_logdetV +
+    logdetXtViX +
+    yPy
+  );
+}
+
+static double estimate_rho_profile(const arma::mat& X,
+                                   const arma::vec& y,
+                                   const BySubjBA& S,
+                                   int max_iter,
+                                   double tol,
+                                   double rho_seed) {
+  auto eval_rho = [&](double rho, double& loglik_out) -> bool {
+    try {
+      const double rho_use = nan_preserve(rho, -0.95, 0.95);
+      std::vector<Precomp> PC = precompute_blocks(X, y, S, /*use_ar1*/ true, rho_use);
+      FitOut fit = fit_diff_em(X, y, S, PC, max_iter, tol);
+      const double loglik = ba_rm_reml_loglik(X, y, PC, fit);
+      if (!std::isfinite(loglik)) return false;
+      loglik_out = loglik;
+      return true;
+    } catch (...) {
+      return false;
+    }
+  };
+
+  std::vector<double> candidates;
+  for (int k = 0; k <= 8; ++k) {
+    candidates.push_back(-0.8 + 0.2 * static_cast<double>(k));
+  }
+  if (std::isfinite(rho_seed)) {
+    candidates.push_back(nan_preserve(rho_seed, -0.95, 0.95));
+  }
+
+  double best_rho = 0.0;
+  double best_loglik = -std::numeric_limits<double>::infinity();
+
+  auto scan_candidates = [&](const std::vector<double>& grid) {
+    for (double rho : grid) {
+      double loglik = NA_REAL;
+      if (!eval_rho(rho, loglik)) continue;
+      if (loglik > best_loglik) {
+        best_loglik = loglik;
+        best_rho = rho;
+      }
+    }
+  };
+
+  scan_candidates(candidates);
+
+  double half_width = 0.2;
+  for (int pass = 0; pass < 2; ++pass) {
+    const double lo = std::max(-0.95, best_rho - half_width);
+    const double hi = std::min( 0.95, best_rho + half_width);
+    std::vector<double> grid;
+    grid.reserve(7);
+    if (hi <= lo) {
+      grid.push_back(lo);
+    } else {
+      for (int k = 0; k <= 6; ++k) {
+        grid.push_back(lo + (hi - lo) * static_cast<double>(k) / 6.0);
+      }
+    }
+    scan_candidates(grid);
+    half_width /= 3.0;
+  }
+
+  return nan_preserve(best_rho, -0.95, 0.95);
+}
+
 
 // [[Rcpp::export]]
 Rcpp::List bland_altman_repeated_em_ext_cpp(
@@ -636,8 +788,10 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     std::vector<Precomp> PC_iid = precompute_blocks(X, ydiff, S, /*use_ar1*/false, 0.0);
     fit = fit_diff_em(X, ydiff, S, PC_iid, max_iter, tol);
 
-    // Estimate rho from residuals
-    double rho_hat = estimate_rho_moments(fit, X, ydiff, S, PC_iid);
+    // Estimate rho from a short-series-stable profile search, seeded by a
+    // lag-1 moments estimate from the iid fit.
+    double rho_mom = estimate_rho_moments(fit, X, ydiff, S, PC_iid);
+    double rho_hat = estimate_rho_profile(X, ydiff, S, max_iter, tol, rho_mom);
     rho_used = rho_hat;
     ar1_estimated = true;
 
@@ -678,7 +832,10 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     loa_multiplier = z;
   }
 
-  const double V_loa = nan_preserve(su2 + se2, 0.0, 1e12);
+  // Point-estimate the marginal variance of a single new paired difference
+  // directly on the paired-difference scale, while retaining the fitted
+  // variance components as model diagnostics and for CI approximations.
+  const double V_loa = nan_preserve(loa_var_subject_equal_weight(ydiff, S, mu0), 0.0, 1e12);
   const double sd_loa = std::sqrt(V_loa);
   const double loa_lower = mu0 - loa_multiplier * sd_loa;
   const double loa_upper = mu0 + loa_multiplier * sd_loa;
