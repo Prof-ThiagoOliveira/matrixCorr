@@ -60,37 +60,51 @@ ba_rm(
 )
 }
 \arguments{
-\item{data}{Optional \code{data.frame}/\code{data.table} containing required columns.}
+\item{data}{Optional data frame-like object. If supplied, \code{response},
+\code{subject}, \code{method}, and \code{time} may be column names. Objects not already
+inheriting from \code{data.frame} are first coerced with \code{as.data.frame()}.}
 
-\item{response}{Numeric vector (stacked outcomes) \strong{or} a single character
-string giving the column name in \code{data}.}
+\item{response}{Numeric response vector, or a single character string naming
+the response column in \code{data}.}
 
-\item{subject}{Subject ID (integer/factor/numeric) \strong{or} a single character
-string giving the column name in \code{data}.}
+\item{subject}{Subject identifier vector (integer, numeric, or factor), or a
+single character string naming the subject column in \code{data}.}
 
-\item{method}{Method label (factor/character/integer; N >= 2 levels) \strong{or}
-a single character string giving the column name in \code{data}.}
+\item{method}{Method label vector (character, factor, integer, or numeric), or
+a single character string naming the method column in \code{data}. At least two
+distinct method levels are required.}
 
-\item{time}{Integer/numeric replicate/time index (pairs within subject) \strong{or}
-a single character string giving the column name in \code{data}.}
+\item{time}{Replicate/time index vector (integer or numeric), or a single
+character string naming the time column in \code{data}. Values are coerced to
+integer before pairing and before AR(1) contiguity checks.}
 
-\item{loa_multiplier}{Positive scalar; LoA multiple of SD (default 1.96).}
+\item{loa_multiplier}{Positive scalar giving the SD multiplier used to form
+the limits of agreement. Default is \code{1.96}. In the exported \code{ba_rm()}
+interface this default is fixed and does not depend on \code{conf_level}.}
 
-\item{conf_level}{Confidence level for CIs (default 0.95).}
+\item{conf_level}{Confidence level for Wald confidence intervals for the
+reported bias and both LoA endpoints. Must lie in \verb{(0, 1)}. Default \code{0.95}.}
 
-\item{include_slope}{Logical. If \code{TRUE}, the model includes the pair mean
-as a fixed effect and estimates a proportional-bias slope.
-Look at details for deeper information. We recommend fit both with and without the slope. If \eqn{\beta_1} is
-materially non-zero over a wide level range, consider a scale transformation
-(e.g., log or percent-logit) and re-fit without the slope.}
+\item{include_slope}{Logical. If \code{TRUE}, the model includes the paired mean as
+a fixed effect and estimates a proportional-bias slope. The reported BA
+centre remains the fitted mean difference at the centred reference paired
+mean used internally by the backend; the returned LoA remain horizontal
+bands and are not regression-adjusted curves.}
 
-\item{use_ar1}{Logical; AR(1) within-subject residual correlation.}
+\item{use_ar1}{Logical. If \code{TRUE}, request an AR(1) residual structure within
+subject over contiguous integer time blocks.}
 
-\item{ar1_rho}{AR(1) parameter (|rho|<1).}
+\item{ar1_rho}{Optional AR(1) parameter. Must satisfy \code{abs(ar1_rho) < 0.999}
+when supplied. If \code{NA} and \code{use_ar1 = TRUE}, the backend estimates \code{rho}
+separately for each analysed pair.}
 
-\item{max_iter, tol}{EM control for the backend (defaults 200, 1e-6).}
+\item{max_iter}{Maximum number of EM/GLS iterations used by the backend.}
 
-\item{verbose}{Logical; print brief progress.}
+\item{tol}{Convergence tolerance for the backend EM/GLS iterations.}
+
+\item{verbose}{Logical. If \code{TRUE}, print progress for the pairwise
+\eqn{\ge 3}-method path. It has no material effect in the exactly-two-method
+path.}
 
 \item{x}{A \code{"ba_repeated_matrix"} object.}
 
@@ -164,310 +178,339 @@ across facets. Passed to \code{ggplot2::facet_wrap(scales = ...)}.}
 }
 \value{
 Either a \code{"ba_repeated"} object (exactly two methods) or a
-\code{"ba_repeated_matrix"} object (pairwise results when \eqn{\ge}3 methods).
+\code{"ba_repeated_matrix"} object (\eqn{\ge 3} methods).
 
-\strong{If \code{"ba_repeated_matrix"} (N\eqn{\ge}3 methods)}, outputs are:
+\strong{If exactly two methods are supplied}, the returned
+\code{"ba_repeated"} object is a list with components:
 \itemize{
-\item \code{bias} \eqn{(m \times m)}; estimated mean difference (row - column).
-Diagonal is \code{NA}.
-\item \code{sd_loa} \eqn{(m \times m)}; estimated SD of a \emph{single new} paired
-difference for the (row, column) methods, accounting for the random
-subject intercept and (if enabled) AR(1) correlation.
-\item \code{loa_lower}, \code{loa_upper} \eqn{(m \times m)}; limits of agreement
-for a single measurement pair, computed as
-\eqn{\mathrm{bias} \pm \mathrm{loa\_multiplier}\times \mathrm{sd\_loa}}.
-Signs follow the row - column convention
-(e.g., \code{loa_lower[j,i] = -loa_upper[i,j]}).
-\item \code{width} \eqn{(m \times m)}; LoA width,
-\code{loa_upper - loa_lower} (= \code{2 * loa_multiplier * sd_loa}).
-\item \code{n} \eqn{(m \times m)}; number of subject-time pairs used in each
-pairwise BA (complete cases where both methods are present).
-
-\item \strong{CI matrices at nominal \code{conf_level}} (delta method):
-\itemize{
-\item \code{mean_ci_low}, \code{mean_ci_high}; CI for the bias.
-\item \code{loa_lower_ci_low}, \code{loa_lower_ci_high}; CI for the lower LoA.
-\item \code{loa_upper_ci_low}, \code{loa_upper_ci_high}; CI for the upper LoA.
+\item \code{means}: numeric vector of paired means
+\eqn{(y_1 + y_2)/2} used for plotting helpers.
+\item \code{diffs}: numeric vector of paired differences
+\eqn{y_2 - y_1} used for plotting helpers.
+\item \code{based.on}: integer number of complete subject-time pairs used.
+\item \code{mean.diffs}: scalar model-based BA centre. When
+\code{include_slope = FALSE}, this is the fitted intercept of the paired-
+difference model. When \code{include_slope = TRUE}, this is the fitted mean
+difference at the centred reference paired mean used internally by the
+backend.
+\item \code{lower.limit}, \code{upper.limit}: scalar limits of agreement,
+computed as
+\eqn{\mu_0 \pm \texttt{loa\_multiplier}\sqrt{\sigma_u^2 + \sigma_e^2}}.
+\item \code{lines}: named numeric vector with entries \code{lower}, \code{mean}, and
+\code{upper}.
+\item \code{CI.lines}: named numeric vector containing Wald confidence
+interval bounds for the bias and both LoA endpoints:
+\code{mean.diff.ci.lower}, \code{mean.diff.ci.upper},
+\code{lower.limit.ci.lower}, \code{lower.limit.ci.upper},
+\code{upper.limit.ci.lower}, \code{upper.limit.ci.upper}.
+\item \code{loa_multiplier}: scalar LoA multiplier actually used.
+\item \code{critical.diff}: scalar LoA half-width
+\eqn{\texttt{loa\_multiplier} \times \texttt{sd\_loa}}.
+\item \code{include_slope}: logical, copied from the call.
+\item \code{beta_slope}: proportional-bias slope on the original paired-mean
+scale when \code{include_slope = TRUE}; otherwise \code{NA}.
+\item \code{sigma2_subject}: estimated variance of the subject-level random
+intercept on paired differences.
+\item \code{sigma2_resid}: estimated residual variance on paired differences.
+\item \code{use_ar1}: logical, copied from the call.
+\item \code{residual_model}: either \code{"ar1"} or \code{"iid"}, indicating the final
+residual structure actually used.
+\item \code{ar1_rho}: AR(1) correlation actually used in the final fit when
+\code{residual_model == "ar1"}; otherwise \code{NA}.
+\item \code{ar1_estimated}: logical indicating whether \code{ar1_rho} was
+estimated internally (\code{TRUE}) or supplied by the user (\code{FALSE}) when the
+final residual model is AR(1); otherwise \code{NA}.
+\item \code{data_long}: stored long-format data frame used downstream for
+plotting and reconstruction. It uses canonical internal column names
+\code{.response}, \code{.subject}, \code{.method}, and \code{.time}.
+\item \code{mapping}: named list identifying those stored canonical column
+names for \code{response}, \code{subject}, \code{method}, and \code{time}.
 }
 
-\item \code{slope} (\eqn{m \times m}; optional); proportional-bias slope (difference
-vs pair mean) when \code{include_slope = TRUE}.
+The confidence level is stored as \code{attr(x, "conf.level")}.
 
-\item \code{sigma2_subject} \eqn{(m \times m)}; estimated variance of the
-subject-level random intercept (on differences).
-\item \code{sigma2_resid} \eqn{(m \times m)}; estimated residual variance of a
-single difference after accounting for the random intercept (and AR(1), if used).
-
-\item \code{use_ar1} \emph{(scalar logical)}; whether AR(1) modeling was requested.
-\item \code{ar1_rho} \emph{(scalar numeric or \code{NA})}; user-supplied \eqn{\rho}
-if a single common value was provided; \code{NA} otherwise.
-\item \code{residual_model} (\eqn{m \times m}; optional); residual model
-actually used for each pair, either \code{"ar1"} or \code{"iid"}.
-\item \code{ar1_rho_pair} (\eqn{m \times m}; optional); \eqn{\rho} actually used per pair
-(may be estimated from data or equal to the supplied value); \code{NA}
-where the final fit used iid residuals. AR(1) blocks require consecutive
-integer time indices for each subject.
-\item \code{ar1_estimated} (\eqn{m \times m}; optional logical); for each pair, \code{TRUE}
-if \eqn{\rho} was estimated internally; \code{FALSE} if supplied; \code{NA}
-where the final fit used iid residuals.
-
-\item \code{methods} \emph{(character)}; method level names; matrix rows/columns
-follow this order.
-\item \code{loa_multiplier} \emph{(scalar)}; LoA multiplier used (default \code{1.96}).
-\item \code{conf_level} \emph{(scalar)}; nominal confidence level used for CIs.
-
-\item \code{data_long} \emph{(data.frame)}; the long data used for fitting
-(\code{response}, \code{subject}, \code{method}, \code{time}). Included to
-facilitate plotting/reproducibility; not required for summary methods.
-}
-
-\strong{If \code{"ba_repeated"} (exactly two methods)}, outputs are:
+\strong{If \eqn{\ge 3} methods are supplied}, the returned
+\code{"ba_repeated_matrix"} object is a list with components:
 \itemize{
-\item \code{mean.diffs} \emph{(scalar)}; estimated bias (method 2 - method 1).
-\item \code{lower.limit}, \code{upper.limit} \emph{(scalars)}; LoA
-\eqn{\mu \pm \mathrm{loa\_multiplier}\times \mathrm{SD}} for a single new pair.
-\item \code{critical.diff} \emph{(scalar)}; \code{loa_multiplier * SD}; LoA half-width.
-\item \code{loa_multiplier}, \code{conf_level} \emph{(scalars)}; as above.
-\item \code{CI.lines} \emph{(named numeric)}; CI bounds for bias and both LoA
-(\code{*.ci.lower}, \code{*.ci.upper}) at \code{conf_level}.
-\item \code{means}, \code{diffs} \emph{(vectors)}; per-pair means and differences
-used by plotting helpers.
-\item \code{based.on} \emph{(integer)}; number of subject-time pairs used.
-\item \code{include_slope}, \code{beta_slope}; whether a proportional-bias slope
-was estimated and its value (if requested).
-\item \code{sigma2_subject}, \code{sigma2_resid}; variance components as above.
-\item \code{use_ar1}, \code{residual_model}, \code{ar1_rho}, \code{ar1_estimated};
-AR(1) settings/results as above (scalars for the two-method fit).
+\item \code{bias}: numeric \eqn{m \times m} matrix of model-based BA centres.
+For indices \eqn{(j, k)} with \eqn{j < k}, \code{bias[j, k]} estimates
+\eqn{\mathrm{method}_k - \mathrm{method}_j}. Thus the matrix orientation is
+\strong{column minus row}, not row minus column. The diagonal is \code{NA}.
+\item \code{sd_loa}: numeric \eqn{m \times m} matrix of LoA SDs,
+\eqn{\sqrt{\sigma_u^2 + \sigma_e^2}}. This matrix is symmetric.
+\item \code{loa_lower}, \code{loa_upper}: numeric \eqn{m \times m} matrices
+of LoA endpoints corresponding to \code{bias}. These satisfy
+\eqn{\texttt{loa\_lower}[j,k] = -\texttt{loa\_upper}[k,j]} and
+\eqn{\texttt{loa\_upper}[j,k] = -\texttt{loa\_lower}[k,j]}.
+\item \code{width}: numeric \eqn{m \times m} matrix of LoA widths,
+\code{loa_upper - loa_lower}. This matrix is symmetric.
+\item \code{n}: integer \eqn{m \times m} matrix giving the number of complete
+subject-time pairs used for each analysed contrast. Pairs with fewer than
+two complete matches are left as \code{NA} in the estimate matrices.
+\item \code{mean_ci_low}, \code{mean_ci_high}: numeric \eqn{m \times m}
+matrices of Wald confidence interval bounds for \code{bias}.
+\item \code{loa_lower_ci_low}, \code{loa_lower_ci_high}: numeric
+\eqn{m \times m} matrices of Wald confidence interval bounds for the lower
+LoA.
+\item \code{loa_upper_ci_low}, \code{loa_upper_ci_high}: numeric
+\eqn{m \times m} matrices of Wald confidence interval bounds for the upper
+LoA.
+\item \code{slope}: optional numeric \eqn{m \times m} matrix of
+proportional-bias slopes on the original paired-mean scale when
+\code{include_slope = TRUE}; otherwise \code{NULL}. This matrix is antisymmetric in
+sign because each fitted contrast is reversed across the transpose.
+\item \code{methods}: character vector of method levels defining matrix row
+and column order.
+\item \code{loa_multiplier}: scalar LoA multiplier actually used.
+\item \code{conf_level}: scalar confidence level used for the reported Wald
+intervals.
+\item \code{use_ar1}: logical, copied from the call.
+\item \code{ar1_rho}: scalar equal to the user-supplied common \code{ar1_rho}
+when \code{use_ar1 = TRUE} and a value was supplied; otherwise \code{NA}. This field
+does \emph{not} store the per-pair estimated AR(1) parameters.
+\item \code{residual_model}: character \eqn{m \times m} matrix whose entries
+are \code{"ar1"}, \code{"iid"}, or \code{NA}, indicating the final residual structure used
+for each pair.
+\item \code{sigma2_subject}: numeric \eqn{m \times m} matrix of estimated
+subject-level random-intercept variances.
+\item \code{sigma2_resid}: numeric \eqn{m \times m} matrix of estimated
+residual variances.
+\item \code{ar1_rho_pair}: optional numeric \eqn{m \times m} matrix giving
+the AR(1) correlation actually used for each pair when the final residual
+model is \code{"ar1"}; otherwise \code{NA} for that entry. Present only when
+\code{use_ar1 = TRUE}.
+\item \code{ar1_estimated}: optional logical \eqn{m \times m} matrix
+indicating whether the pair-specific \code{ar1_rho_pair} was estimated internally
+(\code{TRUE}) or supplied by the user (\code{FALSE}) for entries whose final residual
+model is \code{"ar1"}; otherwise \code{NA}. Present only when \code{use_ar1 = TRUE}.
+\item \code{data_long}: stored long-format data frame used downstream for
+plotting and reconstruction. It uses canonical internal column names
+\code{.response}, \code{.subject}, \code{.method}, and \code{.time}.
+\item \code{mapping}: named list identifying those stored canonical column
+names for \code{response}, \code{subject}, \code{method}, and \code{time}.
 }
 }
 \description{
-Repeated-measures Bland-Altman (BA) for method comparison based on a
+Repeated-measures Bland-Altman (BA) analysis for method comparison based on a
 mixed-effects model fitted to \strong{subject-time matched paired differences}.
-A subject-specific random intercept accounts for clustering, and (optionally)
-an AR(1) process captures serial correlation across replicates within subject.
-The function returns bias (mean difference), limits of agreement (LoA),
-confidence intervals, and variance components, for either two methods or
-all pairwise contrasts when \eqn{\ge}3 methods are supplied.
+The fitted model includes a subject-specific random intercept and, optionally,
+an AR(1) residual correlation structure within subject.
 
-\strong{Required columns / vectors}
+The function accepts either exactly two methods or \eqn{\ge 3} methods.
+With exactly two methods it returns a single fitted BA object. With
+\eqn{\ge 3} methods it fits the same model to every unordered method pair and
+returns pairwise matrices of results.
+
+\strong{Required variables}
 \itemize{
 \item \code{response}: numeric measurements.
-\item \code{subject}: subject identifier (integer/factor/numeric).
-\item \code{method}: method label with \eqn{\ge}2 levels (factor/character/integer).
-\item \code{time}: replicate index used to form pairs; only records where
-both methods are present for the same \code{subject} and \code{time}
-contribute to a given pairwise BA (rows with missing components are dropped
-before fitting each pair).
+\item \code{subject}: subject identifier.
+\item \code{method}: method label with at least two distinct levels.
+\item \code{time}: replicate/time key used to form within-subject pairs.
 }
+
+For any analysed pair of methods, only records where both methods are present
+for the same \code{subject} and integer-coerced \code{time} contribute to the
+fit. Rows with missing values in any required field are excluded for that
+analysed pair.
 }
 \details{
-The function implements a repeated-measures Bland–Altman (BA) analysis for
-two or more methods using a linear mixed model fitted to
-\emph{subject–time matched paired differences}. For any selected pair of
-methods \eqn{(a,b)}, let
-\deqn{d_{it} = y_{itb} - y_{ita}, \qquad m_{it} = \tfrac{1}{2}(y_{itb} + y_{ita}),}
-where \eqn{y_{itm}} denotes the observed value from method \eqn{m\in\{a,b\}} on
-subject \eqn{i} at replicate/time \eqn{t}; \eqn{d_{it}} is the paired difference
-(method \eqn{b} minus method \eqn{a}); and \eqn{m_{it}} is the corresponding pair mean.
-Here \eqn{i=1,\ldots,S} indexes subjects and \eqn{t} indexes replicates/time within subject.
-Only records with both methods present at the same \code{subject} and \code{time}
-contribute to that pair.
+For a selected pair of methods \eqn{(a, b)}, the backend first forms complete
+within-subject pairs at matched \code{subject} and integer-coerced
+\code{time}. Let
+\deqn{
+d_{it} = y_{itb} - y_{ita},
+\qquad
+m_{it} = \frac{y_{ita} + y_{itb}}{2},
+}
+where \eqn{d_{it}} is the paired difference and \eqn{m_{it}} is the paired
+mean for subject \eqn{i} at time/replicate \eqn{t}. Only complete
+subject-time matches contribute to that pairwise fit.
 
-The fitted per-pair model is
-\deqn{d_{it} = \beta_0 + \beta_1\, m_{it} + u_i + \varepsilon_{it},}
-with random intercept \eqn{u_i \sim \mathcal{N}(0, \sigma_u^2)} and
-within-subject residual vector \eqn{\varepsilon_i} having covariance
-\eqn{\operatorname{Cov}(\varepsilon_i) = \sigma_e^2\, \mathbf{R}_i}.
-When \code{use_ar1 = FALSE}, \eqn{\mathbf{R}_i = \mathbf{I}_{n_i}} (i.i.d.).
-When \code{use_ar1 = TRUE}, \eqn{\mathbf{R}_i = \mathbf{C}_i^{-1}} and
-\eqn{\mathbf{C}_i} encodes an AR(1) \emph{precision} structure over time
-(see below). Setting \code{include_slope = FALSE} drops the regressor
-\eqn{m_{it}} (i.e., \eqn{\beta_1 = 0}).
+If multiple rows are present for the same \code{subject}-\code{time}-\code{method}
+combination within an analysed pair, the backend keeps the last encountered
+value for that combination when forming the pair. The function therefore
+implicitly assumes at most one observation per \code{subject}-\code{time}-\code{method}
+cell for each analysed contrast.
 
-\subsection{AR(1) within-subject correlation}{
-For each subject, observations are first ordered by \code{time}. Contiguous
-blocks satisfy \eqn{t_{k+1} = t_k + 1}; non-contiguous gaps and any
-negative/NA times are treated as singletons (i.i.d.).
+The fitted model for each analysed pair is
+\deqn{
+d_{it} = \beta_0 + \beta_1 x_{it} + u_i + \varepsilon_{it},
+}
+where \eqn{x_{it} = m_{it}} if \code{include_slope = TRUE} and the term is omitted
+otherwise; \eqn{u_i \sim \mathcal{N}(0, \sigma_u^2)} is a subject-specific
+random intercept; and the within-subject residual vector satisfies
+\eqn{\mathrm{Cov}(\varepsilon_i) = \sigma_e^2 R_i}.
 
-For a contiguous block of length \eqn{L} and AR(1) parameter \eqn{\rho}
-(clipped to \eqn{(-0.999, 0.999)}), the blockwise \emph{precision} matrix
-\eqn{\mathbf{C}} has entries
-\deqn{\mathbf{C} = \frac{1}{1-\rho^2}\,\begin{bmatrix}
-1 & -\rho &       &        &  \\
--\rho & 1+\rho^2 & -\rho  &        &  \\
-      & \ddots   & \ddots & \ddots &  \\
-      &          & -\rho  & 1+\rho^2 & -\rho \\
-      &          &        & -\rho    & 1
-\end{bmatrix}.}
-The full \eqn{\mathbf{C}_i} is block-diagonal over contiguous segments, with
-a small ridge added to the diagonal for numerical stability. Residual
-covariance is \eqn{\sigma_e^2 \mathbf{R}_i = \sigma_e^2 \mathbf{C}_i^{-1}}.
+When \code{use_ar1 = FALSE}, \eqn{R_i = I}. When \code{use_ar1 = TRUE}, the backend
+works with the residual \emph{precision} matrix \eqn{C_i = R_i^{-1}} over
+contiguous time blocks within subject and uses \eqn{\sigma_e^2 C_i^{-1}} as
+the residual covariance.
 
-If \code{use_ar1 = TRUE} and \code{ar1_rho} is \code{NA}, \eqn{\rho} is
-estimated in two passes (i) fit the i.i.d. model; (ii) compute detrended
-residuals within each contiguous block (remove block-specific intercept and
-linear time), form lag-1 correlations, apply a small-sample bias adjustment
-\eqn{(1-\rho^2)/L}, pool with Fisher's \eqn{z} (weights \eqn{\approx L-3}),
-and refit with the pooled \eqn{\hat\rho}. If AR(1) is requested for a pair
-but that AR(1)-based fit fails to converge while the corresponding i.i.d.
-repeated-measures fit converges, the pair is simplified to i.i.d. with a
-warning; in that case the reported \code{residual_model} is \code{"iid"}
-and the corresponding \code{ar1_rho} value is \code{NA}.
+\subsection{AR(1) residual structure}{
+Within each subject, paired observations are ordered by integer-coerced
+\code{time}. AR(1) correlation is applied only over strictly contiguous runs
+satisfying \eqn{t_{k+1} = t_k + 1}. Gaps break the run. Negative times, and
+any isolated positions not belonging to a contiguous run, are treated as
+independent singletons.
+
+For a contiguous run of length \eqn{L} and correlation parameter \eqn{\rho},
+the block precision matrix is
+\deqn{
+C
+=
+\frac{1}{1-\rho^2}
+\begin{bmatrix}
+1      & -\rho &        &        &  \\
+-\rho  & 1+\rho^2 & -\rho &      &  \\
+        & \ddots & \ddots & \ddots & \\
+        &        & -\rho & 1+\rho^2 & -\rho \\
+        &        &       & -\rho & 1
+\end{bmatrix},
+}
+with a very small ridge added to the diagonal for numerical stability.
+
+If \code{use_ar1 = TRUE} and \code{ar1_rho} is supplied, that value is used after
+validation and clipping to the admissible numerical range handled by the
+backend.
+
+If \code{use_ar1 = TRUE} and \code{ar1_rho = NA}, the backend estimates \code{rho}
+separately for each analysed pair by:
+\enumerate{
+\item fitting the corresponding iid model;
+\item computing a moments-based lag-1 estimate from detrended residuals
+within contiguous blocks, used only as a seed; and
+\item refining that seed by a short profile search over \code{rho} using the
+profiled REML log-likelihood.
 }
 
-\subsection{Estimation by stabilised EM/GLS}{
-Let \eqn{\mathbf{X}_i} be the fixed-effects design for subject \eqn{i}
-(intercept, and optionally the pair mean). Internally, the pair mean
-regressor is centred by \eqn{\bar m} and scaled by an effective denominator
-\eqn{s_m^\ast}. Candidate scales are the sample SD \eqn{s_{\mathrm{sd}}},
-the robust IQR scale \eqn{s_{\mathrm{iqr}} = \mathrm{IQR}(m_{it}) / 1.349},
-and the robust MAD scale
-\eqn{s_{\mathrm{mad}} = 1.4826\,\mathrm{MAD}(m_{it})}. Let
-\eqn{S_{\mathrm{ref}} = \max(s_{\mathrm{sd}}, s_{\mathrm{iqr}}, s_{\mathrm{mad}})}
-over the finite positive candidate scales. A candidate scale is treated as near-zero if
-it is non-finite or \eqn{\le \tau S_{\mathrm{ref}}}, with
-\eqn{\tau \approx \sqrt{\epsilon_{\mathrm{mach}}}}. The backend uses
-\eqn{s_{\mathrm{sd}}} if it is not near-zero, otherwise
-\eqn{s_{\mathrm{iqr}}}, otherwise \eqn{s_{\mathrm{mad}}}; if all candidate
-scales are near-zero the paired means are treated as near-degenerate, the
-proportional-bias slope is not estimable on the observed data scale, and the
-fit stops with an error. Estimates are back-transformed to the original units
-afterwards.
-
-Given current \eqn{(\sigma_u^2, \sigma_e^2)}, the algorithm alternates
-between a GLS update for the fixed effects and an EM update for the variance
-components. Integrating out \eqn{u_i} yields the marginal precision of
-\eqn{d_i} via a Woodbury/Sherman-Morrison identity:
-\deqn{\mathbf{V}_i^{-1} \;=\; \sigma_e^{-2}\mathbf{C}_i \;-\;
-\sigma_e^{-2}\mathbf{C}_i \mathbf{1}\,
-\Big(\sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big)^{-1}
-\mathbf{1}^\top \mathbf{C}_i \sigma_e^{-2}.}
-With \eqn{\mathbf{V}_i^{-1}} in hand, the fixed effects are updated by GLS:
-\deqn{\hat\beta \;=\; \Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} \mathbf{X}_i\Big)^{-1}
-\Big(\sum_i \mathbf{X}_i^\top \mathbf{V}_i^{-1} d_i\Big).}
-Writing \eqn{r_i = d_i - \mathbf{X}_i\hat\beta}, the E-step summarizes the
-random intercept through its conditional mean (the BLUP) and conditional
-second moment:
-\deqn{M_i \;=\; \sigma_u^{-2} + \sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i \mathbf{1},\qquad
-\tilde u_i \;=\; M_i^{-1}\,\sigma_e^{-2}\mathbf{1}^\top \mathbf{C}_i r_i,\qquad
-\mathbb{E}[u_i^2\mid y] \;=\; \tilde u_i^2 + M_i^{-1}.}
-The M-step then refreshes the variance components by averaging these
-conditional quantities across subjects:
-\deqn{\hat\sigma_u^2 \;=\; \frac{1}{m}\sum_i \mathbb{E}[u_i^2\mid y], \qquad
-\hat\sigma_e^2 \;=\; \frac{1}{n}\sum_i \Big\{(r_i - \mathbf{1}\tilde u_i)^\top
-\mathbf{C}_i (r_i - \mathbf{1}\tilde u_i) + M_i^{-1}\,\mathbf{1}^\top \mathbf{C}_i \mathbf{1}\Big\}.}
-The algorithm employs positive-definite inverses with ridge fallback,
-trust-region damping of variance updates (ratio-bounded), and clipping of
-parameters to prevent degeneracy.
+In the exported \code{ba_rm()} wrapper, if an AR(1) fit for a given analysed pair
+fails specifically because the backend EM/GLS routine did not converge to
+admissible finite variance-component estimates, the wrapper retries that pair
+with iid residuals. If the iid refit succeeds, the final reported residual
+model for that pair is \code{"iid"} and a warning is issued. Other AR(1) failures
+are not simplified and are propagated as errors.
 }
 
-\subsection{Point estimates reported}{
-The reported BA \emph{bias} is the \emph{subject-equal} mean of the paired
-differences,
-\deqn{\mu_0 \;=\; \frac{1}{m}\sum_{i=1}^m \bar d_i,\qquad
-\bar d_i = \frac{1}{n_i}\sum_{t=1}^{n_i} d_{it},}
-which is robust to unbalanced replicate counts (\eqn{n_i}) and coincides with
-the GLS intercept when subjects contribute equally. If \code{include_slope =
-TRUE}, the proportional-bias slope is estimated against the pair mean
-\eqn{m_{it}}; internally \eqn{m_{it}} is centred by \eqn{\bar m} and scaled
-by the selected \eqn{s_m^\ast}, and the slope is returned on the original scale.
-}
-
-\subsection{Proportional bias slope (\code{include_slope})}{
-When \code{include_slope = TRUE}, the model augments the mean difference with
-the pair mean \eqn{m_{it} = \tfrac{1}{2}(y_{itb}+y_{ita})}:
-\deqn{d_{it} = \beta_0 + \beta_1 m_{it} + u_i + \varepsilon_{it}.}
-Internally \eqn{m_{it}} is centred by its mean and divided by the selected
-denominator \eqn{s_m^\ast}, using the priority order
-\eqn{s_{\mathrm{sd}} \rightarrow s_{\mathrm{iqr}} \rightarrow s_{\mathrm{mad}}}
-under the relative near-zero rule described above. If all candidate scales
-are near-zero, the function errors because the paired means are
-near-degenerate and the proportional-bias slope is not estimable on the
-observed data scale. The reported \code{beta_slope} and intercept are
-back-transformed to the original scale.
-
-\eqn{\beta_1 \neq 0} indicates level-dependent (proportional)
-bias, where the difference between methods changes with the overall measurement level.
-The Bland–Altman limits of agreement produced by this function remain the
-conventional, \emph{horizontal} bands centred at the subject-equal bias \eqn{\mu_0};
-they are not regression-adjusted LoA.
-
-On an appropriate scale and when
-the two methods have comparable within-subject variances, the null expectation is
-\eqn{\beta_1 \approx 0}. However, because \eqn{m_{it}} contains measurement error
-from both methods, unequal precisions can produce a spurious slope even if there is
-no true proportional bias. Under a simple no-bias data-generating model
-\eqn{y_{itm}=\theta_{it}+c_m+e_{itm}} with independent errors of variances
-\eqn{\sigma_a^2,\sigma_b^2}, the expected OLS slope is approximately
-\deqn{\mathbb{E}[\hat\beta_1] \;\approx\;
-\dfrac{\tfrac{1}{2}(\sigma_b^2-\sigma_a^2)}
-      {\mathrm{Var}(\theta_{it}) + \tfrac{1}{4}(\sigma_a^2+\sigma_b^2)},}
-showing zero expectation when \eqn{\sigma_a^2=\sigma_b^2} and attenuation as the
-level variability \eqn{\mathrm{Var}(\theta_{it})} increases.
-}
-
-\subsection{Limits of Agreement (LoA)}{
-A \emph{single new paired measurement} for a random subject has variance
-\deqn{\mathrm{Var}(d^\star) \;=\; \sigma_u^2 + \sigma_e^2,}
-so the LoA are
-\deqn{\mathrm{LoA} \;=\; \mu_0 \;\pm\; \texttt{loa\_multiplier}\,\sqrt{\sigma_u^2 + \sigma_e^2}.}
-The argument \code{loa_multiplier} is the SD multiplier (default \eqn{z_{1-\alpha/2}}
-implied by \code{conf_level}, e.g., \eqn{1.96} at \eqn{95\%}).
-}
-
-\subsection{Wald/Delta confidence intervals}{
-CIs for \emph{bias} and each LoA use a delta method around the EM estimates.
-The standard error of \eqn{\mu_0} is based on the dispersion of subject
-means \eqn{\mathrm{Var}(\mu_0) \approx \mathrm{Var}(\bar d_i)/m}. For
-\eqn{\mathrm{sd}_{\mathrm{LoA}} = \sqrt{V}} with \eqn{V=\sigma_u^2+\sigma_e^2},
-we can define
-\deqn{\mathrm{Var}(\mathrm{sd}) \;\approx\; \frac{\mathrm{Var}(V)}{4V}, \quad
-\mathrm{Var}(V) \;\approx\; \mathrm{Var}(\hat\sigma_u^2) + \mathrm{Var}(\hat\sigma_e^2)
-+ 2\,\mathrm{Cov}(\hat\sigma_u^2,\hat\sigma_e^2).}
-The per-subject contributions used to approximate these terms are:
-\eqn{A_i=\mathbb{E}[u_i^2\mid y]} and
-\eqn{B_i=\{(r_i-\mathbf{1}\tilde u_i)^\top\mathbf{C}_i(r_i-\mathbf{1}\tilde u_i)
-+ M_i^{-1}\mathbf{1}^\top\mathbf{C}_i\mathbf{1}\}/n_i}. Empirical variances
-of \eqn{A_i} and \eqn{B_i} (with replicate-size weighting for \eqn{B_i}) and
-their covariance yield \eqn{\mathrm{Var}(\hat\sigma_u^2)},
-\eqn{\mathrm{Var}(\hat\sigma_e^2)} and \eqn{\mathrm{Cov}(\hat\sigma_u^2,\hat\sigma_e^2)}.
-For a LoA bound \eqn{L_\pm = \mu_0 \pm \texttt{loa\_multiplier}\cdot \mathrm{sd}}, the
-working variance is
-\deqn{\mathrm{Var}(L_\pm) \;\approx\; \mathrm{Var}(\mu_0) + \texttt{loa\_multiplier}^2\,\mathrm{Var}(\mathrm{sd}),}
-and Wald CIs use the normal quantile at \code{conf_level}. These are
-large-sample approximations; with very small \eqn{m} they may be conservative.
-}
-
-\subsection{Three or more methods}{
-When \eqn{\ge 3} methods are supplied, the routine performs the above fit for
-each unordered pair \eqn{(j,k)} and reassembles matrices. Specifically,
+\subsection{Internal centring and scaling for the proportional-bias slope}{
+When \code{include_slope = TRUE}, the paired mean regressor is centred and scaled
+internally before fitting. Let \eqn{\bar m} be the mean of the observed paired
+means. The backend chooses a scaling denominator from:
 \itemize{
-\item \emph{Orientation} is defined to be \emph{row minus column}, i.e.,
-\eqn{\texttt{bias}[j,k]} estimates \eqn{\mathbb{E}(y_k - y_j)}.
-\item \eqn{\texttt{bias}} is antisymmetric
-(\eqn{b_{jk} = -b_{kj}}); \eqn{\texttt{sd\_loa}} and \eqn{\texttt{width}}
-are symmetric; LoA obey \eqn{\texttt{loa\_lower}[j,k] = -\texttt{loa\_upper}[k,j]}.
-\item \eqn{\texttt{n}[j,k]} is the number of subject-time pairs
-used for that contrast (complete cases where both methods are present).
+\item the sample SD;
+\item the IQR-based scale \eqn{\mathrm{IQR}(m)/1.349};
+\item the MAD-based scale \eqn{1.4826\,\mathrm{MAD}(m)}.
 }
+It uses the first of these that is not judged near-zero relative to the
+largest finite positive candidate scale, under a threshold proportional to
+\eqn{\sqrt{\epsilon_{\mathrm{mach}}}}. If all candidate scales are treated as
+near-zero, the fit stops with an error because the proportional-bias slope is
+not estimable on the observed paired-mean scale.
+
+The returned \code{beta_slope} is back-transformed to the original paired-mean
+scale. The returned BA centre is the fitted mean difference at the centred
+reference paired mean \eqn{\bar m}, not the original-scale intercept
+coefficient.
 }
 
-\subsection{Missingness, time irregularity, and safeguards}{
-Pairs are formed only where both methods are observed at the same
-\code{subject} and \code{time}; other records do not influence that pair.
-AR(1) structure is applied only over contiguous time sequences within
-subject; gaps break contiguity and revert those positions to i.i.d.
-Separate estimation of residual and subject-level variance components
-requires at least two subjects overall and enough within-subject replication
-after pairing; otherwise the model is not separately identifiable on the
-supplied data and the fit stops with an error. When the model is estimable
-but no finite positive pooled within-subject variance can be formed,
-\eqn{0.5\,v_{\mathrm{ref}}} is used only as a temporary positive EM starting
-heuristic. Variance updates are ratio-damped and clipped during the
-iterations, and if the EM/GLS routine still fails to reach admissible finite
-variance-component estimates the fit stops with an explicit convergence
-error rather than returning fallback final values. When used, \eqn{\rho} is
-clipped to \eqn{(-0.999,0.999)}.
+\subsection{Estimation}{
+The backend uses a stabilised EM/GLS scheme.
+
+Conditional on current variance components, the fixed effects are updated by
+GLS using the marginal precision of the paired differences after integrating
+out the random subject intercept. The resulting fixed-effect covariance used
+in the confidence-interval calculations is the GLS covariance
+\deqn{
+\mathrm{Var}(\hat\beta \mid \hat\theta)
+=
+\left( \sum_i X_i^\top V_i^{-1} X_i \right)^{-1}.
+}
+
+Given updated fixed effects, the variance components are refreshed by EM using
+the conditional moments of the subject random intercept and the residual
+quadratic forms. Variance updates are ratio-damped and clipped to admissible
+ranges for numerical stability.
+}
+
+\subsection{Reported BA centre and limits of agreement}{
+The reported BA centre is always model-based.
+
+When \code{include_slope = FALSE}, it is the fitted intercept of the paired-
+difference mixed model.
+
+When \code{include_slope = TRUE}, it is the fitted mean difference at the centred
+reference paired mean used internally by the backend.
+
+The reported limits of agreement are
+\deqn{
+\mu_0 \pm \texttt{loa\_multiplier}\sqrt{\sigma_u^2 + \sigma_e^2},
+}
+where \eqn{\mu_0} is the reported model-based BA centre. These LoA are for a
+single new paired difference from a random subject under the fitted model.
+
+Under the implemented parameterisation, AR(1) correlation affects the
+off-diagonal within-subject covariance structure and therefore the estimation
+of the model parameters and their uncertainty, but not the marginal variance
+of a single paired difference. Consequently \code{rho} does not appear explicitly
+in the LoA point-estimate formula.
+}
+
+\subsection{Confidence intervals}{
+The backend returns Wald confidence intervals for the reported BA centre and
+for both LoA endpoints.
+
+These intervals combine:
+\itemize{
+\item the conditional GLS uncertainty in the fixed effects at the fitted
+covariance parameters; and
+\item a delta-method propagation of covariance-parameter uncertainty from
+the observed information matrix of the profiled REML log-likelihood.
+}
+
+The covariance-parameter vector is profiled on transformed scales:
+log-variances for \eqn{\sigma_u^2} and \eqn{\sigma_e^2}, and, when \code{rho} is
+estimated internally under AR(1), a transformed correlation parameter
+mapped back by \eqn{\rho = 0.95\tanh(z)}.
+
+Numerical central finite differences are used to approximate both the
+observed Hessian of the profiled REML log-likelihood and the gradients of the
+reported derived quantities. The resulting variances are combined and the
+final intervals are formed with the normal quantile corresponding to
+\code{conf_level}.
+}
+
+\subsection{Exactly two methods versus \eqn{\ge 3} methods}{
+With exactly two methods, at least two complete subject-time pairs are
+required; otherwise the function errors.
+
+With \eqn{\ge 3} methods, the function analyses every unordered pair of method
+levels. For a given pair with fewer than two complete subject-time matches,
+that contrast is skipped and the corresponding matrix entries remain \code{NA}.
+
+For a fitted contrast between methods in matrix positions \eqn{(j, k)} with
+\eqn{j < k}, the stored orientation is:
+\deqn{
+\texttt{bias}[j,k] \approx \mathrm{method}_k - \mathrm{method}_j.
+}
+Hence the transposed entry changes sign, while \code{sd_loa} and \code{width} are
+symmetric.
+}
+
+\subsection{Identifiability and safeguards}{
+Separate estimation of the residual and subject-level variance components
+requires sufficient complete within-subject replication after pairing. If the
+paired data are not adequate to separate these components, the fit stops with
+an identifiability error.
+
+If the model is conceptually estimable but no finite positive pooled
+within-subject variance can be formed during initialisation, the backend uses
+\eqn{0.5 \times v_{\mathrm{ref}}} only as a temporary positive starting value
+for the EM routine and records a warning string in the backend output. The
+exported wrapper does not otherwise modify the final estimates.
+
+If the EM/GLS routine fails to reach admissible finite variance-component
+estimates, the backend throws an explicit convergence error rather than
+returning fallback estimates.
 }
 }
 \examples{

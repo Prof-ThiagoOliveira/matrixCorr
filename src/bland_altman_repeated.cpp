@@ -9,7 +9,7 @@
 #include <numeric>
 #include <algorithm>
 
-// bring in your helpers
+// bring helpers
 #include "matrixCorr_detail.h"
 
 using namespace Rcpp;
@@ -307,9 +307,10 @@ static std::vector<Precomp> precompute_blocks(const mat& X, const vec& y,
 // ---------- EM/GLS for differences: random subject intercept + (optional) AR(1) ----------
 struct FitOut {
   arma::vec beta;
-  double su2=NA_REAL, se2=NA_REAL;
-  arma::vec su_term;    // E[u_i^2|y] per subject (for delta)
-  arma::vec se_term;    // per-subject contribution for se2 variance (normalized)
+  arma::mat beta_vcov;   // GLS covariance of beta conditional on fitted variance params
+  double su2 = NA_REAL, se2 = NA_REAL;
+  arma::vec su_term;     // E[u_i^2|y] per subject (for delta)
+  arma::vec se_term;     // per-subject contribution for se2 variance (normalized)
   int iter = 0;
   bool converged = false;
   std::string warn;
@@ -325,37 +326,50 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
 
   const double vref = arma::var(y, /*unbiased*/1);
   const double EPS  = std::max(1e-12, vref * 1e-12);
-  const double MAXV = std::max(10.0 * vref, 1.0); // tight, model-based cap
+  const double MAXV = std::max(10.0 * vref, 1.0);
 
-  // Method-of-moments-ish initialization.
-  // Separate residual vs subject-level variance estimation needs at least
-  // two subjects overall and some within-subject replication after pairing.
-  std::vector<double> mu_s(m, 0.0); std::vector<int> cnt_s(m, 0);
-  for (int i=0;i<m;++i) for (int r : S.rows[i]) { mu_s[i] += y[r]; ++cnt_s[i]; }
-  int used_mu = 0; for (int i=0;i<m;++i) if (cnt_s[i]>0){ mu_s[i] /= (double)cnt_s[i]; ++used_mu; }
+  std::vector<double> mu_s(m, 0.0);
+  std::vector<int> cnt_s(m, 0);
+  for (int i = 0; i < m; ++i) {
+    for (int r : S.rows[i]) {
+      mu_s[i] += y[r];
+      ++cnt_s[i];
+    }
+  }
+
+  int used_mu = 0;
+  for (int i = 0; i < m; ++i) {
+    if (cnt_s[i] > 0) {
+      mu_s[i] /= static_cast<double>(cnt_s[i]);
+      ++used_mu;
+    }
+  }
+
   int n_replicated_subjects = 0;
-  for (int i=0;i<m;++i) if (cnt_s[i] >= 2) ++n_replicated_subjects;
+  for (int i = 0; i < m; ++i) if (cnt_s[i] >= 2) ++n_replicated_subjects;
   if (used_mu < 2 || n_replicated_subjects < 1) {
     stop(BA_RM_IDENTIFIABILITY_ERROR);
   }
+
   arma::vec mu_s_vec(used_mu, arma::fill::zeros);
-  { int k=0; for (int i=0;i<m;++i) if (cnt_s[i]>0) mu_s_vec[k++] = mu_s[i]; }
-  double var_mu = (used_mu>=2 ? arma::var(mu_s_vec, /*unbiased*/true) : 0.0);
+  {
+    int k = 0;
+    for (int i = 0; i < m; ++i) if (cnt_s[i] > 0) mu_s_vec[k++] = mu_s[i];
+  }
+  double var_mu = (used_mu >= 2 ? arma::var(mu_s_vec, /*unbiased*/true) : 0.0);
 
   double num_w = 0.0, den_w = 0.0;
   bool se2_init_fallback = false;
-  for (int i=0;i<m;++i) if ((int)S.rows[i].size() >= 2) {
+  for (int i = 0; i < m; ++i) if ((int)S.rows[i].size() >= 2) {
     arma::vec yi(S.rows[i].size());
-    for (size_t k=0;k<S.rows[i].size();++k) yi[k] = y[ S.rows[i][k] ];
+    for (size_t k = 0; k < S.rows[i].size(); ++k) yi[k] = y[S.rows[i][k]];
     double vsi = arma::var(yi, /*unbiased*/true);
     if (std::isfinite(vsi) && vsi > 0.0) {
       num_w += ((int)yi.n_elem - 1) * vsi;
       den_w += ((int)yi.n_elem - 1);
     }
   }
-  // If the model is separately identifiable but no finite positive pooled
-  // within-subject variance can be formed, use 0.5 * vref only as a temporary
-  // positive EM start. A valid converged solution is still required later.
+
   double se2_init = NA_REAL;
   if (den_w > 0.5) {
     se2_init = num_w / den_w;
@@ -363,11 +377,16 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
     se2_init_fallback = true;
     se2_init = std::max(EPS, 0.5 * std::max(vref, 0.0));
   }
-  double su2_init = std::max(0.0, var_mu - se2_init / std::max(1.0, arma::mean(arma::conv_to<arma::vec>::from(cnt_s))));
+
+  double su2_init = std::max(
+    0.0,
+    var_mu - se2_init / std::max(1.0, arma::mean(arma::conv_to<arma::vec>::from(cnt_s)))
+  );
+
   se2_init = nan_preserve(se2_init, EPS, MAXV);
   su2_init = nan_preserve(su2_init, 0.0, MAXV);
 
-  auto damp_to_ratio = [](double oldv, double newv, double rmax){
+  auto damp_to_ratio = [](double oldv, double newv, double rmax) {
     if (!std::isfinite(newv)) return oldv;
     if (oldv <= 0.0) return nan_preserve(newv, 1e-12, rmax);
     double lo = oldv / rmax, hi = oldv * rmax;
@@ -376,35 +395,35 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
 
   double su2 = su2_init, se2 = se2_init;
   vec beta(p, fill::zeros);
+  mat beta_vcov(p, p, fill::zeros);
   vec su_term(m, fill::zeros);
   vec se_term(m, fill::zeros);
 
   bool converged = false;
-  int   it = -1;
+  int it = -1;
   std::string init_warn;
   if (se2_init_fallback) {
     init_warn = "Residual-variance initialization used 0.5 * v_ref only as a positive EM starting heuristic because no finite positive pooled within-subject variance could be formed after pairing.";
   }
 
-  for (it=0; it<max_iter; ++it) {
-    // (1) Assemble XtViX, XtViy
-    mat XtViX(p,p, fill::zeros);
-    vec XtViy(p,  fill::zeros);
-    const double inv_se = 1.0/std::max(se2, EPS);
+  for (it = 0; it < max_iter; ++it) {
+    mat XtViX(p, p, fill::zeros);
+    vec XtViy(p, fill::zeros);
+    const double inv_se = 1.0 / std::max(se2, EPS);
 
-    for (int i=0;i<m;++i) {
+    for (int i = 0; i < m; ++i) {
       const Precomp& P = PC[i];
-      if (P.n_i==0) continue;
+      if (P.n_i == 0) continue;
 
-      double M = (1.0/std::max(su2,EPS)) + inv_se * P.UCU; // scalar
+      double M = (1.0 / std::max(su2, EPS)) + inv_se * P.UCU;
       M = std::max(M, 1e-12);
       const double Minv = 1.0 / M;
 
       double S_uy = inv_se * P.UTCy;
       double Z_y  = Minv * S_uy;
 
-      vec S_ux = inv_se * P.UTCX;     // p
-      vec Z_X  = Minv * S_ux;         // p
+      vec S_ux = inv_se * P.UTCX;
+      vec Z_X  = Minv * S_ux;
 
       mat XTRinvX = inv_se * P.XTCX;
       vec XTRinvY = inv_se * P.XTCy;
@@ -413,58 +432,51 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
       XtViX += XTRinvX - S_ux * Z_X.t();
     }
 
-    // (2) GLS beta
     mat XtViX_inv;
     if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) break;
     beta = XtViX_inv * XtViy;
+    beta_vcov = XtViX_inv;
     if (!all_finite(beta)) break;
 
-    // (3) M-step (stabilized)
     double su_acc = 0.0;
-    double se_num = 0.0;   // direct numerator for sigma_e^2
+    double se_num = 0.0;
     vec r_global = y - X * beta;
 
-    for (int i=0;i<m;++i) {
+    for (int i = 0; i < m; ++i) {
       const Precomp& P = PC[i];
-      if (P.n_i==0) continue;
+      if (P.n_i == 0) continue;
 
       vec r_i(P.n_i);
-      for (int k=0;k<P.n_i;++k) r_i[k] = r_global[ S.rows[i][k] ];
+      for (int k = 0; k < P.n_i; ++k) r_i[k] = r_global[S.rows[i][k]];
 
-      const double inv_su = 1.0/std::max(su2,EPS);
-      double M = inv_su + (1.0/std::max(se2,EPS)) * P.UCU; // scalar
+      const double inv_su = 1.0 / std::max(su2, EPS);
+      double M = inv_su + (1.0 / std::max(se2, EPS)) * P.UCU;
       M = std::max(M, 1e-12);
       const double Minv = 1.0 / M;
 
-      double Utr = (1.0/std::max(se2,EPS)) *
-        arma::as_scalar( arma::ones<vec>(P.n_i).t() * (P.Cinv * r_i) );
+      double Utr = (1.0 / std::max(se2, EPS)) *
+        arma::as_scalar(arma::ones<vec>(P.n_i).t() * (P.Cinv * r_i));
 
-      double b_i = Minv * Utr;                      // BLUP(u_i)
-      double Eu2 = b_i*b_i + Minv;                  // E[u_i^2 | y]
+      double b_i = Minv * Utr;
+      double Eu2 = b_i * b_i + Minv;
 
       su_acc += Eu2;
       su_term[i] = Eu2;
 
-      vec e = r_i - arma::ones<vec>(P.n_i) * b_i;   // residuals after u_i
+      vec e = r_i - arma::ones<vec>(P.n_i) * b_i;
+      double q = arma::as_scalar(e.t() * (P.Cinv * e));
 
-      // Quadratic form under R^{-1} (Cinv):
-      double q = arma::as_scalar( e.t() * (P.Cinv * e) );
-
-      // ---- trace term on the R-side ----
-      //Var(u|y) * (1' Cinv 1)
       double num_i = q + P.UCU * Minv;
       se_num += num_i;
-      se_term[i] = num_i / std::max(1, P.n_i);      // per-subject normalized contribution
+      se_term[i] = num_i / std::max(1, P.n_i);
     }
 
     double su2_new = su_acc / std::max(1, m);
     double se2_new = se_num / std::max(1, n);
 
-    // trust-region damping (avoid explosions/implosions)
     su2_new = damp_to_ratio(su2, su2_new, 3.0);
     se2_new = damp_to_ratio(se2, se2_new, 3.0);
 
-    // clamp to sane range
     su2_new = nan_preserve(su2_new, 0.0, MAXV);
     se2_new = nan_preserve(se2_new, EPS, MAXV);
 
@@ -476,20 +488,23 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
     if (!admissible) break;
 
     double diff = std::fabs(su2_new - su2) + std::fabs(se2_new - se2);
-    su2 = su2_new; se2 = se2_new;
+    su2 = su2_new;
+    se2 = se2_new;
     if (diff < tol) {
       converged = true;
       break;
     }
   }
 
-  if (!converged || !all_finite(beta) || !std::isfinite(su2) || !std::isfinite(se2) ||
+  if (!converged || !all_finite(beta) || !beta_vcov.is_finite() ||
+      !std::isfinite(su2) || !std::isfinite(se2) ||
       su2 < 0.0 || se2 < EPS) {
     stop(BA_RM_CONVERGENCE_ERROR);
   }
 
   FitOut out;
   out.beta = beta;
+  out.beta_vcov = beta_vcov;
   out.su2 = su2;
   out.se2 = se2;
   out.su_term = su_term;
@@ -730,6 +745,276 @@ static double estimate_rho_profile(const arma::mat& X,
   return nan_preserve(best_rho, -0.95, 0.95);
 }
 
+// ---------- profile-REML CI helpers ----------
+
+struct ProfileThetaEval {
+  arma::vec beta;
+  arma::mat beta_vcov;
+  double su2 = NA_REAL;
+  double se2 = NA_REAL;
+  double rho = NA_REAL;
+  double mu0 = NA_REAL;
+  double sd_loa = NA_REAL;
+  double loa_lower = NA_REAL;
+  double loa_upper = NA_REAL;
+  double loglik = -std::numeric_limits<double>::infinity();
+  bool ok = false;
+};
+
+static inline double ba_rm_pos_from_eta(double eta, double floor_val = 1e-12) {
+  return std::max(std::exp(eta), floor_val);
+}
+
+static inline double ba_rm_rho_from_z(double z) {
+  // Match the profile-search support used elsewhere in this file.
+  return 0.95 * std::tanh(z);
+}
+
+static inline double ba_rm_z_from_rho(double rho) {
+  double x = rho / 0.95;
+  x = std::max(-0.999999, std::min(0.999999, x));
+  return std::atanh(x);
+}
+
+static bool ba_rm_beta_gls_given_theta(const std::vector<Precomp>& PC,
+                                       int p,
+                                       double su2,
+                                       double se2,
+                                       arma::vec& beta,
+                                       arma::mat& beta_vcov) {
+  const double eps = 1e-12;
+  const double inv_su = 1.0 / std::max(su2, eps);
+  const double inv_se = 1.0 / std::max(se2, eps);
+
+  arma::mat XtViX(p, p, arma::fill::zeros);
+  arma::vec XtViy(p, arma::fill::zeros);
+
+  for (const Precomp& P : PC) {
+    if (P.n_i == 0) continue;
+
+    const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
+    const double Minv = 1.0 / M;
+
+    const arma::vec S_ux = inv_se * P.UTCX;
+    const double    S_uy = inv_se * P.UTCy;
+
+    const arma::mat XTRinvX = inv_se * P.XTCX;
+    const arma::vec XTRinvY = inv_se * P.XTCy;
+
+    const arma::vec Z_X = Minv * S_ux;
+    const double    Z_y = Minv * S_uy;
+
+    XtViX += XTRinvX - S_ux * Z_X.t();
+    XtViy += XTRinvY - S_ux * Z_y;
+  }
+
+  arma::mat XtViX_inv;
+  if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) return false;
+
+  beta = XtViX_inv * XtViy;
+  beta_vcov = XtViX_inv;
+
+  return beta.is_finite() && beta_vcov.is_finite();
+}
+
+static double ba_rm_reml_loglik_fixed(const std::vector<Precomp>& PC,
+                                      const arma::vec& beta,
+                                      double su2,
+                                      double se2) {
+  const int p = beta.n_elem;
+  int n = 0;
+
+  const double eps = 1e-12;
+  const double su2_use = std::max(su2, eps);
+  const double se2_use = std::max(se2, eps);
+  const double inv_su = 1.0 / su2_use;
+  const double inv_se = 1.0 / se2_use;
+
+  arma::mat XtViX(p, p, arma::fill::zeros);
+  arma::vec XtViy(p, arma::fill::zeros);
+  double sum_logdetV = 0.0;
+  double yViY = 0.0;
+
+  for (const Precomp& P : PC) {
+    if (P.n_i == 0) continue;
+    n += P.n_i;
+
+    const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
+    const double Minv = 1.0 / M;
+
+    const arma::vec S_ux = inv_se * P.UTCX;
+    const double    S_uy = inv_se * P.UTCy;
+
+    const arma::mat XTRinvX = inv_se * P.XTCX;
+    const arma::vec XTRinvY = inv_se * P.XTCy;
+
+    const arma::vec Z_X = Minv * S_ux;
+    const double    Z_y = Minv * S_uy;
+
+    XtViX += XTRinvX - S_ux * Z_X.t();
+    XtViy += XTRinvY - S_ux * Z_y;
+
+    const arma::vec r_i = P.y_i - P.X_i * beta;
+    const double UTCr = P.UTCy - arma::dot(P.UTCX, beta);
+    const double rTCr = arma::as_scalar(r_i.t() * (P.Cinv * r_i));
+
+    const double quad =
+      inv_se * rTCr -
+      (inv_se * inv_se) * UTCr * UTCr * Minv;
+
+    if (!std::isfinite(quad)) return -std::numeric_limits<double>::infinity();
+    yViY += quad;
+
+    const double logdetV_i =
+      P.n_i * std::log(se2_use) -
+      logdet_spd_safe(P.Cinv) +
+      std::log1p((su2_use / se2_use) * P.UCU);
+
+    if (!std::isfinite(logdetV_i)) return -std::numeric_limits<double>::infinity();
+    sum_logdetV += logdetV_i;
+  }
+
+  arma::mat XtViX_inv;
+  if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) {
+    return -std::numeric_limits<double>::infinity();
+  }
+
+  const double logdetXtViX = logdet_spd_safe(XtViX);
+  const double yPy = yViY - arma::as_scalar(XtViy.t() * (XtViX_inv * XtViy));
+
+  if (!std::isfinite(logdetXtViX) || !std::isfinite(yPy)) {
+    return -std::numeric_limits<double>::infinity();
+  }
+
+  const double two_pi = 2.0 * M_PI;
+  return -0.5 * (
+      (static_cast<double>(n) - static_cast<double>(p)) * std::log(two_pi) +
+        sum_logdetV +
+        logdetXtViX +
+        yPy
+  );
+}
+
+static bool ba_rm_eval_profile_theta(const arma::vec& theta_t,
+                                     const arma::mat& X,
+                                     const arma::vec& y,
+                                     const BySubjBA& S,
+                                     bool use_ar1,
+                                     bool rho_free,
+                                     double rho_fixed,
+                                     double loa_multiplier,
+                                     ProfileThetaEval& out) {
+  if (theta_t.n_elem < 2) return false;
+
+  const double su2 = ba_rm_pos_from_eta(theta_t[0]);
+  const double se2 = ba_rm_pos_from_eta(theta_t[1]);
+  const double rho = use_ar1 ? (rho_free ? ba_rm_rho_from_z(theta_t[2]) : rho_fixed) : 0.0;
+
+  std::vector<Precomp> PC = precompute_blocks(X, y, S, use_ar1, rho);
+
+  arma::vec beta;
+  arma::mat beta_vcov;
+  if (!ba_rm_beta_gls_given_theta(PC, X.n_cols, su2, se2, beta, beta_vcov)) {
+    return false;
+  }
+
+  const double loglik = ba_rm_reml_loglik_fixed(PC, beta, su2, se2);
+  if (!std::isfinite(loglik)) return false;
+
+  const double V_loa = std::max(0.0, su2 + se2);
+  const double sd_loa = std::sqrt(V_loa);
+  const double mu0 = beta[0];
+
+  out.beta = beta;
+  out.beta_vcov = beta_vcov;
+  out.su2 = su2;
+  out.se2 = se2;
+  out.rho = rho;
+  out.mu0 = mu0;
+  out.sd_loa = sd_loa;
+  out.loa_lower = mu0 - loa_multiplier * sd_loa;
+  out.loa_upper = mu0 + loa_multiplier * sd_loa;
+  out.loglik = loglik;
+  out.ok = true;
+  return true;
+}
+
+template <typename Fn>
+static bool ba_rm_central_gradient(const arma::vec& x,
+                                   const arma::vec& h,
+                                   Fn fn,
+                                   arma::vec& grad) {
+  const int q = x.n_elem;
+  grad.set_size(q);
+
+  for (int i = 0; i < q; ++i) {
+    arma::vec xp = x, xm = x;
+    xp[i] += h[i];
+    xm[i] -= h[i];
+
+    double fp = NA_REAL, fm = NA_REAL;
+    if (!fn(xp, fp) || !fn(xm, fm)) return false;
+
+    grad[i] = (fp - fm) / (2.0 * h[i]);
+  }
+
+  return grad.is_finite();
+}
+
+template <typename Fn>
+static bool ba_rm_central_hessian(const arma::vec& x,
+                                  const arma::vec& h,
+                                  Fn fn,
+                                  arma::mat& H) {
+  const int q = x.n_elem;
+  H.set_size(q, q);
+
+  double f0 = NA_REAL;
+  if (!fn(x, f0)) return false;
+
+  for (int i = 0; i < q; ++i) {
+    arma::vec xp = x, xm = x;
+    xp[i] += h[i];
+    xm[i] -= h[i];
+
+    double fp = NA_REAL, fm = NA_REAL;
+    if (!fn(xp, fp) || !fn(xm, fm)) return false;
+
+    H(i, i) = (fp - 2.0 * f0 + fm) / (h[i] * h[i]);
+
+    for (int j = i + 1; j < q; ++j) {
+      arma::vec xpp = x, xpm = x, xmp = x, xmm = x;
+      xpp[i] += h[i]; xpp[j] += h[j];
+      xpm[i] += h[i]; xpm[j] -= h[j];
+      xmp[i] -= h[i]; xmp[j] += h[j];
+      xmm[i] -= h[i]; xmm[j] -= h[j];
+
+      double fpp = NA_REAL, fpm = NA_REAL, fmp = NA_REAL, fmm = NA_REAL;
+      if (!fn(xpp, fpp) || !fn(xpm, fpm) || !fn(xmp, fmp) || !fn(xmm, fmm)) return false;
+
+      const double hij = (fpp - fpm - fmp + fmm) / (4.0 * h[i] * h[j]);
+      H(i, j) = hij;
+      H(j, i) = hij;
+    }
+  }
+
+  return H.is_finite();
+}
+
+static bool ba_rm_invert_observed_info(const arma::mat& Iobs, arma::mat& Sigma) {
+  arma::mat A = 0.5 * (Iobs + Iobs.t());
+  if (inv_sympd_safe(Sigma, A) && Sigma.is_finite()) return true;
+
+  const double tr = arma::trace(A);
+  double ridge = std::max(1e-10, 1e-8 * std::max(1.0, std::fabs(tr) / std::max(1.0, (double)A.n_rows)));
+
+  for (int k = 0; k < 8; ++k) {
+    arma::mat Ar = A + ridge * arma::eye<arma::mat>(A.n_rows, A.n_cols);
+    if (inv_sympd_safe(Sigma, Ar) && Sigma.is_finite()) return true;
+    ridge *= 10.0;
+  }
+  return false;
+}
 
 // [[Rcpp::export]]
 Rcpp::List bland_altman_repeated_em_ext_cpp(
@@ -746,30 +1031,29 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     double loa_multiplier_arg = NA_REAL,
     bool   use_cov_su_se = true
 ) {
-  if (y.size()==0) stop("Empty input.");
-  if (use_ar1 && Rcpp::NumericVector::is_na(ar1_rho)==false && std::fabs(ar1_rho) >= 0.999)
+  if (y.size() == 0) stop("Empty input.");
+  if (use_ar1 && Rcpp::NumericVector::is_na(ar1_rho) == false && std::fabs(ar1_rho) >= 0.999)
     stop("ar1_rho must be in (-0.999, 0.999).");
 
   // 1) Build paired differences
   PairData P = make_pairs(y, subject, method, time);
 
   // 2) Subject indexing over PAIRS (not raw rows)
-  std::vector<int> subj_idx; int m=0;
-  reindex(P.subj, subj_idx, m);              // (replaces reindex_subjects_ba)
+  std::vector<int> subj_idx;
+  int m = 0;
+  reindex(P.subj, subj_idx, m);
   BySubjBA S = index_by_subject_ba(subj_idx, P.time);
 
   // 3) Fixed-effects design: [Intercept, (optional) scaled pair mean]
   const int p = include_slope ? 2 : 1;
   mat X(P.d.size(), p, fill::zeros);
-  for (size_t i=0;i<P.d.size();++i) X(i,0) = 1.0;
+  for (size_t i = 0; i < P.d.size(); ++i) X(i, 0) = 1.0;
 
-  vec x2; double x2_mean = 0.0, x2_scale = 1.0;
+  vec x2;
+  double x2_mean = 0.0, x2_scale = 1.0;
   if (include_slope) {
     x2 = vec(P.mean.data(), P.mean.size(), /*copy*/ false);
-    x2_mean  = arma::mean(x2);
-    // Prefer sd(m); if it is near-zero relative to the paired-mean reference
-    // scale, fall back to IQR(m)/1.349, then MAD(m), otherwise error because
-    // the paired means are too near-degenerate for the slope term.
+    x2_mean = arma::mean(x2);
     x2_scale = ba_rm_slope_scale_denom(P.mean);
     vec x2c = (x2 - x2_mean) / x2_scale;
     X.col(1) = x2c;
@@ -785,7 +1069,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
 
   if (use_ar1 && Rcpp::NumericVector::is_na(ar1_rho)) {
     // First pass: iid
-    std::vector<Precomp> PC_iid = precompute_blocks(X, ydiff, S, /*use_ar1*/false, 0.0);
+    std::vector<Precomp> PC_iid = precompute_blocks(X, ydiff, S, /*use_ar1*/ false, 0.0);
     fit = fit_diff_em(X, ydiff, S, PC_iid, max_iter, tol);
 
     // Estimate rho from a short-series-stable profile search, seeded by a
@@ -796,7 +1080,7 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     ar1_estimated = true;
 
     // Second pass: AR1 with rho_hat
-    std::vector<Precomp> PC_ar1 = precompute_blocks(X, ydiff, S, /*use_ar1*/true, rho_hat);
+    std::vector<Precomp> PC_ar1 = precompute_blocks(X, ydiff, S, /*use_ar1*/ true, rho_hat);
     fit = fit_diff_em(X, ydiff, S, PC_ar1, max_iter, tol);
 
   } else {
@@ -806,127 +1090,197 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   }
 
   vec beta = fit.beta;
-  double beta0 = beta[0];
-  double beta1 = (p==2 ? beta[1] : NA_REAL);
+  mat beta_vcov = fit.beta_vcov;
+
+  // Keep both parameterisations:
+  // - beta_center: fitted mean at the centred pair mean (x2c = 0)
+  // - beta0_orig / beta1_orig: intercept/slope on the original pair-mean scale
+  const double beta_center = beta[0];
+  double beta0_orig = beta[0];
+  double beta1_orig = (p == 2 ? beta[1] : NA_REAL);
+
   if (include_slope) {
-    // Undo centering/scale-aware standardisation: beta1_orig = beta1 / x2_scale
-    // intercept_orig = beta0 - beta1_orig * x2_mean
-    double beta1_orig = beta1 / x2_scale;
-    double beta0_orig = beta0 - beta1_orig * x2_mean;
-    beta0 = beta0_orig;
-    beta1 = beta1_orig;
+    beta1_orig = beta[1] / x2_scale;
+    beta0_orig = beta[0] - beta1_orig * x2_mean;
   }
-  const double su2 = fit.su2;         // subject random intercept variance
-  const double se2 = fit.se2;         // residual variance (for a single difference)
 
-  // 6) Bias from subject-equal weighting
-  arma::vec subj_means;
-  double mu0 = bias_subject_equal_weight(P.d, subj_idx, m, subj_means);
+  const double su2 = fit.su2;
+  const double se2 = fit.se2;
 
-  // 7) LoA for a single new paired measurement
+  // --- Model-based BA centre ---
+  // For include_slope = FALSE, this is the model intercept.
+  // For include_slope = TRUE, this is the fitted mean difference at the average paired mean,
+  // because x2 was centred before fitting.
+  const double mu0 = beta_center;
+
+  // 7) LoA setup
   const double alpha = 1.0 - std::min(std::max(conf_level, 0.0), 1.0);
-  const double z     = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0); // CI multiplier
-  double loa_multiplier = loa_multiplier_arg;                       // LoA multiplier
+  const double z = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0);
+  double loa_multiplier = loa_multiplier_arg;
   if (!std::isfinite(loa_multiplier) || loa_multiplier <= 0.0) {
-    // Fallback: use the conf_level-implied width (e.g., 1.96 at 95%)
     loa_multiplier = z;
   }
 
-  // Point-estimate the marginal variance of a single new paired difference
-  // directly on the paired-difference scale, while retaining the fitted
-  // variance components as model diagnostics and for CI approximations.
-  const double V_loa = nan_preserve(loa_var_subject_equal_weight(ydiff, S, mu0), 0.0, 1e12);
-  const double sd_loa = std::sqrt(V_loa);
+  // --- Main LoA point estimate: model-based predictive variance ---
+  const double V_loa_model = nan_preserve(su2 + se2, 0.0, 1e12);
+  const double sd_loa = std::sqrt(V_loa_model);
   const double loa_lower = mu0 - loa_multiplier * sd_loa;
   const double loa_upper = mu0 + loa_multiplier * sd_loa;
 
-  // 8) Delta-method CIs
-  // Var(mu0) = var(subject means)/m  (equal-weight)
-  int m_used = 0;
-  for (int i = 0; i < m; ++i) if (!S.rows[i].empty()) ++m_used;
-  arma::vec subj_means_used(m_used);
-  for (int i = 0, k = 0; i < m; ++i) if (!S.rows[i].empty()) subj_means_used[k++] = subj_means[i];
+  // --- Empirical paired-difference LoA variance retained as diagnostic only ---
+  const double V_loa_empirical =
+    nan_preserve(loa_var_subject_equal_weight(ydiff, S, mu0), 0.0, 1e12);
+  const double sd_loa_empirical = std::sqrt(V_loa_empirical);
 
-  double var_mu0 = (m_used >= 2 ? sample_var(subj_means_used) / std::max(1, m_used) : 0.0);
+  // 8) Profile-REML / delta-method CIs
+  //
+  // Decomposition:
+  //   Var{T(hat)} = E[ Var{T(hat) | theta_hat} ] + Var{ E[T(hat) | theta_hat] }
+  //
+  // Here:
+  //   - conditional beta uncertainty comes from beta_vcov at fixed variance parameters;
+  //   - profile uncertainty in theta = (log su2, log se2, [z_rho]) comes from the
+  //     observed Hessian of the profiled REML log-likelihood;
+  //   - the second term is propagated numerically by central finite differences on the
+  //     derived quantities mu0, LoA_lower, LoA_upper.
 
-  // Var(su2_hat) = Var(su_term)/m ; Var(se2_hat) via weighted subject sizes
-  double var_su = sample_var(fit.su_term) / std::max(1, m);
+  const double eps_theta = std::max(1e-10, 1e-10 * std::max(1.0, arma::var(ydiff, /*unbiased*/1)));
+  const bool rho_free = (use_ar1 && ar1_estimated);
 
-  arma::vec se_contrib = fit.se_term;                 // per-subject num_i / n_i
-  // weights ~ n_i / n_total  -> sum w^2 factor
-  double n_total = (double)ydiff.n_elem;
-  double w2sum = 0.0;
-  for (int i=0;i<m;++i) {
-    double wi = ((double)S.rows[i].size()) / std::max(1.0, n_total);
-    w2sum += wi*wi;
-  }
-  double var_se = sample_var(se_contrib) * w2sum;
+  arma::vec theta_hat(2 + (rho_free ? 1 : 0), arma::fill::zeros);
+  theta_hat[0] = std::log(std::max(su2, eps_theta));
+  theta_hat[1] = std::log(std::max(se2, eps_theta));
+  if (rho_free) theta_hat[2] = ba_rm_z_from_rho(rho_used);
 
-  double cov_su_se = 0.0;
-  if (use_cov_su_se) {
-    // build subject-used vectors (exclude empty subjects just in case)
-    arma::vec A_used(m_used), B_used(m_used);
-    for (int i = 0, k = 0; i < m; ++i) {
-      if (!S.rows[i].empty()) {
-        A_used[k] = fit.su_term[i];   // A_i = E[u_i^2 | y]
-        B_used[k] = fit.se_term[i];   // B_i = num_i / n_i
-        ++k;
-      }
-    }
-    // Cov( su_hat , se_hat ) approx (1/m_used) * Cov(A_i, B_i)
-    cov_su_se = sample_cov(A_used, B_used) / std::max(1, m_used);
+  arma::vec step(theta_hat.n_elem, arma::fill::zeros);
+  for (arma::uword j = 0; j < theta_hat.n_elem; ++j) {
+    step[j] = 1e-4 * std::max(1.0, std::fabs(theta_hat[j]));
   }
 
-  // Var(V) and Var(sd) via delta
-  double var_V = var_su + var_se + 2.0 * cov_su_se;
-  double var_sd = (V_loa > 0.0 ? var_V / (4.0 * V_loa) : 0.0);
+  auto loglik_fn = [&](const arma::vec& th, double& out) -> bool {
+    ProfileThetaEval E;
+    if (!ba_rm_eval_profile_theta(th, X, ydiff, S, use_ar1, rho_free, rho_used, loa_multiplier, E)) return false;
+    out = E.loglik;
+    return std::isfinite(out);
+  };
 
-  // ---- FIX: LoA multiplier inside, CI z outside ----
-  double var_Lpm = var_mu0 + (loa_multiplier * loa_multiplier) * var_sd;
+  auto mu_fn = [&](const arma::vec& th, double& out) -> bool {
+    ProfileThetaEval E;
+    if (!ba_rm_eval_profile_theta(th, X, ydiff, S, use_ar1, rho_free, rho_used, loa_multiplier, E)) return false;
+    out = E.mu0;
+    return std::isfinite(out);
+  };
 
-  const double se_bias  = std::sqrt(std::max(0.0, var_mu0));
-  const double se_Lpm   = std::sqrt(std::max(0.0, var_Lpm));
+  auto lower_fn = [&](const arma::vec& th, double& out) -> bool {
+    ProfileThetaEval E;
+    if (!ba_rm_eval_profile_theta(th, X, ydiff, S, use_ar1, rho_free, rho_used, loa_multiplier, E)) return false;
+    out = E.loa_lower;
+    return std::isfinite(out);
+  };
+
+  auto upper_fn = [&](const arma::vec& th, double& out) -> bool {
+    ProfileThetaEval E;
+    if (!ba_rm_eval_profile_theta(th, X, ydiff, S, use_ar1, rho_free, rho_used, loa_multiplier, E)) return false;
+    out = E.loa_upper;
+    return std::isfinite(out);
+  };
+
+  arma::mat H_theta;
+  if (!ba_rm_central_hessian(theta_hat, step, loglik_fn, H_theta)) {
+    stop("Profile-REML CI calculation failed while evaluating the numerical Hessian.");
+  }
+
+  arma::mat I_theta = -0.5 * (H_theta + H_theta.t());
+  arma::mat Sigma_theta;
+  if (!ba_rm_invert_observed_info(I_theta, Sigma_theta)) {
+    stop("Profile-REML CI calculation failed because the observed information matrix was not invertible.");
+  }
+
+  arma::vec g_mu, g_lower, g_upper;
+  if (!ba_rm_central_gradient(theta_hat, step, mu_fn, g_mu)) {
+    stop("Profile-REML CI calculation failed while evaluating the gradient for the bias.");
+  }
+  if (!ba_rm_central_gradient(theta_hat, step, lower_fn, g_lower)) {
+    stop("Profile-REML CI calculation failed while evaluating the gradient for the lower LoA.");
+  }
+  if (!ba_rm_central_gradient(theta_hat, step, upper_fn, g_upper)) {
+    stop("Profile-REML CI calculation failed while evaluating the gradient for the upper LoA.");
+  }
+
+  // Conditional beta uncertainty at fixed theta:
+  // mu0 = beta_center = beta[0], and each LoA endpoint depends on beta only through beta[0].
+  const double var_mu_cond = (beta_vcov.n_rows >= 1 ? std::max(0.0, beta_vcov(0, 0)) : 0.0);
+  const double var_lower_cond = var_mu_cond;
+  const double var_upper_cond = var_mu_cond;
+
+  // Profile uncertainty in theta, propagated through the derived quantities.
+  const double var_mu_prof =
+    std::max(0.0, arma::as_scalar(g_mu.t() * Sigma_theta * g_mu));
+  const double var_lower_prof =
+    std::max(0.0, arma::as_scalar(g_lower.t() * Sigma_theta * g_lower));
+  const double var_upper_prof =
+    std::max(0.0, arma::as_scalar(g_upper.t() * Sigma_theta * g_upper));
+
+  const double var_mu0 = var_mu_cond + var_mu_prof;
+  const double var_loa_lower = var_lower_cond + var_lower_prof;
+  const double var_loa_upper = var_upper_cond + var_upper_prof;
+
+  const double se_bias = std::sqrt(std::max(0.0, var_mu0));
+  const double se_loa_lower = std::sqrt(std::max(0.0, var_loa_lower));
+  const double se_loa_upper = std::sqrt(std::max(0.0, var_loa_upper));
 
   const double bias_lwr = mu0 - z * se_bias;
   const double bias_upr = mu0 + z * se_bias;
-  const double loa_lower_lwr = loa_lower - z * se_Lpm;
-  const double loa_lower_upr = loa_lower + z * se_Lpm;
-  const double loa_upper_lwr = loa_upper - z * se_Lpm;
-  const double loa_upper_upr = loa_upper + z * se_Lpm;
-
+  const double loa_lower_lwr = loa_lower - z * se_loa_lower;
+  const double loa_lower_upr = loa_lower + z * se_loa_lower;
+  const double loa_upper_lwr = loa_upper - z * se_loa_upper;
+  const double loa_upper_upr = loa_upper + z * se_loa_upper;
   return List::create(
-    _["n_pairs"]     = (int)P.d.size(),
-    _["n_subjects"]  = m,
-    _["pairs_mean"]  = Rcpp::NumericVector(P.mean.begin(), P.mean.end()),
-    _["pairs_diff"]  = Rcpp::NumericVector(P.d.begin(),   P.d.end()),
-    // estimates
-    _["bias_mu0"]    = mu0,
-    _["bias_se"]     = se_bias,
-    _["bias_lwr"]    = bias_lwr,
-    _["bias_upr"]    = bias_upr,
-    _["beta_intercept"] = beta0,
-    _["beta_slope"]  = (include_slope ? beta1 : NA_REAL),
+    _["n_pairs"] = static_cast<int>(P.d.size()),
+    _["n_subjects"] = m,
+    _["pairs_mean"] = Rcpp::NumericVector(P.mean.begin(), P.mean.end()),
+    _["pairs_diff"] = Rcpp::NumericVector(P.d.begin(), P.d.end()),
+
+    // model-based BA centre and CI
+    _["bias_mu0"] = mu0,
+    _["bias_se"] = se_bias,
+    _["bias_lwr"] = bias_lwr,
+    _["bias_upr"] = bias_upr,
+
+    // fixed effects on original pair-mean scale
+    _["beta_intercept"] = beta0_orig,
+    _["beta_slope"] = (include_slope ? beta1_orig : NA_REAL),
+    _["beta_center"] = beta_center,
+    _["beta_center_reference_mean"] = (include_slope ? x2_mean : NA_REAL),
+
     // variance components
     _["sigma2_subject"] = su2,
-    _["sigma2_resid"]   = se2,
-    // LoA
-    _["sd_loa"]      = sd_loa,
-    _["loa_lower"]   = loa_lower,
-    _["loa_upper"]   = loa_upper,
+    _["sigma2_resid"] = se2,
+
+    // LoA (model-based main result)
+    _["sd_loa"] = sd_loa,
+    _["loa_var_model"] = V_loa_model,
+    _["loa_lower"] = loa_lower,
+    _["loa_upper"] = loa_upper,
     _["loa_lower_lwr"] = loa_lower_lwr,
     _["loa_lower_upr"] = loa_lower_upr,
     _["loa_upper_lwr"] = loa_upper_lwr,
     _["loa_upper_upr"] = loa_upper_upr,
+
+    // empirical paired-difference diagnostics
+    _["loa_var_empirical"] = V_loa_empirical,
+    _["sd_loa_empirical"] = sd_loa_empirical,
+
     // AR(1)
-    _["use_ar1"]     = use_ar1,
-    _["ar1_rho"]     = (use_ar1 ? rho_used : NA_REAL),
+    _["use_ar1"] = use_ar1,
+    _["ar1_rho"] = (use_ar1 ? rho_used : NA_REAL),
     _["ar1_estimated"] = (use_ar1 ? ar1_estimated : false),
+
     // misc
     _["loa_multiplier"] = loa_multiplier,
-    _["conf_level"]  = conf_level,
-    _["converged"]   = fit.converged,
-    _["iter"]        = fit.iter,
-    _["warn"]        = fit.warn
+    _["conf_level"] = conf_level,
+    _["converged"] = fit.converged,
+    _["iter"] = fit.iter,
+    _["warn"] = fit.warn
   );
 }
-
