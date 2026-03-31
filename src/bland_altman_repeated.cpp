@@ -313,8 +313,54 @@ struct FitOut {
   arma::vec se_term;     // per-subject contribution for se2 variance (normalized)
   int iter = 0;
   bool converged = false;
+  bool boundary_su2_zero = false;
   std::string warn;
 };
+
+static inline bool ba_rm_at_su2_boundary(double su2, double tol = 1e-10) {
+  return std::isfinite(su2) && su2 <= tol;
+}
+
+static FitOut fit_diff_boundary_su0(const mat& X,
+                                    const vec& y,
+                                    const std::vector<Precomp>& PC) {
+  const int p = X.n_cols;
+  int n = 0;
+
+  arma::mat XtCX(p, p, arma::fill::zeros);
+  arma::vec XtCy(p, arma::fill::zeros);
+  double yCy = 0.0;
+
+  for (const Precomp& P : PC) {
+    if (P.n_i == 0) continue;
+    XtCX += P.XTCX;
+    XtCy += P.XTCy;
+    yCy  += arma::as_scalar(P.y_i.t() * (P.Cinv * P.y_i));
+    n    += P.n_i;
+  }
+
+  arma::mat XtCX_inv;
+  if (!inv_sympd_safe(XtCX_inv, XtCX) || !XtCX_inv.is_finite()) {
+    stop("Boundary fit with sigma2_subject = 0 failed because X'CX was not invertible.");
+  }
+
+  arma::vec beta = XtCX_inv * XtCy;
+  const double yPy = yCy - arma::as_scalar(XtCy.t() * XtCX_inv * XtCy);
+  const double se2 = std::max(1e-12, yPy / std::max(1, n - p));
+
+  FitOut out;
+  out.beta = beta;
+  out.beta_vcov = se2 * XtCX_inv;
+  out.su2 = 0.0;
+  out.se2 = se2;
+  out.su_term = arma::vec(PC.size(), arma::fill::zeros);
+  out.se_term = arma::vec(PC.size(), arma::fill::zeros);
+  out.iter = 0;
+  out.converged = true;
+  out.boundary_su2_zero = true;
+  out.warn = "Constrained boundary fit used with sigma2_subject fixed at 0.";
+  return out;
+}
 
 static FitOut fit_diff_em(const mat& X, const vec& y,
                           const BySubjBA& S,
@@ -388,7 +434,7 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
 
   auto damp_to_ratio = [](double oldv, double newv, double rmax) {
     if (!std::isfinite(newv)) return oldv;
-    if (oldv <= 0.0) return nan_preserve(newv, 1e-12, rmax);
+    if (oldv <= 0.0) return nan_preserve(newv, 0.0, rmax);
     double lo = oldv / rmax, hi = oldv * rmax;
     return nan_preserve(newv, std::min(lo, hi), std::max(lo, hi));
   };
@@ -622,8 +668,8 @@ static double ba_rm_reml_loglik(const arma::mat& X,
   const double eps = 1e-12;
   const double su2 = std::max(fit.su2, 0.0);
   const double se2 = std::max(fit.se2, eps);
-  const double inv_su = 1.0 / std::max(su2, eps);
   const double inv_se = 1.0 / se2;
+  const bool at_su0 = ba_rm_at_su2_boundary(su2);
 
   arma::mat XtViX(p, p, arma::fill::zeros);
   arma::vec XtViy(p, arma::fill::zeros);
@@ -633,8 +679,12 @@ static double ba_rm_reml_loglik(const arma::mat& X,
   for (const Precomp& P : PC) {
     if (P.n_i == 0) continue;
 
-    const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
-    const double Minv = 1.0 / M;
+    double Minv = 0.0;
+    if (!at_su0) {
+      const double inv_su = 1.0 / su2;
+      const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
+      Minv = 1.0 / M;
+    }
 
     const arma::vec S_ux = inv_se * P.UTCX;
     const arma::vec XTRinvY = inv_se * P.XTCy;
@@ -653,10 +703,10 @@ static double ba_rm_reml_loglik(const arma::mat& X,
     if (!std::isfinite(quad)) return -std::numeric_limits<double>::infinity();
     yViY += quad;
 
-    const double logdetV_i =
-      P.n_i * std::log(se2) -
-      logdet_spd_safe(P.Cinv) +
-      std::log1p((su2 / se2) * P.UCU);
+    double logdetV_i = P.n_i * std::log(se2) - logdet_spd_safe(P.Cinv);
+    if (!at_su0) {
+      logdetV_i += std::log1p((su2 / se2) * P.UCU);
+    }
     if (!std::isfinite(logdetV_i)) return -std::numeric_limits<double>::infinity();
     sum_logdetV += logdetV_i;
   }
@@ -674,10 +724,10 @@ static double ba_rm_reml_loglik(const arma::mat& X,
 
   const double two_pi = 2.0 * M_PI;
   return -0.5 * (
-    (static_cast<double>(n) - static_cast<double>(p)) * std::log(two_pi) +
-    sum_logdetV +
-    logdetXtViX +
-    yPy
+      (static_cast<double>(n) - static_cast<double>(p)) * std::log(two_pi) +
+        sum_logdetV +
+        logdetXtViX +
+        yPy
   );
 }
 
@@ -783,8 +833,8 @@ static bool ba_rm_beta_gls_given_theta(const std::vector<Precomp>& PC,
                                        arma::vec& beta,
                                        arma::mat& beta_vcov) {
   const double eps = 1e-12;
-  const double inv_su = 1.0 / std::max(su2, eps);
   const double inv_se = 1.0 / std::max(se2, eps);
+  const bool at_su0 = ba_rm_at_su2_boundary(su2);
 
   arma::mat XtViX(p, p, arma::fill::zeros);
   arma::vec XtViy(p, arma::fill::zeros);
@@ -792,8 +842,12 @@ static bool ba_rm_beta_gls_given_theta(const std::vector<Precomp>& PC,
   for (const Precomp& P : PC) {
     if (P.n_i == 0) continue;
 
-    const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
-    const double Minv = 1.0 / M;
+    double Minv = 0.0;
+    if (!at_su0) {
+      const double inv_su = 1.0 / su2;
+      const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
+      Minv = 1.0 / M;
+    }
 
     const arma::vec S_ux = inv_se * P.UTCX;
     const double    S_uy = inv_se * P.UTCy;
@@ -813,7 +867,6 @@ static bool ba_rm_beta_gls_given_theta(const std::vector<Precomp>& PC,
 
   beta = XtViX_inv * XtViy;
   beta_vcov = XtViX_inv;
-
   return beta.is_finite() && beta_vcov.is_finite();
 }
 
@@ -825,10 +878,9 @@ static double ba_rm_reml_loglik_fixed(const std::vector<Precomp>& PC,
   int n = 0;
 
   const double eps = 1e-12;
-  const double su2_use = std::max(su2, eps);
   const double se2_use = std::max(se2, eps);
-  const double inv_su = 1.0 / su2_use;
   const double inv_se = 1.0 / se2_use;
+  const bool at_su0 = ba_rm_at_su2_boundary(su2);
 
   arma::mat XtViX(p, p, arma::fill::zeros);
   arma::vec XtViy(p, arma::fill::zeros);
@@ -839,8 +891,13 @@ static double ba_rm_reml_loglik_fixed(const std::vector<Precomp>& PC,
     if (P.n_i == 0) continue;
     n += P.n_i;
 
-    const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
-    const double Minv = 1.0 / M;
+    double Minv = 0.0;
+    if (!at_su0) {
+      const double su2_use = std::max(su2, eps);
+      const double inv_su = 1.0 / su2_use;
+      const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
+      Minv = 1.0 / M;
+    }
 
     const arma::vec S_ux = inv_se * P.UTCX;
     const double    S_uy = inv_se * P.UTCy;
@@ -865,10 +922,13 @@ static double ba_rm_reml_loglik_fixed(const std::vector<Precomp>& PC,
     if (!std::isfinite(quad)) return -std::numeric_limits<double>::infinity();
     yViY += quad;
 
-    const double logdetV_i =
+    double logdetV_i =
       P.n_i * std::log(se2_use) -
-      logdet_spd_safe(P.Cinv) +
-      std::log1p((su2_use / se2_use) * P.UCU);
+      logdet_spd_safe(P.Cinv);
+
+    if (!at_su0) {
+      logdetV_i += std::log1p((su2 / se2_use) * P.UCU);
+    }
 
     if (!std::isfinite(logdetV_i)) return -std::numeric_limits<double>::infinity();
     sum_logdetV += logdetV_i;
@@ -904,11 +964,30 @@ static bool ba_rm_eval_profile_theta(const arma::vec& theta_t,
                                      double rho_fixed,
                                      double loa_multiplier,
                                      ProfileThetaEval& out) {
-  if (theta_t.n_elem < 2) return false;
+  const int min_q = (rho_free ? 2 : 1);
+  if ((int)theta_t.n_elem < min_q) return false;
 
-  const double su2 = ba_rm_pos_from_eta(theta_t[0]);
-  const double se2 = ba_rm_pos_from_eta(theta_t[1]);
-  const double rho = use_ar1 ? (rho_free ? ba_rm_rho_from_z(theta_t[2]) : rho_fixed) : 0.0;
+  int pos = 0;
+  double su2 = 0.0;
+  double se2 = NA_REAL;
+  double rho = 0.0;
+
+  // If theta has 2 variance parameters before rho, use interior form.
+  // If theta has 1 variance parameter before rho, treat su2 as fixed at 0.
+  const bool su2_free = (theta_t.n_elem == (rho_free ? 3 : 2));
+
+  if (su2_free) {
+    su2 = ba_rm_pos_from_eta(theta_t[pos++]);
+    if (su2 <= 1e-10) su2 = 0.0;
+  } else {
+    su2 = 0.0;
+  }
+
+  se2 = ba_rm_pos_from_eta(theta_t[pos++]);
+
+  if (use_ar1) {
+    rho = rho_free ? ba_rm_rho_from_z(theta_t[pos]) : rho_fixed;
+  }
 
   std::vector<Precomp> PC = precompute_blocks(X, y, S, use_ar1, rho);
 
@@ -1061,32 +1140,93 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   vec ydiff(P.d.data(), P.d.size(), /*copy*/ false);
 
   // Strategy:
-  //   - If AR1 requested & rho is NA: fit iid, estimate rho, refit with AR1.
-  //   - Else: fit directly with requested structure.
+  //   - Build the requested covariance structure.
+  //   - Try the interior EM fit.
+  //   - Also compute the exact boundary fit with sigma2_subject = 0.
+  //   - Select the better fit by profiled REML.
+  //   - If AR1 requested & rho is NA, estimate rho from iid first, then repeat.
   bool ar1_estimated = false;
   double rho_used = NA_REAL;
   FitOut fit;
 
+  auto select_best_fit = [&](const std::vector<Precomp>& PC_local,
+                             const FitOut* fit_interior_or_null) -> FitOut {
+                               FitOut fit_boundary = fit_diff_boundary_su0(X, ydiff, PC_local);
+                               const double ll_boundary = ba_rm_reml_loglik(X, ydiff, PC_local, fit_boundary);
+
+                               if (fit_interior_or_null == nullptr) {
+                                 return fit_boundary;
+                               }
+
+                               const double ll_interior =
+                                 ba_rm_reml_loglik(X, ydiff, PC_local, *fit_interior_or_null);
+
+                               if (!std::isfinite(ll_interior)) {
+                                 return fit_boundary;
+                               }
+                               if (!std::isfinite(ll_boundary)) {
+                                 return *fit_interior_or_null;
+                               }
+
+                               // prefer boundary if it is at least as good up to a tiny tolerance
+                               if (ll_boundary >= ll_interior - 1e-8) {
+                                 return fit_boundary;
+                               }
+                               return *fit_interior_or_null;
+                             };
+
   if (use_ar1 && Rcpp::NumericVector::is_na(ar1_rho)) {
     // First pass: iid
-    std::vector<Precomp> PC_iid = precompute_blocks(X, ydiff, S, /*use_ar1*/ false, 0.0);
-    fit = fit_diff_em(X, ydiff, S, PC_iid, max_iter, tol);
+    std::vector<Precomp> PC_iid =
+      precompute_blocks(X, ydiff, S, /*use_ar1*/ false, 0.0);
 
-    // Estimate rho from a short-series-stable profile search, seeded by a
-    // lag-1 moments estimate from the iid fit.
-    double rho_mom = estimate_rho_moments(fit, X, ydiff, S, PC_iid);
+    FitOut fit_iid_interior;
+    FitOut* fit_iid_ptr = nullptr;
+    try {
+      fit_iid_interior = fit_diff_em(X, ydiff, S, PC_iid, max_iter, tol);
+      fit_iid_ptr = &fit_iid_interior;
+    } catch (...) {
+      fit_iid_ptr = nullptr;
+    }
+    FitOut fit_iid = select_best_fit(PC_iid, fit_iid_ptr);
+
+    // Estimate rho from the selected iid fit
+    double rho_mom = estimate_rho_moments(fit_iid, X, ydiff, S, PC_iid);
     double rho_hat = estimate_rho_profile(X, ydiff, S, max_iter, tol, rho_mom);
     rho_used = rho_hat;
     ar1_estimated = true;
 
     // Second pass: AR1 with rho_hat
-    std::vector<Precomp> PC_ar1 = precompute_blocks(X, ydiff, S, /*use_ar1*/ true, rho_hat);
-    fit = fit_diff_em(X, ydiff, S, PC_ar1, max_iter, tol);
+    std::vector<Precomp> PC_ar1 =
+      precompute_blocks(X, ydiff, S, /*use_ar1*/ true, rho_hat);
+
+    FitOut fit_ar1_interior;
+    FitOut* fit_ar1_ptr = nullptr;
+    try {
+      fit_ar1_interior = fit_diff_em(X, ydiff, S, PC_ar1, max_iter, tol);
+      fit_ar1_ptr = &fit_ar1_interior;
+    } catch (...) {
+      fit_ar1_ptr = nullptr;
+    }
+    fit = select_best_fit(PC_ar1, fit_ar1_ptr);
 
   } else {
-    if (use_ar1) rho_used = nan_preserve(ar1_rho, -0.999, 0.999);
-    std::vector<Precomp> PC = precompute_blocks(X, ydiff, S, use_ar1, (use_ar1 ? rho_used : 0.0));
-    fit = fit_diff_em(X, ydiff, S, PC, max_iter, tol);
+    if (use_ar1) {
+      rho_used = nan_preserve(ar1_rho, -0.999, 0.999);
+    }
+
+    std::vector<Precomp> PC =
+      precompute_blocks(X, ydiff, S, use_ar1, (use_ar1 ? rho_used : 0.0));
+
+    FitOut fit_interior;
+    FitOut* fit_ptr = nullptr;
+    try {
+      fit_interior = fit_diff_em(X, ydiff, S, PC, max_iter, tol);
+      fit_ptr = &fit_interior;
+    } catch (...) {
+      fit_ptr = nullptr;
+    }
+    fit = select_best_fit(PC, fit_ptr);
   }
 
   vec beta = fit.beta;
@@ -1147,10 +1287,21 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
   const double eps_theta = std::max(1e-10, 1e-10 * std::max(1.0, arma::var(ydiff, /*unbiased*/1)));
   const bool rho_free = (use_ar1 && ar1_estimated);
 
-  arma::vec theta_hat(2 + (rho_free ? 1 : 0), arma::fill::zeros);
-  theta_hat[0] = std::log(std::max(su2, eps_theta));
-  theta_hat[1] = std::log(std::max(se2, eps_theta));
-  if (rho_free) theta_hat[2] = ba_rm_z_from_rho(rho_used);
+  const bool su2_boundary = fit.boundary_su2_zero;
+
+  arma::vec theta_hat(
+      (su2_boundary ? 1 : 2) + (rho_free ? 1 : 0),
+      arma::fill::zeros
+  );
+
+  int th_pos = 0;
+  if (!su2_boundary) {
+    theta_hat[th_pos++] = std::log(std::max(su2, eps_theta));
+  }
+  theta_hat[th_pos++] = std::log(std::max(se2, eps_theta));
+  if (rho_free) {
+    theta_hat[th_pos++] = ba_rm_z_from_rho(rho_used);
+  }
 
   arma::vec step(theta_hat.n_elem, arma::fill::zeros);
   for (arma::uword j = 0; j < theta_hat.n_elem; ++j) {
