@@ -126,6 +126,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ba_rm_complete_pairs_cpp
+int ba_rm_complete_pairs_cpp(const Rcpp::NumericVector& y, const Rcpp::IntegerVector& subject, const Rcpp::IntegerVector& method, const Rcpp::IntegerVector& time);
+RcppExport SEXP _matrixCorr_ba_rm_complete_pairs_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type time(timeSEXP);
+    rcpp_result_gen = Rcpp::wrap(ba_rm_complete_pairs_cpp(y, subject, method, time));
+    return rcpp_result_gen;
+END_RCPP
+}
 // bland_altman_repeated_em_ext_cpp
 Rcpp::List bland_altman_repeated_em_ext_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, bool include_slope, bool use_ar1, double ar1_rho, int max_iter, double tol, double conf_level, double loa_multiplier_arg, bool use_cov_su_se);
 RcppExport SEXP _matrixCorr_bland_altman_repeated_em_ext_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP include_slopeSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP loa_multiplier_argSEXP, SEXP use_cov_su_seSEXP) {
@@ -650,6 +664,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 5},
     {"_matrixCorr_ba_openmp_threads", (DL_FUNC) &_matrixCorr_ba_openmp_threads, 0},
     {"_matrixCorr_ba_rm_slope_scale_cpp", (DL_FUNC) &_matrixCorr_ba_rm_slope_scale_cpp, 1},
+    {"_matrixCorr_ba_rm_complete_pairs_cpp", (DL_FUNC) &_matrixCorr_ba_rm_complete_pairs_cpp, 4},
     {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 12},
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 11},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},

@@ -489,6 +489,20 @@ test_that("n matrix equals number of subject-time complete pairs per contrast", 
   expect_equal(as.integer(fit$n[i,j]), nrow(cc))
 })
 
+test_that("native complete-pair counter matches the expected matched-pair total", {
+  dat <- data.frame(
+    y = c(1, 2, 3, 4, 5, NA, 7, 8),
+    subject = c(1L, 1L, 1L, 1L, 2L, 2L, 2L, 2L),
+    method = c(1L, 2L, 1L, 1L, 1L, 2L, 2L, 1L),
+    time = c(1L, 1L, 2L, 2L, 1L, 1L, 2L, 2L)
+  )
+
+  expect_equal(
+    matrixCorr:::ba_rm_complete_pairs_cpp(dat$y, dat$subject, dat$method, dat$time),
+    2L
+  )
+})
+
 test_that("Column mapping works both with data= and with vectors", {
   dat <- sim_multi_method(S = 10, Tm = 6, seed = 42)
   # With data=

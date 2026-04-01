@@ -830,24 +830,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
 #' @keywords internal
 .count_ba_rm_complete_pairs <- function(response, subject, method12, time) {
-  keep <- is.finite(response) & !is.na(subject) & !is.na(method12) & !is.na(time)
-  if (!any(keep)) {
-    return(0L)
-  }
-
-  dat <- data.frame(
-    subject = subject[keep],
-    method = method12[keep],
-    time = time[keep],
-    stringsAsFactors = FALSE
-  )
-  keys <- paste(dat$subject, dat$time, sep = "\r")
-  method_by_key <- split(dat$method, keys)
-  n_pairs <- sum(vapply(method_by_key, function(x) {
-    ux <- unique(x)
-    length(ux) >= 2L && all(c(1L, 2L) %in% ux)
-  }, logical(1)))
-  as.integer(n_pairs)
+  ba_rm_complete_pairs_cpp(response, subject, method12, time)
 }
 
 

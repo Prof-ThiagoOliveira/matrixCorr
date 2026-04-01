@@ -219,6 +219,48 @@ static PairData make_pairs(const NumericVector& y,
   return P;
 }
 
+// [[Rcpp::export]]
+int ba_rm_complete_pairs_cpp(const NumericVector& y,
+                             const IntegerVector& subject,
+                             const IntegerVector& method,
+                             const IntegerVector& time) {
+  const int n = y.size();
+  if (subject.size() != n || method.size() != n || time.size() != n) {
+    stop("lengths of y, subject, method, time must match.");
+  }
+
+  struct PairSeen {
+    bool has1 = false;
+    bool has2 = false;
+  };
+
+  std::unordered_map<uint64_t, PairSeen> seen;
+  seen.reserve(static_cast<size_t>(n));
+
+  for (int i = 0; i < n; ++i) {
+    if (NumericVector::is_na(y[i]) ||
+        IntegerVector::is_na(subject[i]) ||
+        IntegerVector::is_na(method[i]) ||
+        IntegerVector::is_na(time[i])) {
+      continue;
+    }
+
+    const int m = method[i];
+    if (m != 1 && m != 2) continue;
+
+    PairSeen& entry = seen[make_pair_key(subject[i], time[i])];
+    if (m == 1) entry.has1 = true;
+    else        entry.has2 = true;
+  }
+
+  int n_pairs = 0;
+  for (const auto& kv : seen) {
+    if (kv.second.has1 && kv.second.has2) ++n_pairs;
+  }
+
+  return n_pairs;
+}
+
 struct BlockSegment {
   int start = 0;
   int len = 0;
