@@ -71,12 +71,17 @@ jobs:
         shell: bash
       - name: Remove all user-installed R packages
         run: |
-          Rscript -e "unlink('~/R/x86_64-pc-linux-gnu-library/4.6', recursive = TRUE)" || true
+          rm -rf ~/R/x86_64-pc-linux-gnu-library/* || true
+          rm -rf /github/home/R/x86_64-pc-linux-gnu-library/* || true
         shell: bash
       - uses: r-hub/actions/setup-deps@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
+      - name: Reinstall rlang from source
+        run: |
+          install.packages("rlang", type = "source", repos = "https://cloud.r-project.org")
+        shell: Rscript {0}
       - name: Refresh packages built under older R
         run: >
           Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org"));
@@ -116,12 +121,17 @@ jobs:
         shell: bash
       - name: Remove all user-installed R packages
         run: |
-          Rscript -e "unlink('~/R/x86_64-pc-linux-gnu-library/4.6', recursive = TRUE)" || true
+          rm -rf ~/R/x86_64-pc-linux-gnu-library/* || true
+          rm -rf /github/home/R/x86_64-pc-linux-gnu-library/* || true
         shell: bash
       - uses: r-hub/actions/setup-deps@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
+      - name: Reinstall rlang from source
+        run: |
+          install.packages("rlang", type = "source", repos = "https://cloud.r-project.org")
+        shell: Rscript {0}
       - name: Refresh packages built under older R
         run: >
           Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org"));
