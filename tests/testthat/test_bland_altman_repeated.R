@@ -637,3 +637,163 @@ test_that("pairwise matrix drops contrasts with <2 matched pairs", {
   expect_equal(fit$n["A", "C"], 3L)
   expect_true(is.finite(fit$bias["A", "C"]))
 })
+
+test_that("backend refactor preserves key model-based BA estimands", {
+  extract_fit <- function(fit) {
+    with(fit, list(
+      bias_mu0 = bias_mu0,
+      bias_lwr = bias_lwr,
+      bias_upr = bias_upr,
+      sigma2_subject = sigma2_subject,
+      sigma2_resid = sigma2_resid,
+      sd_loa = sd_loa,
+      loa_lower = loa_lower,
+      loa_upper = loa_upper,
+      loa_lower_lwr = loa_lower_lwr,
+      loa_lower_upr = loa_lower_upr,
+      loa_upper_lwr = loa_upper_lwr,
+      loa_upper_upr = loa_upper_upr,
+      ar1_rho = ar1_rho,
+      ar1_estimated = ar1_estimated
+    ))
+  }
+
+  expect_close_to_reference <- function(observed, expected, tol = 5e-6) {
+    for (nm in names(expected)) {
+      if (is.logical(expected[[nm]])) {
+        expect_identical(observed[[nm]], expected[[nm]], info = nm)
+      } else if (is.na(expected[[nm]])) {
+        expect_true(is.na(observed[[nm]]), info = nm)
+      } else {
+        expect_equal(observed[[nm]], expected[[nm]], tolerance = tol, info = nm)
+      }
+    }
+  }
+
+  expected <- list(
+    iid_boundary = list(
+      bias_mu0 = 1.10880351648566,
+      bias_lwr = 0.881755926331974,
+      bias_upr = 1.33585110663935,
+      sigma2_subject = 0,
+      sigma2_resid = 2.65706881134442,
+      sd_loa = 1.63005178179849,
+      loa_lower = -2.08609797583937,
+      loa_upper = 4.30370500881069,
+      loa_lower_lwr = -2.57353079579423,
+      loa_lower_upr = -1.5986651558845,
+      loa_upper_lwr = 3.81627218885742,
+      loa_upper_upr = 4.79113782876397,
+      ar1_rho = NA_real_,
+      ar1_estimated = FALSE
+    ),
+    ar1_fixed_slope = list(
+      bias_mu0 = 0.101168854430398,
+      bias_lwr = -0.232691880183468,
+      bias_upr = 0.435029589044263,
+      sigma2_subject = 0.603133877867929,
+      sigma2_resid = 0.604988223925724,
+      sd_loa = 1.09914607845984,
+      loa_lower = -2.09712330248929,
+      loa_upper = 2.29946101135009,
+      loa_lower_lwr = -2.61556143639825,
+      loa_lower_upr = -1.57868516858033,
+      loa_upper_lwr = 1.78104737272341,
+      loa_upper_upr = 2.81787464997676,
+      ar1_rho = 0.35,
+      ar1_estimated = FALSE
+    ),
+    ar1_profiled = list(
+      bias_mu0 = 0.35051291798968,
+      bias_lwr = 0.024251325329714,
+      bias_upr = 0.676774510649645,
+      sigma2_subject = 0.247592888510583,
+      sigma2_resid = 1.13252478725102,
+      sd_loa = 1.17478409750967,
+      loa_lower = -1.95206391312926,
+      loa_upper = 2.65308974910862,
+      loa_lower_lwr = -2.45695199981367,
+      loa_lower_upr = -1.44717582644486,
+      loa_upper_lwr = 2.14433296879168,
+      loa_upper_upr = 3.16184652942557,
+      ar1_rho = 0.555555555555556,
+      ar1_estimated = TRUE
+    ),
+    exact_boundary = list(
+      bias_mu0 = 0.799999999999998,
+      bias_lwr = 0.799999561738728,
+      bias_upr = 0.800000438261268,
+      sigma2_subject = 0,
+      sigma2_resid = 1e-12,
+      sd_loa = 1e-06,
+      loa_lower = 0.799998039999998,
+      loa_upper = 0.800001959999998,
+      loa_lower_lwr = 0.799997601738728,
+      loa_lower_upr = 0.799998478261268,
+      loa_upper_lwr = 0.800001521738728,
+      loa_upper_upr = 0.800002398261268,
+      ar1_rho = NA_real_,
+      ar1_estimated = FALSE
+    )
+  )
+
+  dat_iid <- sim_two_method_known(S = 22L, Tm = 9L, mu = 1.1, sig_s = 0.9, sig_e = 1.3, seed = 42L)
+  fit_iid <- matrixCorr:::bland_altman_repeated_em_ext_cpp(
+    y = dat_iid$y,
+    subject = dat_iid$subject,
+    method = as.integer(dat_iid$method == "M2") + 1L,
+    time = dat_iid$time,
+    include_slope = FALSE,
+    use_ar1 = FALSE,
+    conf_level = 0.95,
+    loa_multiplier_arg = 1.96
+  )
+  expect_close_to_reference(extract_fit(fit_iid), expected$iid_boundary, tol = 5e-6)
+
+  dat_ar1_fixed <- sim_two_method_known(S = 18L, Tm = 8L, mu = 0.6, sig_s = 1.0, sig_e = 0.8, rho = 0.35, seed = 314L)
+  fit_ar1_fixed <- matrixCorr:::bland_altman_repeated_em_ext_cpp(
+    y = dat_ar1_fixed$y,
+    subject = dat_ar1_fixed$subject,
+    method = as.integer(dat_ar1_fixed$method == "M2") + 1L,
+    time = dat_ar1_fixed$time,
+    include_slope = TRUE,
+    use_ar1 = TRUE,
+    ar1_rho = 0.35,
+    conf_level = 0.90,
+    loa_multiplier_arg = 2.0
+  )
+  expect_close_to_reference(extract_fit(fit_ar1_fixed), expected$ar1_fixed_slope, tol = 5e-6)
+
+  dat_ar1_profiled <- sim_two_method_known(S = 24L, Tm = 7L, mu = 0.25, sig_s = 0.7, sig_e = 1.1, rho = 0.55, seed = 20260401L)
+  fit_ar1_profiled <- matrixCorr:::bland_altman_repeated_em_ext_cpp(
+    y = dat_ar1_profiled$y,
+    subject = dat_ar1_profiled$subject,
+    method = as.integer(dat_ar1_profiled$method == "M2") + 1L,
+    time = dat_ar1_profiled$time,
+    include_slope = FALSE,
+    use_ar1 = TRUE,
+    ar1_rho = NA_real_,
+    conf_level = 0.95,
+    loa_multiplier_arg = 1.96
+  )
+  expect_close_to_reference(extract_fit(fit_ar1_profiled), expected$ar1_profiled, tol = 5e-6)
+
+  S <- 10L
+  Tm <- 2L
+  subject_means <- seq(12, 30, length.out = S)
+  means <- rep(subject_means, each = Tm)
+  diffs <- rep(0.8 + 0.25 * (subject_means - mean(subject_means)), each = Tm)
+  dat_boundary <- sim_two_method_from_pairs(means, diffs, S = S, Tm = Tm)
+  fit_boundary <- matrixCorr:::bland_altman_repeated_em_ext_cpp(
+    y = dat_boundary$y,
+    subject = dat_boundary$subject,
+    method = as.integer(dat_boundary$method == "B") + 1L,
+    time = dat_boundary$time,
+    include_slope = TRUE,
+    use_ar1 = FALSE,
+    conf_level = 0.95,
+    loa_multiplier_arg = 1.96
+  )
+  expect_close_to_reference(extract_fit(fit_boundary), expected$exact_boundary, tol = 1e-8)
+  expect_equal(as.numeric(fit_boundary$sigma2_subject), 0, tolerance = 1e-12)
+})
