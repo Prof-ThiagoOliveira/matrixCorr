@@ -48,9 +48,14 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          cache-version: 2
+          cache-version: 3
           extra-packages: any::rcmdcheck
           needs: check
+
+      - name: Reinstall rlang to fix SETLENGTH issue
+        run: |
+          install.packages("rlang", type = "source", repos = "https://cloud.r-project.org")
+        shell: Rscript {0}
 
       - name: Refresh packages built under older R
         run: >
