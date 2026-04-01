@@ -86,6 +86,7 @@ R_spr  <- spearman_rho(X)
 R_ken  <- kendall_tau(X)
 
 print(R_pear, digits = 2)
+summary(R_pear)
 plot(R_spr)   # heatmap
 ```
 
@@ -125,6 +126,7 @@ colnames(Xd) <- paste0("G", seq_len(p))
 
 R_shr <- schafer_corr(Xd)
 print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
+summary(R_shr)
 ```
 
 ### Partial correlation matrix
@@ -132,6 +134,8 @@ print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
 ```{r}
 R_part <- pcorr(X)
 print(R_part, digits = 2)
+summary(R_part)
+plot(R_part)
 ```
 
 `pcorr()` defaults to the sample partial correlation and also supports
@@ -239,6 +243,7 @@ y <- x + 0.5 + rnorm(120, 0, 8)
 
 ba_fit <- ba(x, y)
 print(ba_fit)
+summary(ba_fit)
 plot(ba_fit)
 ```
 
@@ -267,8 +272,9 @@ ba_rep <- ba_rm(
   method = "method", time = "time",
   include_slope = FALSE, use_ar1 = FALSE
 )
+print(ba_rep)
 summary(ba_rep)
-# plot(ba_rep)  # faceted BA scatter by pair
+plot(ba_rep)
 ```
 
 ### Lin's concordance correlation coefficient
@@ -279,7 +285,9 @@ x <- rnorm(80, 100, 8)
 y <- x + 0.4 + rnorm(80, 0, 3)
 
 fit_ccc <- ccc(data.frame(A = x, B = y), ci = TRUE)
+print(fit_ccc)
 summary(fit_ccc)
+plot(fit_ccc)
 ```
 
 Use `ccc_rm_ustat()` when you have repeated measurements on the same subjects
@@ -305,7 +313,9 @@ y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
 dat_ccc <- data.frame(y, id, method, time)
 fit_ccc_rm <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
                           method = "method", time = "time")
+print(fit_ccc_rm)
 summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
+plot(fit_ccc_rm)
 ```
 
 ## Contributing

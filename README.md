@@ -92,6 +92,17 @@ print(R_pear, digits = 2)
 #> V4 -0.02  0.03 -0.06  1.00  0.07  0.03
 #> V5 -0.07 -0.05  0.08  0.07  1.00  0.04
 #> V6  0.01  0.13 -0.14  0.03  0.04  1.00
+summary(R_pear)
+#> Correlation summary:
+#>   class      : pearson_corr
+#>   method     : pearson
+#>   dimensions : 6 x 6
+#>   n_variables: 6
+#>   n_pairs    : 15
+#>   symmetric  : yes
+#>   missing    : 0
+#>   min        : -0.1410
+#>   max        : 0.1272
 plot(R_spr)   # heatmap
 ```
 
@@ -158,6 +169,17 @@ print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
 #> G5  0.00  0.00  0  0  1  0
 #> G6  0.00  0.00  0  0  0  1
 #> ... omitted: 194 rows, 194 cols
+summary(R_shr)
+#> Correlation summary:
+#>   class      : schafer_corr
+#>   method     : schafer_shrinkage
+#>   dimensions : 200 x 200
+#>   n_variables: 200
+#>   n_pairs    : 19900
+#>   symmetric  : yes
+#>   missing    : 0
+#>   min        : -0.0144
+#>   max        : 0.0130
 ```
 
 ### Partial correlation matrix
@@ -173,7 +195,22 @@ print(R_part, digits = 2)
 #> V4 -0.01  0.04 -0.06  1.00  0.08  0.02
 #> V5 -0.07 -0.06  0.10  0.08  1.00  0.06
 #> V6  0.02  0.14 -0.15  0.02  0.06  1.00
+summary(R_part)
+#> Correlation summary:
+#>   class      : partial_corr
+#>   method     : sample
+#>   jitter     : 0
+#>   dimensions : 6 x 6
+#>   n_variables: 6
+#>   n_pairs    : 15
+#>   symmetric  : yes
+#>   missing    : 0
+#>   min        : -0.1518
+#>   max        : 0.1368
+plot(R_part)
 ```
+
+<img src="man/figures/README-unnamed-chunk-7-1.png" alt="" width="100%" />
 
 `pcorr()` defaults to the sample partial correlation and also supports
 `method = "oas"`, `method = "ridge"`, and `method = "glasso"` for
@@ -336,15 +373,19 @@ print(ba_fit)
 #>  Upper LoA       15.743   13.229  18.258 
 #> 
 #> SD(differences): 8.032   LoA width: 31.484
+summary(ba_fit)
+#> Bland-Altman (two methods), 95% CI
+#> 
+#> Agreement estimates
+#> 
+#>  n   bias  sd_loa loa_low loa_up width  loa_multiplier
+#>  120 0.001 8.032  -15.741 15.743 31.484 1.96          
+#> 
+#> Confidence intervals
+#> 
+#>  bias_lwr bias_upr lo_lwr  lo_upr  up_lwr up_upr
+#>  -1.45    1.453    -18.255 -13.226 13.229 18.258
 plot(ba_fit)
-#> Warning: Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
-#> ℹ Please use `linewidth` instead.
-#> ℹ The deprecated feature was likely used in the matrixCorr package.
-#>   Please report the issue at
-#>   <https://github.com/Prof-ThiagoOliveira/matrixCorr/issues>.
-#> This warning is displayed once per session.
-#> Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
-#> generated.
 ```
 
 <img src="man/figures/README-unnamed-chunk-11-1.png" alt="" width="100%" />
@@ -374,19 +415,40 @@ ba_rep <- ba_rm(
   method = "method", time = "time",
   include_slope = FALSE, use_ar1 = FALSE
 )
+print(ba_rep)
+#> Bland-Altman (row − column), 95% CI
+#> 
+#>  method1 method2 bias   sd_loa loa_low loa_up width  n  
+#>  A       B        0.875 3.021  -5.045  6.796  11.841 120
+#>  A       C       -2.609 3.156  -8.795  3.577  12.372 120
+#>  B       C       -3.484 3.167  -9.692  2.724  12.416 120
 summary(ba_rep)
 #> Bland-Altman (pairwise), 95% CI
 #> 
-#>  method1 method2 bias   sd_loa loa_low loa_up width  n   sigma2_subject
-#>  A       B        0.875 3.021  -5.045  6.796  11.841 120 0.000         
-#>  A       C       -2.609 3.144  -8.771  3.554  12.325 120 0.038         
-#>  B       C       -3.484 3.154  -9.666  2.698  12.364 120 0.438         
-#>  sigma2_resid bias_lwr bias_upr lo_lwr  lo_upr up_lwr up_upr
-#>  9.124         0.394    1.357    -6.024 -4.066 5.817  7.775 
-#>  9.848        -3.156   -2.061    -9.660 -7.883 2.665  4.443 
-#>  9.511        -4.124   -2.845   -10.704 -8.629 1.661  3.735
-# plot(ba_rep)  # faceted BA scatter by pair
+#> Agreement estimates
+#> 
+#>  method1 method2 n   bias   sd_loa loa_low loa_up width 
+#>  A       B       120  0.875 3.021  -5.045  6.796  11.841
+#>  A       C       120 -2.609 3.156  -8.795  3.577  12.372
+#>  B       C       120 -3.484 3.167  -9.692  2.724  12.416
+#> 
+#> Confidence intervals
+#> 
+#>  bias_lwr bias_upr lo_lwr  lo_upr up_lwr up_upr
+#>   0.335    1.416    -5.996 -4.094 5.845  7.747 
+#>  -3.173   -2.044   -10.313 -7.276 2.059  5.095 
+#>  -4.051   -2.918   -10.259 -9.126 2.157  3.291 
+#> 
+#> Model details
+#> 
+#>  sigma2_subject sigma2_resid residual_model
+#>  0               9.124       iid           
+#>  0               9.960       iid           
+#>  0              10.032       iid
+plot(ba_rep)
 ```
+
+<img src="man/figures/README-unnamed-chunk-12-1.png" alt="" width="100%" />
 
 ### Lin’s concordance correlation coefficient
 
@@ -396,12 +458,20 @@ x <- rnorm(80, 100, 8)
 y <- x + 0.4 + rnorm(80, 0, 3)
 
 fit_ccc <- ccc(data.frame(A = x, B = y), ci = TRUE)
+print(fit_ccc)
+#> Concordance pairs (Lin's CCC, 95% CI)
+#> 
+#>  method1 method2 estimate lwr    upr   
+#>  A       B       0.9262   0.8877 0.9519
 summary(fit_ccc)
 #> Concordance pairs (Lin's CCC, 95% CI)
 #> 
 #>  method1 method2 estimate lwr  upr 
 #>  A       B       0.9262   0.89 0.95
+plot(fit_ccc)
 ```
+
+<img src="man/figures/README-unnamed-chunk-13-1.png" alt="" width="100%" />
 
 Use `ccc_rm_ustat()` when you have repeated measurements on the same
 subjects across methods and want a direct non-parametric
@@ -426,14 +496,32 @@ y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
 dat_ccc <- data.frame(y, id, method, time)
 fit_ccc_rm <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
                           method = "method", time = "time")
+print(fit_ccc_rm)
+#> Concordance pairs (Lin's CCC)
+#> 
+#>  method1 method2 estimate
+#>  A       B       0.8987
 summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
-#>   method1 method2 estimate sigma2_subject sigma2_subject_method
-#> 1       A       B   0.8987         0.8149                     0
-#>   sigma2_subject_time sigma2_error     SB se_ccc ar1_rho ar1_rho_lag1
-#> 1              0.2965       0.4267 0.0427 0.0172 -0.0533      -0.0533
-#>   ar1_rho_mom ar1_pairs ar1_pval use_ar1 ar1_recommend
-#> 1     -0.0533       420   0.2747   FALSE         FALSE
+#> Repeated-measures concordance (REML)
+#> 
+#> Concordance estimates
+#> 
+#>  method1 method2 estimate SB     se_ccc
+#>  A       B       0.8987   0.0427 0.0172
+#> 
+#> Variance components
+#> 
+#>  sigma2_subject sigma2_subject_method sigma2_subject_time sigma2_error
+#>  0.8149         0                     0.2965              0.4267      
+#> 
+#> AR(1) diagnostics
+#> 
+#>  ar1_rho ar1_rho_lag1 ar1_rho_mom ar1_pairs ar1_pval use_ar1 ar1_recommend
+#>  -0.0533 -0.0533      -0.0533     420       0.2747   FALSE   FALSE
+plot(fit_ccc_rm)
 ```
+
+<img src="man/figures/README-unnamed-chunk-14-1.png" alt="" width="100%" />
 
 ## Contributing
 
