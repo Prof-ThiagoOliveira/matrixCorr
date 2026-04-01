@@ -69,6 +69,10 @@ jobs:
       - name: Remove stale pak lockfile
         run: rm -f .github/pkg.lock
         shell: bash
+      - name: Remove all user-installed R packages
+        run: |
+          Rscript -e "unlink('~/R/x86_64-pc-linux-gnu-library/4.6', recursive = TRUE)" || true
+        shell: bash
       - uses: r-hub/actions/setup-deps@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
@@ -109,6 +113,10 @@ jobs:
           job-config: ${{ matrix.config.job-config }}
       - name: Remove stale pak lockfile
         run: rm -f .github/pkg.lock
+        shell: bash
+      - name: Remove all user-installed R packages
+        run: |
+          Rscript -e "unlink('~/R/x86_64-pc-linux-gnu-library/4.6', recursive = TRUE)" || true
         shell: bash
       - uses: r-hub/actions/setup-deps@v1
         with:
