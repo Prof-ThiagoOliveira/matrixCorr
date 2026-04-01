@@ -115,6 +115,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ba_rm_slope_scale_cpp
+Rcpp::List ba_rm_slope_scale_cpp(Rcpp::NumericVector mean_values);
+RcppExport SEXP _matrixCorr_ba_rm_slope_scale_cpp(SEXP mean_valuesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mean_values(mean_valuesSEXP);
+    rcpp_result_gen = Rcpp::wrap(ba_rm_slope_scale_cpp(mean_values));
+    return rcpp_result_gen;
+END_RCPP
+}
 // bland_altman_repeated_em_ext_cpp
 Rcpp::List bland_altman_repeated_em_ext_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, bool include_slope, bool use_ar1, double ar1_rho, int max_iter, double tol, double conf_level, double loa_multiplier_arg, bool use_cov_su_se);
 RcppExport SEXP _matrixCorr_bland_altman_repeated_em_ext_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP include_slopeSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP loa_multiplier_argSEXP, SEXP use_cov_su_seSEXP) {
@@ -134,17 +145,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type loa_multiplier_arg(loa_multiplier_argSEXP);
     Rcpp::traits::input_parameter< bool >::type use_cov_su_se(use_cov_su_seSEXP);
     rcpp_result_gen = Rcpp::wrap(bland_altman_repeated_em_ext_cpp(y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, loa_multiplier_arg, use_cov_su_se));
-    return rcpp_result_gen;
-END_RCPP
-}
-// ba_rm_slope_scale_cpp
-Rcpp::List ba_rm_slope_scale_cpp(Rcpp::NumericVector mean_values);
-RcppExport SEXP _matrixCorr_ba_rm_slope_scale_cpp(SEXP mean_valuesSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mean_values(mean_valuesSEXP);
-    rcpp_result_gen = Rcpp::wrap(ba_rm_slope_scale_cpp(mean_values));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -649,8 +649,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bicor_matrix_weighted_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_pairwise_cpp, 7},
     {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 5},
     {"_matrixCorr_ba_openmp_threads", (DL_FUNC) &_matrixCorr_ba_openmp_threads, 0},
-    {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 12},
     {"_matrixCorr_ba_rm_slope_scale_cpp", (DL_FUNC) &_matrixCorr_ba_rm_slope_scale_cpp, 1},
+    {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 12},
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 11},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},

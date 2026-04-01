@@ -148,8 +148,104 @@ static double ba_rm_slope_scale_denom(const std::vector<double>& mean_values,
   return ba_rm_choose_slope_scale(mean_values, tau).s_m_star;
 }
 
-// ---- AR(1) block precision (STRICT contiguity: t_{k+1} = t_k + 1) ----
-static inline void ar1_precision_from_time_ba(const std::vector<int>& tim, double rho, mat& Cinv) {
+// ---------- Section 1: Efficient Pair Construction (integer-based, no string keys) ----------
+struct PairData {
+  std::vector<double> d;     // y2 - y1
+  std::vector<double> mean;  // (y1 + y2)/2
+  std::vector<int>    subj;
+  std::vector<int>    time;
+};
+
+// Composite key for subject-time, using 64-bit integer for uniqueness and speed
+static inline uint64_t make_pair_key(int subj, int time) {
+  return (static_cast<uint64_t>(static_cast<uint32_t>(subj)) << 32) | static_cast<uint32_t>(time);
+}
+
+static PairData make_pairs(const NumericVector& y,
+                           const IntegerVector& subject,
+                           const IntegerVector& method,
+                           const IntegerVector& time) {
+  const int n = y.size();
+  if (subject.size()!=n || method.size()!=n || time.size()!=n)
+    stop("lengths of y, subject, method, time must match.");
+  struct V { bool has1=false, has2=false; double y1=NA_REAL, y2=NA_REAL; int s, t; };
+  std::unordered_map<uint64_t, V> H; H.reserve((size_t)n);
+  for (int i=0;i<n;++i) {
+    if (IntegerVector::is_na(subject[i]) || IntegerVector::is_na(method[i]) || IntegerVector::is_na(time[i])) continue;
+    if (NumericVector::is_na(y[i])) continue;
+    int s = subject[i], t = time[i], m = method[i];
+    if (m!=1 && m!=2) continue;     // only the two target methods for this pair
+    uint64_t key = make_pair_key(s, t);
+    auto &v = H[key]; v.s = s; v.t = t;
+    if (m==1) { v.has1=true; v.y1=y[i]; }
+    else      { v.has2=true; v.y2=y[i]; }
+  }
+  PairData P;
+  P.d.reserve(H.size()); P.mean.reserve(H.size());
+  P.subj.reserve(H.size()); P.time.reserve(H.size());
+  for (auto &kv : H) {
+    const V& v = kv.second;
+    if (v.has1 && v.has2 && std::isfinite(v.y1) && std::isfinite(v.y2)) {
+      P.d.push_back(v.y2 - v.y1);
+      P.mean.push_back(0.5 * (v.y1 + v.y2));
+      P.subj.push_back(v.s);
+      P.time.push_back(v.t);
+    }
+  }
+  if (P.d.empty()) stop("No complete subject-time pairs (both methods present).");
+  return P;
+}
+
+// ---------- Section 2: Fast Subject/Block Indexing (preallocated, sorted) ----------
+struct BySubjBA {
+  std::vector< std::vector<int> > rows;
+  std::vector< std::vector<int> > tim;
+};
+static BySubjBA index_by_subject_ba(const std::vector<int>& subj_idx,
+                                    const std::vector<int>& time) {
+  const int m = *std::max_element(subj_idx.begin(), subj_idx.end()) + 1;
+  BySubjBA S; S.rows.assign(m,{}); S.tim.assign(m,{});
+  for (size_t i=0;i<subj_idx.size();++i) {
+    int j = subj_idx[i];
+    S.rows[j].push_back((int)i);
+    S.tim[j].push_back(time[i]);
+  }
+  // Sort by time, but avoid unnecessary copying
+  for (int i=0;i<m;++i) {
+    auto &r = S.rows[i]; auto &t = S.tim[i];
+    if (r.size() <= 1) continue;
+    std::vector<int> ord(r.size()); std::iota(ord.begin(), ord.end(), 0);
+    std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){
+      int ta=t[a], tb=t[b];
+      if (ta<0 && tb<0) return a<b;
+      if (ta<0) return false;
+      if (tb<0) return true;
+      return ta<tb;
+    });
+    std::vector<int> r2(r.size()), t2(t.size());
+    for (size_t k=0; k<ord.size(); ++k) { r2[k]=r[ord[k]]; t2[k]=t[ord[k]]; }
+    r.swap(r2); t.swap(t2);
+  }
+  return S;
+}
+
+// ---------- Section 3: Per-Subject Precomputation (preallocated, AR(1) tridiagonal) ----------
+struct Precomp {
+  int n_i=0;
+  mat X_i;   // n_i x p
+  vec y_i;   // n_i
+  mat Cinv;  // n_i x n_i  (I or AR1 precision)
+
+  // sufficient stats with Cinv (scale-free):
+  mat XTCX;  // p x p
+  vec XTCy;  // p
+  vec UTCX;  // p (1^T C X)
+  double UTCy = 0.0;   // 1^T C y
+  double UCU  = 0.0;   // 1^T C 1
+};
+
+// Efficient AR(1) precision: tridiagonal, in-place
+static inline void ar1_precision_tridiag(const std::vector<int>& tim, double rho, mat& Cinv) {
   const int n = (int)tim.size();
   Cinv.zeros(n, n);
   if (n == 0) return;
@@ -177,98 +273,6 @@ static inline void ar1_precision_from_time_ba(const std::vector<int>& tim, doubl
   Cinv.diag() += 1e-10; // tiny ridge
 }
 
-// ---------- pair builder: subject-time matched differences ----------
-struct PairData {
-  std::vector<double> d;     // y2 - y1
-  std::vector<double> mean;  // (y1 + y2)/2
-  std::vector<int>    subj;
-  std::vector<int>    time;
-};
-static inline std::string key_of(int s, int t) {
-  std::ostringstream oss; oss<<s<<'#'<<t; return oss.str();
-}
-
-static PairData make_pairs(const NumericVector& y,
-                           const IntegerVector& subject,
-                           const IntegerVector& method,
-                           const IntegerVector& time) {
-  const int n = y.size();
-  if (subject.size()!=n || method.size()!=n || time.size()!=n)
-    stop("lengths of y, subject, method, time must match.");
-  struct V { bool has1=false, has2=false; double y1=NA_REAL, y2=NA_REAL; int s, t; };
-  std::unordered_map<std::string, V> H; H.reserve((size_t)n);
-  for (int i=0;i<n;++i) {
-    if (IntegerVector::is_na(subject[i]) || IntegerVector::is_na(method[i]) || IntegerVector::is_na(time[i])) continue;
-    if (NumericVector::is_na(y[i])) continue;
-    int s = subject[i], t = time[i], m = method[i];
-    if (m!=1 && m!=2) continue;     // only the two target methods for this pair
-    auto key = key_of(s,t);
-    auto &v = H[key]; v.s = s; v.t = t;
-    if (m==1) { v.has1=true; v.y1=y[i]; }
-    else      { v.has2=true; v.y2=y[i]; }
-  }
-  PairData P;
-  P.d.reserve(H.size()); P.mean.reserve(H.size());
-  P.subj.reserve(H.size()); P.time.reserve(H.size());
-  for (auto &kv : H) {
-    const V& v = kv.second;
-    if (v.has1 && v.has2 && std::isfinite(v.y1) && std::isfinite(v.y2)) {
-      P.d.push_back(v.y2 - v.y1);
-      P.mean.push_back(0.5 * (v.y1 + v.y2));
-      P.subj.push_back(v.s);
-      P.time.push_back(v.t);
-    }
-  }
-  if (P.d.empty()) stop("No complete subject-time pairs (both methods present).");
-  return P;
-}
-
-// group rows by subject, sorted by time (NA/negative at end)
-struct BySubjBA {
-  std::vector< std::vector<int> > rows;
-  std::vector< std::vector<int> > tim;
-};
-static BySubjBA index_by_subject_ba(const std::vector<int>& subj_idx,
-                                    const std::vector<int>& time) {
-  const int m = *std::max_element(subj_idx.begin(), subj_idx.end()) + 1;
-  BySubjBA S; S.rows.assign(m,{}); S.tim.assign(m,{});
-  for (size_t i=0;i<subj_idx.size();++i) {
-    int j = subj_idx[i];
-    S.rows[j].push_back((int)i);
-    S.tim[j].push_back(time[i]);
-  }
-  for (int i=0;i<m;++i) {
-    auto &r = S.rows[i]; auto &t = S.tim[i];
-    std::vector<int> ord(r.size()); std::iota(ord.begin(), ord.end(), 0);
-    std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){
-      int ta=t[a], tb=t[b];
-      if (ta<0 && tb<0) return a<b;
-      if (ta<0) return false;
-      if (tb<0) return true;
-      return ta<tb;
-    });
-    std::vector<int> r2, t2; r2.reserve(r.size()); t2.reserve(t.size());
-    for (int k:ord) { r2.push_back(r[k]); t2.push_back(t[k]); }
-    r.swap(r2); t.swap(t2);
-  }
-  return S;
-}
-
-// ------------ per-subject precompute -----------
-struct Precomp {
-  int n_i=0;
-  mat X_i;   // n_i x p
-  vec y_i;   // n_i
-  mat Cinv;  // n_i x n_i  (I or AR1 precision)
-
-  // sufficient stats with Cinv (scale-free):
-  mat XTCX;  // p x p
-  vec XTCy;  // p
-  vec UTCX;  // p (1^T C X)
-  double UTCy = 0.0;   // 1^T C y
-  double UCU  = 0.0;   // 1^T C 1
-};
-
 static std::vector<Precomp> precompute_blocks(const mat& X, const vec& y,
                                               const BySubjBA& S,
                                               bool use_ar1, double rho) {
@@ -285,7 +289,7 @@ static std::vector<Precomp> precompute_blocks(const mat& X, const vec& y,
     P.X_i.set_size(n_i,p); P.y_i.set_size(n_i);
     std::vector<int> tim_ord(n_i,-1);
     for (int k=0;k<n_i;++k) { int g = rows[k]; P.X_i.row(k)=X.row(g); P.y_i[k]=y[g]; tim_ord[k]=tim[k]; }
-    if (use_ar1) ar1_precision_from_time_ba(tim_ord, rho, P.Cinv);
+    if (use_ar1) ar1_precision_tridiag(tim_ord, rho, P.Cinv);
     else P.Cinv.eye(n_i, n_i);
 
     vec ones(n_i, fill::ones);
@@ -304,7 +308,7 @@ static std::vector<Precomp> precompute_blocks(const mat& X, const vec& y,
   return out;
 }
 
-// ---------- EM/GLS for differences: random subject intercept + (optional) AR(1) ----------
+// ---------- Section 4: EM/GLS for Differences (blockwise, memory-efficient) ----------
 struct FitOut {
   arma::vec beta;
   arma::mat beta_vcov;   // GLS covariance of beta conditional on fitted variance params
@@ -321,16 +325,15 @@ static inline bool ba_rm_at_su2_boundary(double su2, double tol = 1e-10) {
   return std::isfinite(su2) && su2 <= tol;
 }
 
+// Boundary fit: sigma2_subject = 0
 static FitOut fit_diff_boundary_su0(const mat& X,
                                     const vec& y,
                                     const std::vector<Precomp>& PC) {
   const int p = X.n_cols;
   int n = 0;
-
   arma::mat XtCX(p, p, arma::fill::zeros);
   arma::vec XtCy(p, arma::fill::zeros);
   double yCy = 0.0;
-
   for (const Precomp& P : PC) {
     if (P.n_i == 0) continue;
     XtCX += P.XTCX;
@@ -338,16 +341,13 @@ static FitOut fit_diff_boundary_su0(const mat& X,
     yCy  += arma::as_scalar(P.y_i.t() * (P.Cinv * P.y_i));
     n    += P.n_i;
   }
-
   arma::mat XtCX_inv;
   if (!inv_sympd_safe(XtCX_inv, XtCX) || !XtCX_inv.is_finite()) {
     stop("Boundary fit with sigma2_subject = 0 failed because X'CX was not invertible.");
   }
-
   arma::vec beta = XtCX_inv * XtCy;
   const double yPy = yCy - arma::as_scalar(XtCy.t() * XtCX_inv * XtCy);
   const double se2 = std::max(1e-12, yPy / std::max(1, n - p));
-
   FitOut out;
   out.beta = beta;
   out.beta_vcov = se2 * XtCX_inv;
@@ -362,6 +362,7 @@ static FitOut fit_diff_boundary_su0(const mat& X,
   return out;
 }
 
+// Interior fit: EM for random subject intercept + (optional) AR(1)
 static FitOut fit_diff_em(const mat& X, const vec& y,
                           const BySubjBA& S,
                           const std::vector<Precomp>& PC,
@@ -369,11 +370,9 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
   const int p = X.n_cols;
   const int m = (int)S.rows.size();
   const int n = y.n_rows;
-
   const double vref = arma::var(y, /*unbiased*/1);
   const double EPS  = std::max(1e-12, vref * 1e-12);
   const double MAXV = std::max(10.0 * vref, 1.0);
-
   std::vector<double> mu_s(m, 0.0);
   std::vector<int> cnt_s(m, 0);
   for (int i = 0; i < m; ++i) {
@@ -382,7 +381,6 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
       ++cnt_s[i];
     }
   }
-
   int used_mu = 0;
   for (int i = 0; i < m; ++i) {
     if (cnt_s[i] > 0) {
@@ -390,20 +388,17 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
       ++used_mu;
     }
   }
-
   int n_replicated_subjects = 0;
   for (int i = 0; i < m; ++i) if (cnt_s[i] >= 2) ++n_replicated_subjects;
   if (used_mu < 2 || n_replicated_subjects < 1) {
     stop(BA_RM_IDENTIFIABILITY_ERROR);
   }
-
   arma::vec mu_s_vec(used_mu, arma::fill::zeros);
   {
     int k = 0;
     for (int i = 0; i < m; ++i) if (cnt_s[i] > 0) mu_s_vec[k++] = mu_s[i];
   }
   double var_mu = (used_mu >= 2 ? arma::var(mu_s_vec, /*unbiased*/true) : 0.0);
-
   double num_w = 0.0, den_w = 0.0;
   bool se2_init_fallback = false;
   for (int i = 0; i < m; ++i) if ((int)S.rows[i].size() >= 2) {
@@ -415,7 +410,6 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
       den_w += ((int)yi.n_elem - 1);
     }
   }
-
   double se2_init = NA_REAL;
   if (den_w > 0.5) {
     se2_init = num_w / den_w;
@@ -423,116 +417,89 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
     se2_init_fallback = true;
     se2_init = std::max(EPS, 0.5 * std::max(vref, 0.0));
   }
-
   double su2_init = std::max(
     0.0,
     var_mu - se2_init / std::max(1.0, arma::mean(arma::conv_to<arma::vec>::from(cnt_s)))
   );
-
   se2_init = nan_preserve(se2_init, EPS, MAXV);
   su2_init = nan_preserve(su2_init, 0.0, MAXV);
-
   auto damp_to_ratio = [](double oldv, double newv, double rmax) {
     if (!std::isfinite(newv)) return oldv;
     if (oldv <= 0.0) return nan_preserve(newv, 0.0, rmax);
     double lo = oldv / rmax, hi = oldv * rmax;
     return nan_preserve(newv, std::min(lo, hi), std::max(lo, hi));
   };
-
   double su2 = su2_init, se2 = se2_init;
   vec beta(p, fill::zeros);
   mat beta_vcov(p, p, fill::zeros);
   vec su_term(m, fill::zeros);
   vec se_term(m, fill::zeros);
-
   bool converged = false;
   int it = -1;
   std::string init_warn;
   if (se2_init_fallback) {
     init_warn = "Residual-variance initialization used 0.5 * v_ref only as a positive EM starting heuristic because no finite positive pooled within-subject variance could be formed after pairing.";
   }
-
   for (it = 0; it < max_iter; ++it) {
     mat XtViX(p, p, fill::zeros);
     vec XtViy(p, fill::zeros);
     const double inv_se = 1.0 / std::max(se2, EPS);
-
     for (int i = 0; i < m; ++i) {
       const Precomp& P = PC[i];
       if (P.n_i == 0) continue;
-
       double M = (1.0 / std::max(su2, EPS)) + inv_se * P.UCU;
       M = std::max(M, 1e-12);
       const double Minv = 1.0 / M;
-
       double S_uy = inv_se * P.UTCy;
       double Z_y  = Minv * S_uy;
-
       vec S_ux = inv_se * P.UTCX;
       vec Z_X  = Minv * S_ux;
-
       mat XTRinvX = inv_se * P.XTCX;
       vec XTRinvY = inv_se * P.XTCy;
-
       XtViy += XTRinvY - S_ux * Z_y;
       XtViX += XTRinvX - S_ux * Z_X.t();
     }
-
     mat XtViX_inv;
     if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) break;
     beta = XtViX_inv * XtViy;
     beta_vcov = XtViX_inv;
     if (!all_finite(beta)) break;
-
     double su_acc = 0.0;
     double se_num = 0.0;
     vec r_global = y - X * beta;
-
     for (int i = 0; i < m; ++i) {
       const Precomp& P = PC[i];
       if (P.n_i == 0) continue;
-
       vec r_i(P.n_i);
       for (int k = 0; k < P.n_i; ++k) r_i[k] = r_global[S.rows[i][k]];
-
       const double inv_su = 1.0 / std::max(su2, EPS);
       double M = inv_su + (1.0 / std::max(se2, EPS)) * P.UCU;
       M = std::max(M, 1e-12);
       const double Minv = 1.0 / M;
-
       double Utr = (1.0 / std::max(se2, EPS)) *
         arma::as_scalar(arma::ones<vec>(P.n_i).t() * (P.Cinv * r_i));
-
       double b_i = Minv * Utr;
       double Eu2 = b_i * b_i + Minv;
-
       su_acc += Eu2;
       su_term[i] = Eu2;
-
       vec e = r_i - arma::ones<vec>(P.n_i) * b_i;
       double q = arma::as_scalar(e.t() * (P.Cinv * e));
-
       double num_i = q + P.UCU * Minv;
       se_num += num_i;
       se_term[i] = num_i / std::max(1, P.n_i);
     }
-
     double su2_new = su_acc / std::max(1, m);
     double se2_new = se_num / std::max(1, n);
-
     su2_new = damp_to_ratio(su2, su2_new, 3.0);
     se2_new = damp_to_ratio(se2, se2_new, 3.0);
-
     su2_new = nan_preserve(su2_new, 0.0, MAXV);
     se2_new = nan_preserve(se2_new, EPS, MAXV);
-
     const bool admissible =
       std::isfinite(su2_new) &&
       std::isfinite(se2_new) &&
       su2_new >= 0.0 &&
       se2_new >= EPS;
     if (!admissible) break;
-
     double diff = std::fabs(su2_new - su2) + std::fabs(se2_new - se2);
     su2 = su2_new;
     se2 = se2_new;
@@ -541,13 +508,11 @@ static FitOut fit_diff_em(const mat& X, const vec& y,
       break;
     }
   }
-
   if (!converged || !all_finite(beta) || !beta_vcov.is_finite() ||
       !std::isfinite(su2) || !std::isfinite(se2) ||
       su2 < 0.0 || se2 < EPS) {
     stop(BA_RM_CONVERGENCE_ERROR);
   }
-
   FitOut out;
   out.beta = beta;
   out.beta_vcov = beta_vcov;
@@ -795,8 +760,8 @@ static double estimate_rho_profile(const arma::mat& X,
   return nan_preserve(best_rho, -0.95, 0.95);
 }
 
-// ---------- profile-REML CI helpers ----------
 
+// ---------- Section 5: Profile-REML CI helpers (efficient, blockwise) ----------
 struct ProfileThetaEval {
   arma::vec beta;
   arma::mat beta_vcov;
@@ -826,6 +791,7 @@ static inline double ba_rm_z_from_rho(double rho) {
   return std::atanh(x);
 }
 
+// GLS for beta at fixed variance parameters (blockwise, memory-efficient)
 static bool ba_rm_beta_gls_given_theta(const std::vector<Precomp>& PC,
                                        int p,
                                        double su2,
@@ -835,36 +801,27 @@ static bool ba_rm_beta_gls_given_theta(const std::vector<Precomp>& PC,
   const double eps = 1e-12;
   const double inv_se = 1.0 / std::max(se2, eps);
   const bool at_su0 = ba_rm_at_su2_boundary(su2);
-
   arma::mat XtViX(p, p, arma::fill::zeros);
   arma::vec XtViy(p, arma::fill::zeros);
-
   for (const Precomp& P : PC) {
     if (P.n_i == 0) continue;
-
     double Minv = 0.0;
     if (!at_su0) {
       const double inv_su = 1.0 / su2;
       const double M = std::max(inv_su + inv_se * P.UCU, 1e-12);
       Minv = 1.0 / M;
     }
-
     const arma::vec S_ux = inv_se * P.UTCX;
     const double    S_uy = inv_se * P.UTCy;
-
     const arma::mat XTRinvX = inv_se * P.XTCX;
     const arma::vec XTRinvY = inv_se * P.XTCy;
-
     const arma::vec Z_X = Minv * S_ux;
     const double    Z_y = Minv * S_uy;
-
     XtViX += XTRinvX - S_ux * Z_X.t();
     XtViy += XTRinvY - S_ux * Z_y;
   }
-
   arma::mat XtViX_inv;
   if (!inv_sympd_safe(XtViX_inv, XtViX) || !XtViX_inv.is_finite()) return false;
-
   beta = XtViX_inv * XtViy;
   beta_vcov = XtViX_inv;
   return beta.is_finite() && beta_vcov.is_finite();
