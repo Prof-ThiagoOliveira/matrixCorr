@@ -6,6 +6,8 @@
 #include <limits>
 #include <cmath>
 #include <algorithm>
+#include <cstdint>
+#include <random>
 #include "matrixCorr_omp.h"
 
 #include "matrixCorr_detail.h"
@@ -369,6 +371,44 @@ struct SkipMaskEntry {
   std::vector<int> skipped_rows;
 };
 
+struct SkipBootstrapResult {
+  double lwr = arma::datum::nan;
+  double upr = arma::datum::nan;
+  double p_value = arma::datum::nan;
+};
+
+struct SkipMultipleResult {
+  arma::mat p_adjusted;
+  arma::mat reject;
+  double critical_p_value = arma::datum::nan;
+};
+
+inline std::uint64_t splitmix64(std::uint64_t x) {
+  x += 0x9e3779b97f4a7c15ULL;
+  x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+  return x ^ (x >> 31);
+}
+
+inline double harrell_davis_quantile_sorted_std(const std::vector<double>& x, const double q) {
+  const std::size_t n = x.size();
+  if (n == 0u) return arma::datum::nan;
+  if (q <= 0.0) return x.front();
+  if (q >= 1.0) return x.back();
+  if (n == 1u) return x.front();
+
+  const double a = (static_cast<double>(n) + 1.0) * q;
+  const double b = (static_cast<double>(n) + 1.0) * (1.0 - q);
+  double out = 0.0;
+  for (std::size_t i = 1u; i <= n; ++i) {
+    const double lo = static_cast<double>(i - 1u) / static_cast<double>(n);
+    const double hi = static_cast<double>(i) / static_cast<double>(n);
+    const double w = R::pbeta(hi, a, b, 1, 0) - R::pbeta(lo, a, b, 1, 0);
+    out += w * x[i - 1u];
+  }
+  return out;
+}
+
 inline double skipcor_pair_core_ptr(const double* x_orig,
                                     const double* y_orig,
                                     const double* x_det,
@@ -389,8 +429,10 @@ inline double skipcor_pair_core_ptr(const double* x_orig,
                                     std::vector<double>& work_buf,
                                     arma::vec& xkeep,
                                     arma::vec& ykeep,
+                                    int* skipped_count = nullptr,
                                     std::vector<int>* skipped_rows = nullptr,
                                     const std::vector<arma::uword>* row_index = nullptr) {
+  if (skipped_count != nullptr) *skipped_count = NA_INTEGER;
   if (static_cast<int>(n) < min_n) return arma::datum::nan;
 
   bx.set_size(n);
@@ -452,6 +494,9 @@ inline double skipcor_pair_core_ptr(const double* x_orig,
   for (arma::uword i = 0; i < n; ++i) {
     if (outlier[static_cast<std::size_t>(i)] == 0u) keep_idx.push_back(i);
   }
+  if (skipped_count != nullptr) {
+    *skipped_count = static_cast<int>(n - static_cast<arma::uword>(keep_idx.size()));
+  }
   if (keep_idx.size() < static_cast<std::size_t>(min_n)) return arma::datum::nan;
 
   if (method_int == 1) {
@@ -484,6 +529,308 @@ inline double skipcor_pair_core_ptr(const double* x_orig,
   }
   if (!(sxx > 0.0) || !(syy > 0.0)) return arma::datum::nan;
   return clamp_corr(sxy / std::sqrt(sxx * syy));
+}
+
+template <class RNG>
+inline SkipBootstrapResult skipcor_pair_bootstrap_b2_ptr(const double* x_orig,
+                                                         const double* y_orig,
+                                                         const arma::uword n,
+                                                         const int method_int,
+                                                         const bool stand,
+                                                         const bool use_mad,
+                                                         const double gval,
+                                                         const int min_n,
+                                                         const int n_boot,
+                                                         const double conf_level,
+                                                         RNG& rng,
+                                                         arma::vec& xboot,
+                                                         arma::vec& yboot,
+                                                         arma::vec& xdet_boot,
+                                                         arma::vec& ydet_boot,
+                                                         arma::vec& bx,
+                                                         arma::vec& by,
+                                                         arma::vec& bot,
+                                                         std::vector<unsigned char>& outlier,
+                                                         std::vector<arma::uword>& keep_idx,
+                                                         std::vector<double>& dist_buf,
+                                                         std::vector<double>& work_buf,
+                                                         arma::vec& xkeep,
+                                                         arma::vec& ykeep) {
+  SkipBootstrapResult out;
+  if (n_boot <= 1 || !(conf_level > 0.0 && conf_level < 1.0) || static_cast<int>(n) < min_n) {
+    return out;
+  }
+
+  std::uniform_int_distribution<arma::uword> draw(0u, n - 1u);
+  std::vector<double> boots;
+  boots.reserve(static_cast<std::size_t>(n_boot));
+
+  xboot.set_size(n);
+  yboot.set_size(n);
+
+  for (int b = 0; b < n_boot; ++b) {
+    for (arma::uword i = 0; i < n; ++i) {
+      const arma::uword idx = draw(rng);
+      xboot[i] = x_orig[idx];
+      yboot[i] = y_orig[idx];
+    }
+
+    double center_x = 0.0;
+    double center_y = 0.0;
+    prepare_skip_detection_column(xboot, xdet_boot, stand, center_x);
+    prepare_skip_detection_column(yboot, ydet_boot, stand, center_y);
+    const double val = skipcor_pair_core_ptr(
+      xboot.memptr(),
+      yboot.memptr(),
+      xdet_boot.memptr(),
+      ydet_boot.memptr(),
+      n,
+      center_x,
+      center_y,
+      method_int,
+      use_mad,
+      gval,
+      min_n,
+      bx,
+      by,
+      bot,
+      outlier,
+      keep_idx,
+      dist_buf,
+      work_buf,
+      xkeep,
+      ykeep
+    );
+    if (!std::isfinite(val)) {
+      return out;
+    }
+    boots.push_back(val);
+  }
+
+  std::sort(boots.begin(), boots.end());
+  const double alpha = 1.0 - conf_level;
+  int l = static_cast<int>(std::llround(alpha * static_cast<double>(n_boot) / 2.0));
+  if (l < 0) l = 0;
+  if (l > n_boot - 1) l = n_boot - 1;
+  int u = n_boot - l - 1;
+  if (u < 0) u = 0;
+  if (u > n_boot - 1) u = n_boot - 1;
+  if (u < l) u = l;
+
+  out.lwr = boots[static_cast<std::size_t>(l)];
+  out.upr = boots[static_cast<std::size_t>(u)];
+
+  int less = 0;
+  int equal = 0;
+  for (const double val : boots) {
+    if (val < 0.0) {
+      ++less;
+    } else if (val == 0.0) {
+      ++equal;
+    }
+  }
+  const double q = (static_cast<double>(less) + 0.5 * static_cast<double>(equal)) /
+    static_cast<double>(n_boot);
+  out.p_value = std::min(1.0, 2.0 * std::min(q, 1.0 - q));
+  return out;
+}
+
+inline arma::mat skipcor_bootstrap_pvalue_matrix_complete(const arma::mat& X,
+                                                          const int method_int,
+                                                          const bool stand,
+                                                          const bool use_mad,
+                                                          const double gval,
+                                                          const int min_n,
+                                                          const int n_boot,
+                                                          const int n_threads,
+                                                          const std::uint64_t seed_base) {
+  const std::size_t n = X.n_rows;
+  const std::size_t p = X.n_cols;
+  arma::mat p_mat(p, p, fill::none);
+  p_mat.fill(arma::datum::nan);
+
+#ifdef _OPENMP
+  omp_set_num_threads(std::max(1, n_threads));
+#pragma omp parallel for schedule(dynamic)
+#endif
+  for (std::ptrdiff_t j = 0; j < static_cast<std::ptrdiff_t>(p); ++j) {
+    static thread_local arma::vec bx;
+    static thread_local arma::vec by;
+    static thread_local arma::vec bot;
+    static thread_local arma::vec xkeep;
+    static thread_local arma::vec ykeep;
+    static thread_local std::vector<unsigned char> outlier;
+    static thread_local std::vector<arma::uword> keep_idx;
+    static thread_local std::vector<double> dist_buf;
+    static thread_local std::vector<double> work_buf;
+    static thread_local arma::vec xboot;
+    static thread_local arma::vec yboot;
+    static thread_local arma::vec xdet_boot;
+    static thread_local arma::vec ydet_boot;
+
+    const double* xorig_ptr = X.colptr(static_cast<arma::uword>(j));
+    for (std::size_t k = static_cast<std::size_t>(j + 1u); k < p; ++k) {
+      const std::uint64_t pair_seed = splitmix64(
+        seed_base ^
+        (static_cast<std::uint64_t>(j + 1u) << 32) ^
+        static_cast<std::uint64_t>(k + 1u)
+      );
+      std::mt19937_64 rng(pair_seed);
+      const SkipBootstrapResult infer = skipcor_pair_bootstrap_b2_ptr(
+        xorig_ptr,
+        X.colptr(static_cast<arma::uword>(k)),
+        static_cast<arma::uword>(n),
+        method_int,
+        stand,
+        use_mad,
+        gval,
+        min_n,
+        n_boot,
+        0.95,
+        rng,
+        xboot,
+        yboot,
+        xdet_boot,
+        ydet_boot,
+        bx,
+        by,
+        bot,
+        outlier,
+        keep_idx,
+        dist_buf,
+        work_buf,
+        xkeep,
+        ykeep
+      );
+      p_mat(j, k) = infer.p_value;
+      p_mat(k, j) = infer.p_value;
+    }
+  }
+
+  for (std::size_t j = 0; j < p; ++j) p_mat(j, j) = 0.0;
+  return p_mat;
+}
+
+inline SkipMultipleResult skipcor_hochberg_inference(const arma::mat& p_mat,
+                                                     const double alpha) {
+  const std::size_t p = p_mat.n_cols;
+  SkipMultipleResult out;
+  out.p_adjusted = arma::mat(p, p, fill::none);
+  out.reject = arma::mat(p, p, fill::zeros);
+  out.p_adjusted.fill(arma::datum::nan);
+
+  std::vector<std::pair<double, std::pair<std::size_t, std::size_t>>> vals;
+  vals.reserve((p * (p - 1u)) / 2u);
+  for (std::size_t j = 0; j < p; ++j) {
+    for (std::size_t k = j + 1u; k < p; ++k) {
+      const double pv = p_mat(j, k);
+      if (std::isfinite(pv)) vals.push_back({pv, {j, k}});
+    }
+  }
+
+  if (vals.empty()) {
+    for (std::size_t j = 0; j < p; ++j) {
+      out.p_adjusted(j, j) = 0.0;
+      out.reject(j, j) = 0.0;
+    }
+    return out;
+  }
+
+  std::sort(vals.begin(), vals.end(),
+            [](const auto& a, const auto& b) { return a.first > b.first; });
+
+  std::vector<double> adj_desc(vals.size(), 1.0);
+  double running = 1.0;
+  for (std::size_t i = 0; i < vals.size(); ++i) {
+    const double candidate = std::min(1.0, static_cast<double>(i + 1u) * vals[i].first);
+    running = std::min(running, candidate);
+    adj_desc[i] = running;
+  }
+
+  for (std::size_t i = 0; i < vals.size(); ++i) {
+    const std::size_t j = vals[i].second.first;
+    const std::size_t k = vals[i].second.second;
+    out.p_adjusted(j, k) = adj_desc[i];
+    out.p_adjusted(k, j) = adj_desc[i];
+    const double rej = (adj_desc[i] <= alpha) ? 1.0 : 0.0;
+    out.reject(j, k) = rej;
+    out.reject(k, j) = rej;
+  }
+  for (std::size_t j = 0; j < p; ++j) {
+    out.p_adjusted(j, j) = 0.0;
+    out.reject(j, j) = 0.0;
+  }
+  return out;
+}
+
+inline SkipMultipleResult skipcor_ecp_inference_complete(const arma::mat& observed_p,
+                                                         const arma::uword n,
+                                                         const arma::uword p,
+                                                         const int method_int,
+                                                         const bool stand,
+                                                         const bool use_mad,
+                                                         const double gval,
+                                                         const int min_n,
+                                                         const int n_boot,
+                                                         const int n_mc,
+                                                         const int n_threads,
+                                                         const double alpha,
+                                                         const std::uint64_t seed_base) {
+  SkipMultipleResult out;
+  out.reject = arma::mat(p, p, fill::zeros);
+  out.p_adjusted = arma::mat();
+
+  std::vector<double> min_pvals;
+  min_pvals.reserve(static_cast<std::size_t>(n_mc));
+  std::normal_distribution<double> norm01(0.0, 1.0);
+
+  for (int d = 0; d < n_mc; ++d) {
+    std::mt19937_64 rng(splitmix64(seed_base ^ static_cast<std::uint64_t>(d + 1)));
+    arma::mat X0(n, p, fill::none);
+    for (arma::uword col = 0; col < p; ++col) {
+      for (arma::uword row = 0; row < n; ++row) {
+        X0(row, col) = norm01(rng);
+      }
+    }
+
+    const arma::mat p0 = skipcor_bootstrap_pvalue_matrix_complete(
+      X0,
+      method_int,
+      stand,
+      use_mad,
+      gval,
+      min_n,
+      n_boot,
+      n_threads,
+      splitmix64(seed_base ^ (static_cast<std::uint64_t>(d + 1u) << 16))
+    );
+
+    double minp = arma::datum::inf;
+    for (arma::uword j = 0; j < p; ++j) {
+      for (arma::uword k = j + 1u; k < p; ++k) {
+        const double pv = p0(j, k);
+        if (std::isfinite(pv) && pv < minp) minp = pv;
+      }
+    }
+    if (std::isfinite(minp)) min_pvals.push_back(minp);
+  }
+
+  if (!min_pvals.empty()) {
+    std::sort(min_pvals.begin(), min_pvals.end());
+    out.critical_p_value = harrell_davis_quantile_sorted_std(min_pvals, alpha);
+  }
+
+  if (std::isfinite(out.critical_p_value)) {
+    for (arma::uword j = 0; j < p; ++j) {
+      for (arma::uword k = j + 1u; k < p; ++k) {
+        const double rej = (std::isfinite(observed_p(j, k)) && observed_p(j, k) <= out.critical_p_value) ? 1.0 : 0.0;
+        out.reject(j, k) = rej;
+        out.reject(k, j) = rej;
+      }
+    }
+  }
+  for (arma::uword j = 0; j < p; ++j) out.reject(j, j) = 0.0;
+  return out;
 }
 
 } // namespace
@@ -683,12 +1030,46 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
                               const double gval = 2.717803,
                               const int min_n = 5,
                               const int n_threads = 1,
-                              const bool return_masks = false) {
+                              const bool return_masks = false,
+                              const bool return_inference = false,
+                              const double conf_level = 0.95,
+                              const int n_boot = 2000,
+                              const int seed = 0,
+                              const int multiple_method_int = 0,
+                              const double fwe_level = 0.05,
+                              const int n_mc = 1000) {
   const std::size_t n = X.n_rows, p = X.n_cols;
   if (p == 0 || n < 2) stop("X must have >=2 rows and >=1 column.");
+  if (return_inference && !X.is_finite()) {
+    stop("Bootstrap inference for skipped correlation currently requires complete finite data.");
+  }
 
   arma::mat R(p, p, fill::none);
   R.fill(arma::datum::nan);
+  arma::mat n_complete_mat(p, p, fill::none);
+  arma::mat skipped_n_mat(p, p, fill::none);
+  arma::mat skipped_prop_mat(p, p, fill::none);
+  n_complete_mat.fill(arma::datum::nan);
+  skipped_n_mat.fill(arma::datum::nan);
+  skipped_prop_mat.fill(arma::datum::nan);
+  arma::mat lwr_mat;
+  arma::mat upr_mat;
+  arma::mat p_mat;
+  arma::mat p_adj_mat;
+  arma::mat reject_mat;
+  double critical_p_value = arma::datum::nan;
+  if (return_inference) {
+    lwr_mat.set_size(p, p);
+    upr_mat.set_size(p, p);
+    p_mat.set_size(p, p);
+    p_adj_mat.set_size(p, p);
+    reject_mat.set_size(p, p);
+    lwr_mat.fill(arma::datum::nan);
+    upr_mat.fill(arma::datum::nan);
+    p_mat.fill(arma::datum::nan);
+    p_adj_mat.fill(arma::datum::nan);
+    reject_mat.fill(0.0);
+  }
   std::vector<std::vector<SkipMaskEntry>> mask_entries;
   if (return_masks) mask_entries.resize(p);
 
@@ -712,10 +1093,15 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
       static thread_local std::vector<double> dist_buf;
       static thread_local std::vector<double> work_buf;
       static thread_local std::vector<int> skipped_rows;
+      static thread_local arma::vec xboot;
+      static thread_local arma::vec yboot;
+      static thread_local arma::vec xdet_boot;
+      static thread_local arma::vec ydet_boot;
 
       const double* xorig_ptr = X.colptr(static_cast<arma::uword>(j));
       const double* xdet_ptr = Zdet.colptr(static_cast<arma::uword>(j));
       for (std::size_t k = static_cast<std::size_t>(j + 1); k < p; ++k) {
+        int skipped_count = NA_INTEGER;
         const double val = skipcor_pair_core_ptr(
           xorig_ptr,
           X.colptr(static_cast<arma::uword>(k)),
@@ -737,11 +1123,20 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
           work_buf,
           xkeep,
           ykeep,
+          &skipped_count,
           (return_masks ? &skipped_rows : nullptr),
           nullptr
         );
         R(j, k) = val;
         R(k, j) = val;
+        n_complete_mat(j, k) = static_cast<double>(n);
+        n_complete_mat(k, j) = static_cast<double>(n);
+        if (skipped_count != NA_INTEGER) {
+          skipped_n_mat(j, k) = static_cast<double>(skipped_count);
+          skipped_n_mat(k, j) = static_cast<double>(skipped_count);
+          skipped_prop_mat(j, k) = static_cast<double>(skipped_count) / static_cast<double>(n);
+          skipped_prop_mat(k, j) = skipped_prop_mat(j, k);
+        }
         if (return_masks && !skipped_rows.empty()) {
           SkipMaskEntry entry;
           entry.j = static_cast<int>(j + 1);
@@ -749,10 +1144,86 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
           entry.skipped_rows = skipped_rows;
           mask_entries[static_cast<std::size_t>(j)].push_back(std::move(entry));
         }
+        if (return_inference && std::isfinite(val)) {
+          const std::uint64_t pair_seed = splitmix64(
+            static_cast<std::uint64_t>(seed <= 0 ? 1 : seed) ^
+            (static_cast<std::uint64_t>(j + 1u) << 32) ^
+            static_cast<std::uint64_t>(k + 1u)
+          );
+          std::mt19937_64 rng(pair_seed);
+          const SkipBootstrapResult infer = skipcor_pair_bootstrap_b2_ptr(
+            xorig_ptr,
+            X.colptr(static_cast<arma::uword>(k)),
+            static_cast<arma::uword>(n),
+            method_int,
+            stand,
+            use_mad,
+            gval,
+            min_n,
+            n_boot,
+            conf_level,
+            rng,
+            xboot,
+            yboot,
+            xdet_boot,
+            ydet_boot,
+            bx,
+            by,
+            bot,
+            outlier,
+            keep_idx,
+            dist_buf,
+            work_buf,
+            xkeep,
+            ykeep
+          );
+          lwr_mat(j, k) = infer.lwr;
+          lwr_mat(k, j) = infer.lwr;
+          upr_mat(j, k) = infer.upr;
+          upr_mat(k, j) = infer.upr;
+          p_mat(j, k) = infer.p_value;
+          p_mat(k, j) = infer.p_value;
+        }
       }
     }
 
-    for (std::size_t j = 0; j < p; ++j) R(j, j) = 1.0;
+    for (std::size_t j = 0; j < p; ++j) {
+      R(j, j) = 1.0;
+      n_complete_mat(j, j) = static_cast<double>(n);
+      skipped_n_mat(j, j) = 0.0;
+      skipped_prop_mat(j, j) = 0.0;
+      if (return_inference) {
+        lwr_mat(j, j) = 1.0;
+        upr_mat(j, j) = 1.0;
+        p_mat(j, j) = 0.0;
+        p_adj_mat(j, j) = 0.0;
+        reject_mat(j, j) = 0.0;
+      }
+    }
+
+    if (return_inference && multiple_method_int == 1) {
+      const SkipMultipleResult mult = skipcor_hochberg_inference(p_mat, fwe_level);
+      p_adj_mat = mult.p_adjusted;
+      reject_mat = mult.reject;
+    } else if (return_inference && multiple_method_int == 2) {
+      const SkipMultipleResult mult = skipcor_ecp_inference_complete(
+        p_mat,
+        static_cast<arma::uword>(n),
+        static_cast<arma::uword>(p),
+        method_int,
+        stand,
+        use_mad,
+        gval,
+        min_n,
+        n_boot,
+        n_mc,
+        n_threads,
+        fwe_level,
+        splitmix64(static_cast<std::uint64_t>(seed <= 0 ? 1 : seed) ^ 0xA5A5A5A5ULL)
+      );
+      critical_p_value = mult.critical_p_value;
+      reject_mat = mult.reject;
+    }
   } else {
     std::vector<arma::uvec> finite_idx(p);
     for (std::size_t j = 0; j < p; ++j) finite_idx[j] = arma::find_finite(X.col(j));
@@ -787,6 +1258,7 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
         double center_x = 0.0, center_y = 0.0;
         prepare_skip_detection_column(xbuf, xdet, stand, center_x);
         prepare_skip_detection_column(ybuf, ydet, stand, center_y);
+        int skipped_count = NA_INTEGER;
         const double val = skipcor_pair_core_ptr(
           xbuf.memptr(),
           ybuf.memptr(),
@@ -808,11 +1280,20 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
           work_buf,
           xkeep,
           ykeep,
+          &skipped_count,
           (return_masks ? &skipped_rows : nullptr),
           (return_masks ? &overlap_idx : nullptr)
         );
         R(j, k) = val;
         R(k, j) = val;
+        n_complete_mat(j, k) = static_cast<double>(xbuf.n_elem);
+        n_complete_mat(k, j) = static_cast<double>(xbuf.n_elem);
+        if (skipped_count != NA_INTEGER && xbuf.n_elem > 0u) {
+          skipped_n_mat(j, k) = static_cast<double>(skipped_count);
+          skipped_n_mat(k, j) = static_cast<double>(skipped_count);
+          skipped_prop_mat(j, k) = static_cast<double>(skipped_count) / static_cast<double>(xbuf.n_elem);
+          skipped_prop_mat(k, j) = skipped_prop_mat(j, k);
+        }
         if (return_masks && !skipped_rows.empty()) {
           SkipMaskEntry entry;
           entry.j = static_cast<int>(j + 1);
@@ -827,9 +1308,18 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
       if (finite_idx[j].n_elem < 2u) {
         R.row(j).fill(arma::datum::nan);
         R.col(j).fill(arma::datum::nan);
+        n_complete_mat.row(j).fill(arma::datum::nan);
+        n_complete_mat.col(j).fill(arma::datum::nan);
+        skipped_n_mat.row(j).fill(arma::datum::nan);
+        skipped_n_mat.col(j).fill(arma::datum::nan);
+        skipped_prop_mat.row(j).fill(arma::datum::nan);
+        skipped_prop_mat.col(j).fill(arma::datum::nan);
         R(j, j) = 1.0;
       } else {
         R(j, j) = 1.0;
+        n_complete_mat(j, j) = static_cast<double>(finite_idx[j].n_elem);
+        skipped_n_mat(j, j) = 0.0;
+        skipped_prop_mat(j, j) = 0.0;
       }
     }
   }
@@ -859,6 +1349,15 @@ Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
     Rcpp::_["cor"] = R,
     Rcpp::_["pair_i"] = pair_i,
     Rcpp::_["pair_j"] = pair_j,
-    Rcpp::_["skipped_rows"] = skipped
+    Rcpp::_["skipped_rows"] = skipped,
+    Rcpp::_["n_complete"] = n_complete_mat,
+    Rcpp::_["skipped_n"] = skipped_n_mat,
+    Rcpp::_["skipped_prop"] = skipped_prop_mat,
+    Rcpp::_["lwr"] = lwr_mat,
+    Rcpp::_["upr"] = upr_mat,
+    Rcpp::_["p_value"] = p_mat,
+    Rcpp::_["p_value_adjusted"] = p_adj_mat,
+    Rcpp::_["reject"] = reject_mat,
+    Rcpp::_["critical_p_value"] = critical_p_value
   );
 }

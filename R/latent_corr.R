@@ -258,12 +258,15 @@
       if (!is.matrix(x) || !identical(dim(x), dim(m))) return(default)
       vals <- transform(x[selector])
       vals <- vals[!is.na(vals)]
+      vals <- vals[is.finite(vals)]
       if (!length(vals)) return(default)
       vals
     }
 
     zero_vals <- pair_pick(diag_attr$zero_cells)
     ncomp_vals <- pair_pick(diag_attr$n_complete)
+    skipped_n_vals <- pair_pick(diag_attr$skipped_n, default = integer())
+    skipped_prop_vals <- pair_pick(diag_attr$skipped_prop, default = numeric())
     boundary_vals <- pair_pick(diag_attr$boundary, as.logical, NA)
     near_vals <- pair_pick(diag_attr$near_boundary, as.logical, NA)
     corrected_vals <- pair_pick(diag_attr$corrected, as.logical, NA)
@@ -276,6 +279,10 @@
     out$converged_pairs <- if (is.atomic(conv_vals) && length(conv_vals)) sum(conv_vals, na.rm = TRUE) else NA_integer_
     out$n_complete_min <- if (is.atomic(ncomp_vals) && length(ncomp_vals)) min(ncomp_vals, na.rm = TRUE) else NA_integer_
     out$n_complete_max <- if (is.atomic(ncomp_vals) && length(ncomp_vals)) max(ncomp_vals, na.rm = TRUE) else NA_integer_
+    out$skipped_n_min <- if (is.atomic(skipped_n_vals) && length(skipped_n_vals)) min(skipped_n_vals, na.rm = TRUE) else NA_integer_
+    out$skipped_n_max <- if (is.atomic(skipped_n_vals) && length(skipped_n_vals)) max(skipped_n_vals, na.rm = TRUE) else NA_integer_
+    out$skipped_prop_min <- if (is.atomic(skipped_prop_vals) && length(skipped_prop_vals)) min(skipped_prop_vals, na.rm = TRUE) else NA_real_
+    out$skipped_prop_max <- if (is.atomic(skipped_prop_vals) && length(skipped_prop_vals)) max(skipped_prop_vals, na.rm = TRUE) else NA_real_
     out$optimizer_tol <- if (is.null(diag_attr$optimizer_tol)) NA_real_ else diag_attr$optimizer_tol
   } else {
     out$zero_cell_pairs <- NA_integer_
@@ -285,6 +292,10 @@
     out$converged_pairs <- NA_integer_
     out$n_complete_min <- NA_integer_
     out$n_complete_max <- NA_integer_
+    out$skipped_n_min <- NA_integer_
+    out$skipped_n_max <- NA_integer_
+    out$skipped_prop_min <- NA_real_
+    out$skipped_prop_max <- NA_real_
     out$optimizer_tol <- NA_real_
   }
 
@@ -1612,6 +1623,14 @@ print.summary_corr_matrix <- function(x, digits = 4, ...) {
   cat(sprintf("  missing    : %d\n", x$n_missing))
   if (!is.na(x$n_complete_min) && !is.na(x$n_complete_max)) {
     cat(sprintf("  n_complete : %d to %d\n", x$n_complete_min, x$n_complete_max))
+  }
+  if (is.finite(x$skipped_n_min) && is.finite(x$skipped_n_max)) {
+    cat(sprintf("  skipped_n  : %d to %d\n", as.integer(x$skipped_n_min), as.integer(x$skipped_n_max)))
+  }
+  if (is.finite(x$skipped_prop_min) && is.finite(x$skipped_prop_max)) {
+    cat(sprintf("  skipped_prop: %s to %s\n",
+                format(round(x$skipped_prop_min, digits), nsmall = digits),
+                format(round(x$skipped_prop_max, digits), nsmall = digits)))
   }
   if (!is.na(x$zero_cell_pairs)) {
     cat(sprintf("  zero_cells : %d pair(s)\n", x$zero_cell_pairs))

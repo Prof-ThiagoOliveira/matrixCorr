@@ -127,15 +127,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // ba_rm_complete_pairs_cpp
-int ba_rm_complete_pairs_cpp(const Rcpp::NumericVector& y, const Rcpp::IntegerVector& subject, const Rcpp::IntegerVector& method, const Rcpp::IntegerVector& time);
+int ba_rm_complete_pairs_cpp(const NumericVector& y, const IntegerVector& subject, const IntegerVector& method, const IntegerVector& time);
 RcppExport SEXP _matrixCorr_ba_rm_complete_pairs_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type y(ySEXP);
-    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type subject(subjectSEXP);
-    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type method(methodSEXP);
-    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type time(timeSEXP);
     rcpp_result_gen = Rcpp::wrap(ba_rm_complete_pairs_cpp(y, subject, method, time));
     return rcpp_result_gen;
 END_RCPP
@@ -473,8 +473,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // skipcor_matrix_cpp
-Rcpp::List skipcor_matrix_cpp(const arma::mat& X, const int method_int, const bool stand, const bool use_mad, const double gval, const int min_n, const int n_threads, const bool return_masks);
-RcppExport SEXP _matrixCorr_skipcor_matrix_cpp(SEXP XSEXP, SEXP method_intSEXP, SEXP standSEXP, SEXP use_madSEXP, SEXP gvalSEXP, SEXP min_nSEXP, SEXP n_threadsSEXP, SEXP return_masksSEXP) {
+Rcpp::List skipcor_matrix_cpp(const arma::mat& X, const int method_int, const bool stand, const bool use_mad, const double gval, const int min_n, const int n_threads, const bool return_masks, const bool return_inference, const double conf_level, const int n_boot, const int seed, const int multiple_method_int, const double fwe_level, const int n_mc);
+RcppExport SEXP _matrixCorr_skipcor_matrix_cpp(SEXP XSEXP, SEXP method_intSEXP, SEXP standSEXP, SEXP use_madSEXP, SEXP gvalSEXP, SEXP min_nSEXP, SEXP n_threadsSEXP, SEXP return_masksSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP, SEXP n_bootSEXP, SEXP seedSEXP, SEXP multiple_method_intSEXP, SEXP fwe_levelSEXP, SEXP n_mcSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -486,7 +486,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const int >::type min_n(min_nSEXP);
     Rcpp::traits::input_parameter< const int >::type n_threads(n_threadsSEXP);
     Rcpp::traits::input_parameter< const bool >::type return_masks(return_masksSEXP);
-    rcpp_result_gen = Rcpp::wrap(skipcor_matrix_cpp(X, method_int, stand, use_mad, gval, min_n, n_threads, return_masks));
+    Rcpp::traits::input_parameter< const bool >::type return_inference(return_inferenceSEXP);
+    Rcpp::traits::input_parameter< const double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_boot(n_bootSEXP);
+    Rcpp::traits::input_parameter< const int >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< const int >::type multiple_method_int(multiple_method_intSEXP);
+    Rcpp::traits::input_parameter< const double >::type fwe_level(fwe_levelSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_mc(n_mcSEXP);
+    rcpp_result_gen = Rcpp::wrap(skipcor_matrix_cpp(X, method_int, stand, use_mad, gval, min_n, n_threads, return_masks, return_inference, conf_level, n_boot, seed, multiple_method_int, fwe_level, n_mc));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -689,7 +696,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_pbcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_pbcor_matrix_pairwise_cpp, 4},
     {"_matrixCorr_wincor_matrix_cpp", (DL_FUNC) &_matrixCorr_wincor_matrix_cpp, 3},
     {"_matrixCorr_wincor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_wincor_matrix_pairwise_cpp, 4},
-    {"_matrixCorr_skipcor_matrix_cpp", (DL_FUNC) &_matrixCorr_skipcor_matrix_cpp, 8},
+    {"_matrixCorr_skipcor_matrix_cpp", (DL_FUNC) &_matrixCorr_skipcor_matrix_cpp, 15},
     {"_matrixCorr_sss_cor_cpp", (DL_FUNC) &_matrixCorr_sss_cor_cpp, 1},
     {"_matrixCorr_spearman_matrix_cpp", (DL_FUNC) &_matrixCorr_spearman_matrix_cpp, 1},
     {"_matrixCorr_matrixCorr_tetrachoric_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_tetrachoric_mle_cpp, 2},

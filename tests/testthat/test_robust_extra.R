@@ -363,6 +363,152 @@ test_that("skipped_corr default output is unchanged and has no extra mask payloa
   expect_true(inherits(attr(R_masks, "skipped_masks", exact = TRUE), "skipped_corr_masks"))
 })
 
+test_that("skipped_corr legacy example remains unchanged when inference is off", {
+  set.seed(4242)
+  X <- matrix(rnorm(80), ncol = 4)
+  X[1, 1] <- 8
+  X[1, 2] <- -8
+  colnames(X) <- paste0("V", 1:4)
+
+  R <- skipped_corr(X, method = "pearson")
+  expected <- matrix(
+    c(
+      1.000000000000000,  0.442551271825158,  0.001069283910523, -0.056140658927032,
+      0.442551271825158,  1.000000000000000, -0.193019542135606,  0.180008663965879,
+      0.001069283910523, -0.193019542135606,  1.000000000000000,  0.072274267976520,
+     -0.056140658927032,  0.180008663965879,  0.072274267976520,  1.000000000000000
+    ),
+    nrow = 4, byrow = TRUE,
+    dimnames = list(colnames(X), colnames(X))
+  )
+
+  expect_equal(unname(plain_matrix_R(R)), unname(expected), tolerance = 1e-12)
+  expect_null(attr(R, "lwr.ci", exact = TRUE))
+  expect_null(attr(R, "p_value", exact = TRUE))
+})
+
+test_that("skipped_corr bootstrap inference attaches CI and p-value matrices", {
+  set.seed(1101)
+  X <- matrix(rnorm(60 * 3), nrow = 60, ncol = 3)
+  X[, 2] <- 0.75 * X[, 1] + rnorm(60, sd = 0.35)
+  X[1, 1] <- 9
+  X[1, 2] <- -9
+  colnames(X) <- c("A", "B", "C")
+
+  R <- skipped_corr(
+    X,
+    method = "pearson",
+    ci = TRUE,
+    p_value = TRUE,
+    n_boot = 200,
+    seed = 123,
+    p_adjust = "hochberg"
+  )
+
+  ci <- R$ci
+  lwr <- ci$lwr.ci
+  upr <- ci$upr.ci
+  pval <- R$p_value
+  padj <- R$p_value_adjusted
+  rej <- R$reject
+
+  expect_true(is.list(ci))
+  expect_true(is.matrix(lwr))
+  expect_true(is.matrix(upr))
+  expect_true(is.matrix(pval))
+  expect_true(is.matrix(padj))
+  expect_true(is.matrix(rej))
+  expect_equal(dim(lwr), dim(R))
+  expect_equal(dim(upr), dim(R))
+  expect_equal(dim(pval), dim(R))
+  expect_equal(dim(padj), dim(R))
+  expect_equal(unname(diag(lwr)), rep(1, ncol(X)), tolerance = 0)
+  expect_equal(unname(diag(upr)), rep(1, ncol(X)), tolerance = 0)
+  expect_equal(unname(diag(pval)), rep(0, ncol(X)), tolerance = 0)
+  expect_equal(unname(diag(padj)), rep(0, ncol(X)), tolerance = 0)
+  expect_true(isSymmetric(lwr))
+  expect_true(isSymmetric(upr))
+  expect_true(isSymmetric(pval))
+  expect_true(isSymmetric(padj))
+  expect_true(R["A", "B"] >= lwr["A", "B"] && R["A", "B"] <= upr["A", "B"])
+  expect_identical(R$inference$method, "method_h")
+  expect_identical(R$inference$p_adjust, "hochberg")
+
+  idx <- upper.tri(pval, diag = FALSE) & is.finite(pval)
+  expect_equal(
+    padj[idx],
+    stats::p.adjust(pval[idx], method = "hochberg"),
+    tolerance = 1e-12
+  )
+  expect_identical(
+    unname(rej[idx]),
+    unname(padj[idx] <= R$inference$fwe_level)
+  )
+})
+
+test_that("skipped_corr ECP inference returns a critical p-value and reject matrix", {
+  set.seed(1103)
+  X <- matrix(rnorm(50 * 3), nrow = 50, ncol = 3)
+  X[, 2] <- 0.7 * X[, 1] + rnorm(50, sd = 0.3)
+  X[1, 1] <- 8
+  X[1, 2] <- -8
+  colnames(X) <- c("A", "B", "C")
+
+  R <- skipped_corr(
+    X,
+    method = "pearson",
+    p_value = TRUE,
+    n_boot = 80,
+    p_adjust = "ecp",
+    n_mc = 40,
+    seed = 777
+  )
+
+  pval <- R$p_value
+  reject <- R$reject
+  critical <- R$critical_p_value
+
+  expect_true(is.matrix(pval))
+  expect_true(is.matrix(reject))
+  expect_true(is.finite(critical))
+  expect_identical(R$inference$method, "ecp")
+  expect_identical(R$inference$p_adjust, "ecp")
+  expect_identical(R$inference$n_mc, 40L)
+  expect_equal(unname(diag(reject)), rep(FALSE, ncol(X)))
+  idx <- upper.tri(pval, diag = FALSE) & is.finite(pval)
+  expect_identical(unname(reject[idx]), unname(pval[idx] <= critical))
+})
+
+test_that("skipped_corr list-like accessors expose CI and inference components", {
+  set.seed(1104)
+  X <- matrix(rnorm(40 * 3), nrow = 40, ncol = 3)
+  X[1, 1] <- 7
+  X[1, 2] <- -7
+  colnames(X) <- c("A", "B", "C")
+
+  R <- skipped_corr(X, ci = TRUE, p_value = TRUE, n_boot = 60, seed = 99)
+
+  expect_true("ci" %in% names(R))
+  expect_true("p_value" %in% names(R))
+  expect_true(is.list(R$ci))
+  expect_true(is.matrix(R$ci$lwr.ci))
+  expect_true(is.matrix(R[["p_value"]]))
+  expect_true(is.list(R$inference))
+})
+
+test_that("skipped_corr plot supports CI overlays when intervals are available", {
+  set.seed(1105)
+  X <- matrix(rnorm(45 * 3), nrow = 45, ncol = 3)
+  X[1, 1] <- 8
+  X[1, 2] <- -8
+  colnames(X) <- c("A", "B", "C")
+
+  R <- skipped_corr(X, ci = TRUE, n_boot = 60, seed = 123)
+  p <- plot(R, value_text_size = 2, ci_text_size = 2)
+
+  expect_s3_class(p, "ggplot")
+})
+
 test_that("skipped_corr masks reconstruct the reported pairwise correlations", {
   set.seed(1008)
   X <- matrix(rnorm(90 * 3), nrow = 90, ncol = 3)
@@ -442,4 +588,22 @@ test_that("new robust correlation classes support print and plot methods", {
     sm <- summary(obj)
     expect_s3_class(sm, "summary_corr_matrix")
   }
+})
+
+test_that("skipped_corr summary reports skipped counts and proportions", {
+  set.seed(1102)
+  X <- matrix(rnorm(50 * 4), nrow = 50, ncol = 4)
+  X[1, 1] <- 8
+  X[1, 2] <- -8
+  colnames(X) <- paste0("V", 1:4)
+
+  sm <- summary(skipped_corr(X))
+  txt <- capture.output(print(sm, digits = 4))
+
+  expect_match(paste(txt, collapse = "\n"), "skipped_n")
+  expect_match(paste(txt, collapse = "\n"), "skipped_prop")
+  expect_true(is.finite(sm$skipped_n_min))
+  expect_true(is.finite(sm$skipped_n_max))
+  expect_true(is.finite(sm$skipped_prop_min))
+  expect_true(is.finite(sm$skipped_prop_max))
 })

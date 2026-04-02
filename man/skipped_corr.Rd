@@ -6,6 +6,7 @@
 \alias{print.skipped_corr}
 \alias{plot.skipped_corr}
 \alias{summary.skipped_corr}
+\alias{print.summary.skipped_corr}
 \title{Pairwise skipped correlation}
 \usage{
 skipped_corr(
@@ -16,12 +17,29 @@ skipped_corr(
   outlier_rule = c("idealf", "mad"),
   cutoff = sqrt(stats::qchisq(0.975, df = 2)),
   n_threads = getOption("matrixCorr.threads", 1L),
-  return_masks = FALSE
+  return_masks = FALSE,
+  ci = FALSE,
+  p_value = FALSE,
+  conf_level = 0.95,
+  n_boot = 2000L,
+  p_adjust = c("none", "hochberg", "ecp"),
+  fwe_level = 0.05,
+  n_mc = 1000L,
+  seed = NULL
 )
 
 skipped_corr_masks(x, var1 = NULL, var2 = NULL)
 
-\method{print}{skipped_corr}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{skipped_corr}(
+  x,
+  digits = 4,
+  max_rows = NULL,
+  max_cols = NULL,
+  ci_digits = 4,
+  show_ci = c("auto", "yes", "no"),
+  show_p = c("auto", "yes", "no"),
+  ...
+)
 
 \method{plot}{skipped_corr}(
   x,
@@ -30,10 +48,13 @@ skipped_corr_masks(x, var1 = NULL, var2 = NULL)
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  ci_text_size = 3,
   ...
 )
 
 \method{summary}{skipped_corr}(object, ...)
+
+\method{print}{summary.skipped_corr}(x, ...)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -42,7 +63,16 @@ columns. All non-numeric columns will be excluded.}
 \item{method}{Correlation computed after removing projected outliers. One of
 \code{"pearson"} (default) or \code{"spearman"}.}
 
-\item{na_method}{One of \code{"error"} (default) or \code{"pairwise"}.}
+\item{na_method}{One of \code{"error"} (default) or \code{"pairwise"}.
+With \code{"error"}, the function requires all retained numeric columns to
+be free of missing or non-finite values and aborts otherwise. This is the
+recommended setting when you want a single common sample size across all
+pairs, reproducible skipped-row diagnostics on the same rows, or bootstrap
+inference via \code{ci = TRUE} / \code{p_value = TRUE}. With
+\code{"pairwise"}, each variable pair is computed on its own overlap of
+finite rows. This is more permissive for incomplete data, but different
+pairs can be based on different effective samples and different skipped-row
+sets, so the resulting matrix is less directly comparable across entries.}
 
 \item{stand}{Logical; if \code{TRUE} (default), each variable in the pair is
 centred by its median and divided by a robust scale estimate before the
@@ -69,7 +99,37 @@ Default \code{sqrt(qchisq(0.975, df = 2))}.}
 \item{return_masks}{Logical; if \code{TRUE}, attach compact pairwise skipped-row
 indices as an attribute. Default \code{FALSE}.}
 
-\item{x}{An object of class \code{skipped_corr}.}
+\item{ci}{Logical; if \code{TRUE}, attach percentile-bootstrap confidence
+intervals for each skipped correlation using the Wilcox (2015) B2
+resampling scheme. Default \code{FALSE}.}
+
+\item{p_value}{Logical; if \code{TRUE}, attach bootstrap p-values for testing
+whether each skipped correlation is zero. Default \code{FALSE}.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default
+\code{0.95}.}
+
+\item{n_boot}{Integer \eqn{\geq 2}. Number of bootstrap resamples used when
+\code{ci = TRUE} or \code{p_value = TRUE}. Default \code{2000}.}
+
+\item{p_adjust}{One of \code{"none"} (default), \code{"hochberg"}, or
+\code{"ecp"}. Optional familywise-error procedure applied to the matrix of
+bootstrap p-values. \code{"hochberg"} corresponds to method H in Wilcox,
+Rousselet, and Pernet (2018); \code{"ecp"} corresponds to their simulated
+critical-p-value method ECP.}
+
+\item{fwe_level}{Familywise-error level used when
+\code{p_adjust = "hochberg"} or \code{"ecp"}. Default \code{0.05}.}
+
+\item{n_mc}{Integer \eqn{\geq 10}. Number of null Monte Carlo data sets used
+when \code{p_adjust = "ecp"} to estimate the critical p-value. Default
+\code{1000}.}
+
+\item{seed}{Optional positive integer used to seed the bootstrap resampling
+when \code{ci = TRUE} or \code{p_value = TRUE}. If \code{NULL}, a fresh
+internal seed is generated.}
+
+\item{x}{An object of class \code{summary.skipped_corr}.}
 
 \item{var1, var2}{Optional column names or 1-based column indices used by
 \code{\link[=skipped_corr_masks]{skipped_corr_masks()}} to extract the skipped-row indices for one pair.}
@@ -77,6 +137,16 @@ indices as an attribute. Default \code{FALSE}.}
 \item{digits}{Integer; number of digits to print.}
 
 \item{max_rows, max_cols}{Optional integers limiting the printed matrix size.}
+
+\item{ci_digits}{Integer; digits for skipped-correlation confidence limits.}
+
+\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
+\code{print()}, \code{"auto"} keeps the compact matrix-only display;
+use \code{"yes"} to also print the pairwise CI table.}
+
+\item{show_p}{One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
+\code{print()}, \code{"auto"} keeps the compact matrix-only display;
+use \code{"yes"} to also print pairwise p-values.}
 
 \item{...}{Additional arguments passed to the underlying print or plot helper.}
 
@@ -86,6 +156,8 @@ indices as an attribute. Default \code{FALSE}.}
 
 \item{value_text_size}{Numeric text size for overlaid cell values.}
 
+\item{ci_text_size}{Text size for confidence intervals in the heatmap.}
+
 \item{object}{An object of class \code{skipped_corr}.}
 }
 \value{
@@ -93,7 +165,10 @@ A symmetric correlation matrix with class \code{skipped_corr} and
 attributes \code{method = "skipped_correlation"}, \code{description}, and
 \code{package = "matrixCorr"}. When \code{return_masks = TRUE}, the matrix
 also carries a \code{skipped_masks} attribute containing compact pairwise
-skipped-row indices.
+skipped-row indices. The \code{diagnostics} attribute stores per-pair
+complete-case counts and skipped-row counts/proportions. When
+\code{ci = TRUE} or \code{p_value = TRUE}, bootstrap inference matrices are
+attached via attributes.
 }
 \description{
 Computes all pairwise skipped correlation coefficients for the numeric
@@ -155,6 +230,26 @@ than for marginal robust methods. The implementation evaluates pairs in
 'C++'; where available, pairs are processed with 'OpenMP' parallelism. With
 \code{na_method = "pairwise"}, each pair is recomputed on its overlap of
 non-missing rows.
+
+\strong{Bootstrap inference.} When \code{ci = TRUE} or \code{p_value = TRUE},
+the implementation uses the percentile-bootstrap strategy studied by Wilcox
+(2015). Each bootstrap replicate resamples whole observation pairs with
+replacement, reruns the skipped-correlation outlier detection on the
+resampled data, and recomputes the skipped correlation on the retained
+observations. This corresponds to Wilcox's B2 method and avoids the
+statistically unsatisfactory shortcut of removing outliers only once before
+bootstrapping. Bootstrap inference currently requires complete data
+(\code{na_method = "error"}). When \code{p_adjust = "hochberg"}, the
+bootstrap p-values are processed with Hochberg's step-up procedure (method H
+in Wilcox, Rousselet, and Pernet, 2018). When \code{p_adjust = "ecp"}, the
+package follows their ECP method and simulates \code{n_mc} null data sets
+from a \eqn{p}-variate normal distribution with identity covariance,
+recomputes the pairwise bootstrap p-values for each null data set, stores the
+minimum p-value from each run, and estimates the \code{fwe_level} quantile of
+that null distribution using the Harrell-Davis estimator. Hypotheses are then
+rejected when their observed bootstrap p-values are less than or equal to the
+estimated critical p-value. The calibrated H1 procedure from Wilcox,
+Rousselet, and Pernet (2018) is not currently implemented.
 }
 \examples{
 set.seed(12)
@@ -170,6 +265,15 @@ plot(R)
 Rm <- skipped_corr(X, method = "pearson", return_masks = TRUE)
 skipped_corr_masks(Rm, 1, 2)
 
+# Example 1:
+Xm <- as.matrix(datasets::mtcars[, c("mpg", "disp", "hp", "wt")])
+Rm2 <- skipped_corr(Xm, method = "spearman")
+print(Rm2, digits = 2)
+
+# Example 2:
+Ri <- skipped_corr(Xm, method = "pearson", ci = TRUE, n_boot = 40, seed = 1)
+Ri$ci
+
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
   view_corr_shiny(R)
@@ -180,6 +284,16 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 Wilcox, R. R. (2004). Inferences based on a skipped correlation coefficient.
 Journal of Applied Statistics, 31(2), 131-143.
 \doi{10.1080/0266476032000148821}
+
+Wilcox, R. R. (2015). Inferences about the skipped correlation coefficient:
+Dealing with heteroscedasticity and non-normality. Journal of Modern Applied
+Statistical Methods, 14(1), 172-188.
+\doi{10.22237/jmasm/1430453580}
+
+Wilcox, R. R., Rousselet, G. A., & Pernet, C. R. (2018). Improved methods
+for making inferences about multiple skipped correlations. Journal of
+Statistical Computation and Simulation, 88(16), 3116-3131.
+\doi{10.1080/00949655.2018.1501051}
 }
 \seealso{
 \code{\link[=pbcor]{pbcor()}}, \code{\link[=wincor]{wincor()}}, \code{\link[=bicor]{bicor()}}
