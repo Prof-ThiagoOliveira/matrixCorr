@@ -363,6 +363,12 @@ inline bool extract_overlap_pair(const arma::uvec& idx_j,
   return true;
 }
 
+struct SkipMaskEntry {
+  int j = 0;
+  int k = 0;
+  std::vector<int> skipped_rows;
+};
+
 inline double skipcor_pair_core_ptr(const double* x_orig,
                                     const double* y_orig,
                                     const double* x_det,
@@ -382,7 +388,9 @@ inline double skipcor_pair_core_ptr(const double* x_orig,
                                     std::vector<double>& dist_buf,
                                     std::vector<double>& work_buf,
                                     arma::vec& xkeep,
-                                    arma::vec& ykeep) {
+                                    arma::vec& ykeep,
+                                    std::vector<int>* skipped_rows = nullptr,
+                                    const std::vector<arma::uword>* row_index = nullptr) {
   if (static_cast<int>(n) < min_n) return arma::datum::nan;
 
   bx.set_size(n);
@@ -425,6 +433,17 @@ inline double skipcor_pair_core_ptr(const double* x_orig,
     const double thresh = med + gval * spread;
     for (arma::uword j = 0; j < n; ++j) {
       if (dist_buf[static_cast<std::size_t>(j)] > thresh) outlier[static_cast<std::size_t>(j)] = 1u;
+    }
+  }
+
+  if (skipped_rows != nullptr) {
+    skipped_rows->clear();
+    for (arma::uword i = 0; i < n; ++i) {
+      if (outlier[static_cast<std::size_t>(i)] == 0u) continue;
+      const int row = (row_index == nullptr)
+        ? static_cast<int>(i + 1u)
+        : static_cast<int>((*row_index)[static_cast<std::size_t>(i)] + 1u);
+      skipped_rows->push_back(row);
     }
   }
 
@@ -657,18 +676,21 @@ arma::mat wincor_matrix_pairwise_cpp(const arma::mat& X,
 }
 
 // [[Rcpp::export]]
-arma::mat skipcor_matrix_cpp(const arma::mat& X,
-                             const int method_int = 0,
-                             const bool stand = true,
-                             const bool use_mad = false,
-                             const double gval = 2.717803,
-                             const int min_n = 5,
-                             const int n_threads = 1) {
+Rcpp::List skipcor_matrix_cpp(const arma::mat& X,
+                              const int method_int = 0,
+                              const bool stand = true,
+                              const bool use_mad = false,
+                              const double gval = 2.717803,
+                              const int min_n = 5,
+                              const int n_threads = 1,
+                              const bool return_masks = false) {
   const std::size_t n = X.n_rows, p = X.n_cols;
   if (p == 0 || n < 2) stop("X must have >=2 rows and >=1 column.");
 
   arma::mat R(p, p, fill::none);
   R.fill(arma::datum::nan);
+  std::vector<std::vector<SkipMaskEntry>> mask_entries;
+  if (return_masks) mask_entries.resize(p);
 
   if (X.is_finite()) {
     arma::mat Zdet;
@@ -689,11 +711,11 @@ arma::mat skipcor_matrix_cpp(const arma::mat& X,
       static thread_local std::vector<arma::uword> keep_idx;
       static thread_local std::vector<double> dist_buf;
       static thread_local std::vector<double> work_buf;
+      static thread_local std::vector<int> skipped_rows;
 
       const double* xorig_ptr = X.colptr(static_cast<arma::uword>(j));
       const double* xdet_ptr = Zdet.colptr(static_cast<arma::uword>(j));
-      for (std::size_t k = static_cast<std::size_t>(j); k < p; ++k) {
-        if (k == static_cast<std::size_t>(j)) continue;
+      for (std::size_t k = static_cast<std::size_t>(j + 1); k < p; ++k) {
         const double val = skipcor_pair_core_ptr(
           xorig_ptr,
           X.colptr(static_cast<arma::uword>(k)),
@@ -714,85 +736,129 @@ arma::mat skipcor_matrix_cpp(const arma::mat& X,
           dist_buf,
           work_buf,
           xkeep,
-          ykeep
+          ykeep,
+          (return_masks ? &skipped_rows : nullptr),
+          nullptr
         );
         R(j, k) = val;
         R(k, j) = val;
+        if (return_masks && !skipped_rows.empty()) {
+          SkipMaskEntry entry;
+          entry.j = static_cast<int>(j + 1);
+          entry.k = static_cast<int>(k + 1);
+          entry.skipped_rows = skipped_rows;
+          mask_entries[static_cast<std::size_t>(j)].push_back(std::move(entry));
+        }
       }
     }
 
     for (std::size_t j = 0; j < p; ++j) R(j, j) = 1.0;
-    return R;
-  }
-
-  std::vector<arma::uvec> finite_idx(p);
-  for (std::size_t j = 0; j < p; ++j) finite_idx[j] = arma::find_finite(X.col(j));
+  } else {
+    std::vector<arma::uvec> finite_idx(p);
+    for (std::size_t j = 0; j < p; ++j) finite_idx[j] = arma::find_finite(X.col(j));
 
 #ifdef _OPENMP
-  omp_set_num_threads(std::max(1, n_threads));
+    omp_set_num_threads(std::max(1, n_threads));
 #pragma omp parallel for schedule(dynamic)
 #endif
-  for (std::ptrdiff_t j = 0; j < static_cast<std::ptrdiff_t>(p); ++j) {
-    const arma::uvec& idx_j = finite_idx[static_cast<std::size_t>(j)];
-    for (std::size_t k = static_cast<std::size_t>(j); k < p; ++k) {
-      if (k == static_cast<std::size_t>(j)) continue;
-      const arma::uvec& idx_k = finite_idx[k];
-      static thread_local std::vector<arma::uword> overlap_idx;
-      static thread_local arma::vec xbuf;
-      static thread_local arma::vec ybuf;
-      const double* colj_ptr = X.colptr(static_cast<arma::uword>(j));
-      const double* colk_ptr = X.colptr(static_cast<arma::uword>(k));
-      if (!extract_overlap_pair(idx_j, idx_k, colj_ptr, colk_ptr, min_n, overlap_idx, xbuf, ybuf)) continue;
+    for (std::ptrdiff_t j = 0; j < static_cast<std::ptrdiff_t>(p); ++j) {
+      const arma::uvec& idx_j = finite_idx[static_cast<std::size_t>(j)];
+      for (std::size_t k = static_cast<std::size_t>(j + 1); k < p; ++k) {
+        const arma::uvec& idx_k = finite_idx[k];
+        static thread_local std::vector<arma::uword> overlap_idx;
+        static thread_local arma::vec xbuf;
+        static thread_local arma::vec ybuf;
+        const double* colj_ptr = X.colptr(static_cast<arma::uword>(j));
+        const double* colk_ptr = X.colptr(static_cast<arma::uword>(k));
+        if (!extract_overlap_pair(idx_j, idx_k, colj_ptr, colk_ptr, min_n, overlap_idx, xbuf, ybuf)) continue;
 
-      static thread_local arma::vec xdet;
-      static thread_local arma::vec ydet;
-      static thread_local arma::vec bx;
-      static thread_local arma::vec by;
-      static thread_local arma::vec bot;
-      static thread_local arma::vec xkeep;
-      static thread_local arma::vec ykeep;
-      static thread_local std::vector<unsigned char> outlier;
-      static thread_local std::vector<arma::uword> keep_idx;
-      static thread_local std::vector<double> dist_buf;
-      static thread_local std::vector<double> work_buf;
-      double center_x = 0.0, center_y = 0.0;
-      prepare_skip_detection_column(xbuf, xdet, stand, center_x);
-      prepare_skip_detection_column(ybuf, ydet, stand, center_y);
-      const double val = skipcor_pair_core_ptr(
-        xbuf.memptr(),
-        ybuf.memptr(),
-        xdet.memptr(),
-        ydet.memptr(),
-        xbuf.n_elem,
-        center_x,
-        center_y,
-        method_int,
-        use_mad,
-        gval,
-        min_n,
-        bx,
-        by,
-        bot,
-        outlier,
-        keep_idx,
-        dist_buf,
-        work_buf,
-        xkeep,
-        ykeep
-      );
-      R(j, k) = val;
-      R(k, j) = val;
+        static thread_local arma::vec xdet;
+        static thread_local arma::vec ydet;
+        static thread_local arma::vec bx;
+        static thread_local arma::vec by;
+        static thread_local arma::vec bot;
+        static thread_local arma::vec xkeep;
+        static thread_local arma::vec ykeep;
+        static thread_local std::vector<unsigned char> outlier;
+        static thread_local std::vector<arma::uword> keep_idx;
+        static thread_local std::vector<double> dist_buf;
+        static thread_local std::vector<double> work_buf;
+        static thread_local std::vector<int> skipped_rows;
+        double center_x = 0.0, center_y = 0.0;
+        prepare_skip_detection_column(xbuf, xdet, stand, center_x);
+        prepare_skip_detection_column(ybuf, ydet, stand, center_y);
+        const double val = skipcor_pair_core_ptr(
+          xbuf.memptr(),
+          ybuf.memptr(),
+          xdet.memptr(),
+          ydet.memptr(),
+          xbuf.n_elem,
+          center_x,
+          center_y,
+          method_int,
+          use_mad,
+          gval,
+          min_n,
+          bx,
+          by,
+          bot,
+          outlier,
+          keep_idx,
+          dist_buf,
+          work_buf,
+          xkeep,
+          ykeep,
+          (return_masks ? &skipped_rows : nullptr),
+          (return_masks ? &overlap_idx : nullptr)
+        );
+        R(j, k) = val;
+        R(k, j) = val;
+        if (return_masks && !skipped_rows.empty()) {
+          SkipMaskEntry entry;
+          entry.j = static_cast<int>(j + 1);
+          entry.k = static_cast<int>(k + 1);
+          entry.skipped_rows = skipped_rows;
+          mask_entries[static_cast<std::size_t>(j)].push_back(std::move(entry));
+        }
+      }
+    }
+
+    for (std::size_t j = 0; j < p; ++j) {
+      if (finite_idx[j].n_elem < 2u) {
+        R.row(j).fill(arma::datum::nan);
+        R.col(j).fill(arma::datum::nan);
+        R(j, j) = 1.0;
+      } else {
+        R(j, j) = 1.0;
+      }
     }
   }
 
-  for (std::size_t j = 0; j < p; ++j) {
-    if (finite_idx[j].n_elem < 2u) {
-      R.row(j).fill(arma::datum::nan);
-      R.col(j).fill(arma::datum::nan);
-      R(j, j) = 1.0;
-    } else {
-      R(j, j) = 1.0;
+  Rcpp::IntegerVector pair_i;
+  Rcpp::IntegerVector pair_j;
+  Rcpp::List skipped;
+  if (return_masks) {
+    std::size_t n_entries = 0u;
+    for (const auto& per_j : mask_entries) n_entries += per_j.size();
+    pair_i = Rcpp::IntegerVector(static_cast<R_xlen_t>(n_entries));
+    pair_j = Rcpp::IntegerVector(static_cast<R_xlen_t>(n_entries));
+    skipped = Rcpp::List(static_cast<R_xlen_t>(n_entries));
+
+    std::size_t pos = 0u;
+    for (const auto& per_j : mask_entries) {
+      for (const auto& entry : per_j) {
+        pair_i[static_cast<R_xlen_t>(pos)] = entry.j;
+        pair_j[static_cast<R_xlen_t>(pos)] = entry.k;
+        skipped[static_cast<R_xlen_t>(pos)] = Rcpp::wrap(entry.skipped_rows);
+        ++pos;
+      }
     }
   }
-  return R;
+
+  return Rcpp::List::create(
+    Rcpp::_["cor"] = R,
+    Rcpp::_["pair_i"] = pair_i,
+    Rcpp::_["pair_j"] = pair_j,
+    Rcpp::_["skipped_rows"] = skipped
+  );
 }

@@ -32,7 +32,11 @@
 #'   Default \code{sqrt(qchisq(0.975, df = 2))}.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
+#' @param return_masks Logical; if \code{TRUE}, attach compact pairwise skipped-row
+#'   indices as an attribute. Default \code{FALSE}.
 #' @param x An object of class \code{skipped_corr}.
+#' @param var1,var2 Optional column names or 1-based column indices used by
+#'   [skipped_corr_masks()] to extract the skipped-row indices for one pair.
 #' @param digits Integer; number of digits to print.
 #' @param max_rows,max_cols Optional integers limiting the printed matrix size.
 #' @param ... Additional arguments passed to the underlying print or plot helper.
@@ -42,7 +46,9 @@
 #'
 #' @return A symmetric correlation matrix with class \code{skipped_corr} and
 #'   attributes \code{method = "skipped_correlation"}, \code{description}, and
-#'   \code{package = "matrixCorr"}.
+#'   \code{package = "matrixCorr"}. When \code{return_masks = TRUE}, the matrix
+#'   also carries a \code{skipped_masks} attribute containing compact pairwise
+#'   skipped-row indices.
 #'
 #' @details
 #' Let \eqn{X \in \mathbb{R}^{n \times p}} be a numeric matrix with rows as
@@ -114,6 +120,9 @@
 #' summary(R)
 #' plot(R)
 #'
+#' Rm <- skipped_corr(X, method = "pearson", return_masks = TRUE)
+#' skipped_corr_masks(Rm, 1, 2)
+#'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 #'   view_corr_shiny(R)
@@ -127,11 +136,13 @@ skipped_corr <- function(data,
                     stand = TRUE,
                     outlier_rule = c("idealf", "mad"),
                     cutoff = sqrt(stats::qchisq(0.975, df = 2)),
-                    n_threads = getOption("matrixCorr.threads", 1L)) {
+                    n_threads = getOption("matrixCorr.threads", 1L),
+                    return_masks = FALSE) {
   method <- match.arg(method)
   na_method <- match.arg(na_method)
   outlier_rule <- match.arg(outlier_rule)
   check_bool(stand, arg = "stand")
+  check_bool(return_masks, arg = "return_masks")
   check_scalar_numeric(cutoff, arg = "cutoff", lower = 0, closed_lower = FALSE)
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
@@ -151,11 +162,28 @@ skipped_corr <- function(data,
     use_mad = use_mad,
     gval = cutoff,
     min_n = 5L,
-    n_threads = n_threads
+    n_threads = n_threads,
+    return_masks = return_masks
   )
 
+  mask_payload <- NULL
+  if (isTRUE(return_masks)) {
+    mask_payload <- structure(
+      list(
+        pair_i = as.integer(res$pair_i),
+        pair_j = as.integer(res$pair_j),
+        skipped_rows = unname(lapply(res$skipped_rows, as.integer)),
+        n_rows = nrow(numeric_data),
+        n_cols = ncol(numeric_data),
+        colnames = colnames_data
+      ),
+      class = "skipped_corr_masks"
+    )
+  }
+
+  res <- res$cor
   colnames(res) <- rownames(res) <- colnames_data
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     res,
     class_name = "skipped_corr",
     method = "skipped_correlation",
@@ -166,6 +194,47 @@ skipped_corr <- function(data,
       "; NA mode = ", na_method, "."
     )
   )
+  if (isTRUE(return_masks)) attr(out, "skipped_masks") <- mask_payload
+  out
+}
+
+#' @rdname skipped_corr
+#' @export
+skipped_corr_masks <- function(x, var1 = NULL, var2 = NULL) {
+  check_inherits(x, "skipped_corr")
+  masks <- attr(x, "skipped_masks", exact = TRUE)
+  if (is.null(masks)) return(NULL)
+  if (is.null(var1) && is.null(var2)) return(masks)
+  if (is.null(var1) || is.null(var2)) {
+    abort_bad_arg("var1", message = "and {.arg var2} must both be supplied when extracting a specific pair mask.")
+  }
+
+  resolve_one <- function(var, arg) {
+    if (is.character(var)) {
+      if (length(var) != 1L || is.na(var)) {
+        abort_bad_arg(arg, message = "must be a single non-missing column name or index.")
+      }
+      idx <- match(var, colnames(x))
+      if (is.na(idx)) {
+        abort_bad_arg(arg, message = "must match a column name in {.arg x}.")
+      }
+      idx
+    } else {
+      idx <- check_scalar_int_pos(var, arg = arg)
+      if (idx > ncol(x)) {
+        abort_bad_arg(arg, message = "must be <= ncol(x).")
+      }
+      idx
+    }
+  }
+
+  i <- resolve_one(var1, "var1")
+  j <- resolve_one(var2, "var2")
+  if (i == j) return(integer())
+  lo <- min(i, j)
+  hi <- max(i, j)
+  hit <- which(masks$pair_i == lo & masks$pair_j == hi)
+  if (!length(hit)) integer() else masks$skipped_rows[[hit[[1L]]]]
 }
 
 #' @rdname skipped_corr

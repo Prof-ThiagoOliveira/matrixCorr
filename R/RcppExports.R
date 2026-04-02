@@ -129,8 +129,8 @@ wincor_matrix_pairwise_cpp <- function(X, tr = 0.2, min_n = 5L, n_threads = 1L) 
     .Call(`_matrixCorr_wincor_matrix_pairwise_cpp`, X, tr, min_n, n_threads)
 }
 
-skipcor_matrix_cpp <- function(X, method_int = 0L, stand = TRUE, use_mad = FALSE, gval = 2.717803, min_n = 5L, n_threads = 1L) {
-    .Call(`_matrixCorr_skipcor_matrix_cpp`, X, method_int, stand, use_mad, gval, min_n, n_threads)
+skipcor_matrix_cpp <- function(X, method_int = 0L, stand = TRUE, use_mad = FALSE, gval = 2.717803, min_n = 5L, n_threads = 1L, return_masks = FALSE) {
+    .Call(`_matrixCorr_skipcor_matrix_cpp`, X, method_int, stand, use_mad, gval, min_n, n_threads, return_masks)
 }
 
 sss_cor_cpp <- function(X_) {

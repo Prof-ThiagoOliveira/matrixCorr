@@ -1474,6 +1474,64 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
 }
 
 #' @keywords internal
+inform_ccc_rm_ar1_fallback <- function(pair_label = NULL,
+                                       .verbose = getOption("matrixCorr.verbose", TRUE)) {
+  where <- if (length(pair_label)) {
+    sprintf(" for pair(s): %s", pair_label)
+  } else {
+    " for this fit"
+  }
+
+  inform_if_verbose(
+    sprintf(
+      "Requested AR(1) residual structure could not be fit%s; using iid residuals instead.",
+      where
+    ),
+    .verbose = .verbose
+  )
+}
+
+#' @keywords internal
+recommend_ar1_from_refit <- function(ans_iid, Xr, yr, subject, method_int, time_int, Laux, Z,
+                                     max_iter = 100, tol = 1e-6, conf_level = 0.95,
+                                     ci_mode_int,
+                                     include_subj_method = TRUE, include_subj_time = TRUE,
+                                     sb_zero_tol = 1e-10, eval_single_visit = FALSE,
+                                     time_weights = NULL) {
+  if (!isTRUE(ans_iid[["use_ar1"]])) return(FALSE)
+
+  rho_fit <- tryCatch(
+    estimate_rho(
+      Xr, yr, subject, method_int, time_int, Laux, Z,
+      max_iter = max_iter, tol = tol, conf_level = conf_level,
+      ci_mode_int = ci_mode_int,
+      include_subj_method = include_subj_method,
+      include_subj_time   = include_subj_time,
+      sb_zero_tol = sb_zero_tol,
+      eval_single_visit = eval_single_visit,
+      time_weights = time_weights
+    ),
+    error = function(e) NULL
+  )
+  rho_hat <- num_or_na(rho_fit$rho %||% NA_real_)
+  if (!is.finite(rho_hat) || rho_hat <= 0) return(FALSE)
+
+  sag_share <- if (isTRUE(include_subj_time)) {
+    sag_hat <- num_or_na(ans_iid[["sigma2_subject_time"]])
+    se_hat  <- num_or_na(ans_iid[["sigma2_error"]])
+    if (is.finite(sag_hat) && is.finite(se_hat)) {
+      sag_hat / max(1e-12, sag_hat + se_hat)
+    } else {
+      0
+    }
+  } else {
+    0
+  }
+  thr <- if (sag_share > 0.25) 0.20 else 0.10
+  rho_hat >= thr
+}
+
+#' @keywords internal
 #' @importFrom stats pchisq
 p_half_chisq1 <- function(lrt) 0.5 * pchisq(lrt, df = 1, lower.tail = FALSE)
 
@@ -1720,8 +1778,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       use_ar1_eff <- identical(ar, "ar1") && isTRUE(has_ar1_info)
       # (Optional) message once if AR1 requested but not usable:
       if (identical(ar, "ar1") && !use_ar1_eff) {
-        inform_if_verbose(
-          "AR(1) requested but no subject has >=2 distinct non-missing time points; fitting IID residuals for this pair.",
+        inform_ccc_rm_ar1_fallback(
+          pair_label = sprintf("%s vs %s", m1, m2),
           .verbose = verbose
         )
       }
@@ -1818,7 +1876,22 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         ar1_rho_lag1_mat[i, j] <- ar1_rho_lag1_mat[j, i] <- num_or_na(ans[["ar1_rho_lag1"]])
         ar1_pairs_mat[i, j]    <- ar1_pairs_mat[j, i]    <- suppressWarnings(as.integer(ans[["ar1_pairs"]]))
         ar1_pval_mat[i, j]     <- ar1_pval_mat[j, i]     <- num_or_na(ans[["ar1_pval"]])
-        ar1_reco_mat[i, j]     <- ar1_reco_mat[j, i]     <- isTRUE(ans[["use_ar1"]])
+        ar1_reco <- if (!identical(ar, "ar1")) {
+          recommend_ar1_from_refit(
+            ans,
+            Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
+            max_iter = max_iter, tol = tol, conf_level = conf_level,
+            ci_mode_int = ci_mode_int,
+            include_subj_method = inc_subj_method_eff,
+            include_subj_time   = inc_subj_time_eff,
+            sb_zero_tol = sb_zero_tol,
+            eval_single_visit = eval_single_visit,
+            time_weights = time_weights_kappa
+          )
+        } else {
+          isTRUE(ans[["use_ar1"]])
+        }
+        ar1_reco_mat[i, j]     <- ar1_reco_mat[j, i]     <- ar1_reco
 
         if (isTRUE(verbose)) {
           .vc_message(ans, label = sprintf("Pair: %s vs %s", m1, m2),

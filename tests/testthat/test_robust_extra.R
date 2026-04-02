@@ -133,6 +133,53 @@ skipcor_manual_R <- function(x, y,
   }
 }
 
+skipcor_manual_mask_R <- function(x, y,
+                                  stand = TRUE,
+                                  outlier_rule = c("idealf", "mad"),
+                                  cutoff = sqrt(stats::qchisq(0.975, df = 2))) {
+  outlier_rule <- match.arg(outlier_rule)
+  ok <- is.finite(x) & is.finite(y)
+  x_ok <- x[ok]
+  y_ok <- y[ok]
+  idx_ok <- which(ok)
+  if (length(x_ok) < 5) return(integer())
+
+  X <- cbind(x_ok, y_ok)
+  if (stand) {
+    for (j in 1:2) {
+      med <- stats::median(X[, j])
+      sc <- stats::mad(X[, j], constant = 1)
+      if (!is.finite(sc) || sc <= 0) {
+        qs <- stats::quantile(X[, j], c(0.25, 0.75), names = FALSE, type = 7)
+        sc <- diff(qs) / 1.3489795003921634
+      }
+      if (!is.finite(sc) || sc <= 0) sc <- 1
+      X[, j] <- (X[, j] - med) / sc
+    }
+  }
+
+  center <- apply(X, 2, stats::median)
+  B <- sweep(X, 2, center, "-")
+  bot <- rowSums(B^2)
+  outlier <- rep(FALSE, nrow(B))
+
+  for (i in seq_len(nrow(B))) {
+    if (!(bot[i] > 0)) next
+    dis <- abs(drop(B %*% B[i, ])) / sqrt(bot[i])
+    med <- stats::median(dis)
+    spread <- if (outlier_rule == "mad") {
+      stats::mad(dis, center = med, constant = 1)
+    } else {
+      idealf_iqr_R(dis)
+    }
+    if (!is.finite(spread) || spread <= 0) next
+    thresh <- med + cutoff * spread
+    outlier <- outlier | (dis > thresh)
+  }
+
+  idx_ok[outlier]
+}
+
 skipcor_manual_matrix_R <- function(X,
                                     method = c("pearson", "spearman"),
                                     stand = TRUE,
@@ -298,6 +345,81 @@ test_that("skipped_corr matches the manual skipped-correlation matrix on wider i
     unname(plain_matrix_R(R)),
     unname(plain_matrix_R(skipcor_manual_matrix_R(X, method = "pearson"))),
     tolerance = 1e-12
+  )
+})
+
+test_that("skipped_corr default output is unchanged and has no extra mask payload", {
+  set.seed(1007)
+  X <- matrix(rnorm(120), nrow = 30, ncol = 4)
+  X[1, 1] <- 8
+  X[1, 2] <- -8
+  colnames(X) <- paste0("V", seq_len(ncol(X)))
+
+  R_default <- skipped_corr(X, method = "pearson")
+  R_masks <- skipped_corr(X, method = "pearson", return_masks = TRUE)
+
+  expect_equal(unname(plain_matrix_R(R_default)), unname(plain_matrix_R(R_masks)), tolerance = 0)
+  expect_null(attr(R_default, "skipped_masks", exact = TRUE))
+  expect_true(inherits(attr(R_masks, "skipped_masks", exact = TRUE), "skipped_corr_masks"))
+})
+
+test_that("skipped_corr masks reconstruct the reported pairwise correlations", {
+  set.seed(1008)
+  X <- matrix(rnorm(90 * 3), nrow = 90, ncol = 3)
+  X[, 2] <- 0.7 * X[, 1] + rnorm(90, sd = 0.25)
+  X[c(5, 11), 1] <- c(9, -10)
+  X[c(5, 11), 2] <- c(-9, 10)
+  X[c(13, 24), 3] <- c(11, -12)
+  X[7, 3] <- NA_real_
+  colnames(X) <- c("A", "B", "C")
+
+  R <- skipped_corr(X, method = "spearman", na_method = "pairwise", return_masks = TRUE)
+
+  for (j in 1:(ncol(X) - 1L)) {
+    for (k in (j + 1L):ncol(X)) {
+      skipped <- skipped_corr_masks(R, j, k)
+      keep <- is.finite(X[, j]) & is.finite(X[, k])
+      if (length(skipped)) keep[skipped] <- FALSE
+      expected <- if (sum(keep) < 5L) NA_real_ else stats::cor(X[keep, j], X[keep, k], method = "spearman")
+      expect_equal(unname(R[j, k]), expected, tolerance = 1e-12)
+    }
+  }
+})
+
+test_that("skipped_corr mask accessor is symmetric by variable pair", {
+  set.seed(1009)
+  X <- matrix(rnorm(70 * 3), nrow = 70, ncol = 3)
+  X[1, 1] <- 8
+  X[1, 2] <- -8
+  colnames(X) <- c("x", "y", "z")
+
+  R <- skipped_corr(X, return_masks = TRUE)
+  expect_identical(skipped_corr_masks(R, "x", "y"), skipped_corr_masks(R, "y", "x"))
+})
+
+test_that("skipped_corr two-variable masks expose expected skipped rows", {
+  x <- c(1, 2, 3, 4, 5, 20, 7, 8, 9, 10)
+  y <- c(1.2, 2.1, 2.8, 4.2, 5.1, -18, 6.9, 8.3, 8.8, 10.4)
+  X <- cbind(x = x, y = y)
+
+  R <- skipped_corr(X, method = "pearson", return_masks = TRUE)
+  expect_identical(skipped_corr_masks(R, "x", "y"), 6L)
+})
+
+test_that("skipped_corr masks match manual skipped rows on pairwise NA input", {
+  x <- c(-3, -2, -1, 0, 1, 2, 8, 3, NA)
+  y <- c(-3.1, -2.2, -1.0, 0.2, 1.1, 2.0, -7.5, 2.9, 4)
+  z <- c(1, 2, 3, 4, 5, 6, 7, NA, 9)
+  M <- cbind(x = x, y = y, z = z)
+
+  R <- skipped_corr(M, na_method = "pairwise", return_masks = TRUE)
+  expect_identical(
+    skipped_corr_masks(R, "x", "y"),
+    skipcor_manual_mask_R(x, y)
+  )
+  expect_identical(
+    skipped_corr_masks(R, "x", "z"),
+    skipcor_manual_mask_R(x, z)
   )
 })
 

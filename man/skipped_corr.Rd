@@ -2,6 +2,7 @@
 % Please edit documentation in R/skipcor.R
 \name{skipped_corr}
 \alias{skipped_corr}
+\alias{skipped_corr_masks}
 \alias{print.skipped_corr}
 \alias{plot.skipped_corr}
 \alias{summary.skipped_corr}
@@ -14,8 +15,11 @@ skipped_corr(
   stand = TRUE,
   outlier_rule = c("idealf", "mad"),
   cutoff = sqrt(stats::qchisq(0.975, df = 2)),
-  n_threads = getOption("matrixCorr.threads", 1L)
+  n_threads = getOption("matrixCorr.threads", 1L),
+  return_masks = FALSE
 )
+
+skipped_corr_masks(x, var1 = NULL, var2 = NULL)
 
 \method{print}{skipped_corr}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
 
@@ -62,7 +66,13 @@ Default \code{sqrt(qchisq(0.975, df = 2))}.}
 \item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
 
+\item{return_masks}{Logical; if \code{TRUE}, attach compact pairwise skipped-row
+indices as an attribute. Default \code{FALSE}.}
+
 \item{x}{An object of class \code{skipped_corr}.}
+
+\item{var1, var2}{Optional column names or 1-based column indices used by
+\code{\link[=skipped_corr_masks]{skipped_corr_masks()}} to extract the skipped-row indices for one pair.}
 
 \item{digits}{Integer; number of digits to print.}
 
@@ -81,7 +91,9 @@ Default \code{sqrt(qchisq(0.975, df = 2))}.}
 \value{
 A symmetric correlation matrix with class \code{skipped_corr} and
 attributes \code{method = "skipped_correlation"}, \code{description}, and
-\code{package = "matrixCorr"}.
+\code{package = "matrixCorr"}. When \code{return_masks = TRUE}, the matrix
+also carries a \code{skipped_masks} attribute containing compact pairwise
+skipped-row indices.
 }
 \description{
 Computes all pairwise skipped correlation coefficients for the numeric
@@ -154,6 +166,9 @@ R <- skipped_corr(X, method = "pearson")
 print(R, digits = 2)
 summary(R)
 plot(R)
+
+Rm <- skipped_corr(X, method = "pearson", return_masks = TRUE)
+skipped_corr_masks(Rm, 1, 2)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

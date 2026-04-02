@@ -473,8 +473,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // skipcor_matrix_cpp
-arma::mat skipcor_matrix_cpp(const arma::mat& X, const int method_int, const bool stand, const bool use_mad, const double gval, const int min_n, const int n_threads);
-RcppExport SEXP _matrixCorr_skipcor_matrix_cpp(SEXP XSEXP, SEXP method_intSEXP, SEXP standSEXP, SEXP use_madSEXP, SEXP gvalSEXP, SEXP min_nSEXP, SEXP n_threadsSEXP) {
+Rcpp::List skipcor_matrix_cpp(const arma::mat& X, const int method_int, const bool stand, const bool use_mad, const double gval, const int min_n, const int n_threads, const bool return_masks);
+RcppExport SEXP _matrixCorr_skipcor_matrix_cpp(SEXP XSEXP, SEXP method_intSEXP, SEXP standSEXP, SEXP use_madSEXP, SEXP gvalSEXP, SEXP min_nSEXP, SEXP n_threadsSEXP, SEXP return_masksSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -485,7 +485,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type gval(gvalSEXP);
     Rcpp::traits::input_parameter< const int >::type min_n(min_nSEXP);
     Rcpp::traits::input_parameter< const int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(skipcor_matrix_cpp(X, method_int, stand, use_mad, gval, min_n, n_threads));
+    Rcpp::traits::input_parameter< const bool >::type return_masks(return_masksSEXP);
+    rcpp_result_gen = Rcpp::wrap(skipcor_matrix_cpp(X, method_int, stand, use_mad, gval, min_n, n_threads, return_masks));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -688,7 +689,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_pbcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_pbcor_matrix_pairwise_cpp, 4},
     {"_matrixCorr_wincor_matrix_cpp", (DL_FUNC) &_matrixCorr_wincor_matrix_cpp, 3},
     {"_matrixCorr_wincor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_wincor_matrix_pairwise_cpp, 4},
-    {"_matrixCorr_skipcor_matrix_cpp", (DL_FUNC) &_matrixCorr_skipcor_matrix_cpp, 7},
+    {"_matrixCorr_skipcor_matrix_cpp", (DL_FUNC) &_matrixCorr_skipcor_matrix_cpp, 8},
     {"_matrixCorr_sss_cor_cpp", (DL_FUNC) &_matrixCorr_sss_cor_cpp, 1},
     {"_matrixCorr_spearman_matrix_cpp", (DL_FUNC) &_matrixCorr_spearman_matrix_cpp, 1},
     {"_matrixCorr_matrixCorr_tetrachoric_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_tetrachoric_mle_cpp, 2},

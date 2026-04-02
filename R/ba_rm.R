@@ -814,13 +814,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   ba_repeated <- structure(ba_repeated, class = c("ba_repeated_matrix","list"))
   attr(ba_repeated, "conf.level") <- conf_level
   if (length(ar1_simplified_pairs)) {
-    warning(
-      sprintf(
-        "AR(1) was simplified to iid for pair(s): %s.",
-        paste(unique(ar1_simplified_pairs), collapse = ", ")
-      ),
-      call. = FALSE
-    )
+    .warn_ba_rm_ar1_fallback(ar1_simplified_pairs)
   }
   ba_repeated
 }
@@ -839,6 +833,22 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     "failed to converge to admissible finite variance-component estimates",
     conditionMessage(cnd),
     fixed = TRUE
+  )
+}
+
+.warn_ba_rm_ar1_fallback <- function(pair_labels = NULL) {
+  where <- if (length(pair_labels)) {
+    sprintf(" for pair(s): %s", paste(unique(pair_labels), collapse = ", "))
+  } else {
+    " for this fit"
+  }
+
+  warning(
+    sprintf(
+      "Requested AR(1) residual structure could not be fit%s; using iid residuals instead.",
+      where
+    ),
+    call. = FALSE
   )
 }
 
@@ -964,10 +974,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   ba_repeated <- structure(ba_repeated, class = c("ba_repeated","list"))
   attr(ba_repeated, "conf.level") <- conf_level
   if (isTRUE(fit_info$ar1_simplified)) {
-    warning(
-      "AR(1) was simplified to iid for this fit.",
-      call. = FALSE
-    )
+    .warn_ba_rm_ar1_fallback()
   }
   ba_repeated
 }
@@ -1120,8 +1127,10 @@ summary.ba_repeated <- function(object,
   ba_repeated$sigma2_resid   <- round(num_or_na_ba(object$sigma2_resid),   digits)
   ba_repeated$use_ar1        <- isTRUE(object$use_ar1)
   ba_repeated$residual_model <- if (!is.null(object$residual_model)) object$residual_model else if (isTRUE(object$use_ar1)) "ar1" else "iid"
-  ba_repeated$ar1_rho        <- if (isTRUE(object$use_ar1)) round(num_or_na_ba(object$ar1_rho), digits) else NA_real_
-  ba_repeated$ar1_estimated  <- if (isTRUE(object$use_ar1)) object$ar1_estimated else NA
+  if (identical(ba_repeated$residual_model, "ar1")) {
+    ba_repeated$ar1_rho       <- round(num_or_na_ba(object$ar1_rho), digits)
+    ba_repeated$ar1_estimated <- object$ar1_estimated
+  }
 
   ba_repeated <- structure(ba_repeated, class = c("summary.ba_repeated","data.frame"))
   attr(ba_repeated, "conf.level") <- cl
@@ -1185,6 +1194,12 @@ summary.ba_repeated_matrix <- function(object,
   }
   df <- structure(do.call(rbind.data.frame, rows),
                   class = c("summary.ba_repeated_matrix", "data.frame"))
+  if ("ar1_rho" %in% names(df) && all(is.na(df$ar1_rho))) {
+    df$ar1_rho <- NULL
+  }
+  if ("ar1_estimated" %in% names(df) && all(is.na(df$ar1_estimated))) {
+    df$ar1_estimated <- NULL
+  }
   attr(df, "conf.level") <- cl
   df
 }

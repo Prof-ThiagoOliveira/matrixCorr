@@ -115,6 +115,94 @@ sim_ccc_rm_dat <- function(seed, rho = 0, n_subj = 120L, n_time = 6L,
   data.frame(y = y, id = id, method = method, time = time)
 }
 
+sim_ccc_rm_irregular <- function(seed, rho = 0, n_subj = 30L, n_time = 6L, n_method = 3L,
+                                 miss = 0.35, sig_subject = 0.5, sig_error = 0.8,
+                                 bias_scale = 0.5, time_effect = 1.0,
+                                 sig_subject_time = 0.7) {
+  set.seed(seed)
+  ids <- seq_len(n_subj)
+  methods <- LETTERS[seq_len(n_method)]
+  rows <- vector("list", n_subj * n_method)
+  kk <- 0L
+  subj_eff <- rnorm(n_subj, 0, sig_subject)
+  subj_time_eff <- matrix(rnorm(n_subj * n_time, 0, sig_subject_time), n_subj, n_time)
+
+  for (s in ids) {
+    for (m in seq_along(methods)) {
+      keep_t <- sort(sample(seq_len(n_time), size = max(2L, ceiling((1 - miss) * n_time))))
+      eps <- if (abs(rho) < 1e-12) {
+        rnorm(length(keep_t), 0, sig_error)
+      } else {
+        as.numeric(stats::arima.sim(list(ar = rho), n = length(keep_t), sd = sig_error))
+      }
+      y <- subj_eff[s] + subj_time_eff[s, keep_t] +
+        time_effect * (keep_t - mean(seq_len(n_time))) / n_time +
+        (m - 1) * bias_scale + eps
+      kk <- kk + 1L
+      rows[[kk]] <- data.frame(
+        y = y,
+        id = factor(s),
+        method = factor(methods[m], levels = methods),
+        time = factor(keep_t, levels = seq_len(n_time))
+      )
+    }
+  }
+
+  do.call(rbind, rows[seq_len(kk)])
+}
+
+ccc_rm_raw_ar1_recommend <- function(row) {
+  scalar_or_na <- function(x) {
+    if (is.null(x) || !length(x)) return(NA_real_)
+    suppressWarnings(as.numeric(x[[1L]]))
+  }
+
+  sag_hat <- scalar_or_na(row[["sigma2_subject_time"]])
+  se_hat  <- scalar_or_na(row[["sigma2_error"]])
+  rho_hat <- scalar_or_na(row[["ar1_rho_lag1"]])
+  pval    <- scalar_or_na(row[["ar1_pval"]])
+
+  sag_share <- if (is.finite(sag_hat) && is.finite(se_hat)) {
+    sag_hat / max(1e-12, sag_hat + se_hat)
+  } else {
+    0
+  }
+  thr   <- if (sag_share > 0.25) 0.20 else 0.10
+  p_thr <- if (sag_share > 0.25) 0.01 else 0.05
+
+  is.finite(rho_hat) && is.finite(pval) && rho_hat >= thr && pval < p_thr
+}
+
+find_ccc_rm_false_positive_candidate <- function() {
+  param_grid <- list(
+    list(n_subj = 30L, n_time = 6L, n_method = 3L, miss = 0.35, sig_subject = 0.5, sig_error = 0.8, bias_scale = 0.5, time_effect = 1.0, sig_subject_time = 0.7),
+    list(n_subj = 24L, n_time = 6L, n_method = 3L, miss = 0.25, sig_subject = 0.4, sig_error = 0.9, bias_scale = 0.6, time_effect = 0.9, sig_subject_time = 0.8),
+    list(n_subj = 36L, n_time = 5L, n_method = 3L, miss = 0.30, sig_subject = 0.6, sig_error = 0.7, bias_scale = 0.5, time_effect = 1.1, sig_subject_time = 0.6)
+  )
+
+  for (params in param_grid) {
+    for (seed in 1:80) {
+      dat <- do.call(sim_ccc_rm_irregular, c(list(seed = seed, rho = 0), params))
+      fit <- suppressMessages(
+        ccc_rm_reml(dat, "y", "id", method = "method", time = "time", ar = "none")
+      )
+      sm <- as.data.frame(summary(fit))
+      raw_reco <- vapply(seq_len(nrow(sm)), function(i) ccc_rm_raw_ar1_recommend(sm[i, , drop = FALSE]), logical(1))
+      final_reco <- sm$use_ar1 %in% TRUE
+      hit <- which(raw_reco & !final_reco)
+      if (length(hit)) {
+        return(list(
+          seed = seed,
+          params = params,
+          summary = sm[hit[1], , drop = FALSE]
+        ))
+      }
+    }
+  }
+
+  NULL
+}
+
 test_that("Dmat_type affects CCC as expected when biases flip over time", {
   set.seed(42)
   n_subj <- 200L
@@ -248,6 +336,26 @@ test_that("AR(1) recommendation distinguishes IID from positive serial correlati
   sm_ar1 <- as.data.frame(summary(fit_ar1_diag))
   expect_true(isTRUE(sm_ar1$use_ar1[1]))
   expect_gt(sm_ar1$ar1_rho_lag1[1], 0.1)
+})
+
+test_that("AR(1) fallback message aligns with ba_rm wording", {
+  dat <- sim_ccc_rm_dat(seed = 11, rho = 0)
+  subj_time <- rep(c(1L, 2L), length.out = nlevels(dat$id))
+  dat$time <- factor(subj_time[as.integer(dat$id)], levels = 1:2)
+
+  expect_message(
+    ccc_rm_reml(dat, "y", "id", method = "method", time = "time", ar = "ar1", verbose = TRUE),
+    "Requested AR\\(1\\) residual structure could not be fit for pair\\(s\\): A vs B; using iid residuals instead\\."
+  )
+})
+
+test_that("AR(1) recommendation is not triggered by an IID irregular-panel false positive", {
+  cand <- find_ccc_rm_false_positive_candidate()
+  skip_if(is.null(cand), "No IID irregular-panel raw false-positive candidate found on this platform/configuration.")
+
+  row <- cand$summary[1, , drop = FALSE]
+  expect_true(ccc_rm_raw_ar1_recommend(row))
+  expect_false(isTRUE(row$use_ar1))
 })
 
 

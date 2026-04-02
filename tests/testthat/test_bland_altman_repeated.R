@@ -113,6 +113,7 @@ test_that("Two-method BA recovers bias and sd_loa under i.i.d. residuals", {
   sm <- summary(fit)
   expect_s3_class(sm, "summary.ba_repeated")
   expect_true(all(c("bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm)))
+  expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm)))
 })
 
 test_that("Two-method BA with AR(1) honours supplied rho and recovers truth", {
@@ -217,6 +218,18 @@ test_that("AR(1) requests simplify to iid with a warning when needed for some pa
 
   sm <- summary(fit)
   expect_true(all(c("residual_model", "ar1_rho") %in% names(sm)))
+})
+
+test_that("AR(1) fallback warning text is explicit", {
+  expect_warning(
+    matrixCorr:::.warn_ba_rm_ar1_fallback(),
+    "Requested AR\\(1\\) residual structure could not be fit for this fit; using iid residuals instead\\."
+  )
+
+  expect_warning(
+    matrixCorr:::.warn_ba_rm_ar1_fallback(c("A-B", "B-C", "A-B")),
+    "Requested AR\\(1\\) residual structure could not be fit for pair\\(s\\): A-B, B-C; using iid residuals instead\\."
+  )
 })
 
 test_that("Edge case: constant difference gives zero sd_loa and degenerate LoA", {
@@ -535,10 +548,12 @@ test_that("summary/print produce expected classes and do not error", {
   sm_mat <- summary(fit_mat)
   expect_s3_class(sm_mat, "summary.ba_repeated_matrix")
   expect_true(all(c("method1","method2","bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm_mat)))
+  expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm_mat)))
   out_mat <- capture.output(print(sm_mat))
   expect_true(any(grepl("^Agreement estimates$", out_mat)))
   expect_true(any(grepl("^Confidence intervals$", out_mat)))
   expect_true(any(grepl("^Model details$", out_mat)))
+  expect_false(any(grepl("ar1_rho|ar1_estimated", out_mat)))
 
   # Two-method
   dat12 <- subset(dat, method %in% c("M1","M2"))
@@ -548,10 +563,46 @@ test_that("summary/print produce expected classes and do not error", {
   sm2 <- summary(fit2)
   expect_s3_class(sm2, "summary.ba_repeated")
   expect_true(all(c("bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm2)))
+  expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm2)))
   out2 <- capture.output(print(sm2))
   expect_true(any(grepl("^Agreement estimates$", out2)))
   expect_true(any(grepl("^Confidence intervals$", out2)))
   expect_true(any(grepl("^Model details$", out2)))
+  expect_false(any(grepl("ar1_rho|ar1_estimated", out2)))
+})
+
+test_that("two-method summary omits AR columns when final residual model is iid", {
+  fit <- structure(
+    list(
+      based.on = 12L,
+      mean.diffs = 0.8,
+      critical.diff = 1.96,
+      loa_multiplier = 1.96,
+      lower.limit = -1.16,
+      upper.limit = 2.76,
+      CI.lines = c(
+        "mean.diff.ci.lower" = 0.5,
+        "mean.diff.ci.upper" = 1.1,
+        "lower.limit.ci.lower" = -1.6,
+        "lower.limit.ci.upper" = -0.7,
+        "upper.limit.ci.lower" = 2.3,
+        "upper.limit.ci.upper" = 3.2
+      ),
+      include_slope = FALSE,
+      sigma2_subject = 0.4,
+      sigma2_resid = 1.1,
+      use_ar1 = TRUE,
+      residual_model = "iid",
+      ar1_rho = NA_real_,
+      ar1_estimated = FALSE
+    ),
+    class = "ba_repeated"
+  )
+  attr(fit, "conf.level") <- 0.95
+
+  sm <- summary(fit)
+
+  expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm)))
 })
 
 test_that("plot methods return a ggplot object and do not error", {
