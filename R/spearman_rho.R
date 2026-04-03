@@ -1,13 +1,10 @@
 #' @title Pairwise Spearman's rank correlation
 #'
 #' @description
-#' Computes all pairwise Spearman's rank correlation coefficients for the
-#' numeric columns of a matrix or data frame using a high-performance
-#' 'C++' backend.
-#'
-#' This function ranks the data and computes Pearson correlation on ranks,
-#' which is equivalent to Spearman’s rho. It supports large datasets and
-#' is optimized in 'C++' for performance.
+#' Computes pairwise Spearman's rank correlations for the numeric columns of a
+#' matrix or data frame using a high-performance 'C++' backend. Optional
+#' confidence intervals are available via a jackknife Euclidean-likelihood
+#' method.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Each column must have
@@ -15,10 +12,18 @@
 #' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, the input is
 #' required to be free of \code{NA}/\code{NaN}/\code{Inf}. Set to
 #' \code{FALSE} only when the caller already handled missingness.
+#' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
+#' jackknife Euclidean-likelihood confidence intervals for the off-diagonal
+#' Spearman correlations.
+#' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
+#' \code{0.95}.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)}-th element is
 #' the Spearman correlation between the \code{i}-th and \code{j}-th
-#' numeric columns of the input.
+#' numeric columns of the input. When \code{ci = TRUE}, the object also
+#' carries a \code{ci} attribute with elements \code{est}, \code{lwr.ci},
+#' \code{upr.ci}, and \code{conf.level}. When pairwise-complete evaluation is
+#' used, pairwise sample sizes are stored in \code{attr(x, "diagnostics")$n_complete}.
 #'
 #' @details
 #' For each column \eqn{j=1,\ldots,p}, let
@@ -57,7 +62,7 @@
 #' \eqn{\rho_S(i,j) \in [-1,1]} and \eqn{\widehat{\rho}_S} is symmetric
 #' positive semi-definite by construction (up to floating-point error). The
 #' implementation symmetrises the result to remove round-off asymmetry.
-#' Spearman’s correlation is invariant to strictly monotone transformations
+#' Spearman's correlation is invariant to strictly monotone transformations
 #' applied separately to each variable.
 #'
 #' \strong{Computation.} Each column is ranked (mid-ranks) to form \eqn{R}.
@@ -72,11 +77,28 @@
 #' Columns with zero rank variance (all values equal) are returned as \code{NA}
 #' along their row/column; the corresponding diagonal entry is also \code{NA}.
 #'
+#' When \code{check_na = FALSE}, each \eqn{(i,j)} estimate is recomputed on the
+#' pairwise complete-case overlap of columns \eqn{i} and \eqn{j}. When
+#' \code{ci = TRUE}, confidence intervals are computed in 'C++' using the
+#' jackknife Euclidean-likelihood method of de Carvalho and Marques (2012).
+#' For a pairwise estimate \eqn{U = \hat\rho_S}, delete-one jackknife
+#' pseudo-values are formed as
+#' \deqn{
+#' Z_i = nU - (n-1)U_{(-i)}, \qquad i = 1,\ldots,n,
+#' }
+#' where \eqn{U_{(-i)}} is the Spearman correlation after removing observation
+#' \eqn{i}. The confidence limits solve
+#' \deqn{
+#' \frac{n(U-\theta)^2}{n^{-1}\sum_{i=1}^n (Z_i - \theta)^2}
+#' = \chi^2_{1,\;\texttt{conf\_level}}.
+#' }
+#'
 #' Ranking costs
 #' \eqn{O\!\bigl(p\,n\log n\bigr)}; forming and normalising
 #' \eqn{R^\top R} costs \eqn{O\!\bigl(n p^2\bigr)} with \eqn{O(p^2)} additional
-#' memory. 'OpenMP' parallelism is used across columns for ranking, and a 'BLAS'
-#' 'SYRK' kernel is used for the matrix product when available.
+#' memory. The optional jackknife Euclidean-likelihood confidence intervals add
+#' per-pair delete-one recomputation work and are intended for inference rather
+#' than raw-matrix throughput.
 #'
 #' @note Missing values are not allowed when \code{check_na = TRUE}. Columns
 #' with fewer than two observations are excluded.
@@ -85,60 +107,43 @@
 #' Spearman, C. (1904). The proof and measurement of association between
 #' two things. International Journal of Epidemiology, 39(5), 1137-1150.
 #'
+#' de Carvalho, M., & Marques, F. (2012). Jackknife Euclidean
+#' likelihood-based inference for Spearman's rho. North American Actuarial
+#' Journal, 16(4), 487-492.
+#'
 #' @examples
 #' ## Monotone transformation invariance (Spearman is rank-based)
 #' set.seed(123)
 #' n <- 400; p <- 6; rho <- 0.6
-#' # AR(1) correlation
 #' Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
 #' L <- chol(Sigma)
 #' X <- matrix(rnorm(n * p), n, p) %*% L
 #' colnames(X) <- paste0("V", seq_len(p))
 #'
-#' # Monotone transforms to some columns
 #' X_mono <- X
-#' # exponential
 #' X_mono[, 1] <- exp(X_mono[, 1])
-#' # softplus
 #' X_mono[, 2] <- log1p(exp(X_mono[, 2]))
-#' # odd monotone polynomial
 #' X_mono[, 3] <- X_mono[, 3]^3
 #'
 #' sp_X <- spearman_rho(X)
 #' sp_m <- spearman_rho(X_mono)
 #' summary(sp_X)
-#'
-#' # Spearman should be (nearly) unchanged under monotone transformations
 #' round(max(abs(sp_X - sp_m)), 3)
-#' # heatmap of Spearman correlations
 #' plot(sp_X)
+#'
+#' ## Confidence intervals
+#' sp_ci <- spearman_rho(X[, 1:3], ci = TRUE)
+#' print(sp_ci, show_ci = "yes")
+#' summary(sp_ci)
 #'
 #' ## Ties handled via mid-ranks
 #' tied <- cbind(
-#'   # many ties
 #'   a = rep(1:5, each = 20),
-#'   # noisy reverse order
 #'   b = rep(5:1, each = 20) + rnorm(100, sd = 0.1),
-#'   # ordinal with ties
 #'   c = as.numeric(gl(10, 10))
 #' )
-#' sp_tied <- spearman_rho(tied)
-#' print(sp_tied, digits = 2)
-#' summary(sp_tied)
-#'
-#' ## Bivariate normal, theoretical Spearman's rho
-#' ## For BVN with Pearson correlation r, rho_S = (6/pi) * asin(r/2).
-#' r_target <- c(-0.8, -0.4, 0, 0.4, 0.8)
-#' n2 <- 200
-#' est <- true_corr <- numeric(length(r_target))
-#' for (i in seq_along(r_target)) {
-#'   R2 <- matrix(c(1, r_target[i], r_target[i], 1), 2, 2)
-#'   Z  <- matrix(rnorm(n2 * 2), n2, 2) %*% chol(R2)
-#'   s  <- spearman_rho(Z)
-#'   est[i]  <- s[1, 2]
-#'   true_corr[i] <- (6 / pi) * asin(r_target[i] / 2)
-#' }
-#' cbind(r_target, est = round(est, 3), theory = round(true_corr, 3))
+#' sp_tied <- spearman_rho(tied, ci = TRUE)
+#' print(sp_tied, digits = 2, show_ci = "yes")
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -149,17 +154,111 @@
 #' @seealso \code{\link{print.spearman_rho}}, \code{\link{plot.spearman_rho}}
 #' @author Thiago de Paula Oliveira
 #' @export
-spearman_rho <- function(data, check_na = TRUE) {
+spearman_rho <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
+  check_bool(ci, arg = "ci")
+  if (isTRUE(ci)) {
+    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  }
+
   numeric_data <- validate_corr_input(data, check_na = check_na)
   colnames_data <- colnames(numeric_data)
-  result <- spearman_matrix_cpp(numeric_data)
+  diagnostics <- NULL
+  ci_attr <- NULL
+
+  if (isTRUE(check_na) && !isTRUE(ci)) {
+    result <- spearman_matrix_cpp(numeric_data)
+  } else {
+    pairwise <- spearman_matrix_pairwise_cpp(
+      numeric_data,
+      return_ci = ci,
+      conf_level = conf_level
+    )
+    result <- pairwise$est
+    diagnostics <- list(n_complete = pairwise$n_complete)
+    dimnames(diagnostics$n_complete) <- list(colnames_data, colnames_data)
+    if (isTRUE(ci)) {
+      ci_attr <- list(
+        est = unclass(result),
+        lwr.ci = unclass(pairwise$lwr),
+        upr.ci = unclass(pairwise$upr),
+        conf.level = pairwise$conf_level
+      )
+      dimnames(ci_attr$est) <- list(colnames_data, colnames_data)
+      dimnames(ci_attr$lwr.ci) <- list(colnames_data, colnames_data)
+      dimnames(ci_attr$upr.ci) <- list(colnames_data, colnames_data)
+    }
+  }
+
   colnames(result) <- rownames(result) <- colnames_data
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     result,
     class_name = "spearman_rho",
     method = "spearman",
-    description = "Pairwise Spearman's rank correlation matrix"
+    description = "Pairwise Spearman's rank correlation matrix",
+    diagnostics = diagnostics
   )
+  if (!is.null(ci_attr)) {
+    attr(out, "ci") <- ci_attr
+    attr(out, "conf.level") <- conf_level
+  }
+  out
+}
+
+.mc_spearman_ci_attr <- function(x) {
+  attr(x, "ci", exact = TRUE)
+}
+
+.mc_spearman_pairwise_summary <- function(object,
+                                          digits = 4,
+                                          ci_digits = 3,
+                                          show_ci = c("auto", "yes", "no")) {
+  show_ci <- match.arg(show_ci)
+  check_inherits(object, "spearman_rho")
+
+  est <- as.matrix(object)
+  rn <- rownames(est); cn <- colnames(est)
+  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
+  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
+
+  ci <- .mc_spearman_ci_attr(object)
+  diag_attr <- attr(object, "diagnostics", exact = TRUE)
+  include_ci <- switch(show_ci, auto = !is.null(ci), yes = TRUE, no = FALSE)
+
+  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
+  k <- 0L
+  for (i in seq_len(nrow(est) - 1L)) {
+    for (j in (i + 1L):ncol(est)) {
+      k <- k + 1L
+      rec <- list(
+        var1 = rn[i],
+        var2 = cn[j],
+        estimate = round(est[i, j], digits)
+      )
+      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
+        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
+      }
+      if (include_ci) {
+        rec$lwr <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
+        rec$upr <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
+      }
+      rows[[k]] <- rec
+    }
+  }
+
+  df <- do.call(rbind.data.frame, rows)
+  rownames(df) <- NULL
+  if ("estimate" %in% names(df)) df$estimate <- as.numeric(df$estimate)
+  if ("lwr" %in% names(df)) df$lwr <- as.numeric(df$lwr)
+  if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
+  if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
+
+  out <- structure(df, class = c("summary.spearman_rho", "data.frame"))
+  attr(out, "overview") <- .mc_summary_corr_matrix(object)
+  attr(out, "has_ci") <- include_ci
+  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
+  attr(out, "digits") <- digits
+  attr(out, "ci_digits") <- ci_digits
+  out
 }
 
 #' @rdname spearman_rho
@@ -175,11 +274,22 @@ spearman_rho <- function(data, check_na = TRUE) {
 #'  If \code{NULL}, all rows are shown.
 #' @param max_cols Optional integer; maximum number of columns to display.
 #' If \code{NULL}, all columns are shown.
+#' @param ci_digits Integer; digits for Spearman confidence limits.
+#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
+#'   \code{print()}, \code{"auto"} keeps the compact matrix-only display;
+#'   use \code{"yes"} to also print the pairwise CI table.
 #' @param ... Additional arguments passed to \code{print}.
 #'
 #' @return Invisibly returns the \code{spearman_rho} object.
 #' @export
-print.spearman_rho <- function(x, digits = 4, max_rows = NULL, max_cols = NULL, ...) {
+print.spearman_rho <- function(x,
+                               digits = 4,
+                               max_rows = NULL,
+                               max_cols = NULL,
+                               ci_digits = 3,
+                               show_ci = c("auto", "yes", "no"),
+                               ...) {
+  show_ci <- match.arg(show_ci)
   .mc_print_corr_matrix(
     x,
     header = "Spearman correlation matrix:",
@@ -188,8 +298,20 @@ print.spearman_rho <- function(x, digits = 4, max_rows = NULL, max_cols = NULL, 
     max_cols = max_cols,
     ...
   )
+  include_ci <- switch(show_ci, auto = FALSE, yes = TRUE, no = FALSE)
+  if (include_ci) {
+    sm <- .mc_spearman_pairwise_summary(
+      x,
+      digits = digits,
+      ci_digits = ci_digits,
+      show_ci = "yes"
+    )
+    attr(sm, "show_overview") <- FALSE
+    cat("\n")
+    print(sm, ...)
+  }
+  invisible(x)
 }
-
 
 #' @rdname spearman_rho
 #' @method plot spearman_rho
@@ -208,6 +330,7 @@ print.spearman_rho <- function(x, digits = 4, max_rows = NULL, max_cols = NULL, 
 #' @param mid_color Color for zero correlation. Default is \code{"white"}.
 #' @param value_text_size Font size for displaying correlation values. Default
 #' is \code{4}.
+#' @param ci_text_size Text size for confidence intervals in the heatmap.
 #' @param ... Additional arguments passed to \code{ggplot2::theme()} or other
 #' \code{ggplot2} layers.
 #'
@@ -217,18 +340,132 @@ print.spearman_rho <- function(x, digits = 4, max_rows = NULL, max_cols = NULL, 
 plot.spearman_rho <-
   function(x, title = "Spearman's rank correlation heatmap",
            low_color = "indianred1", high_color = "steelblue1",
-           mid_color = "white", value_text_size = 4, ...) {
-  .mc_plot_corr_matrix(
-    x, class_name = "spearman_rho", fill_name = "Rho",
-    title = title, low_color = low_color, high_color = high_color,
-    mid_color = mid_color, value_text_size = value_text_size, ...
-  )
-}
+           mid_color = "white", value_text_size = 4,
+           ci_text_size = 3, ...) {
+    ci <- .mc_spearman_ci_attr(x)
+    if (is.null(ci) || is.null(ci$lwr.ci) || is.null(ci$upr.ci)) {
+      return(.mc_plot_corr_matrix(
+        x, class_name = "spearman_rho", fill_name = "Rho",
+        title = title, low_color = low_color, high_color = high_color,
+        mid_color = mid_color, value_text_size = value_text_size, ...
+      ))
+    }
+
+    est_mat <- as.matrix(x)
+    df_est <- as.data.frame(as.table(est_mat))
+    names(df_est) <- c("Var1", "Var2", "rho")
+
+    df_lwr <- as.data.frame(as.table(ci$lwr.ci))
+    names(df_lwr)[3] <- "lwr"
+    df_upr <- as.data.frame(as.table(ci$upr.ci))
+    names(df_upr)[3] <- "upr"
+    df <- Reduce(
+      function(a, b) merge(a, b, by = c("Var1", "Var2"), all = TRUE),
+      list(df_est, df_lwr, df_upr)
+    )
+
+    diag_idx <- df$Var1 == df$Var2
+    df$lwr[diag_idx] <- NA_real_
+    df$upr[diag_idx] <- NA_real_
+    df$ci_label <- ifelse(
+      is.na(df$lwr) | is.na(df$upr),
+      NA_character_,
+      sprintf("[%.3f, %.3f]", df$lwr, df$upr)
+    )
+
+    lev_row <- unique(df_est$Var1)
+    lev_col <- unique(df_est$Var2)
+    df$Var1 <- factor(df$Var1, levels = rev(lev_row))
+    df$Var2 <- factor(df$Var2, levels = lev_col)
+    df$label <- sprintf("%.2f", df$rho)
+
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = rho)) +
+      ggplot2::geom_tile(color = "white") +
+      ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size, color = "black") +
+      ggplot2::scale_fill_gradient2(
+        low = low_color,
+        high = high_color,
+        mid = mid_color,
+        midpoint = 0,
+        limits = c(-1, 1),
+        name = "Rho"
+      ) +
+      ggplot2::theme_minimal(base_size = 12) +
+      ggplot2::theme(
+        axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+        panel.grid = ggplot2::element_blank(),
+        ...
+      ) +
+      ggplot2::coord_fixed() +
+      ggplot2::labs(title = title, x = NULL, y = NULL)
+
+    if (any(!is.na(df$ci_label))) {
+      p <- p + ggplot2::geom_text(
+        ggplot2::aes(label = ci_label, y = as.numeric(Var1) - 0.25),
+        size = ci_text_size,
+        color = "gray30",
+        na.rm = TRUE
+      )
+    }
+
+    p
+  }
 
 #' @rdname spearman_rho
 #' @method summary spearman_rho
 #' @param object An object of class \code{spearman_rho}.
+#' @param ci_digits Integer; digits for Spearman confidence limits in the
+#'   pairwise summary.
+#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}.
 #' @export
-summary.spearman_rho <- function(object, ...) {
-  .mc_summary_corr_matrix(object)
+summary.spearman_rho <- function(object,
+                                 ci_digits = 3,
+                                 show_ci = c("auto", "yes", "no"),
+                                 ...) {
+  check_inherits(object, "spearman_rho")
+  show_ci <- match.arg(show_ci)
+  if (is.null(.mc_spearman_ci_attr(object))) {
+    return(.mc_summary_corr_matrix(object))
+  }
+  .mc_spearman_pairwise_summary(
+    object,
+    ci_digits = ci_digits,
+    show_ci = show_ci
+  )
+}
+
+#' @rdname spearman_rho
+#' @method print summary.spearman_rho
+#' @param x An object of class \code{summary.spearman_rho}.
+#' @export
+print.summary.spearman_rho <- function(x, ...) {
+  overview <- attr(x, "overview", exact = TRUE)
+  if (isTRUE(attr(x, "show_overview", exact = TRUE)) || is.null(attr(x, "show_overview", exact = TRUE))) {
+    if (!is.null(overview)) {
+      class(overview) <- "summary_corr_matrix"
+      print.summary_corr_matrix(overview, ...)
+    }
+  }
+
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+  if (isTRUE(attr(x, "has_ci")) && is.finite(cl)) {
+    cat(sprintf("\nSpearman-correlation pairs (%g%% CI)\n\n", 100 * cl))
+  } else {
+    cat("\nSpearman-correlation pairs\n\n")
+  }
+
+  digits <- attr(x, "digits"); if (!is.numeric(digits)) digits <- 4
+  ci_digits <- attr(x, "ci_digits"); if (!is.numeric(ci_digits)) ci_digits <- 3
+  df <- x
+  if ("estimate" %in% names(df) && is.numeric(df$estimate)) {
+    df$estimate <- ifelse(is.na(df$estimate), NA, formatC(df$estimate, format = "f", digits = digits))
+  }
+  if ("lwr" %in% names(df) && is.numeric(df$lwr)) {
+    df$lwr <- ifelse(is.na(df$lwr), NA, formatC(df$lwr, format = "f", digits = ci_digits))
+  }
+  if ("upr" %in% names(df) && is.numeric(df$upr)) {
+    df$upr <- ifelse(is.na(df$upr), NA, formatC(df$upr, format = "f", digits = ci_digits))
+  }
+  print.data.frame(df, row.names = FALSE, right = FALSE, ...)
+  invisible(x)
 }

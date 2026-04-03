@@ -97,12 +97,20 @@ kendall_tau2_from_mat_cpp <- function(mat) {
     .Call(`_matrixCorr_kendall_tau2_from_mat_cpp`, mat)
 }
 
+kendall_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95, ci_method = "fieller") {
+    .Call(`_matrixCorr_kendall_matrix_pairwise_cpp`, X_, return_ci, conf_level, ci_method)
+}
+
 partial_correlation_cpp <- function(X_, method = "sample", lambda = 1e-3, return_cov_precision = TRUE, return_p_value = FALSE) {
     .Call(`_matrixCorr_partial_correlation_cpp`, X_, method, lambda, return_cov_precision, return_p_value)
 }
 
 pearson_matrix_cpp <- function(X_) {
     .Call(`_matrixCorr_pearson_matrix_cpp`, X_)
+}
+
+pearson_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95) {
+    .Call(`_matrixCorr_pearson_matrix_pairwise_cpp`, X_, return_ci, conf_level)
 }
 
 rmcorr_pair_cpp <- function(x, y, subject, conf_level = 0.95) {
@@ -139,6 +147,10 @@ sss_cor_cpp <- function(X_) {
 
 spearman_matrix_cpp <- function(X_) {
     .Call(`_matrixCorr_spearman_matrix_cpp`, X_)
+}
+
+spearman_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95) {
+    .Call(`_matrixCorr_spearman_matrix_pairwise_cpp`, X_, return_ci, conf_level)
 }
 
 matrixCorr_tetrachoric_mle_cpp <- function(tab, correct = 0.5) {

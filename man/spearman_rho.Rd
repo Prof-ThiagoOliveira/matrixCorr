@@ -5,11 +5,20 @@
 \alias{print.spearman_rho}
 \alias{plot.spearman_rho}
 \alias{summary.spearman_rho}
+\alias{print.summary.spearman_rho}
 \title{Pairwise Spearman's rank correlation}
 \usage{
-spearman_rho(data, check_na = TRUE)
+spearman_rho(data, check_na = TRUE, ci = FALSE, conf_level = 0.95)
 
-\method{print}{spearman_rho}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{spearman_rho}(
+  x,
+  digits = 4,
+  max_rows = NULL,
+  max_cols = NULL,
+  ci_digits = 3,
+  show_ci = c("auto", "yes", "no"),
+  ...
+)
 
 \method{plot}{spearman_rho}(
   x,
@@ -18,10 +27,13 @@ spearman_rho(data, check_na = TRUE)
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  ci_text_size = 3,
   ...
 )
 
-\method{summary}{spearman_rho}(object, ...)
+\method{summary}{spearman_rho}(object, ci_digits = 3, show_ci = c("auto", "yes", "no"), ...)
+
+\method{print}{summary.spearman_rho}(x, ...)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -32,7 +44,14 @@ at least two non-missing values.}
 required to be free of \code{NA}/\code{NaN}/\code{Inf}. Set to
 \code{FALSE} only when the caller already handled missingness.}
 
-\item{x}{An object of class \code{spearman_rho}.}
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach
+jackknife Euclidean-likelihood confidence intervals for the off-diagonal
+Spearman correlations.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
+\item{x}{An object of class \code{summary.spearman_rho}.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
@@ -41,6 +60,11 @@ If \code{NULL}, all rows are shown.}
 
 \item{max_cols}{Optional integer; maximum number of columns to display.
 If \code{NULL}, all columns are shown.}
+
+\item{ci_digits}{Integer; digits for Spearman confidence limits in the
+pairwise summary.}
+
+\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}
@@ -59,25 +83,27 @@ heatmap"}.}
 \item{value_text_size}{Font size for displaying correlation values. Default
 is \code{4}.}
 
+\item{ci_text_size}{Text size for confidence intervals in the heatmap.}
+
 \item{object}{An object of class \code{spearman_rho}.}
 }
 \value{
 A symmetric numeric matrix where the \code{(i, j)}-th element is
 the Spearman correlation between the \code{i}-th and \code{j}-th
-numeric columns of the input.
+numeric columns of the input. When \code{ci = TRUE}, the object also
+carries a \code{ci} attribute with elements \code{est}, \code{lwr.ci},
+\code{upr.ci}, and \code{conf.level}. When pairwise-complete evaluation is
+used, pairwise sample sizes are stored in \code{attr(x, "diagnostics")$n_complete}.
 
 Invisibly returns the \code{spearman_rho} object.
 
 A \code{ggplot} object representing the heatmap.
 }
 \description{
-Computes all pairwise Spearman's rank correlation coefficients for the
-numeric columns of a matrix or data frame using a high-performance
-'C++' backend.
-
-This function ranks the data and computes Pearson correlation on ranks,
-which is equivalent to Spearman’s rho. It supports large datasets and
-is optimized in 'C++' for performance.
+Computes pairwise Spearman's rank correlations for the numeric columns of a
+matrix or data frame using a high-performance 'C++' backend. Optional
+confidence intervals are available via a jackknife Euclidean-likelihood
+method.
 
 Prints a summary of the Spearman's correlation matrix,
 including description and method metadata.
@@ -122,7 +148,7 @@ smaller.
 \eqn{\rho_S(i,j) \in [-1,1]} and \eqn{\widehat{\rho}_S} is symmetric
 positive semi-definite by construction (up to floating-point error). The
 implementation symmetrises the result to remove round-off asymmetry.
-Spearman’s correlation is invariant to strictly monotone transformations
+Spearman's correlation is invariant to strictly monotone transformations
 applied separately to each variable.
 
 \strong{Computation.} Each column is ranked (mid-ranks) to form \eqn{R}.
@@ -137,11 +163,28 @@ covariance of ranks; standardising by \eqn{D^{-1/2}} gives \eqn{\widehat{\rho}_S
 Columns with zero rank variance (all values equal) are returned as \code{NA}
 along their row/column; the corresponding diagonal entry is also \code{NA}.
 
+When \code{check_na = FALSE}, each \eqn{(i,j)} estimate is recomputed on the
+pairwise complete-case overlap of columns \eqn{i} and \eqn{j}. When
+\code{ci = TRUE}, confidence intervals are computed in 'C++' using the
+jackknife Euclidean-likelihood method of de Carvalho and Marques (2012).
+For a pairwise estimate \eqn{U = \hat\rho_S}, delete-one jackknife
+pseudo-values are formed as
+\deqn{
+Z_i = nU - (n-1)U_{(-i)}, \qquad i = 1,\ldots,n,
+}
+where \eqn{U_{(-i)}} is the Spearman correlation after removing observation
+\eqn{i}. The confidence limits solve
+\deqn{
+\frac{n(U-\theta)^2}{n^{-1}\sum_{i=1}^n (Z_i - \theta)^2}
+= \chi^2_{1,\;\texttt{conf\_level}}.
+}
+
 Ranking costs
 \eqn{O\!\bigl(p\,n\log n\bigr)}; forming and normalising
 \eqn{R^\top R} costs \eqn{O\!\bigl(n p^2\bigr)} with \eqn{O(p^2)} additional
-memory. 'OpenMP' parallelism is used across columns for ranking, and a 'BLAS'
-'SYRK' kernel is used for the matrix product when available.
+memory. The optional jackknife Euclidean-likelihood confidence intervals add
+per-pair delete-one recomputation work and are intended for inference rather
+than raw-matrix throughput.
 }
 \note{
 Missing values are not allowed when \code{check_na = TRUE}. Columns
@@ -151,56 +194,35 @@ with fewer than two observations are excluded.
 ## Monotone transformation invariance (Spearman is rank-based)
 set.seed(123)
 n <- 400; p <- 6; rho <- 0.6
-# AR(1) correlation
 Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
 L <- chol(Sigma)
 X <- matrix(rnorm(n * p), n, p) \%*\% L
 colnames(X) <- paste0("V", seq_len(p))
 
-# Monotone transforms to some columns
 X_mono <- X
-# exponential
 X_mono[, 1] <- exp(X_mono[, 1])
-# softplus
 X_mono[, 2] <- log1p(exp(X_mono[, 2]))
-# odd monotone polynomial
 X_mono[, 3] <- X_mono[, 3]^3
 
 sp_X <- spearman_rho(X)
 sp_m <- spearman_rho(X_mono)
 summary(sp_X)
-
-# Spearman should be (nearly) unchanged under monotone transformations
 round(max(abs(sp_X - sp_m)), 3)
-# heatmap of Spearman correlations
 plot(sp_X)
+
+## Confidence intervals
+sp_ci <- spearman_rho(X[, 1:3], ci = TRUE)
+print(sp_ci, show_ci = "yes")
+summary(sp_ci)
 
 ## Ties handled via mid-ranks
 tied <- cbind(
-  # many ties
   a = rep(1:5, each = 20),
-  # noisy reverse order
   b = rep(5:1, each = 20) + rnorm(100, sd = 0.1),
-  # ordinal with ties
   c = as.numeric(gl(10, 10))
 )
-sp_tied <- spearman_rho(tied)
-print(sp_tied, digits = 2)
-summary(sp_tied)
-
-## Bivariate normal, theoretical Spearman's rho
-## For BVN with Pearson correlation r, rho_S = (6/pi) * asin(r/2).
-r_target <- c(-0.8, -0.4, 0, 0.4, 0.8)
-n2 <- 200
-est <- true_corr <- numeric(length(r_target))
-for (i in seq_along(r_target)) {
-  R2 <- matrix(c(1, r_target[i], r_target[i], 1), 2, 2)
-  Z  <- matrix(rnorm(n2 * 2), n2, 2) \%*\% chol(R2)
-  s  <- spearman_rho(Z)
-  est[i]  <- s[1, 2]
-  true_corr[i] <- (6 / pi) * asin(r_target[i] / 2)
-}
-cbind(r_target, est = round(est, 3), theory = round(true_corr, 3))
+sp_tied <- spearman_rho(tied, ci = TRUE)
+print(sp_tied, digits = 2, show_ci = "yes")
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -210,6 +232,10 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 \references{
 Spearman, C. (1904). The proof and measurement of association between
 two things. International Journal of Epidemiology, 39(5), 1137-1150.
+
+de Carvalho, M., & Marques, F. (2012). Jackknife Euclidean
+likelihood-based inference for Spearman's rho. North American Actuarial
+Journal, 16(4), 487-492.
 }
 \seealso{
 \code{\link{print.spearman_rho}}, \code{\link{plot.spearman_rho}}

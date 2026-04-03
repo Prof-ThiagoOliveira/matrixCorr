@@ -362,6 +362,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// kendall_matrix_pairwise_cpp
+Rcpp::List kendall_matrix_pairwise_cpp(SEXP X_, const bool return_ci, const double conf_level, const std::string ci_method);
+RcppExport SEXP _matrixCorr_kendall_matrix_pairwise_cpp(SEXP X_SEXP, SEXP return_ciSEXP, SEXP conf_levelSEXP, SEXP ci_methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
+    Rcpp::traits::input_parameter< const bool >::type return_ci(return_ciSEXP);
+    Rcpp::traits::input_parameter< const double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< const std::string >::type ci_method(ci_methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(kendall_matrix_pairwise_cpp(X_, return_ci, conf_level, ci_method));
+    return rcpp_result_gen;
+END_RCPP
+}
 // partial_correlation_cpp
 Rcpp::List partial_correlation_cpp(SEXP X_, const std::string method, const double lambda, const bool return_cov_precision, const bool return_p_value);
 RcppExport SEXP _matrixCorr_partial_correlation_cpp(SEXP X_SEXP, SEXP methodSEXP, SEXP lambdaSEXP, SEXP return_cov_precisionSEXP, SEXP return_p_valueSEXP) {
@@ -385,6 +399,19 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
     rcpp_result_gen = Rcpp::wrap(pearson_matrix_cpp(X_));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pearson_matrix_pairwise_cpp
+Rcpp::List pearson_matrix_pairwise_cpp(SEXP X_, const bool return_ci, const double conf_level);
+RcppExport SEXP _matrixCorr_pearson_matrix_pairwise_cpp(SEXP X_SEXP, SEXP return_ciSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
+    Rcpp::traits::input_parameter< const bool >::type return_ci(return_ciSEXP);
+    Rcpp::traits::input_parameter< const double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(pearson_matrix_pairwise_cpp(X_, return_ci, conf_level));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -516,6 +543,19 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
     rcpp_result_gen = Rcpp::wrap(spearman_matrix_cpp(X_));
+    return rcpp_result_gen;
+END_RCPP
+}
+// spearman_matrix_pairwise_cpp
+Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_, const bool return_ci, const double conf_level);
+RcppExport SEXP _matrixCorr_spearman_matrix_pairwise_cpp(SEXP X_SEXP, SEXP return_ciSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
+    Rcpp::traits::input_parameter< const bool >::type return_ci(return_ciSEXP);
+    Rcpp::traits::input_parameter< const double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(spearman_matrix_pairwise_cpp(X_, return_ci, conf_level));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -688,8 +728,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
     {"_matrixCorr_kendall_tau2_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_cpp, 2},
     {"_matrixCorr_kendall_tau2_from_mat_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_from_mat_cpp, 1},
+    {"_matrixCorr_kendall_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_pairwise_cpp, 4},
     {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 5},
     {"_matrixCorr_pearson_matrix_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_cpp, 1},
+    {"_matrixCorr_pearson_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_pairwise_cpp, 3},
     {"_matrixCorr_rmcorr_pair_cpp", (DL_FUNC) &_matrixCorr_rmcorr_pair_cpp, 4},
     {"_matrixCorr_rmcorr_matrix_cpp", (DL_FUNC) &_matrixCorr_rmcorr_matrix_cpp, 6},
     {"_matrixCorr_pbcor_matrix_cpp", (DL_FUNC) &_matrixCorr_pbcor_matrix_cpp, 3},
@@ -699,6 +741,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_skipcor_matrix_cpp", (DL_FUNC) &_matrixCorr_skipcor_matrix_cpp, 15},
     {"_matrixCorr_sss_cor_cpp", (DL_FUNC) &_matrixCorr_sss_cor_cpp, 1},
     {"_matrixCorr_spearman_matrix_cpp", (DL_FUNC) &_matrixCorr_spearman_matrix_cpp, 1},
+    {"_matrixCorr_spearman_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_spearman_matrix_pairwise_cpp, 3},
     {"_matrixCorr_matrixCorr_tetrachoric_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_tetrachoric_mle_cpp, 2},
     {"_matrixCorr_matrixCorr_tetrachoric_fixed_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_tetrachoric_fixed_cpp, 4},
     {"_matrixCorr_matrixCorr_polychoric_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polychoric_mle_cpp, 2},

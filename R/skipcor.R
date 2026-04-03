@@ -749,7 +749,18 @@ plot.skipped_corr <- function(x,
 #' @export
 summary.skipped_corr <- function(object, ...) {
   check_inherits(object, "skipped_corr")
-  .mc_summary_corr_matrix(object)
+  ci <- .mc_skipcor_ci_attr(object)
+  inf <- .mc_skipcor_inference_attr(object)
+
+  if (is.null(ci) && (is.null(inf) || is.null(inf$p_value))) {
+    return(.mc_summary_corr_matrix(object))
+  }
+
+  .mc_skipcor_pairwise_summary(
+    object,
+    show_ci = "auto",
+    show_p = "auto"
+  )
 }
 
 #' @rdname skipped_corr

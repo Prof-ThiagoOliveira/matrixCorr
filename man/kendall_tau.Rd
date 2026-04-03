@@ -5,11 +5,27 @@
 \alias{print.kendall_matrix}
 \alias{plot.kendall_matrix}
 \alias{summary.kendall_matrix}
+\alias{print.summary.kendall_matrix}
 \title{Pairwise (or Two-Vector) Kendall's Tau Rank Correlation}
 \usage{
-kendall_tau(data, y = NULL, check_na = TRUE)
+kendall_tau(
+  data,
+  y = NULL,
+  check_na = TRUE,
+  ci = FALSE,
+  conf_level = 0.95,
+  ci_method = c("fieller", "if_el", "brown_benedetti")
+)
 
-\method{print}{kendall_matrix}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{kendall_matrix}(
+  x,
+  digits = 4,
+  max_rows = NULL,
+  max_cols = NULL,
+  ci_digits = 3,
+  show_ci = c("auto", "yes", "no"),
+  ...
+)
 
 \method{plot}{kendall_matrix}(
   x,
@@ -18,15 +34,18 @@ kendall_tau(data, y = NULL, check_na = TRUE)
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  ci_text_size = 3,
   ...
 )
 
-\method{summary}{kendall_matrix}(object, ...)
+\method{summary}{kendall_matrix}(object, ci_digits = 3, show_ci = c("auto", "yes", "no"), ...)
+
+\method{print}{summary.kendall_matrix}(x, ...)
 }
 \arguments{
-\item{data}{For matrix/data frame, it is expected a numeric matrix or a data frame with at
-least two numeric columns. All non-numeric columns will be excluded.
-For two-vector mode, a numeric vector \code{x}.}
+\item{data}{For matrix/data frame mode, a numeric matrix or a data frame with at least
+two numeric columns. All non-numeric columns are excluded. For two-vector
+mode, a numeric vector \code{x}.}
 
 \item{y}{Optional numeric vector \code{y} of the same length as \code{data}
 when \code{data} is a vector. If supplied, the function computes the
@@ -34,12 +53,23 @@ Kendall correlation \emph{between \code{data} and \code{y}} using a
 low-overhead scalar path and returns a single number.}
 
 \item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, inputs must
-be free of missing/undefined values. Use \code{FALSE} only when you have
-already filtered or imputed them.}
+be free of missing/undefined values. Use \code{FALSE} only when missingness
+has already been handled upstream.}
 
-\item{x}{An object of class \code{kendall_matrix}.}
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach pairwise
+confidence intervals for the off-diagonal Kendall correlations in
+matrix/data-frame mode.}
 
-\item{digits}{Integer; number of decimal places to print}
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
+\item{ci_method}{Confidence-interval engine used when \code{ci = TRUE}.
+Supported Kendall methods are \code{"fieller"} (default),
+\code{"brown_benedetti"}, and \code{"if_el"}.}
+
+\item{x}{An object of class \code{summary.kendall_matrix}.}
+
+\item{digits}{Integer; number of decimal places to print.}
 
 \item{max_rows}{Optional integer; maximum number of rows to display.
 If \code{NULL}, all rows are shown.}
@@ -47,11 +77,16 @@ If \code{NULL}, all rows are shown.}
 \item{max_cols}{Optional integer; maximum number of columns to display.
 If \code{NULL}, all columns are shown.}
 
+\item{ci_digits}{Integer; digits for Kendall confidence limits in the
+pairwise summary.}
+
+\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}.}
+
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}
 
-\item{title}{Plot title. Default is \code{"Kendall's Tau Correlation
-Heatmap"}.}
+\item{title}{Plot title. Default is \code{"Kendall's Tau correlation
+heatmap"}.}
 
 \item{low_color}{Color for the minimum tau value. Default is
 \code{"indianred1"}.}
@@ -64,13 +99,19 @@ Heatmap"}.}
 \item{value_text_size}{Font size for displaying correlation values. Default
 is \code{4}.}
 
+\item{ci_text_size}{Text size for confidence intervals in the heatmap.}
+
 \item{object}{An object of class \code{kendall_matrix}.}
 }
 \value{
 \itemize{
 \item If \code{y} is \code{NULL} and \code{data} is a matrix/data frame: a
 symmetric numeric matrix where entry \code{(i, j)} is the Kendall's tau
-correlation between the \code{i}-th and \code{j}-th numeric columns.
+correlation between the \code{i}-th and \code{j}-th numeric columns. When
+\code{ci = TRUE}, the object also carries a \code{ci} attribute with
+elements \code{est}, \code{lwr.ci}, \code{upr.ci}, \code{conf.level}, and
+\code{ci.method}. Pairwise complete-case sample sizes are stored in
+\code{attr(x, "diagnostics")$n_complete}.
 \item If \code{y} is provided (two-vector mode): a single numeric scalar,
 the Kendall's tau correlation between \code{data} and \code{y}.
 }
@@ -80,16 +121,11 @@ Invisibly returns the \code{kendall_matrix} object.
 A \code{ggplot} object representing the heatmap.
 }
 \description{
-Computes Kendall's tau rank correlation either for
-\strong{all pairs of numeric columns} in a matrix/data frame, or
-for \strong{two numeric vectors} directly (scalar path).
-
-This function uses a scalable algorithm implemented in 'C++' to
-compute Kendall's tau-b (tie-robust). When there are no ties, tau-b reduces
-to tau-a. The implementation follows the Knight (1966) \eqn{O(n \log n)}
-scheme, where a single sort on one variable, in-block sorting of the paired
-variable within tie groups, and a global merge-sort–based inversion count
-with closed-form tie corrections.
+Computes pairwise Kendall's tau correlations for the numeric columns of a
+matrix or data frame using a high-performance 'C++' backend. Optional
+confidence intervals are available for matrix/data-frame input via Fieller's
+asymptotic method, a Brown-Benedetti large-sample interval, or an
+influence-function empirical-likelihood method.
 
 Prints a summary of the Kendall's tau correlation matrix,
 including description and method metadata.
@@ -113,20 +149,51 @@ When there are no ties (\eqn{T_x = T_y = 0}), this reduces to tau-a:
 
 The function automatically handles ties. In degenerate cases where a
 variable is constant (\eqn{n_0 = T_x} or \eqn{n_0 = T_y}), the tau-b
-denominator is zero and the correlation is undefined (returned as \code{NA}).
+denominator is zero and the correlation is undefined (returned as \code{NA}
+off the diagonal).
+
+When \code{check_na = FALSE}, each \eqn{(i,j)} estimate is recomputed on the
+pairwise complete-case overlap of columns \eqn{i} and \eqn{j}. Confidence
+intervals use the observed pairwise-complete Kendall estimate and the same
+pairwise complete-case overlap.
+
+With \code{ci_method = "fieller"}, the interval is built on the Fisher-style
+transformed scale \eqn{z = \operatorname{atanh}(\hat\tau)} using Fieller's
+asymptotic standard error
+\deqn{ \operatorname{SE}(z) = \sqrt{\frac{0.437}{n - 4}}, }
+where \eqn{n} is the pairwise complete-case sample size. The interval is then
+mapped back with \code{tanh()} and clipped to \eqn{[-1, 1]} for numerical
+safety. This is the default Kendall CI and is intended to be the fast,
+production-oriented choice.
+
+With \code{ci_method = "brown_benedetti"}, the interval is computed on the
+Kendall tau scale using the Brown-Benedetti large-sample variance for
+Kendall's tau-b. This path is tie-aware, remains on the original Kendall
+scale, and is intended as a conventional asymptotic alternative when a
+direct tau-scale interval is preferred.
+
+With \code{ci_method = "if_el"}, the interval is computed in 'C++' using an
+influence-function empirical-likelihood construction built from the
+linearised Kendall estimating equation. The lower and upper limits are found
+by solving the empirical-likelihood ratio equation against the
+\eqn{\chi^2_1}-cutoff implied by \code{conf_level}. This method is slower
+than \code{"fieller"} and is intended for specialised inference.
 
 \strong{Performance:}
 \itemize{
 \item In the \strong{two-vector mode} (\code{y} supplied), the C++ backend uses a
-raw-double path (no intermediate 2\eqn{\times}2 matrix, no discretisation).
-\item In the \strong{matrix/data-frame mode}, columns are discretised once and all
-pairwise correlations are computed via the Knight \eqn{O(n \log n)}
-procedure; where available, pairs are evaluated in parallel.
+raw-double path with minimal overhead.
+\item In the \strong{matrix/data-frame mode}, the no-missing estimate-only path
+uses the Knight (1966) \eqn{O(n \log n)} algorithm. Pairwise-complete
+inference paths recompute each pair on its complete-case overlap; the
+\code{"brown_benedetti"} interval adds tie-aware large-sample variance
+calculations and \code{"if_el"} adds extra per-pair likelihood solving.
 }
 }
 \note{
 Missing values are not allowed when \code{check_na = TRUE}. Columns
-with fewer than two observations are excluded.
+with fewer than two observations are excluded. Confidence intervals are not
+available in the two-vector interface.
 }
 \examples{
 # Basic usage with a matrix
@@ -136,13 +203,14 @@ print(kt)
 summary(kt)
 plot(kt)
 
+# Confidence intervals
+kt_ci <- kendall_tau(mat[, 1:3], ci = TRUE)
+print(kt_ci, show_ci = "yes")
+summary(kt_ci)
+
 # Two-vector mode (scalar path)
 x <- rnorm(1000); y <- 0.5 * x + rnorm(1000)
 kendall_tau(x, y)
-
-# With a large data frame
-df <- data.frame(x = rnorm(1e4), y = rnorm(1e4), z = rnorm(1e4))
-kendall_tau(df)
 
 # Including ties
 tied_df <- data.frame(
@@ -150,10 +218,8 @@ tied_df <- data.frame(
   v2 = rep(5:1, each = 20),
   v3 = rnorm(100)
 )
-kt <- kendall_tau(tied_df)
-print(kt)
-summary(kt)
-plot(kt)
+kt_tied <- kendall_tau(tied_df, ci = TRUE, ci_method = "fieller")
+print(kt_tied, show_ci = "yes")
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -163,11 +229,26 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 }
 \references{
 Kendall, M. G. (1938). A New Measure of Rank Correlation. \emph{Biometrika},
-30(1/2), 81–93.
+30(1/2), 81-93.
 
-Knight, W. R. (1966). A Computer Method for Calculating Kendall’s Tau with
+Knight, W. R. (1966). A Computer Method for Calculating Kendall's Tau with
 Ungrouped Data. \emph{Journal of the American Statistical Association},
-61(314), 436–439.
+61(314), 436-439.
+
+Fieller, E. C., Hartley, H. O., & Pearson, E. S. (1957). Tests for rank
+correlation coefficients. I. \emph{Biometrika}, 44(3/4), 470-481.
+
+Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of tests for
+correlation in two-way contingency tables. \emph{Journal of the American
+Statistical Association}, 72(358), 309-315.
+
+Huang, Z., & Qin, G. (2023). Influence function-based confidence intervals
+for the Kendall rank correlation coefficient. \emph{Computational
+Statistics}, 38(2), 1041-1055.
+
+Croux, C., & Dehon, C. (2010). Influence functions of the Spearman and
+Kendall correlation measures. \emph{Statistical Methods & Applications},
+19, 497-515.
 }
 \seealso{
 \code{\link{print.kendall_matrix}}, \code{\link{plot.kendall_matrix}}

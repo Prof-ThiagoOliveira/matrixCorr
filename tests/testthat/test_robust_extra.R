@@ -509,6 +509,36 @@ test_that("skipped_corr plot supports CI overlays when intervals are available",
   expect_s3_class(p, "ggplot")
 })
 
+test_that("skipped_corr summary surfaces pairwise inference details when available", {
+  set.seed(1106)
+  X <- matrix(rnorm(40 * 4), nrow = 40, ncol = 4)
+  X[1, 1] <- 8
+  X[1, 2] <- -8
+  colnames(X) <- paste0("V", 1:4)
+
+  R_ci <- skipped_corr(X, ci = TRUE, n_boot = 60, seed = 123)
+  sm_ci <- summary(R_ci)
+  txt_ci <- capture.output(print(sm_ci, digits = 4))
+
+  expect_s3_class(sm_ci, "summary.skipped_corr")
+  expect_equal(nrow(sm_ci), choose(ncol(X), 2))
+  expect_true(isTRUE(attr(sm_ci, "has_ci")))
+  expect_false(isTRUE(attr(sm_ci, "has_p")))
+  expect_match(paste(txt_ci, collapse = "\n"), "Skipped-correlation pairs")
+  expect_match(paste(txt_ci, collapse = "\n"), "lwr")
+  expect_match(paste(txt_ci, collapse = "\n"), "upr")
+
+  R_p <- skipped_corr(X, ci = TRUE, p_value = TRUE, n_boot = 60, seed = 456)
+  sm_p <- summary(R_p)
+  txt_p <- capture.output(print(sm_p, digits = 4))
+
+  expect_s3_class(sm_p, "summary.skipped_corr")
+  expect_true(isTRUE(attr(sm_p, "has_ci")))
+  expect_true(isTRUE(attr(sm_p, "has_p")))
+  expect_match(paste(txt_p, collapse = "\n"), "p_value")
+  expect_match(paste(txt_p, collapse = "\n"), "Inference method")
+})
+
 test_that("skipped_corr masks reconstruct the reported pairwise correlations", {
   set.seed(1008)
   X <- matrix(rnorm(90 * 3), nrow = 90, ncol = 3)

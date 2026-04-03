@@ -14,8 +14,10 @@ Main changes in this submission:
 - Added `pcorr(method = "glasso")` for sparse graphical-lasso partial
   correlation estimation, alongside the existing sample, ridge, and OAS
   options.
-- Added robust correlation methods `pbcor()`, `wincor()`, and
-  `skipped_corr()`.
+- Added robust correlation methods `pbcor()` and `wincor()`, and
+  extended `skipped_corr()` to return optional bootstrap-based inference
+  results (confidence intervals, p-values, multiplicity adjustment, and
+  rejection decisions).
 - Added latent correlation methods such as `tetrachoric()`, 
 `polychoric()`, `polyserial()`, and `biserial()`.
 - Added standard `summary()` methods across the matrix-style 

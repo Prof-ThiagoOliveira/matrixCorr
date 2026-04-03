@@ -3,7 +3,10 @@
 #include <RcppArmadillo.h>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numeric>
+#include <utility>
+#include <string>
 #include <vector>
 #include "matrixCorr_detail.h"
 
@@ -78,6 +81,473 @@ inline double kendall_tau_from_order(const std::vector<long long>& y,
   const double den2 = double(n0 - m2);
   if (den1 <= 0.0 || den2 <= 0.0) return NA_REAL;
   return s / std::sqrt(den1 * den2);
+}
+
+inline double clamp_tau(double x) {
+  if (!std::isfinite(x)) return NA_REAL;
+  if (x > 1.0) return 1.0;
+  if (x < -1.0) return -1.0;
+  return x;
+}
+
+inline double bounded_atanh(double x) {
+  constexpr double eps = 1e-15;
+  const double xc = std::min(1.0 - eps, std::max(-1.0 + eps, x));
+  return std::atanh(xc);
+}
+
+template <class Func>
+double bisect_root(Func&& g, double lo, double hi,
+                   double f_lo, double f_hi,
+                   const double tol = 1e-10,
+                   const int max_iter = 200) {
+  if (std::abs(f_lo) <= tol) return lo;
+  if (std::abs(f_hi) <= tol) return hi;
+
+  double left = lo;
+  double right = hi;
+  double f_left = f_lo;
+  double f_right = f_hi;
+
+  for (int iter = 0; iter < max_iter; ++iter) {
+    const double mid = 0.5 * (left + right);
+    const double f_mid = g(mid);
+    if (!std::isfinite(f_mid) || std::abs(f_mid) <= tol ||
+        0.5 * (right - left) <= tol) {
+      return mid;
+    }
+    if ((f_left <= 0.0 && f_mid <= 0.0) || (f_left >= 0.0 && f_mid >= 0.0)) {
+      left = mid;
+      f_left = f_mid;
+    } else {
+      right = mid;
+      f_right = f_mid;
+    }
+  }
+
+  return 0.5 * (left + right);
+}
+
+inline bool kendall_fieller_ci_core(const double tau,
+                                    const int n,
+                                    const double conf_level,
+                                    double& lwr,
+                                    double& upr) {
+  lwr = NA_REAL;
+  upr = NA_REAL;
+  if (!std::isfinite(tau) || n <= 4) return false;
+
+  const double z = bounded_atanh(tau);
+  const double se = std::sqrt(0.437 / (static_cast<double>(n) - 4.0));
+  const double alpha = 1.0 - conf_level;
+  const double crit = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0);
+
+  lwr = clamp_tau(std::tanh(z - crit * se));
+  upr = clamp_tau(std::tanh(z + crit * se));
+  return std::isfinite(lwr) && std::isfinite(upr);
+}
+
+struct KendallBBCell {
+  int xr = 0;
+  int yr = 0;
+  int count = 0;
+  double pi_c = 0.0;
+  double pi_d = 0.0;
+};
+
+class FenwickCounts {
+ public:
+  explicit FenwickCounts(const int n = 0) : tree_(static_cast<std::size_t>(n + 1), 0.0) {}
+
+  void reset() {
+    std::fill(tree_.begin(), tree_.end(), 0.0);
+  }
+
+  void add(int idx, double value) {
+    ++idx;
+    while (idx < static_cast<int>(tree_.size())) {
+      tree_[static_cast<std::size_t>(idx)] += value;
+      idx += idx & -idx;
+    }
+  }
+
+  double sum_prefix(int idx) const {
+    if (idx < 0) return 0.0;
+    double out = 0.0;
+    ++idx;
+    while (idx > 0) {
+      out += tree_[static_cast<std::size_t>(idx)];
+      idx -= idx & -idx;
+    }
+    return out;
+  }
+
+ private:
+  std::vector<double> tree_;
+};
+
+inline bool kendall_brown_benedetti_ci_core(const arma::vec& x,
+                                            const arma::vec& y,
+                                            const double conf_level,
+                                            double& tau,
+                                            double& lwr,
+                                            double& upr) {
+  lwr = NA_REAL;
+  upr = NA_REAL;
+  tau = NA_REAL;
+
+  const arma::uword n = x.n_elem;
+  if (n != y.n_elem || n < 2u) return false;
+
+  std::vector<double> ux(x.begin(), x.end());
+  std::vector<double> uy(y.begin(), y.end());
+  std::sort(ux.begin(), ux.end());
+  ux.erase(std::unique(ux.begin(), ux.end()), ux.end());
+  std::sort(uy.begin(), uy.end());
+  uy.erase(std::unique(uy.begin(), uy.end()), uy.end());
+
+  const int nr = static_cast<int>(ux.size());
+  const int nc = static_cast<int>(uy.size());
+  if (nr < 2 || nc < 2) return false;
+
+  std::vector<std::pair<int, int>> coords;
+  coords.reserve(n);
+  for (arma::uword i = 0; i < n; ++i) {
+    const int xr = static_cast<int>(std::lower_bound(ux.begin(), ux.end(), x[i]) - ux.begin());
+    const int yr = static_cast<int>(std::lower_bound(uy.begin(), uy.end(), y[i]) - uy.begin());
+    coords.emplace_back(xr, yr);
+  }
+  std::sort(coords.begin(), coords.end());
+
+  std::vector<KendallBBCell> cells;
+  cells.reserve(coords.size());
+  std::vector<double> row_counts(static_cast<std::size_t>(nr), 0.0);
+  std::vector<double> col_counts(static_cast<std::size_t>(nc), 0.0);
+
+  for (std::size_t i = 0; i < coords.size(); ) {
+    std::size_t j = i + 1u;
+    while (j < coords.size() && coords[j] == coords[i]) ++j;
+
+    KendallBBCell cell;
+    cell.xr = coords[i].first;
+    cell.yr = coords[i].second;
+    cell.count = static_cast<int>(j - i);
+    cells.push_back(cell);
+    row_counts[static_cast<std::size_t>(cell.xr)] += static_cast<double>(cell.count);
+    col_counts[static_cast<std::size_t>(cell.yr)] += static_cast<double>(cell.count);
+    i = j;
+  }
+
+  FenwickCounts bit(nc);
+  double total_before = 0.0;
+  for (std::size_t s = 0; s < cells.size(); ) {
+    std::size_t e = s + 1u;
+    while (e < cells.size() && cells[e].xr == cells[s].xr) ++e;
+
+    for (std::size_t idx = s; idx < e; ++idx) {
+      const int yr = cells[idx].yr;
+      const double sw = bit.sum_prefix(yr - 1);
+      const double nw = total_before - bit.sum_prefix(yr);
+      cells[idx].pi_c = sw;
+      cells[idx].pi_d = nw;
+    }
+
+    for (std::size_t idx = s; idx < e; ++idx) {
+      bit.add(cells[idx].yr, static_cast<double>(cells[idx].count));
+      total_before += static_cast<double>(cells[idx].count);
+    }
+    s = e;
+  }
+
+  bit.reset();
+  double total_after = 0.0;
+  for (std::size_t e = cells.size(); e > 0u; ) {
+    std::size_t s = e - 1u;
+    while (s > 0u && cells[s - 1u].xr == cells[e - 1u].xr) --s;
+
+    for (std::size_t idx = s; idx < e; ++idx) {
+      const int yr = cells[idx].yr;
+      const double se = bit.sum_prefix(yr - 1);
+      const double ne = total_after - bit.sum_prefix(yr);
+      cells[idx].pi_c += ne;
+      cells[idx].pi_d += se;
+    }
+
+    for (std::size_t idx = s; idx < e; ++idx) {
+      bit.add(cells[idx].yr, static_cast<double>(cells[idx].count));
+      total_after += static_cast<double>(cells[idx].count);
+    }
+    e = s;
+  }
+
+  double C = 0.0;
+  double D = 0.0;
+  for (const auto& cell : cells) {
+    C += cell.pi_c * static_cast<double>(cell.count);
+    D += cell.pi_d * static_cast<double>(cell.count);
+  }
+  C *= 0.5;
+  D *= 0.5;
+
+  const double nd = static_cast<double>(n);
+  const double n0 = nd * (nd - 1.0) / 2.0;
+  double n1 = 0.0;
+  double n2 = 0.0;
+  double rowsum_sq = 0.0;
+  double colsum_sq = 0.0;
+  for (double rc : row_counts) {
+    n1 += rc * (rc - 1.0) / 2.0;
+    const double p = rc / nd;
+    rowsum_sq += p * p;
+  }
+  for (double cc : col_counts) {
+    n2 += cc * (cc - 1.0) / 2.0;
+    const double p = cc / nd;
+    colsum_sq += p * p;
+  }
+
+  const double den_tau = std::sqrt((n0 - n1) * (n0 - n2));
+  if (!(den_tau > 0.0)) return false;
+  tau = clamp_tau((C - D) / den_tau);
+  if (!std::isfinite(tau)) return false;
+
+  const double delta1 = std::sqrt(std::max(0.0, 1.0 - rowsum_sq));
+  const double delta2 = std::sqrt(std::max(0.0, 1.0 - colsum_sq));
+  if (!(delta1 > 0.0) || !(delta2 > 0.0)) return false;
+
+  const double Pdiff = 2.0 * (C - D) / (nd * nd);
+  double sum_pi_tauphi = 0.0;
+  double sum_pi_tauphi2 = 0.0;
+  for (const auto& cell : cells) {
+    const double pi = static_cast<double>(cell.count) / nd;
+    const double rowprob = row_counts[static_cast<std::size_t>(cell.xr)] / nd;
+    const double colprob = col_counts[static_cast<std::size_t>(cell.yr)] / nd;
+    const double pdiff = (cell.pi_c - cell.pi_d) / nd;
+    const double tauphi =
+      (2.0 * pdiff + Pdiff * colprob) * delta2 * delta1 +
+      (Pdiff * rowprob * delta2) / delta1;
+    sum_pi_tauphi += pi * tauphi;
+    sum_pi_tauphi2 += pi * tauphi * tauphi;
+  }
+
+  double sigma2 =
+    (sum_pi_tauphi2 - sum_pi_tauphi * sum_pi_tauphi) /
+    std::pow(delta1 * delta2, 4.0) / nd;
+  if (sigma2 < std::numeric_limits<double>::epsilon() * 10.0) sigma2 = 0.0;
+  if (!(sigma2 >= 0.0) || !std::isfinite(sigma2)) return false;
+
+  const double pr2 = 1.0 - (1.0 - conf_level) / 2.0;
+  const double crit = R::qnorm(pr2, 0.0, 1.0, 1, 0);
+  const double half_width = crit * std::sqrt(sigma2);
+  lwr = clamp_tau(std::max(tau - half_width, -1.0));
+  upr = clamp_tau(std::min(tau + half_width, 1.0));
+  return std::isfinite(lwr) && std::isfinite(upr);
+}
+
+inline bool kendall_ifel_pseudo_obs(const arma::vec& x,
+                                    const arma::vec& y,
+                                    const double tau_input,
+                                    arma::vec& w,
+                                    double& tau_hat) {
+  const arma::uword n = x.n_elem;
+  if (n != y.n_elem || n < 3u || !std::isfinite(tau_input)) return false;
+
+  arma::vec s_sum(n, arma::fill::zeros);
+  arma::vec a_sum(n, arma::fill::zeros);
+  arma::vec b_sum(n, arma::fill::zeros);
+
+  double s_total = 0.0;
+  double a_total = 0.0;
+  double b_total = 0.0;
+
+  for (arma::uword i = 0; i + 1u < n; ++i) {
+    for (arma::uword j = i + 1u; j < n; ++j) {
+      const double dx = x[i] - x[j];
+      const double dy = y[i] - y[j];
+      const int sx = (dx > 0.0) - (dx < 0.0);
+      const int sy = (dy > 0.0) - (dy < 0.0);
+      const double s_ij = static_cast<double>(sx * sy);
+      const double a_ij = (sx != 0) ? 1.0 : 0.0;
+      const double b_ij = (sy != 0) ? 1.0 : 0.0;
+
+      s_sum[i] += s_ij;
+      s_sum[j] += s_ij;
+      a_sum[i] += a_ij;
+      a_sum[j] += a_ij;
+      b_sum[i] += b_ij;
+      b_sum[j] += b_ij;
+
+      s_total += s_ij;
+      a_total += a_ij;
+      b_total += b_ij;
+    }
+  }
+
+  if (!(a_total > 0.0) || !(b_total > 0.0)) return false;
+
+  tau_hat = s_total / std::sqrt(a_total * b_total);
+  tau_hat = clamp_tau(tau_hat);
+  if (!std::isfinite(tau_hat)) return false;
+
+  const double n0 = 0.5 * static_cast<double>(n) * static_cast<double>(n - 1u);
+  const double s_bar = s_total / n0;
+  const double a_bar = a_total / n0;
+  const double b_bar = b_total / n0;
+  if (!(a_bar > 0.0) || !(b_bar > 0.0)) return false;
+
+  const double den = std::sqrt(a_bar * b_bar);
+  const double inv_nm1 = 1.0 / static_cast<double>(n - 1u);
+
+  w.set_size(n);
+  for (arma::uword i = 0; i < n; ++i) {
+    const double s_i = s_sum[i] * inv_nm1;
+    const double a_i = a_sum[i] * inv_nm1;
+    const double b_i = b_sum[i] * inv_nm1;
+    const double psi_i = 2.0 * (
+      (s_i - s_bar) / den -
+        0.5 * tau_hat * ((a_i - a_bar) / a_bar + (b_i - b_bar) / b_bar)
+    );
+    w[i] = tau_hat + psi_i;
+  }
+
+  return true;
+}
+
+inline bool kendall_el_ratio_stat(const arma::vec& w,
+                                  const double theta,
+                                  double& stat) {
+  constexpr double tol = 1e-12;
+  constexpr double domain_eps = 1e-12;
+
+  stat = std::numeric_limits<double>::infinity();
+  if (w.n_elem == 0u || !std::isfinite(theta)) return false;
+
+  const arma::vec v = w - theta;
+  const double vmax = v.max();
+  const double vmin = v.min();
+
+  if (std::max(std::abs(vmax), std::abs(vmin)) <= tol) {
+    stat = 0.0;
+    return true;
+  }
+
+  if (!(vmin < 0.0 && vmax > 0.0)) return false;
+
+  double lo = -std::numeric_limits<double>::infinity();
+  double hi = std::numeric_limits<double>::infinity();
+  for (arma::uword i = 0; i < v.n_elem; ++i) {
+    const double vi = v[i];
+    if (vi > 0.0) {
+      lo = std::max(lo, -1.0 / vi);
+    } else if (vi < 0.0) {
+      hi = std::min(hi, -1.0 / vi);
+    }
+  }
+  lo += domain_eps;
+  hi -= domain_eps;
+  if (!(lo < hi) || !std::isfinite(lo) || !std::isfinite(hi)) return false;
+
+  const auto g = [&](double lambda) -> double {
+    double acc = 0.0;
+    for (arma::uword i = 0; i < v.n_elem; ++i) {
+      const double den = 1.0 + lambda * v[i];
+      if (!(den > 0.0) || !std::isfinite(den)) {
+        return (lambda > 0.0)
+          ? std::numeric_limits<double>::infinity()
+          : -std::numeric_limits<double>::infinity();
+      }
+      acc += v[i] / den;
+    }
+    return acc;
+  };
+
+  const double g0 = arma::accu(v);
+  double lambda = 0.0;
+  if (std::abs(g0) > tol) {
+    const double g_lo = g(lo);
+    const double g_hi = g(hi);
+    if (!std::isfinite(g_lo) || !std::isfinite(g_hi) || g_lo <= 0.0 || g_hi >= 0.0) {
+      return false;
+    }
+    lambda = bisect_root(g, lo, hi, g_lo, g_hi);
+  }
+
+  double llr = 0.0;
+  for (arma::uword i = 0; i < v.n_elem; ++i) {
+    const double den = 1.0 + lambda * v[i];
+    if (!(den > 0.0) || !std::isfinite(den)) return false;
+    llr += 2.0 * std::log(den);
+  }
+  stat = llr;
+  return std::isfinite(stat);
+}
+
+inline bool kendall_ifel_ci_core(const arma::vec& x,
+                                 const arma::vec& y,
+                                 const double tau_input,
+                                 const double conf_level,
+                                 double& lwr,
+                                 double& upr) {
+  constexpr double theta_eps = 1e-10;
+
+  lwr = NA_REAL;
+  upr = NA_REAL;
+
+  arma::vec w;
+  double tau_hat = tau_input;
+  if (!kendall_ifel_pseudo_obs(x, y, tau_input, w, tau_hat)) return false;
+
+  const double spread = arma::mean(arma::square(w - tau_hat));
+  if (!std::isfinite(spread)) return false;
+  if (spread <= 1e-14) {
+    lwr = tau_hat;
+    upr = tau_hat;
+    return true;
+  }
+
+  const double crit = R::qchisq(conf_level, 1.0, 1, 0);
+  const auto f = [&](double theta) -> double {
+    double stat = 0.0;
+    if (!kendall_el_ratio_stat(w, theta, stat)) {
+      return std::numeric_limits<double>::infinity();
+    }
+    return stat - crit;
+  };
+
+  const double w_min = w.min();
+  const double w_max = w.max();
+  const double left_edge = std::max(-1.0, w_min);
+  const double right_edge = std::min(1.0, w_max);
+
+  if (tau_hat <= left_edge + theta_eps) {
+    lwr = left_edge;
+  } else {
+    const double left_start = std::min(tau_hat, left_edge + theta_eps);
+    const double f_left = f(left_start);
+    const double f_tau = f(tau_hat);
+    if (!std::isfinite(f_left) || f_left > 0.0) {
+      lwr = bisect_root(f, left_start, tau_hat, f_left, f_tau);
+    } else {
+      lwr = left_edge;
+    }
+  }
+
+  if (tau_hat >= right_edge - theta_eps) {
+    upr = right_edge;
+  } else {
+    const double right_start = std::max(tau_hat, right_edge - theta_eps);
+    const double f_tau = f(tau_hat);
+    const double f_right = f(right_start);
+    if (!std::isfinite(f_right) || f_right > 0.0) {
+      upr = bisect_root(f, tau_hat, right_start, f_tau, f_right);
+    } else {
+      upr = right_edge;
+    }
+  }
+
+  lwr = clamp_tau(lwr);
+  upr = clamp_tau(upr);
+  return std::isfinite(lwr) && std::isfinite(upr);
 }
 
 } // namespace
@@ -167,4 +637,145 @@ double kendall_tau2_from_mat_cpp(Rcpp::NumericMatrix mat) {
   const double* x = &mat(0, 0);
   const double* y = &mat(0, 1);
   return matrixCorr_detail::order_stats::tau_two_vectors_fast(x, y, n);
+}
+
+// [[Rcpp::export]]
+Rcpp::List kendall_matrix_pairwise_cpp(SEXP X_,
+                                       const bool return_ci = false,
+                                       const double conf_level = 0.95,
+                                       const std::string ci_method = "fieller") {
+  if (!Rf_isReal(X_) || !Rf_isMatrix(X_))
+    Rcpp::stop("Numeric double matrix required.");
+  if (return_ci && !(conf_level > 0.0 && conf_level < 1.0))
+    Rcpp::stop("conf_level must be in (0,1).");
+  if (return_ci &&
+      ci_method != "fieller" &&
+      ci_method != "if_el" &&
+      ci_method != "brown_benedetti")
+    Rcpp::stop("ci_method must be one of 'fieller', 'if_el', or 'brown_benedetti'.");
+
+  const arma::uword n = static_cast<arma::uword>(Rf_nrows(X_));
+  const arma::uword p = static_cast<arma::uword>(Rf_ncols(X_));
+  if (n < 2 || p < 2) Rcpp::stop("Need >= 2 rows and >= 2 columns.");
+
+  arma::mat X(REAL(X_), n, p, /*copy_aux_mem*/ false, /*strict*/ true);
+
+  arma::mat est(p, p, arma::fill::none);
+  est.fill(arma::datum::nan);
+  arma::Mat<int> n_complete(p, p, arma::fill::zeros);
+
+  arma::mat lwr;
+  arma::mat upr;
+  if (return_ci) {
+    lwr.set_size(p, p);
+    upr.set_size(p, p);
+    lwr.fill(arma::datum::nan);
+    upr.fill(arma::datum::nan);
+  }
+
+  std::vector<arma::uvec> finite_idx(p);
+  for (arma::uword j = 0; j < p; ++j) {
+    finite_idx[j] = arma::find_finite(X.col(j));
+  }
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic)
+#endif
+  for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
+    const arma::uword uj = static_cast<arma::uword>(j);
+    const arma::uvec& idx_j = finite_idx[uj];
+    const double* colj_ptr = X.colptr(uj);
+
+    static thread_local std::vector<arma::uword> overlap_idx;
+    static thread_local arma::vec xbuf;
+    static thread_local arma::vec ybuf;
+
+    for (arma::uword k = uj + 1u; k < p; ++k) {
+      const arma::uvec& idx_k = finite_idx[k];
+      const std::size_t possible = std::min(idx_j.n_elem, idx_k.n_elem);
+      if (possible < 2u) continue;
+
+      overlap_idx.clear();
+      overlap_idx.reserve(possible);
+
+      arma::uword ia = 0u, ib = 0u;
+      while (ia < idx_j.n_elem && ib < idx_k.n_elem) {
+        const arma::uword a = idx_j[ia];
+        const arma::uword b = idx_k[ib];
+        if (a == b) {
+          overlap_idx.push_back(a);
+          ++ia;
+          ++ib;
+        } else if (a < b) {
+          ++ia;
+        } else {
+          ++ib;
+        }
+      }
+
+      const int overlap_n = static_cast<int>(overlap_idx.size());
+      n_complete(uj, k) = overlap_n;
+      n_complete(k, uj) = overlap_n;
+      if (overlap_n < 2) continue;
+
+      const double* colk_ptr = X.colptr(k);
+      xbuf.set_size(overlap_idx.size());
+      ybuf.set_size(overlap_idx.size());
+      for (std::size_t t = 0; t < overlap_idx.size(); ++t) {
+        const arma::uword row = overlap_idx[t];
+        xbuf[t] = colj_ptr[row];
+        ybuf[t] = colk_ptr[row];
+      }
+
+      const double tau = tau_two_vectors_fast(xbuf.memptr(), ybuf.memptr(),
+                                              static_cast<int>(xbuf.n_elem));
+      est(uj, k) = tau;
+      est(k, uj) = tau;
+
+      if (return_ci && std::isfinite(tau)) {
+        double lo = arma::datum::nan;
+        double hi = arma::datum::nan;
+        bool ok = false;
+        if (ci_method == "fieller") {
+          ok = kendall_fieller_ci_core(tau, overlap_n, conf_level, lo, hi);
+        } else if (ci_method == "brown_benedetti") {
+          double tau_bb = arma::datum::nan;
+          ok = kendall_brown_benedetti_ci_core(xbuf, ybuf, conf_level, tau_bb, lo, hi);
+          if (ok && std::isfinite(tau_bb)) {
+            est(uj, k) = tau_bb;
+            est(k, uj) = tau_bb;
+          }
+        } else {
+          ok = kendall_ifel_ci_core(xbuf, ybuf, tau, conf_level, lo, hi);
+        }
+        if (ok) {
+          lwr(uj, k) = lo;
+          lwr(k, uj) = lo;
+          upr(uj, k) = hi;
+          upr(k, uj) = hi;
+        }
+      }
+    }
+  }
+
+  for (arma::uword j = 0; j < p; ++j) {
+    n_complete(j, j) = static_cast<int>(finite_idx[j].n_elem);
+    est(j, j) = (finite_idx[j].n_elem >= 2u) ? 1.0 : arma::datum::nan;
+    if (return_ci) {
+      lwr(j, j) = arma::datum::nan;
+      upr(j, j) = arma::datum::nan;
+    }
+  }
+
+  Rcpp::List out = Rcpp::List::create(
+    Rcpp::_["est"] = est,
+    Rcpp::_["n_complete"] = n_complete
+  );
+  if (return_ci) {
+    out["lwr"] = lwr;
+    out["upr"] = upr;
+    out["conf_level"] = conf_level;
+    out["ci_method"] = ci_method;
+  }
+  return out;
 }
