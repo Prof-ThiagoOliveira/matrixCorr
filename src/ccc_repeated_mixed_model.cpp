@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cctype>
+#include <cstring>
 #include <string>
 
 #include "matrixCorr_omp.h"
@@ -54,6 +55,37 @@ inline bool env_flag_true(const char* key) {
   return (c0 == '1' || c0 == 't' || c0 == 'y');
 }
 
+inline bool extsoft_blas_mentions_mkl() {
+  SEXP call = PROTECT(Rf_lang1(Rf_install("extSoftVersion")));
+  int error_occurred = 0;
+  SEXP info = R_tryEval(call, R_BaseEnv, &error_occurred);
+  UNPROTECT(1);
+
+  if (error_occurred || TYPEOF(info) != VECSXP) return false;
+
+  SEXP names = Rf_getAttrib(info, R_NamesSymbol);
+  if (TYPEOF(names) != STRSXP) return false;
+
+  const R_xlen_t n = Rf_xlength(names);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    if (std::strcmp(CHAR(STRING_ELT(names, i)), "BLAS") != 0) continue;
+
+    SEXP blas = VECTOR_ELT(info, i);
+    if (TYPEOF(blas) != STRSXP || Rf_xlength(blas) < 1) return false;
+
+    SEXP blas_elt = STRING_ELT(blas, 0);
+    if (blas_elt == NA_STRING) return false;
+
+    std::string blas_name(CHAR(blas_elt));
+    for (char& ch : blas_name) {
+      ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return blas_name.find("mkl") != std::string::npos;
+  }
+
+  return false;
+}
+
 inline bool detect_mkl_runtime() {
   if (std::getenv("MKL_INTERFACE_LAYER") ||
       std::getenv("MKLROOT") ||
@@ -67,17 +99,7 @@ inline bool detect_mkl_runtime() {
   static bool extsoft_is_mkl = false;
   if (!checked_extsoft) {
     checked_extsoft = true;
-    try {
-      Rcpp::Function extSoftVersion = Rcpp::Environment::base_env()["extSoftVersion"];
-      Rcpp::List info = extSoftVersion();
-      if (info.containsElementNamed("BLAS")) {
-        std::string blas = Rcpp::as<std::string>(info["BLAS"]);
-        for (char& ch : blas) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-        extsoft_is_mkl = (blas.find("mkl") != std::string::npos);
-      }
-    } catch (...) {
-      // ignore: best-effort detection only
-    }
+    extsoft_is_mkl = extsoft_blas_mentions_mkl();
   }
   if (extsoft_is_mkl) return true;
 
