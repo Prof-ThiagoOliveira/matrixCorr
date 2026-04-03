@@ -19,7 +19,7 @@ on:
       config:
         description: "Comma-separated R-hub platforms"
         type: string
-        default: "ubuntu-next,ubuntu-release"
+        default: "ubuntu-release"
       name:
         description: "Run name (optional)"
         type: string
@@ -43,11 +43,11 @@ jobs:
         id: rhub-setup
         with:
           # Keep automatic R-hub checks on patched/release Linux only.
-          # As of March 27, 2026, the available devel-style flavors in
-          # r-hub/actions are surfacing upstream plotly/lazyeval breakage that
-          # is unrelated to this package. Release macOS/Windows remain covered
+          # As of April 3, 2026, ubuntu-next can fail during dependency setup
+          # with upstream R-devel/rlang/dplyr loader breakage (`SETLENGTH`)
+          # before this package is built. Release macOS/Windows remain covered
           # by the regular R-CMD-check workflow.
-          config: ${{ github.event.inputs.config || 'ubuntu-next,ubuntu-release' }}
+          config: ${{ github.event.inputs.config || 'ubuntu-release' }}
 
   linux-containers:
     needs: setup
