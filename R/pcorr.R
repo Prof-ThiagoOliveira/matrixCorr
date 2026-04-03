@@ -384,12 +384,14 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   diag(diagnostics$n_conditioning) <- 0L
   ci_attr <- NULL
   if (isTRUE(ci)) {
+    ci_needs_repair <- .mc_sample_covariance_needs_ci_repair(numeric_data)
     ci_attr <- .mc_partial_corr_fisher_ci(
       pcor = res$pcor,
       n_complete = nrow(numeric_data),
       n_conditioning = ncol(numeric_data) - 2L,
       conf_level = conf_level,
-      jitter = res$jitter %||% NA_real_
+      jitter = res$jitter %||% NA_real_,
+      needs_repair = ci_needs_repair
     )
   }
 
@@ -429,6 +431,11 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
 
 # small helper for older R versions without %||%
 `%||%` <- function(a, b) if (!is.null(a)) a else b
+
+.mc_sample_covariance_needs_ci_repair <- function(x) {
+  centered <- scale(as.matrix(x), center = TRUE, scale = FALSE)
+  qr(centered)$rank < ncol(centered)
+}
 
 .mc_partial_corr_ci_attr <- function(x) {
   attr(x, "ci", exact = TRUE)
@@ -509,7 +516,8 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
                                        n_complete,
                                        n_conditioning,
                                        conf_level = 0.95,
-                                       jitter = NA_real_) {
+                                       jitter = NA_real_,
+                                       needs_repair = FALSE) {
   pcor <- as.matrix(pcor)
   p <- ncol(pcor)
   dn <- dimnames(pcor)
@@ -526,11 +534,11 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     ci.method = "fisher_z_partial"
   )
 
-  if (!is.na(jitter) && is.finite(jitter) && jitter > 0) {
+  if (isTRUE(needs_repair) || (!is.na(jitter) && is.finite(jitter) && jitter > 0)) {
     cli::cli_warn(
       c(
         "Partial-correlation confidence intervals are unavailable for this fit.",
-        "i" = "The sample covariance required positive-definiteness repair (`jitter > 0`), so the classical Fisher-z partial-correlation interval is not identified.",
+        "i" = "The sample covariance was rank-deficient or required positive-definiteness repair, so the classical Fisher-z partial-correlation interval is not identified.",
         "i" = "Returning {.code NA} confidence bounds."
       ),
       class = c("matrixCorr_warning", "matrixCorr_ci_warning")
