@@ -1,6 +1,5 @@
 // Thiago de Paula Oliveira
 // validate_corr_input.cpp
-// [[Rcpp::plugins(cpp11)]]
 // [[Rcpp::plugins(openmp)]]
 #include <Rcpp.h>
 #include <atomic>
