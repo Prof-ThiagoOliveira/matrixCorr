@@ -20,10 +20,12 @@ kendall_tau(
 \method{print}{kendall_matrix}(
   x,
   digits = 4,
-  max_rows = NULL,
-  max_cols = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
   ci_digits = 3,
-  show_ci = c("auto", "yes", "no"),
+  show_ci = NULL,
   ...
 )
 
@@ -35,12 +37,31 @@ kendall_tau(
   mid_color = "white",
   value_text_size = 4,
   ci_text_size = 3,
+  show_value = TRUE,
   ...
 )
 
-\method{summary}{kendall_matrix}(object, ci_digits = 3, show_ci = c("auto", "yes", "no"), ...)
+\method{summary}{kendall_matrix}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  ci_digits = 3,
+  show_ci = NULL,
+  ...
+)
 
-\method{print}{summary.kendall_matrix}(x, ...)
+\method{print}{summary.kendall_matrix}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{For matrix/data frame mode, a numeric matrix or a data frame with at least
@@ -71,16 +92,19 @@ Supported Kendall methods are \code{"fieller"} (default),
 
 \item{digits}{Integer; number of decimal places to print.}
 
-\item{max_rows}{Optional integer; maximum number of rows to display.
-If \code{NULL}, all rows are shown.}
+\item{n}{Optional row threshold for compact preview output.}
 
-\item{max_cols}{Optional integer; maximum number of columns to display.
-If \code{NULL}, all columns are shown.}
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
 
 \item{ci_digits}{Integer; digits for Kendall confidence limits in the
 pairwise summary.}
 
-\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}.}
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}
@@ -100,6 +124,9 @@ heatmap"}.}
 is \code{4}.}
 
 \item{ci_text_size}{Text size for confidence intervals in the heatmap.}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
 
 \item{object}{An object of class \code{kendall_matrix}.}
 }
@@ -121,17 +148,9 @@ Invisibly returns the \code{kendall_matrix} object.
 A \code{ggplot} object representing the heatmap.
 }
 \description{
-Computes pairwise Kendall's tau correlations for the numeric columns of a
-matrix or data frame using a high-performance 'C++' backend. Optional
-confidence intervals are available for matrix/data-frame input via Fieller's
-asymptotic method, a Brown-Benedetti large-sample interval, or an
-influence-function empirical-likelihood method.
-
-Prints a summary of the Kendall's tau correlation matrix,
-including description and method metadata.
-
-Generates a ggplot2-based heatmap of the Kendall's tau
-correlation matrix.
+Computes pairwise Kendall's tau correlations for numeric data using a
+high-performance 'C++' backend. Optional confidence intervals are available
+for matrix and data-frame input.
 }
 \details{
 Kendall's tau is a rank-based measure of association between two variables.

@@ -9,7 +9,16 @@
 \usage{
 dcor(data, check_na = TRUE)
 
-\method{print}{dcor}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{dcor}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{dcor}(
   x,
@@ -17,10 +26,19 @@ dcor(data, check_na = TRUE)
   low_color = "white",
   high_color = "steelblue1",
   value_text_size = 4,
+  show_value = TRUE,
   ...
 )
 
-\method{summary}{dcor}(object, ...)
+\method{summary}{dcor}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -34,11 +52,16 @@ have already handled missingness upstream.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
-\item{max_rows}{Optional integer; maximum number of rows to display.
-If \code{NULL}, all rows are shown.}
+\item{n}{Optional row threshold for compact preview output.}
 
-\item{max_cols}{Optional integer; maximum number of columns to display.
-If \code{NULL}, all columns are shown.}
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}
@@ -50,6 +73,9 @@ If \code{NULL}, all columns are shown.}
 \item{high_color}{Colour for strong correlation. Default is \code{"steelblue1"}.}
 
 \item{value_text_size}{Font size for displaying values. Default is \code{4}.}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
 
 \item{object}{An object of class \code{dcor}.}
 }
@@ -65,18 +91,9 @@ Invisibly returns \code{x}.
 A \code{ggplot} object representing the heatmap.
 }
 \description{
-Computes all pairwise \emph{distance correlations} using the unbiased
-U-statistic estimator for the numeric columns of a matrix or data frame,
-via a high-performance 'C++' backend ('OpenMP'-parallelised).
-Distance correlation detects general (including non-linear and non-monotonic)
-dependence between variables; unlike Pearson or Spearman, it is zero
-(in population) if and only if the variables are independent.
-
-Prints a summary of the distance correlation matrix with
-optional truncation for large objects.
-
-Generates a ggplot2 heatmap of the distance correlation matrix.
-Distance correlation is non-negative; the fill scale spans \code{[0, 1]}.
+Computes pairwise distance correlations for the numeric columns of a matrix
+or data frame using a high-performance 'C++' backend. Distance correlation
+detects general dependence, including non-linear relationships.
 }
 \details{
 Let \eqn{x \in \mathbb{R}^n} and \eqn{D^{(x)}} be the pairwise distance matrix

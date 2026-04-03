@@ -1,8 +1,33 @@
 # Package-level documentation and namespace setup
 
+#' matrixCorr
+#'
+#' Correlation and agreement estimators with a consistent S3 interface.
+#'
+#' `print()` methods provide compact previews and `summary()` methods provide
+#' richer but still bounded digests. Truncation affects console display only;
+#' full results remain available through direct extraction and coercion helpers
+#' such as `as.matrix()`, `as.data.frame()`, and `tidy()` where implemented.
+#'
+#' Package-wide display defaults can be controlled with options:
+#' \itemize{
+#'   \item `matrixCorr.print_max_rows` (default `20L`)
+#'   \item `matrixCorr.print_topn` (default `5L`)
+#'   \item `matrixCorr.print_max_vars` (default `NULL`, derived from console width)
+#'   \item `matrixCorr.print_show_ci` (default `"yes"`)
+#'   \item `matrixCorr.summary_max_rows` (default `12L`)
+#'   \item `matrixCorr.summary_topn` (default `5L`)
+#'   \item `matrixCorr.summary_max_vars` (default `10L`)
+#'   \item `matrixCorr.summary_show_ci` (default `"yes"`)
+#' }
+#'
+#' Display methods validate user-facing arguments with `cli` conditions.
+#' Confidence-interval visibility is explicit: `show_ci` accepts only `"yes"`
+#' or `"no"`.
+#'
+#' @name matrixCorr-package
+#' @aliases matrixCorr RcppExports
 #' @keywords internal
-#' @name matrixCorr-internal
-#' @aliases RcppExports
 "_PACKAGE"
 
 ## usethis namespace: start

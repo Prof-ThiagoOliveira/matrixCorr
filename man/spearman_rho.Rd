@@ -13,10 +13,12 @@ spearman_rho(data, check_na = TRUE, ci = FALSE, conf_level = 0.95)
 \method{print}{spearman_rho}(
   x,
   digits = 4,
-  max_rows = NULL,
-  max_cols = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
   ci_digits = 3,
-  show_ci = c("auto", "yes", "no"),
+  show_ci = NULL,
   ...
 )
 
@@ -28,12 +30,31 @@ spearman_rho(data, check_na = TRUE, ci = FALSE, conf_level = 0.95)
   mid_color = "white",
   value_text_size = 4,
   ci_text_size = 3,
+  show_value = TRUE,
   ...
 )
 
-\method{summary}{spearman_rho}(object, ci_digits = 3, show_ci = c("auto", "yes", "no"), ...)
+\method{summary}{spearman_rho}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  ci_digits = 3,
+  show_ci = NULL,
+  ...
+)
 
-\method{print}{summary.spearman_rho}(x, ...)
+\method{print}{summary.spearman_rho}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -55,16 +76,19 @@ Spearman correlations.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
-\item{max_rows}{Optional integer; maximum number of rows to display.
-If \code{NULL}, all rows are shown.}
+\item{n}{Optional row threshold for compact preview output.}
 
-\item{max_cols}{Optional integer; maximum number of columns to display.
-If \code{NULL}, all columns are shown.}
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
 
 \item{ci_digits}{Integer; digits for Spearman confidence limits in the
 pairwise summary.}
 
-\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}.}
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}
@@ -85,6 +109,9 @@ is \code{4}.}
 
 \item{ci_text_size}{Text size for confidence intervals in the heatmap.}
 
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
+
 \item{object}{An object of class \code{spearman_rho}.}
 }
 \value{
@@ -104,12 +131,6 @@ Computes pairwise Spearman's rank correlations for the numeric columns of a
 matrix or data frame using a high-performance 'C++' backend. Optional
 confidence intervals are available via a jackknife Euclidean-likelihood
 method.
-
-Prints a summary of the Spearman's correlation matrix,
-including description and method metadata.
-
-Generates a ggplot2-based heatmap of the Spearman's rank
-correlation matrix.
 }
 \details{
 For each column \eqn{j=1,\ldots,p}, let

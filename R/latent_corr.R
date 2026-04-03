@@ -157,25 +157,63 @@
   )
 }
 
-.mc_print_corr_matrix <- function(x, header, digits = 4, max_rows = NULL,
-                                  max_cols = NULL, ...) {
-  cat(header, "\n")
-  m <- as.matrix(x)
-  attributes(m) <- attributes(m)[c("dim", "dimnames")]
+.mc_print_corr_matrix <- function(x,
+                                  header,
+                                  digits = 4,
+                                  n = NULL,
+                                  topn = NULL,
+                                  max_vars = NULL,
+                                  width = NULL,
+                                  show_ci = NULL,
+                                  mat = NULL,
+                                  ...) {
+  legacy <- .mc_extract_legacy_display_args(
+    list(...),
+    n = n,
+    topn = topn,
+    max_vars = max_vars
+  )
+  cfg <- .mc_resolve_display_args(
+    context = "print",
+    n = legacy$n,
+    topn = legacy$topn,
+    max_vars = legacy$max_vars,
+    width = width,
+    show_ci = show_ci
+  )
 
-  if (!is.null(max_rows) || !is.null(max_cols)) {
-    nr <- nrow(m)
-    nc <- ncol(m)
-    r <- if (is.null(max_rows)) nr else min(nr, max_rows)
-    c <- if (is.null(max_cols)) nc else min(nc, max_cols)
-    mm <- round(m[seq_len(r), seq_len(c), drop = FALSE], digits)
-    print(mm, ...)
-    if (nr > r || nc > c) {
-      cat(sprintf("... omitted: %d rows, %d cols\n", nr - r, nc - c))
-    }
-  } else {
-    print(round(m, digits), ...)
-  }
+  m <- as.matrix(.mc_coalesce(mat, x))
+  attributes(m) <- attributes(m)[c("dim", "dimnames")]
+  ci_present <- .mc_has_ci_payload(x)
+  p_present <- .mc_has_p_payload(x)
+
+  cat(header, "\n", sep = "")
+  digest <- c(
+      method = .mc_coalesce(attr(x, "method", exact = TRUE), NA_character_),
+      dimensions = sprintf("%d x %d", nrow(m), ncol(m)),
+      if (ci_present) c(ci = "yes"),
+      if (p_present) c(p_values = "yes")
+    )
+  digest <- digest[!is.na(digest) & nzchar(digest)]
+  .mc_print_named_digest(digest)
+  cat("\n")
+  do.call(
+    .mc_print_preview_matrix,
+    c(
+      list(
+        m = m,
+        digits = digits,
+        n = cfg$n,
+        topn = cfg$topn,
+        max_vars = cfg$max_vars,
+        width = cfg$width,
+        context = "print",
+        full_hint = TRUE,
+        summary_hint = TRUE
+      ),
+      legacy$dots
+    )
+  )
 
   invisible(x)
 }
@@ -184,21 +222,18 @@
                                  low_color = "indianred1",
                                  high_color = "steelblue1",
                                  mid_color = "white",
-                                 value_text_size = 4, ...) {
+                                 value_text_size = 4,
+                                 show_value = TRUE, ...) {
   check_inherits(x, class_name)
+  check_bool(show_value, arg = "show_value")
 
   mat <- as.matrix(x)
   df <- as.data.frame(as.table(mat))
   colnames(df) <- c("Var1", "Var2", fill_name)
   df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
 
-  ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = .data[[fill_name]])) +
+  p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = .data[[fill_name]])) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(
-      ggplot2::aes(label = sprintf("%.2f", .data[[fill_name]])),
-      size = value_text_size,
-      color = "black"
-    ) +
     ggplot2::scale_fill_gradient2(
       low = low_color,
       high = high_color,
@@ -215,9 +250,21 @@
     ) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
+
+  if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
+    p <- p + ggplot2::geom_text(
+      ggplot2::aes(label = sprintf("%.2f", .data[[fill_name]])),
+      size = value_text_size,
+      color = "black"
+    )
+  }
+
+  p
 }
 
-.mc_summary_corr_matrix <- function(object, header = "Correlation summary") {
+.mc_summary_corr_matrix <- function(object,
+                                    header = "Correlation summary",
+                                    topn = NULL) {
   m <- as.matrix(object)
   symmetric <- isTRUE(nrow(m) == ncol(m)) && isTRUE(isSymmetric(unclass(m)))
   vals <- if (symmetric && nrow(m) > 1L) {
@@ -248,8 +295,13 @@
     threshold_sets = {
       thr <- attr(object, "thresholds")
       if (is.list(thr)) length(thr) else NA_integer_
-    }
+    },
+    has_ci = .mc_has_ci_payload(object),
+    has_p = .mc_has_p_payload(object)
   )
+  extremes <- .mc_pair_extremes(object, digits = 4)
+  out$most_negative <- extremes$most_negative
+  out$most_positive <- extremes$most_positive
 
   diag_attr <- attr(object, "diagnostics")
   if (is.list(diag_attr)) {
@@ -283,8 +335,8 @@
     out$skipped_n_max <- if (is.atomic(skipped_n_vals) && length(skipped_n_vals)) max(skipped_n_vals, na.rm = TRUE) else NA_integer_
     out$skipped_prop_min <- if (is.atomic(skipped_prop_vals) && length(skipped_prop_vals)) min(skipped_prop_vals, na.rm = TRUE) else NA_real_
     out$skipped_prop_max <- if (is.atomic(skipped_prop_vals) && length(skipped_prop_vals)) max(skipped_prop_vals, na.rm = TRUE) else NA_real_
-    out$optimizer_tol <- if (is.null(diag_attr$optimizer_tol)) NA_real_ else diag_attr$optimizer_tol
-  } else {
+      out$optimizer_tol <- if (is.null(diag_attr$optimizer_tol)) NA_real_ else diag_attr$optimizer_tol
+    } else {
     out$zero_cell_pairs <- NA_integer_
     out$boundary_pairs <- NA_integer_
     out$near_boundary_pairs <- NA_integer_
@@ -296,10 +348,40 @@
     out$skipped_n_max <- NA_integer_
     out$skipped_prop_min <- NA_real_
     out$skipped_prop_max <- NA_real_
-    out$optimizer_tol <- NA_real_
-  }
+      out$optimizer_tol <- NA_real_
+    }
 
+  ci_attr <- attr(object, "ci", exact = TRUE)
+  out$ci_conf_level <- NA_real_
+  out$ci_method <- NA_character_
+  out$ci_width_min <- NA_real_
+  out$ci_width_max <- NA_real_
+  out$ci_cross_zero <- NA_integer_
+  if (is.list(ci_attr) &&
+      is.matrix(ci_attr$lwr.ci) &&
+      is.matrix(ci_attr$upr.ci) &&
+      identical(dim(ci_attr$lwr.ci), dim(m)) &&
+      identical(dim(ci_attr$upr.ci), dim(m))) {
+    selector <- if (symmetric && nrow(m) > 1L) upper.tri(m, diag = FALSE) else matrix(TRUE, nrow(m), ncol(m))
+    lwr_vals <- ci_attr$lwr.ci[selector]
+    upr_vals <- ci_attr$upr.ci[selector]
+    keep_ci <- is.finite(lwr_vals) & is.finite(upr_vals)
+    out$ci_conf_level <- suppressWarnings(as.numeric(ci_attr$conf.level %||% attr(object, "conf.level", exact = TRUE)))
+    out$ci_method <- as.character(ci_attr$ci.method %||% attr(object, "ci.method", exact = TRUE) %||% NA_character_)
+    if (any(keep_ci)) {
+      widths <- upr_vals[keep_ci] - lwr_vals[keep_ci]
+      out$ci_width_min <- min(widths)
+      out$ci_width_max <- max(widths)
+      out$ci_cross_zero <- sum(lwr_vals[keep_ci] <= 0 & upr_vals[keep_ci] >= 0, na.rm = TRUE)
+    }
+  }
+  
   out$header <- header
+  out$top_results <- .mc_summary_top_pairs(
+    object,
+    digits = 4,
+    topn = .mc_coalesce(topn, .mc_display_option("summary_topn", 5L))
+  )
   class(out) <- if (identical(header, "Latent correlation summary")) {
     c("summary_latent_corr", "summary_corr_matrix")
   } else {
@@ -903,15 +985,21 @@ tetrachoric <- function(data, y = NULL, correct = 0.5, check_na = TRUE) {
 #' @method print tetrachoric_corr
 #' @param x An object of class \code{tetrachoric_corr}.
 #' @param digits Integer; number of decimal places to print.
-#' @param max_rows Optional integer; maximum number of rows to display.
-#' @param max_cols Optional integer; maximum number of columns to display.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to \code{print()}.
 #' @export
-print.tetrachoric_corr <- function(x, digits = 4, max_rows = NULL,
-                                   max_cols = NULL, ...) {
+print.tetrachoric_corr <- function(x, digits = 4, n = NULL, topn = NULL,
+                                   max_vars = NULL, width = NULL,
+                                   show_ci = NULL, ...) {
   .mc_print_corr_matrix(
-    x, header = "Tetrachoric correlation matrix:",
-    digits = digits, max_rows = max_rows, max_cols = max_cols, ...
+    x, header = "Tetrachoric correlation matrix",
+    digits = digits, n = n, topn = topn,
+    max_vars = max_vars, width = width, show_ci = show_ci, ...
   )
 }
 
@@ -922,16 +1010,20 @@ print.tetrachoric_corr <- function(x, digits = 4, max_rows = NULL,
 #' @param high_color Color for the maximum correlation.
 #' @param mid_color Color for zero correlation.
 #' @param value_text_size Font size used in tile labels.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @export
 plot.tetrachoric_corr <- function(x, title = "Tetrachoric correlation heatmap",
                                   low_color = "indianred1",
                                   high_color = "steelblue1",
                                   mid_color = "white",
-                                  value_text_size = 4, ...) {
+                                  value_text_size = 4,
+                                  show_value = TRUE, ...) {
   .mc_plot_corr_matrix(
     x, class_name = "tetrachoric_corr", fill_name = "Tetrachoric",
     title = title, low_color = low_color, high_color = high_color,
-    mid_color = mid_color, value_text_size = value_text_size, ...
+    mid_color = mid_color, value_text_size = value_text_size,
+    show_value = show_value, ...
   )
 }
 
@@ -939,8 +1031,10 @@ plot.tetrachoric_corr <- function(x, title = "Tetrachoric correlation heatmap",
 #' @method summary tetrachoric_corr
 #' @param object An object of class \code{tetrachoric_corr}.
 #' @export
-summary.tetrachoric_corr <- function(object, ...) {
-  .mc_summary_corr_matrix(object, header = "Latent correlation summary")
+summary.tetrachoric_corr <- function(object, n = NULL, topn = NULL,
+                                     max_vars = NULL, width = NULL,
+                                     show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, header = "Latent correlation summary", topn = topn)
 }
 
 #' @title Pairwise Polychoric Correlation
@@ -1192,15 +1286,21 @@ polychoric <- function(data, y = NULL, correct = 0.5, check_na = TRUE) {
 #' @method print polychoric_corr
 #' @param x An object of class \code{polychoric_corr}.
 #' @param digits Integer; number of decimal places to print.
-#' @param max_rows Optional integer; maximum number of rows to display.
-#' @param max_cols Optional integer; maximum number of columns to display.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to \code{print()}.
 #' @export
-print.polychoric_corr <- function(x, digits = 4, max_rows = NULL,
-                                  max_cols = NULL, ...) {
+print.polychoric_corr <- function(x, digits = 4, n = NULL, topn = NULL,
+                                  max_vars = NULL, width = NULL,
+                                  show_ci = NULL, ...) {
   .mc_print_corr_matrix(
-    x, header = "Polychoric correlation matrix:",
-    digits = digits, max_rows = max_rows, max_cols = max_cols, ...
+    x, header = "Polychoric correlation matrix",
+    digits = digits, n = n, topn = topn,
+    max_vars = max_vars, width = width, show_ci = show_ci, ...
   )
 }
 
@@ -1211,16 +1311,20 @@ print.polychoric_corr <- function(x, digits = 4, max_rows = NULL,
 #' @param high_color Color for the maximum correlation.
 #' @param mid_color Color for zero correlation.
 #' @param value_text_size Font size used in tile labels.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @export
 plot.polychoric_corr <- function(x, title = "Polychoric correlation heatmap",
                                  low_color = "indianred1",
                                  high_color = "steelblue1",
                                  mid_color = "white",
-                                 value_text_size = 4, ...) {
+                                 value_text_size = 4,
+                                 show_value = TRUE, ...) {
   .mc_plot_corr_matrix(
     x, class_name = "polychoric_corr", fill_name = "Polychoric",
     title = title, low_color = low_color, high_color = high_color,
-    mid_color = mid_color, value_text_size = value_text_size, ...
+    mid_color = mid_color, value_text_size = value_text_size,
+    show_value = show_value, ...
   )
 }
 
@@ -1228,8 +1332,10 @@ plot.polychoric_corr <- function(x, title = "Polychoric correlation heatmap",
 #' @method summary polychoric_corr
 #' @param object An object of class \code{polychoric_corr}.
 #' @export
-summary.polychoric_corr <- function(object, ...) {
-  .mc_summary_corr_matrix(object, header = "Latent correlation summary")
+summary.polychoric_corr <- function(object, n = NULL, topn = NULL,
+                                    max_vars = NULL, width = NULL,
+                                    show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, header = "Latent correlation summary", topn = topn)
 }
 
 #' @title Polyserial Correlation Between Continuous and Ordinal Variables
@@ -1375,15 +1481,21 @@ polyserial <- function(data, y, check_na = TRUE) {
 #' @method print polyserial_corr
 #' @param x An object of class \code{polyserial_corr}.
 #' @param digits Integer; number of decimal places to print.
-#' @param max_rows Optional integer; maximum number of rows to display.
-#' @param max_cols Optional integer; maximum number of columns to display.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to \code{print()}.
 #' @export
-print.polyserial_corr <- function(x, digits = 4, max_rows = NULL,
-                                  max_cols = NULL, ...) {
+print.polyserial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
+                                  max_vars = NULL, width = NULL,
+                                  show_ci = NULL, ...) {
   .mc_print_corr_matrix(
-    x, header = "Polyserial correlation matrix:",
-    digits = digits, max_rows = max_rows, max_cols = max_cols, ...
+    x, header = "Polyserial correlation matrix",
+    digits = digits, n = n, topn = topn,
+    max_vars = max_vars, width = width, show_ci = show_ci, ...
   )
 }
 
@@ -1394,16 +1506,20 @@ print.polyserial_corr <- function(x, digits = 4, max_rows = NULL,
 #' @param high_color Color for the maximum correlation.
 #' @param mid_color Color for zero correlation.
 #' @param value_text_size Font size used in tile labels.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @export
 plot.polyserial_corr <- function(x, title = "Polyserial correlation heatmap",
                                  low_color = "indianred1",
                                  high_color = "steelblue1",
                                  mid_color = "white",
-                                 value_text_size = 4, ...) {
+                                 value_text_size = 4,
+                                 show_value = TRUE, ...) {
   .mc_plot_corr_matrix(
     x, class_name = "polyserial_corr", fill_name = "Polyserial",
     title = title, low_color = low_color, high_color = high_color,
-    mid_color = mid_color, value_text_size = value_text_size, ...
+    mid_color = mid_color, value_text_size = value_text_size,
+    show_value = show_value, ...
   )
 }
 
@@ -1411,8 +1527,10 @@ plot.polyserial_corr <- function(x, title = "Polyserial correlation heatmap",
 #' @method summary polyserial_corr
 #' @param object An object of class \code{polyserial_corr}.
 #' @export
-summary.polyserial_corr <- function(object, ...) {
-  .mc_summary_corr_matrix(object, header = "Latent correlation summary")
+summary.polyserial_corr <- function(object, n = NULL, topn = NULL,
+                                    max_vars = NULL, width = NULL,
+                                    show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, header = "Latent correlation summary", topn = topn)
 }
 
 #' @title Biserial Correlation Between Continuous and Binary Variables
@@ -1546,15 +1664,21 @@ biserial <- function(data, y, check_na = TRUE) {
 #' @method print biserial_corr
 #' @param x An object of class \code{biserial_corr}.
 #' @param digits Integer; number of decimal places to print.
-#' @param max_rows Optional integer; maximum number of rows to display.
-#' @param max_cols Optional integer; maximum number of columns to display.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to \code{print()}.
 #' @export
-print.biserial_corr <- function(x, digits = 4, max_rows = NULL,
-                                max_cols = NULL, ...) {
+print.biserial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
+                                max_vars = NULL, width = NULL,
+                                show_ci = NULL, ...) {
   .mc_print_corr_matrix(
-    x, header = "Biserial correlation matrix:",
-    digits = digits, max_rows = max_rows, max_cols = max_cols, ...
+    x, header = "Biserial correlation matrix",
+    digits = digits, n = n, topn = topn,
+    max_vars = max_vars, width = width, show_ci = show_ci, ...
   )
 }
 
@@ -1565,16 +1689,20 @@ print.biserial_corr <- function(x, digits = 4, max_rows = NULL,
 #' @param high_color Color for the maximum correlation.
 #' @param mid_color Color for zero correlation.
 #' @param value_text_size Font size used in tile labels.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @export
 plot.biserial_corr <- function(x, title = "Biserial correlation heatmap",
                                low_color = "indianred1",
                                high_color = "steelblue1",
                                mid_color = "white",
-                               value_text_size = 4, ...) {
+                               value_text_size = 4,
+                               show_value = TRUE, ...) {
   .mc_plot_corr_matrix(
     x, class_name = "biserial_corr", fill_name = "Biserial",
     title = title, low_color = low_color, high_color = high_color,
-    mid_color = mid_color, value_text_size = value_text_size, ...
+    mid_color = mid_color, value_text_size = value_text_size,
+    show_value = show_value, ...
   )
 }
 
@@ -1582,8 +1710,10 @@ plot.biserial_corr <- function(x, title = "Biserial correlation heatmap",
 #' @method summary biserial_corr
 #' @param object An object of class \code{biserial_corr}.
 #' @export
-summary.biserial_corr <- function(object, ...) {
-  .mc_summary_corr_matrix(object, header = "Latent correlation summary")
+summary.biserial_corr <- function(object, n = NULL, topn = NULL,
+                                  max_vars = NULL, width = NULL,
+                                  show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, header = "Latent correlation summary", topn = topn)
 }
 
 #' @title Summary Method for Correlation Matrices
@@ -1594,67 +1724,81 @@ summary.biserial_corr <- function(object, ...) {
 #'
 #' @param x An object of class \code{summary_corr_matrix}.
 #' @param digits Integer; number of decimal places to print.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Unused.
 #'
 #' @return Invisibly returns \code{x}.
 #' @export
-print.summary_corr_matrix <- function(x, digits = 4, ...) {
-  cat(paste0(x$header %||% "Correlation summary", ":\n"))
-  cat(sprintf("  class      : %s\n", x$class))
-  cat(sprintf("  method     : %s\n", x$method))
+print.summary_corr_matrix <- function(x,
+                                      digits = 4,
+                                      n = NULL,
+                                      topn = NULL,
+                                      max_vars = NULL,
+                                      width = NULL,
+                                      show_ci = NULL,
+                                      ...) {
+  cfg <- .mc_resolve_display_args(
+    context = "summary",
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci
+  )
+
+  digest <- .mc_corr_summary_digest_items(x, digits = digits, show_ci = cfg$show_ci)
+  if (isTRUE(x$has_ci) && identical(cfg$show_ci, "yes")) {
+    if (is.finite(x$ci_conf_level)) {
+      digest <- c(digest, ci_level = sprintf("%g%%", 100 * x$ci_conf_level))
+    }
+    if (!is.null(x$ci_method) && length(x$ci_method) == 1L &&
+        !is.na(x$ci_method) && nzchar(x$ci_method)) {
+      digest <- c(digest, ci_method = x$ci_method)
+    }
+    ci_width_txt <- .mc_format_scalar_or_range(
+      x$ci_width_min,
+      x$ci_width_max,
+      digits = 3,
+      integer = FALSE
+    )
+    if (!is.null(ci_width_txt)) {
+      digest <- c(digest, ci_width = ci_width_txt)
+    }
+    if (is.finite(x$ci_cross_zero) && x$ci_cross_zero > 0L) {
+      digest <- c(digest, cross_zero = sprintf("%s pair(s)", .mc_count_fmt(x$ci_cross_zero)))
+    }
+  }
   if (!is.null(x$lambda) && is.finite(x$lambda)) {
-    cat(sprintf("  lambda     : %s\n", format(signif(x$lambda, digits = digits))))
+    digest <- c(digest, lambda = format(signif(x$lambda, digits = digits)))
   }
   if (!is.null(x$rho) && is.finite(x$rho)) {
-    cat(sprintf("  rho        : %s\n", format(signif(x$rho, digits = digits))))
+    digest <- c(digest, rho = format(signif(x$rho, digits = digits)))
   }
   if (!is.null(x$jitter) && is.finite(x$jitter)) {
-    cat(sprintf("  jitter     : %s\n", format(signif(x$jitter, digits = digits))))
+    digest <- c(digest, jitter = format(signif(x$jitter, digits = digits)))
   }
-  cat(sprintf("  dimensions : %d x %d\n", x$n_rows, x$n_cols))
-  if (!is.na(x$correct) && !is.null(x$correct)) {
-    cat(sprintf("  correct    : %s\n", format(round(x$correct, digits), nsmall = digits)))
+
+  .mc_print_named_digest(
+    digest,
+    header = .mc_coalesce(x$header, "Correlation summary")
+  )
+
+  if (is.data.frame(x$top_results) && nrow(x$top_results)) {
+    .mc_print_ranked_pairs_preview(
+      x$top_results,
+      header = "Strongest pairs by |estimate|",
+      topn = cfg$topn,
+      max_vars = cfg$max_vars,
+      width = cfg$width,
+      show_ci = cfg$show_ci,
+      ...
+    )
   }
-  if (!is.na(x$n_variables)) {
-    cat(sprintf("  n_variables: %d\n", x$n_variables))
-  }
-  cat(sprintf("  n_pairs    : %d\n", x$n_pairs))
-  cat(sprintf("  symmetric  : %s\n", if (isTRUE(x$symmetric)) "yes" else "no"))
-  cat(sprintf("  missing    : %d\n", x$n_missing))
-  if (!is.na(x$n_complete_min) && !is.na(x$n_complete_max)) {
-    cat(sprintf("  n_complete : %d to %d\n", x$n_complete_min, x$n_complete_max))
-  }
-  if (is.finite(x$skipped_n_min) && is.finite(x$skipped_n_max)) {
-    cat(sprintf("  skipped_n  : %d to %d\n", as.integer(x$skipped_n_min), as.integer(x$skipped_n_max)))
-  }
-  if (is.finite(x$skipped_prop_min) && is.finite(x$skipped_prop_max)) {
-    cat(sprintf("  skipped_prop: %s to %s\n",
-                format(round(x$skipped_prop_min, digits), nsmall = digits),
-                format(round(x$skipped_prop_max, digits), nsmall = digits)))
-  }
-  if (!is.na(x$zero_cell_pairs)) {
-    cat(sprintf("  zero_cells : %d pair(s)\n", x$zero_cell_pairs))
-  }
-  if (!is.na(x$corrected_pairs)) {
-    cat(sprintf("  corrected  : %d pair(s)\n", x$corrected_pairs))
-  }
-  if (!is.na(x$boundary_pairs)) {
-    cat(sprintf("  boundary   : %d pair(s)\n", x$boundary_pairs))
-  }
-  if (!is.na(x$near_boundary_pairs)) {
-    cat(sprintf("  near_bound : %d pair(s)\n", x$near_boundary_pairs))
-  }
-  if (!is.na(x$converged_pairs)) {
-    cat(sprintf("  converged  : %d pair(s)\n", x$converged_pairs))
-  }
-  if (!is.na(x$optimizer_tol)) {
-    cat(sprintf("  opt_tol    : %s\n", format(signif(x$optimizer_tol, digits = digits))))
-  }
-  if (!is.na(x$threshold_sets)) {
-    cat(sprintf("  thresholds : %d set(s)\n", x$threshold_sets))
-  }
-  cat(sprintf("  min        : %s\n", format(round(x$estimate_min, digits), nsmall = digits)))
-  cat(sprintf("  max        : %s\n", format(round(x$estimate_max, digits), nsmall = digits)))
   invisible(x)
 }
 

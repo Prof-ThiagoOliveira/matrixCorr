@@ -33,10 +33,12 @@ skipped_corr_masks(x, var1 = NULL, var2 = NULL)
 \method{print}{skipped_corr}(
   x,
   digits = 4,
-  max_rows = NULL,
-  max_cols = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
   ci_digits = 4,
-  show_ci = c("auto", "yes", "no"),
+  show_ci = NULL,
   show_p = c("auto", "yes", "no"),
   ...
 )
@@ -49,12 +51,30 @@ skipped_corr_masks(x, var1 = NULL, var2 = NULL)
   mid_color = "white",
   value_text_size = 4,
   ci_text_size = 3,
+  show_value = TRUE,
   ...
 )
 
-\method{summary}{skipped_corr}(object, ...)
+\method{summary}{skipped_corr}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
-\method{print}{summary.skipped_corr}(x, ...)
+\method{print}{summary.skipped_corr}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -136,13 +156,18 @@ internal seed is generated.}
 
 \item{digits}{Integer; number of digits to print.}
 
-\item{max_rows, max_cols}{Optional integers limiting the printed matrix size.}
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
 
 \item{ci_digits}{Integer; digits for skipped-correlation confidence limits.}
 
-\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
-\code{print()}, \code{"auto"} keeps the compact matrix-only display;
-use \code{"yes"} to also print the pairwise CI table.}
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{show_p}{One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
 \code{print()}, \code{"auto"} keeps the compact matrix-only display;
@@ -157,6 +182,9 @@ use \code{"yes"} to also print pairwise p-values.}
 \item{value_text_size}{Numeric text size for overlaid cell values.}
 
 \item{ci_text_size}{Text size for confidence intervals in the heatmap.}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
 
 \item{object}{An object of class \code{skipped_corr}.}
 }

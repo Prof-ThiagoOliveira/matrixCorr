@@ -102,7 +102,10 @@ test_that("rmcorr pair interface matches manual within-subject formulas", {
   sm <- summary(fit)
   expect_s3_class(sm, "summary_rmcorr")
   expect_true(any(grepl("Repeated-measures correlation", capture.output(print(fit)))))
-  expect_true(any(grepl("Repeated-measures correlation summary", capture.output(print(sm)))))
+  sum_out <- capture.output(print(sm))
+  expect_true(any(grepl("Repeated-measures correlation summary", sum_out)))
+  expect_true(any(grepl("obs_per_subject", sum_out, fixed = TRUE)))
+  expect_true(any(grepl("ci_method", sum_out, fixed = TRUE)))
   expect_s3_class(plot(fit), "ggplot")
 })
 

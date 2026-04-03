@@ -24,9 +24,30 @@ ba_rm(
   verbose = FALSE
 )
 
-\method{print}{ba_repeated}(x, digits = 3, ci_digits = 3, ...)
+\method{print}{ba_repeated}(
+  x,
+  digits = 3,
+  ci_digits = 3,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
-\method{print}{ba_repeated_matrix}(x, digits = 3, ci_digits = 3, style = c("pairs", "matrices"), ...)
+\method{print}{ba_repeated_matrix}(
+  x,
+  digits = 3,
+  ci_digits = 3,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  style = c("pairs", "matrices"),
+  ...
+)
 
 \method{plot}{ba_repeated}(
   x,
@@ -40,6 +61,7 @@ ba_rm(
   smoother = c("none", "loess", "lm"),
   symmetrize_y = TRUE,
   show_points = TRUE,
+  show_value = TRUE,
   ...
 )
 
@@ -56,6 +78,7 @@ ba_rm(
   shade_alpha = 0.08,
   smoother = c("none", "loess", "lm"),
   show_points = TRUE,
+  show_value = TRUE,
   ...
 )
 }
@@ -112,6 +135,17 @@ path.}
 
 \item{ci_digits}{Number of digits for CI bounds (default 3).}
 
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
+
 \item{...}{Additional theme adjustments passed to \code{ggplot2::theme(...)}
 (e.g., \code{plot.title.position = "plot"}, \code{axis.title.x = element_text(size=11)}).}
 
@@ -162,6 +196,10 @@ in the fitted object (two-method path) or when they can be reconstructed
 from \code{x$data_long} and \code{x$mapping} (pairwise path). If \code{FALSE} or if point
 data are unavailable, only the bands (and optional CI indicators) are drawn.
 Default \code{TRUE}.}
+
+\item{show_value}{Logical; included for a consistent plotting interface.
+Repeated-measures Bland-Altman plots do not overlay numeric cell values,
+so this argument currently has no effect.}
 
 \item{pairs}{(Faceted pairwise plot only.) Optional character vector of
 labels specifying which method contrasts to display. Labels must match the

@@ -155,20 +155,28 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
 #' @method print ccc
 #' @param digits Integer; decimals for CCC estimates (default 4).
 #' @param ci_digits Integer; decimals for CI bounds (default 4).
-#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}.
-#'   \itemize{
-#'     \item \code{"auto"} (default): include CI columns only if the object has non-NA CIs.
-#'     \item \code{"yes"}: always include CI columns (may contain NA).
-#'     \item \code{"no"}: never include CI columns.
-#'   }
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Passed to \code{\link[base]{print.data.frame}}.
 #' @export
 print.ccc <- function(x,
                       digits = 4,
                       ci_digits = 4,
-                      show_ci = c("auto", "yes", "no"),
+                      n = NULL,
+                      topn = NULL,
+                      max_vars = NULL,
+                      width = NULL,
+                      show_ci = NULL,
                       ...) {
-  show_ci <- match.arg(show_ci)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("print_show_ci", "yes")
+  )
 
   # -- identify object type ----------------------------------------------------
   is_ci_obj <- inherits(x, "ccc_ci") ||
@@ -192,63 +200,18 @@ print.ccc <- function(x,
   if (is.null(rn)) rn <- paste0("m", seq_len(nrow(est)))
   if (is.null(cn)) cn <- rn
 
-  # -- decide whether to print CI columns --------------------------------------
-  has_any_ci <- any(is.finite(lwr) | is.finite(upr))
-  include_ci <- switch(show_ci,
-                       auto = has_any_ci,
-                       yes  = TRUE,
-                       no   = FALSE)
-
-  # -- header ------------------------------------------------------------------
-  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (include_ci && is.finite(cl)) {
-    cat(sprintf("Concordance pairs (Lin's CCC, %g%% CI)\n\n", 100 * cl))
-  } else {
-    cat("Concordance pairs (Lin's CCC)\n\n")
-  }
-
-  # -- 1x1 case (overall CCC) --------------------------------------------------
-  if (nrow(est) == 1L && ncol(est) == 1L) {
-    df <- data.frame(
-      method1  = rn[1],
-      method2  = cn[1],
-      estimate = formatC(est[1,1], format = "f", digits = digits),
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    )
-    if (include_ci) {
-      df$lwr <- ifelse(is.na(lwr[1,1]), NA,
-                       formatC(lwr[1,1], format = "f", digits = ci_digits))
-      df$upr <- ifelse(is.na(upr[1,1]), NA,
-                       formatC(upr[1,1], format = "f", digits = ci_digits))
-    }
-    print(df, row.names = FALSE, right = FALSE, ...)
-    return(invisible(x))
-  }
-
-  # -- long table for i < j pairs ----------------------------------------------
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L); k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      row <- list(
-        method1  = rn[i],
-        method2  = cn[j],
-        estimate = formatC(est[i, j], format = "f", digits = digits)
-      )
-      if (include_ci) {
-        row$lwr <- ifelse(is.na(lwr[i, j]), NA,
-                          formatC(lwr[i, j], format = "f", digits = ci_digits))
-        row$upr <- ifelse(is.na(upr[i, j]), NA,
-                          formatC(upr[i, j], format = "f", digits = ci_digits))
-      }
-      rows[[k]] <- row
-    }
-  }
-
-  df <- do.call(rbind.data.frame, rows)
-  rownames(df) <- NULL
-  print(df, row.names = FALSE, right = FALSE, ...)
+  .mc_print_corr_matrix(
+    x,
+    header = "Lin's concordance correlation matrix",
+    digits = digits,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    mat = est,
+    ...
+  )
   invisible(x)
 }
 
@@ -257,12 +220,7 @@ print.ccc <- function(x,
 #' @param object A \code{"ccc"} or \code{"ccc_ci"} object to summarize.
 #' @param digits Integer; decimals for CCC estimates (default 4).
 #' @param ci_digits Integer; decimals for CI bounds (default 2).
-#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}.
-#'   \itemize{
-#'     \item \code{"auto"} (default): include CI columns only if the object has non-NA CIs.
-#'     \item \code{"yes"}: always include CI columns (may contain NA).
-#'     \item \code{"no"}: never include CI columns.
-#'   }
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Ignored.
 #' @return For \code{summary.ccc}, a data frame with columns
 #'   \code{method1}, \code{method2}, \code{estimate} and (optionally)
@@ -271,9 +229,17 @@ print.ccc <- function(x,
 summary.ccc <- function(object,
                         digits = 4,
                         ci_digits = 2,
-                        show_ci = c("auto", "yes", "no"),
+                        n = NULL,
+                        topn = NULL,
+                        max_vars = NULL,
+                        width = NULL,
+                        show_ci = NULL,
                         ...) {
-  show_ci <- match.arg(show_ci)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
 
   # detect CI container
   is_ci_obj <- inherits(object, "ccc_ci") ||
@@ -302,10 +268,7 @@ summary.ccc <- function(object,
 
   # decide whether to include CI columns
   has_any_ci <- any(is.finite(lwr) | is.finite(upr))
-  include_ci <- switch(show_ci,
-                       auto = has_any_ci,
-                       yes  = TRUE,
-                       no   = FALSE)
+  include_ci <- identical(show_ci, "yes") && has_any_ci
 
   # 1x1 case
   if (nrow(est) == 1L && ncol(est) == 1L) {
@@ -347,6 +310,7 @@ summary.ccc <- function(object,
 
   # carry attrs for printing
   df <- structure(df, class = c("summary.ccc", "data.frame"))
+  attr(df, "overview") <- .mc_summary_corr_matrix(est, topn = topn)
   attr(df, "conf.level") <- if (is.finite(conf_level)) conf_level else NA_real_
   attr(df, "has_ci")     <- isTRUE(include_ci)
   attr(df, "digits")     <- digits
@@ -358,32 +322,21 @@ summary.ccc <- function(object,
 #' @method print summary.ccc
 #' @param ... Passed to \code{\link[base]{print.data.frame}}.
 #' @export
-print.summary.ccc <- function(x, ...) {
-  has_ci <- isTRUE(attr(x, "has_ci")) ||
-    (all(c("lwr","upr") %in% names(x)))
-  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (!is.finite(cl)) cl <- NA_real_
-
-  if (has_ci && is.finite(cl)) {
-    cat(sprintf("Concordance pairs (Lin's CCC, %g%% CI)\n\n", 100 * cl))
-  } else {
-    cat("Concordance pairs (Lin's CCC)\n\n")
-  }
-
-  # format for display using stored preferences
-  digits    <- attr(x, "digits");    if (!is.numeric(digits))    digits <- 4
-  ci_digits <- attr(x, "ci_digits"); if (!is.numeric(ci_digits)) ci_digits <- 2
-
-  df <- x
-  if (is.numeric(df$estimate)) {
-    df$estimate <- formatC(df$estimate, format = "f", digits = digits)
-  }
-  if (has_ci) {
-    if (is.numeric(df$lwr)) df$lwr <- ifelse(is.na(df$lwr), NA, formatC(df$lwr, format = "f", digits = ci_digits))
-    if (is.numeric(df$upr)) df$upr <- ifelse(is.na(df$upr), NA, formatC(df$upr, format = "f", digits = ci_digits))
-  }
-
-  print.data.frame(df, row.names = FALSE, right = FALSE, ...)
+print.summary.ccc <- function(x, digits = NULL, n = NULL,
+                              topn = NULL, max_vars = NULL,
+                              width = NULL, show_ci = NULL, ...) {
+  .mc_print_pairwise_summary_digest(
+    x,
+    title = "Lin's concordance summary",
+    digits = .mc_coalesce(digits, 4),
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    ci_method = "delta_method",
+    ...
+  )
   invisible(x)
 }
 
@@ -397,6 +350,8 @@ print.summary.ccc <- function(x, ...) {
 #' @param mid_color Color for mid CCC values.
 #' @param value_text_size Text size for CCC values in the heatmap.
 #' @param ci_text_size Text size for confidence intervals.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @param ... Passed to \code{ggplot2::theme()}.
 #' @export
 plot.ccc <- function(x,
@@ -406,9 +361,11 @@ plot.ccc <- function(x,
                      mid_color = "white",
                      value_text_size = 4,
                      ci_text_size = 3,
+                     show_value = TRUE,
                      ...) {
 
   check_inherits(x, "ccc")
+  check_bool(show_value, arg = "show_value")
 
   # --- Build long data with proper alignment by (Var1, Var2) ---
   est_mat <- if (is.list(x) && !is.null(x$est)) x$est else unclass(x)
@@ -445,7 +402,6 @@ plot.ccc <- function(x,
   # --- Plot ---
   p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = CCC)) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size) +
     ggplot2::scale_fill_gradient2(
       low = low_color, high = high_color, mid = mid_color,
       midpoint = 0, limits = c(-1, 1), name = "CCC"
@@ -459,7 +415,11 @@ plot.ccc <- function(x,
     ) +
     ggplot2::labs(title = title, x = NULL, y = NULL)
 
-  if (any(!is.na(df$ci_label))) {
+  if (isTRUE(show_value)) {
+    p <- p + ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size)
+  }
+
+  if (isTRUE(show_value) && any(!is.na(df$ci_label))) {
     p <- p + ggplot2::geom_text(
       ggplot2::aes(label = ci_label, y = as.numeric(Var1) - 0.25),
       size = ci_text_size, color = "gray30", na.rm = TRUE

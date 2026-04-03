@@ -454,41 +454,66 @@ rmcorr <- function(data = NULL, response, subject,
 #' @param x An object of class \code{"rmcorr"} or \code{"summary_rmcorr"}.
 #' @param object An object of class \code{"rmcorr"}.
 #' @param digits Number of significant digits to print.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param title Optional plot title for \code{plot.rmcorr()}. Defaults to a
 #'   title containing the estimated repeated-measures correlation.
 #' @param point_alpha Alpha transparency for scatterplot points.
 #' @param line_width Line width for subject-specific fitted lines.
 #' @param show_legend Logical; if \code{TRUE}, shows the subject legend in the
 #'   pairwise scatterplot.
+#' @param show_value Logical; included for a consistent plotting interface.
+#'   Pairwise repeated-measures plots do not overlay numeric cell values, so this
+#'   argument currently has no effect.
 #' @param ... Additional arguments passed to downstream methods. For
 #'   \code{plot.rmcorr()}, these are passed to \code{ggplot2::theme()}.
 #' @rdname rmcorr_methods
 #' @method print rmcorr
 #' @export
-print.rmcorr <- function(x, digits = 4, ...) {
+print.rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
+                         max_vars = NULL, width = NULL,
+                         show_ci = NULL, ...) {
   check_inherits(x, "rmcorr")
-  cat("Repeated-measures correlation:\n")
-  cat(sprintf("  responses : %s vs %s\n", x$responses[[1L]], x$responses[[2L]]))
-  cat(sprintf("  based.on  : %d\n", x$based.on))
-  cat(sprintf("  subjects  : %d\n", x$n_subjects))
-  cat(sprintf("  df        : %s\n", format(signif(x$df, digits = digits))))
-  cat(sprintf("  r         : %s\n", format(signif(x$r, digits = digits))))
-  cat(sprintf("  slope     : %s\n", format(signif(x$slope, digits = digits))))
-  cat(sprintf("  p_value   : %s\n", format(signif(x$p_value, digits = digits))))
-  cat(sprintf(
-    "  CI %.1f%%   : [%s, %s]\n",
-    100 * x$conf_level,
-    format(signif(x$conf_int[[1L]], digits = digits)),
-    format(signif(x$conf_int[[2L]], digits = digits))
-  ))
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("print_show_ci", "yes")
+  )
+  digest <- c(
+    method = attr(x, "method"),
+    responses = sprintf("%s vs %s", x$responses[[1L]], x$responses[[2L]]),
+    based_on = x$based.on,
+    subjects = x$n_subjects,
+    estimate = format(signif(x$r, digits = digits)),
+    if (identical(show_ci, "yes")) {
+      c(ci = sprintf(
+        "[%s, %s] (%g%%)",
+        format(signif(x$conf_int[[1L]], digits = digits)),
+        format(signif(x$conf_int[[2L]], digits = digits)),
+        100 * x$conf_level
+      ))
+    }
+  )
+  .mc_print_named_digest(digest, header = "Repeated-measures correlation preview:")
   invisible(x)
 }
 
 #' @rdname rmcorr_methods
 #' @method summary rmcorr
 #' @export
-summary.rmcorr <- function(object, ...) {
+summary.rmcorr <- function(object, n = NULL, topn = NULL,
+                           max_vars = NULL, width = NULL,
+                           show_ci = NULL, ...) {
   check_inherits(object, "rmcorr")
+  subj_counts <- if (is.data.frame(object$data_long) && nrow(object$data_long)) {
+    as.integer(table(object$data_long$.subject))
+  } else {
+    integer()
+  }
   out <- list(
     class = "rmcorr",
     method = attr(object, "method"),
@@ -501,7 +526,13 @@ summary.rmcorr <- function(object, ...) {
     slope = object$slope,
     p_value = object$p_value,
     conf_int = object$conf_int,
-    conf_level = object$conf_level
+    conf_level = object$conf_level,
+    obs_per_subject_min = if (length(subj_counts)) min(subj_counts) else NA_integer_,
+    obs_per_subject_max = if (length(subj_counts)) max(subj_counts) else NA_integer_,
+    n_intercepts = length(object$intercepts),
+    ci_method = "fisher_z",
+    ci_width = if (all(is.finite(object$conf_int))) diff(range(object$conf_int)) else NA_real_,
+    valid = isTRUE(object$valid)
   )
   class(out) <- "summary_rmcorr"
   out
@@ -510,22 +541,50 @@ summary.rmcorr <- function(object, ...) {
 #' @rdname rmcorr_methods
 #' @method print summary_rmcorr
 #' @export
-print.summary_rmcorr <- function(x, digits = 4, ...) {
-  cat("Repeated-measures correlation summary:\n")
-  cat(sprintf("  method    : %s\n", x$method))
-  cat(sprintf("  responses : %s vs %s\n", x$responses[[1L]], x$responses[[2L]]))
-  cat(sprintf("  based.on  : %d\n", x$based.on))
-  cat(sprintf("  subjects  : %d\n", x$n_subjects))
-  cat(sprintf("  df        : %s\n", format(signif(x$df, digits = digits))))
-  cat(sprintf("  r         : %s\n", format(signif(x$estimate, digits = digits))))
-  cat(sprintf("  slope     : %s\n", format(signif(x$slope, digits = digits))))
-  cat(sprintf("  p_value   : %s\n", format(signif(x$p_value, digits = digits))))
-  cat(sprintf(
-    "  CI %.1f%%   : [%s, %s]\n",
-    100 * x$conf_level,
-    format(signif(x$conf_int[[1L]], digits = digits)),
-    format(signif(x$conf_int[[2L]], digits = digits))
-  ))
+print.summary_rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
+                                 max_vars = NULL, width = NULL,
+                                 show_ci = NULL, ...) {
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
+  digest <- c(
+    method = x$method,
+    responses = sprintf("%s vs %s", x$responses[[1L]], x$responses[[2L]]),
+    based_on = x$based.on,
+    subjects = x$n_subjects,
+    obs_per_subject = .mc_format_scalar_or_range(
+      x$obs_per_subject_min,
+      x$obs_per_subject_max,
+      digits = digits,
+      integer = TRUE
+    ),
+    df = format(signif(x$df, digits = digits)),
+    estimate = format(signif(x$estimate, digits = digits)),
+    slope = format(signif(x$slope, digits = digits)),
+    p_value = format(signif(x$p_value, digits = digits)),
+    if (identical(show_ci, "yes")) {
+      c(
+        interval = sprintf(
+          "[%s, %s]",
+          format(signif(x$conf_int[[1L]], digits = digits)),
+          format(signif(x$conf_int[[2L]], digits = digits))
+        ),
+        ci_level = sprintf("%g%%", 100 * x$conf_level),
+        ci_method = x$ci_method,
+        ci_width = format(signif(x$ci_width, digits = digits))
+      )
+    }
+  )
+  if (is.finite(x$n_intercepts) && x$n_intercepts > 0L) {
+    digest <- c(digest, fitted_subjects = x$n_intercepts)
+  }
+  if (!isTRUE(x$valid)) {
+    digest <- c(digest, valid = "no")
+  }
+  digest <- digest[!is.na(digest) & nzchar(digest)]
+  .mc_print_named_digest(digest, header = "Repeated-measures correlation summary:")
   invisible(x)
 }
 
@@ -537,8 +596,10 @@ plot.rmcorr <- function(x,
                         point_alpha = 0.8,
                         line_width = 0.8,
                         show_legend = FALSE,
+                        show_value = TRUE,
                         ...) {
   check_inherits(x, "rmcorr")
+  check_bool(show_value, arg = "show_value")
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     cli::cli_abort("Package {.pkg ggplot2} is required for plotting.")
   }
@@ -589,25 +650,35 @@ plot.rmcorr <- function(x,
 #'   \code{"summary_rmcorr_matrix"}.
 #' @param object An object of class \code{"rmcorr_matrix"}.
 #' @param digits Number of significant digits to print.
-#' @param max_rows,max_cols Optional maximum numbers of rows and columns to show
-#'   when printing the matrix.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param title Plot title for \code{plot.rmcorr_matrix()}.
 #' @param low_color,high_color,mid_color Colours used for negative, positive,
 #'   and midpoint values in the heatmap.
 #' @param value_text_size Size of the overlaid numeric value labels in the
 #'   heatmap.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on heatmap tiles when the plot type supports them.
 #' @param ... Additional arguments passed to downstream methods.
 #' @rdname rmcorr_matrix_methods
 #' @method print rmcorr_matrix
 #' @export
-print.rmcorr_matrix <- function(x, digits = 4, max_rows = NULL,
-                                max_cols = NULL, ...) {
+print.rmcorr_matrix <- function(x, digits = 4, n = NULL,
+                                topn = NULL, max_vars = NULL,
+                                width = NULL, show_ci = NULL, ...) {
   .mc_print_corr_matrix(
     x,
-    header = "Repeated-measures correlation matrix:",
+    header = "Repeated-measures correlation matrix",
     digits = digits,
-    max_rows = max_rows,
-    max_cols = max_cols,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
     ...
   )
 }
@@ -619,7 +690,8 @@ plot.rmcorr_matrix <- function(x, title = "Repeated-measures correlation heatmap
                                low_color = "indianred1",
                                high_color = "steelblue1",
                                mid_color = "white",
-                               value_text_size = 4, ...) {
+                               value_text_size = 4,
+                               show_value = TRUE, ...) {
   .mc_plot_corr_matrix(
     x,
     class_name = "rmcorr_matrix",
@@ -629,6 +701,7 @@ plot.rmcorr_matrix <- function(x, title = "Repeated-measures correlation heatmap
     high_color = high_color,
     mid_color = mid_color,
     value_text_size = value_text_size,
+    show_value = show_value,
     ...
   )
 }
@@ -636,7 +709,9 @@ plot.rmcorr_matrix <- function(x, title = "Repeated-measures correlation heatmap
 #' @rdname rmcorr_matrix_methods
 #' @method summary rmcorr_matrix
 #' @export
-summary.rmcorr_matrix <- function(object, ...) {
+summary.rmcorr_matrix <- function(object, n = NULL, topn = NULL,
+                                  max_vars = NULL, width = NULL,
+                                  show_ci = NULL, ...) {
   check_inherits(object, "rmcorr_matrix")
   diag_attr <- attr(object, "diagnostics")
   m <- as.matrix(object)
@@ -700,6 +775,7 @@ summary.rmcorr_matrix <- function(object, ...) {
     if (length(vals)) max(vals) else NA_real_
   }
   out$conf_level <- diag_attr$conf_level %||% NA_real_
+  out$top_results <- .mc_summary_top_pairs(object, digits = 4, topn = .mc_coalesce(topn, .mc_display_option("summary_topn", 5L)))
   class(out) <- "summary_rmcorr_matrix"
   out
 }
@@ -707,64 +783,50 @@ summary.rmcorr_matrix <- function(object, ...) {
 #' @rdname rmcorr_matrix_methods
 #' @method print summary_rmcorr_matrix
 #' @export
-print.summary_rmcorr_matrix <- function(x, digits = 4, ...) {
-  line_item <- function(label, value) {
-    cat(sprintf("  %-11s: %s\n", label, value))
-  }
-
-  cat(paste0(x$header %||% "Repeated-measures correlation summary", ":\n"))
-  line_item("class", x$class)
-  line_item("method", x$method)
-  line_item("dimensions", sprintf("%d x %d", x$n_rows, x$n_cols))
-  if (!is.na(x$n_variables)) {
-    line_item("n_variables", x$n_variables)
-  }
-  line_item("n_pairs", x$n_pairs)
-  line_item("symmetric", if (isTRUE(x$symmetric)) "yes" else "no")
-  line_item("missing", x$n_missing)
-  line_item("min", format(round(x$estimate_min, digits), nsmall = digits))
-  line_item("max", format(round(x$estimate_max, digits), nsmall = digits))
-  if (is.finite(x$conf_level)) {
-    line_item("conf_level", format(signif(x$conf_level, digits = digits)))
-  }
+print.summary_rmcorr_matrix <- function(x, digits = 4, n = NULL,
+                                        topn = NULL, max_vars = NULL,
+                                        width = NULL, show_ci = NULL, ...) {
+  cfg <- .mc_resolve_display_args(
+    context = "summary",
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci
+  )
+  digest <- c(
+    method = x$method,
+    dimensions = sprintf("%d x %d", x$n_rows, x$n_cols),
+    pairs = .mc_count_fmt(x$n_pairs),
+    estimate = .mc_format_scalar_or_range(x$estimate_min, x$estimate_max, digits = digits)
+  )
+  if (!is.na(x$n_variables)) digest <- c(digest, n_variables = x$n_variables)
+  if (is.finite(x$conf_level)) digest <- c(digest, conf_level = format(signif(x$conf_level, digits = digits)))
   if (is.finite(x$n_complete_min) && is.finite(x$n_complete_max)) {
-    line_item(
-      "n_complete",
-      sprintf(
-        "%s to %s",
-        format(signif(x$n_complete_min, digits = digits)),
-        format(signif(x$n_complete_max, digits = digits))
-      )
-    )
+    digest <- c(digest, n_complete = .mc_format_scalar_or_range(x$n_complete_min, x$n_complete_max, digits = digits))
   }
   if (is.finite(x$df_min) && is.finite(x$df_max)) {
-    line_item(
-      "df",
-      sprintf(
-        "%s to %s",
-        format(signif(x$df_min, digits = digits)),
-        format(signif(x$df_max, digits = digits))
-      )
-    )
+    digest <- c(digest, df = .mc_format_scalar_or_range(x$df_min, x$df_max, digits = digits))
   }
   if (is.finite(x$n_subjects_min) && is.finite(x$n_subjects_max)) {
-    line_item(
-      "subjects",
-      sprintf(
-        "%s to %s",
-        format(signif(x$n_subjects_min, digits = digits)),
-        format(signif(x$n_subjects_max, digits = digits))
-      )
-    )
+    digest <- c(digest, subjects = .mc_format_scalar_or_range(x$n_subjects_min, x$n_subjects_max, digits = digits))
   }
   if (is.finite(x$p_value_min) && is.finite(x$p_value_max)) {
-    line_item(
-      "p_value",
-      sprintf(
-        "%s to %s",
-        format(signif(x$p_value_min, digits = digits)),
-        format(signif(x$p_value_max, digits = digits))
-      )
+    digest <- c(digest, p_value = .mc_format_scalar_or_range(x$p_value_min, x$p_value_max, digits = digits))
+  }
+  if (isTRUE(x$n_missing > 0L)) {
+    digest <- c(digest, missing = .mc_count_fmt(x$n_missing))
+  }
+  .mc_print_named_digest(digest, header = x$header %||% "Repeated-measures correlation summary")
+  if (is.data.frame(x$top_results) && nrow(x$top_results)) {
+    .mc_print_ranked_pairs_preview(
+      x$top_results,
+      header = "Strongest pairs by |estimate|",
+      topn = cfg$topn,
+      max_vars = cfg$max_vars,
+      width = cfg$width,
+      show_ci = cfg$show_ci,
+      ...
     )
   }
   invisible(x)

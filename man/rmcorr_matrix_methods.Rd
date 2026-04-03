@@ -7,7 +7,16 @@
 \alias{print.summary_rmcorr_matrix}
 \title{Methods for rmcorr Matrix Objects}
 \usage{
-\method{print}{rmcorr_matrix}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{rmcorr_matrix}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{rmcorr_matrix}(
   x,
@@ -16,12 +25,30 @@
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  show_value = TRUE,
   ...
 )
 
-\method{summary}{rmcorr_matrix}(object, ...)
+\method{summary}{rmcorr_matrix}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
-\method{print}{summary_rmcorr_matrix}(x, digits = 4, ...)
+\method{print}{summary_rmcorr_matrix}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{x}{An object of class \code{"rmcorr_matrix"} or
@@ -29,8 +56,16 @@
 
 \item{digits}{Number of significant digits to print.}
 
-\item{max_rows, max_cols}{Optional maximum numbers of rows and columns to show
-when printing the matrix.}
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to downstream methods.}
 
@@ -41,6 +76,9 @@ and midpoint values in the heatmap.}
 
 \item{value_text_size}{Size of the overlaid numeric value labels in the
 heatmap.}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on heatmap tiles when the plot type supports them.}
 
 \item{object}{An object of class \code{"rmcorr_matrix"}.}
 }

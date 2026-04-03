@@ -4,7 +4,17 @@
 \alias{print.matrixCorr_ccc}
 \title{Print method for matrixCorr CCC objects}
 \usage{
-\method{print}{matrixCorr_ccc}(x, digits = 4, ci_digits = 4, show_ci = c("auto", "yes", "no"), ...)
+\method{print}{matrixCorr_ccc}(
+  x,
+  digits = 4,
+  ci_digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{x}{A \code{matrixCorr_ccc} or \code{matrixCorr_ccc_ci} object.}
@@ -13,7 +23,16 @@
 
 \item{ci_digits}{Number of digits for CI bounds.}
 
-\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}.}
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives
+this from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Passed to underlying printers.}
 }

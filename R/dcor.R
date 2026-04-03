@@ -1,12 +1,9 @@
 #' @title Pairwise Distance Correlation (dCor)
 #'
 #' @description
-#' Computes all pairwise \emph{distance correlations} using the unbiased
-#' U-statistic estimator for the numeric columns of a matrix or data frame,
-#' via a high-performance 'C++' backend ('OpenMP'-parallelised).
-#' Distance correlation detects general (including non-linear and non-monotonic)
-#' dependence between variables; unlike Pearson or Spearman, it is zero
-#' (in population) if and only if the variables are independent.
+#' Computes pairwise distance correlations for the numeric columns of a matrix
+#' or data frame using a high-performance 'C++' backend. Distance correlation
+#' detects general dependence, including non-linear relationships.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns are dropped. Columns must be numeric.
@@ -117,27 +114,30 @@ dcor <- function(data, check_na = TRUE) {
 #' @method print dcor
 #' @title Print Method for \code{dcor} Objects
 #'
-#' @description Prints a summary of the distance correlation matrix with
-#' optional truncation for large objects.
-#'
 #' @param x An object of class \code{dcor}.
 #' @param digits Integer; number of decimal places to print.
-#' @param max_rows Optional integer; maximum number of rows to display.
-#' If \code{NULL}, all rows are shown.
-#' @param max_cols Optional integer; maximum number of columns to display.
-#' If \code{NULL}, all columns are shown.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to \code{print}.
 #'
 #' @return Invisibly returns \code{x}.
 #' @export
-print.dcor <- function(x, digits = 4, max_rows = NULL,
-                            max_cols = NULL, ...) {
+print.dcor <- function(x, digits = 4, n = NULL, topn = NULL,
+                       max_vars = NULL, width = NULL,
+                       show_ci = NULL, ...) {
   .mc_print_corr_matrix(
     x,
-    header = "Distance correlation (dCor) matrix:",
+    header = "Distance correlation (dCor) matrix",
     digits = digits,
-    max_rows = max_rows,
-    max_cols = max_cols,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
     ...
   )
 }
@@ -146,14 +146,13 @@ print.dcor <- function(x, digits = 4, max_rows = NULL,
 #' @method plot dcor
 #' @title Plot Method for \code{dcor} Objects
 #'
-#' @description Generates a ggplot2 heatmap of the distance correlation matrix.
-#' Distance correlation is non-negative; the fill scale spans \code{[0, 1]}.
-#'
 #' @param x An object of class \code{dcor}.
 #' @param title Plot title. Default is \code{"Distance correlation heatmap"}.
 #' @param low_color Colour for zero correlation. Default is \code{"white"}.
 #' @param high_color Colour for strong correlation. Default is \code{"steelblue1"}.
 #' @param value_text_size Font size for displaying values. Default is \code{4}.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @param ... Additional arguments passed to \code{ggplot2::theme()} or other
 #' \code{ggplot2} layers.
 #'
@@ -163,9 +162,10 @@ print.dcor <- function(x, digits = 4, max_rows = NULL,
 plot.dcor <-
   function(x, title = "Distance correlation heatmap",
            low_color = "white", high_color = "steelblue1",
-           value_text_size = 4, ...) {
+           value_text_size = 4, show_value = TRUE, ...) {
 
     check_inherits(x, "dcor")
+    check_bool(show_value, arg = "show_value")
     if (!requireNamespace("ggplot2", quietly = TRUE)) {
       cli::cli_abort("Package {.pkg ggplot2} is required for plotting.")
     }
@@ -176,10 +176,8 @@ plot.dcor <-
 
     df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
 
-    ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = dCor)) +
+    p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = dCor)) +
       ggplot2::geom_tile(color = "white") +
-      ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", dCor)),
-                         size = value_text_size, color = "black") +
       ggplot2::scale_fill_gradient(
         low = low_color, high = high_color,
         limits = c(0, 1), name = "dCor"
@@ -192,12 +190,24 @@ plot.dcor <-
       ) +
       ggplot2::coord_fixed() +
       ggplot2::labs(title = title, x = NULL, y = NULL)
+
+    if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
+      p <- p + ggplot2::geom_text(
+        ggplot2::aes(label = sprintf("%.2f", dCor)),
+        size = value_text_size,
+        color = "black"
+      )
+    }
+
+    p
   }
 
 #' @rdname dcor
 #' @method summary dcor
 #' @param object An object of class \code{dcor}.
 #' @export
-summary.dcor <- function(object, ...) {
-  .mc_summary_corr_matrix(object)
+summary.dcor <- function(object, n = NULL, topn = NULL,
+                         max_vars = NULL, width = NULL,
+                         show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, topn = topn)
 }

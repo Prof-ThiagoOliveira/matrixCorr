@@ -21,11 +21,18 @@
 #'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param x An object of class \code{wincor}.
 #' @param digits Integer; number of digits to print.
-#' @param max_rows,max_cols Optional integers limiting the printed matrix size.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to the underlying print or plot helper.
 #' @param title Character; plot title.
 #' @param low_color,high_color,mid_color Colors used in the heatmap.
 #' @param value_text_size Numeric text size for overlaid cell values.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #'
 #' @return A symmetric correlation matrix with class \code{wincor} and
 #'   attributes \code{method = "winsorized_correlation"}, \code{description},
@@ -144,19 +151,26 @@ wincor <- function(data,
 #' @rdname wincor
 #' @method print wincor
 #' @export
-print.wincor <- function(x, digits = 4, max_rows = NULL, max_cols = NULL, ...) {
+print.wincor <- function(x, digits = 4, n = NULL, topn = NULL,
+                         max_vars = NULL, width = NULL,
+                         show_ci = NULL, ...) {
   .mc_print_corr_matrix(
     x,
-    header = "Winsorized correlation matrix:",
+    header = "Winsorized correlation matrix",
     digits = digits,
-    max_rows = max_rows,
-    max_cols = max_cols,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
     ...
   )
 }
 
 #' @rdname wincor
 #' @method plot wincor
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @export
 plot.wincor <- function(x,
                         title = "Winsorized correlation heatmap",
@@ -164,6 +178,7 @@ plot.wincor <- function(x,
                         high_color = "steelblue1",
                         mid_color = "white",
                         value_text_size = 4,
+                        show_value = TRUE,
                         ...) {
   .mc_plot_corr_matrix(
     x,
@@ -174,6 +189,7 @@ plot.wincor <- function(x,
     high_color = high_color,
     mid_color = mid_color,
     value_text_size = value_text_size,
+    show_value = show_value,
     ...
   )
 }
@@ -182,6 +198,8 @@ plot.wincor <- function(x,
 #' @method summary wincor
 #' @param object An object of class \code{wincor}.
 #' @export
-summary.wincor <- function(object, ...) {
-  .mc_summary_corr_matrix(object)
+summary.wincor <- function(object, n = NULL, topn = NULL,
+                           max_vars = NULL, width = NULL,
+                           show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, topn = topn)
 }

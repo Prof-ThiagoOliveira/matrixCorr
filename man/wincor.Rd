@@ -14,7 +14,16 @@ wincor(
   n_threads = getOption("matrixCorr.threads", 1L)
 )
 
-\method{print}{wincor}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{wincor}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{wincor}(
   x,
@@ -23,10 +32,19 @@ wincor(
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  show_value = TRUE,
   ...
 )
 
-\method{summary}{wincor}(object, ...)
+\method{summary}{wincor}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -47,7 +65,16 @@ statistic. Default \code{0.2}.}
 
 \item{digits}{Integer; number of digits to print.}
 
-\item{max_rows, max_cols}{Optional integers limiting the printed matrix size.}
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to the underlying print or plot helper.}
 
@@ -56,6 +83,9 @@ statistic. Default \code{0.2}.}
 \item{low_color, high_color, mid_color}{Colors used in the heatmap.}
 
 \item{value_text_size}{Numeric text size for overlaid cell values.}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
 
 \item{object}{An object of class \code{wincor}.}
 }

@@ -54,7 +54,9 @@ partial_correlation(
   data,
   method = c("oas", "ridge", "sample"),
   lambda = 0.001,
-  return_cov_precision = FALSE
+  return_cov_precision = FALSE,
+  ci = FALSE,
+  conf_level = 0.95
 )
 
 ccc_lmm_reml(
@@ -160,11 +162,59 @@ proportion of outliers on each side.}
 \item{return_cov_precision}{Logical; if \code{TRUE}, also return covariance and
 precision matrices.}
 
+\item{ci}{Logical; if \code{TRUE}, request confidence intervals when supported by
+the replacement function.}
+
 \item{rind}{Character; column identifying subjects for \code{ccc_rm_reml()}.}
 
-\item{interaction, Dmat, Dmat_type, Dmat_weights, Dmat_rescale, ci, ci_mode, digits, }{use_message,ar,ar_rho,slope,slope_var,slope_Z,drop_zero_cols,vc_select,
-vc_alpha,vc_test_order,include_subj_method,include_subj_time,sb_zero_tol
-Additional arguments forwarded to \code{ccc_rm_reml()}.}
+\item{interaction}{Logical; forwarded to \code{ccc_rm_reml()}.}
+
+\item{Dmat}{Optional distance matrix forwarded to \code{ccc_rm_reml()}.}
+
+\item{Dmat_type}{Character selector controlling how \code{Dmat} is constructed.}
+
+\item{Dmat_weights}{Optional weights used when \code{Dmat_type} requires them.}
+
+\item{Dmat_rescale}{Logical; whether to rescale \code{Dmat}.}
+
+\item{ci_mode}{Character selector for the confidence-interval scale used by
+\code{ccc_rm_reml()}.}
+
+\item{digits}{Display precision forwarded to \code{ccc_rm_reml()}.}
+
+\item{use_message}{Logical; whether the deprecated wrapper emits a lifecycle
+message.}
+
+\item{ar}{Character selector for the within-subject residual correlation
+model.}
+
+\item{ar_rho}{Numeric AR(1) parameter.}
+
+\item{slope}{Character selector for the proportional-bias slope structure.}
+
+\item{slope_var}{Optional covariance matrix for custom slopes.}
+
+\item{slope_Z}{Optional design matrix for custom slopes.}
+
+\item{drop_zero_cols}{Logical; whether zero-variance design columns are
+dropped.}
+
+\item{vc_select}{Character selector controlling variance-component
+selection.}
+
+\item{vc_alpha}{Significance level used in variance-component selection.}
+
+\item{vc_test_order}{Character vector controlling the variance-component
+test order.}
+
+\item{include_subj_method}{Optional logical override for the
+subject-by-method component.}
+
+\item{include_subj_time}{Optional logical override for the subject-by-time
+component.}
+
+\item{sb_zero_tol}{Numerical tolerance used when stabilising the scale-bias
+term.}
 
 \item{delta}{Numeric power exponent for U-statistics distances.}
 }

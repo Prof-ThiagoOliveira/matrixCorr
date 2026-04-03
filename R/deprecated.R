@@ -31,14 +31,41 @@
 #' @param sparse_threshold Optional threshold controlling sparse output.
 #' @param n_threads Integer number of OpenMP threads.
 #' @param rind Character; column identifying subjects for `ccc_rm_reml()`.
-#' @param interaction,Dmat,Dmat_type,Dmat_weights,Dmat_rescale,ci,ci_mode,digits,
-#'   use_message,ar,ar_rho,slope,slope_var,slope_Z,drop_zero_cols,vc_select,
-#'   vc_alpha,vc_test_order,include_subj_method,include_subj_time,sb_zero_tol
-#'   Additional arguments forwarded to `ccc_rm_reml()`.
+#' @param interaction Logical; forwarded to `ccc_rm_reml()`.
+#' @param Dmat Optional distance matrix forwarded to `ccc_rm_reml()`.
+#' @param Dmat_type Character selector controlling how `Dmat` is constructed.
+#' @param Dmat_weights Optional weights used when `Dmat_type` requires them.
+#' @param Dmat_rescale Logical; whether to rescale `Dmat`.
+#' @param ci_mode Character selector for the confidence-interval scale used by
+#'   `ccc_rm_reml()`.
+#' @param digits Display precision forwarded to `ccc_rm_reml()`.
+#' @param use_message Logical; whether the deprecated wrapper emits a lifecycle
+#'   message.
+#' @param ar Character selector for the within-subject residual correlation
+#'   model.
+#' @param ar_rho Numeric AR(1) parameter.
+#' @param slope Character selector for the proportional-bias slope structure.
+#' @param slope_var Optional covariance matrix for custom slopes.
+#' @param slope_Z Optional design matrix for custom slopes.
+#' @param drop_zero_cols Logical; whether zero-variance design columns are
+#'   dropped.
+#' @param vc_select Character selector controlling variance-component
+#'   selection.
+#' @param vc_alpha Significance level used in variance-component selection.
+#' @param vc_test_order Character vector controlling the variance-component
+#'   test order.
+#' @param include_subj_method Optional logical override for the
+#'   subject-by-method component.
+#' @param include_subj_time Optional logical override for the subject-by-time
+#'   component.
+#' @param sb_zero_tol Numerical tolerance used when stabilising the scale-bias
+#'   term.
 #' @param delta Numeric power exponent for U-statistics distances.
 #' @param lambda Numeric regularisation strength used by `pcorr()`.
 #' @param return_cov_precision Logical; if `TRUE`, also return covariance and
 #'   precision matrices.
+#' @param ci Logical; if `TRUE`, request confidence intervals when supported by
+#'   the replacement function.
 #' @param check_na Logical validation flag used by `dcor()`.
 #'
 #' @details
@@ -167,7 +194,9 @@ distance_corr <- function(data, check_na = TRUE) {
 partial_correlation <- function(data,
                                 method = c("oas", "ridge", "sample"),
                                 lambda = 1e-3,
-                                return_cov_precision = FALSE) {
+                                return_cov_precision = FALSE,
+                                ci = FALSE,
+                                conf_level = 0.95) {
   .mc_deprecate(
     old = "partial_correlation",
     new = "pcorr",
@@ -178,7 +207,9 @@ partial_correlation <- function(data,
     data = data,
     method = match.arg(method),
     lambda = lambda,
-    return_cov_precision = return_cov_precision
+    return_cov_precision = return_cov_precision,
+    ci = ci,
+    conf_level = conf_level
   )
 }
 

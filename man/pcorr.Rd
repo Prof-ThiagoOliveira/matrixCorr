@@ -13,14 +13,43 @@ pcorr(
   method = c("sample", "oas", "ridge", "glasso"),
   lambda = 0.001,
   return_cov_precision = FALSE,
-  return_p_value = FALSE
+  return_p_value = FALSE,
+  ci = FALSE,
+  conf_level = 0.95
 )
 
-\method{print}{partial_corr}(x, digits = 3, show_method = TRUE, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{partial_corr}(
+  x,
+  digits = 3,
+  show_method = TRUE,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
-\method{summary}{partial_corr}(object, ...)
+\method{summary}{partial_corr}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
-\method{print}{summary_partial_corr}(x, digits = 4, ...)
+\method{print}{summary_partial_corr}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{partial_corr}(
   x,
@@ -29,6 +58,7 @@ pcorr(
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  show_value = TRUE,
   mask_diag = TRUE,
   reorder = FALSE,
   ...
@@ -56,6 +86,14 @@ two-sided p-values for testing whether each sample partial correlation is
 zero. This option is available only for \code{method = "sample"} and
 requires \eqn{n > p}. Default to \code{FALSE}.}
 
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach Fisher-z
+confidence intervals for the off-diagonal partial correlations. This
+option is available only for the classical \code{method = "sample"}
+estimator in the ordinary low-dimensional setting.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
 \item{x}{An object of class \code{partial_corr}.}
 
 \item{digits}{Integer; number of decimal places for display (default 3).}
@@ -63,8 +101,16 @@ requires \eqn{n > p}. Default to \code{FALSE}.}
 \item{show_method}{Logical; print a one-line header with \code{method}
 (and \code{lambda}/\code{rho} if available). Default \code{TRUE}.}
 
-\item{max_rows, max_cols}{Optional integer limits for display; if provided,
-the printed matrix is truncated with a note about omitted rows/cols.}
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \pkg{ggplot2} layers.}
@@ -84,6 +130,9 @@ the printed matrix is truncated with a note about omitted rows/cols.}
 
 \item{value_text_size}{Font size for cell labels. Default \code{4}.}
 
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
+
 \item{mask_diag}{Logical; if \code{TRUE}, the diagonal is masked
 (set to \code{NA}) and not labelled. Default \code{TRUE}.}
 
@@ -98,6 +147,10 @@ An object of class \code{"partial_corr"} (a list) with elements:
 \item \code{precision} (if requested): precision matrix \eqn{\Theta}.
 \item \code{p_value} (if requested): matrix of two-sided p-values for
 the sample partial correlations.
+\item \code{ci} (if requested): a list with elements \code{est},
+\code{lwr.ci}, \code{upr.ci}, \code{conf.level}, and \code{ci.method}.
+\item \code{diagnostics}: metadata used for inference, including the
+effective complete-case sample size and number of conditioned variables.
 \item \code{method}: the estimator used (\code{"oas"}, \code{"ridge"},
 \code{"sample"}, or \code{"glasso"}).
 \item \code{lambda}: ridge or graphical-lasso penalty
@@ -114,38 +167,12 @@ A compact summary object of class \code{summary_partial_corr}.
 A \code{ggplot} object.
 }
 \description{
-Computes the Gaussian partial correlation matrix from a numeric data frame
-or matrix. The covariance matrix can be estimated using:
-\itemize{
-\item \strong{Unbiased sample covariance}: the standard empirical
-covariance estimator.
-\item \strong{Ridge-regularised covariance}: adds a positive ridge
-penalty to improve stability when the covariance matrix is near-singular.
-\item \strong{OAS shrinkage to a scaled identity}: recommended when
-\eqn{p \gg n}, as it reduces estimation error by shrinking towards a
-scaled identity matrix.
-\item \strong{Graphical lasso}: estimates a sparse precision matrix using
-an \eqn{\ell_1} penalty on off-diagonal precision entries.
-}
-
-The method uses a high-performance 'C++' backend.
-
-This help page also documents the associated S3 methods.
-\code{print.partial_corr()} prints a \code{pcorr()} result directly,
-whereas \code{print.summary_partial_corr()} prints the compact object
-returned by \code{summary()}.
-
-Prints only the partial correlation matrix (no attribute spam),
-with an optional one-line header stating the estimator used.
-
-Prints the same compact matrix summary used by the other correlation
-methods, based on the partial-correlation matrix stored in
-\code{object$pcor}. This method is used for the object returned by
-\code{summary(pcorr(...))}, not for the direct \code{pcorr()} result.
-
-Produces a \pkg{ggplot2}-based heatmap of the partial correlation matrix
-stored in \code{x$pcor}. Optionally masks the diagonal and/or reorders
-variables via hierarchical clustering of \eqn{1 - |pcor|}.
+Computes Gaussian partial correlations for the numeric columns of a matrix
+or data frame using a high-performance 'C++' backend. Covariance estimation
+is available via the classical sample estimator, ridge regularisation, OAS
+shrinkage, or graphical lasso. Optional p-values and Fisher-z confidence
+intervals are available for the classical sample estimator in the ordinary
+low-dimensional setting.
 }
 \details{
 \strong{Statistical overview.} Given an \eqn{n \times p} data matrix \eqn{X}
@@ -199,6 +226,22 @@ with \eqn{n - p} degrees of freedom. These p-values are returned only for
 \code{method = "sample"}, where they match the standard full-model partial
 correlation test.
 
+When \code{ci = TRUE}, the function reports Fisher-\eqn{z} confidence
+intervals for the sample partial correlations. For a partial correlation
+\eqn{r_{xy \cdot Z}} conditioning on \eqn{c} variables, the transformed
+statistic is \eqn{z = \operatorname{atanh}(r_{xy \cdot Z})} with standard
+error
+\deqn{\operatorname{SE}(z) = \frac{1}{\sqrt{n - 3 - c}},}
+where \eqn{n} is the effective complete-case sample size used for the
+estimate. The two-sided normal-theory interval is formed on the transformed
+scale using \code{conf_level} and then mapped back with \code{tanh()}. In
+the full matrix path implemented here, each off-diagonal entry conditions on
+all remaining variables, so \eqn{c = p - 2} and the classical CI requires
+\eqn{n > p + 1}. This inference is only supported for
+\code{method = "sample"} without positive-definiteness repair; in
+unsupported or numerically singular settings, CI bounds are returned as
+\code{NA} with an informative \pkg{cli} warning or the request is rejected.
+
 \strong{Interpretation.} For Gaussian data, \eqn{\mathrm{pcor}_{ij}} equals
 the correlation between residuals from regressing variable \eqn{i} and
 variable \eqn{j} on all the remaining variables; equivalently, it encodes
@@ -214,7 +257,7 @@ covariance is singular and inversion is ill-posed. Ridge and OAS both yield
 well-conditioned \eqn{\Sigma}. Ridge adds a fixed \eqn{\lambda} on the
 diagonal, whereas OAS shrinks adaptively towards \eqn{\mu_I I_p} with a
 weight chosen to minimise (approximately) the Frobenius risk under a
-Gaussian model, often improving mean–square accuracy in high dimension.
+Gaussian model, often improving mean-square accuracy in high dimension.
 
 \strong{Why glasso?} Glasso is useful when the goal is not just to
 stabilise a covariance estimate, but to recover a manageable network of
@@ -375,7 +418,7 @@ Biostatistics.
 
 Ledoit, O., & Wolf, M. (2004).
 A well-conditioned estimator for large-dimensional covariance matrices.
-Journal of Multivariate Analysis, 88(2), 365–411.
+Journal of Multivariate Analysis, 88(2), 365-411.
 
 Schafer, J., & Strimmer, K. (2005).
 A shrinkage approach to large-scale covariance matrix estimation and

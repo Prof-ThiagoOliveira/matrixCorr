@@ -1,18 +1,9 @@
 #' @title Schafer-Strimmer shrinkage correlation
 #'
 #' @description
-#' Computes a shrinkage correlation matrix using the Schafer-Strimmer approach
-#' with an analytic, data-driven intensity \eqn{\hat\lambda}. The off-diagonals
-#' of the sample Pearson correlation \eqn{R} are shrunk towards zero, yielding
-#' \eqn{R_{\mathrm{shr}}=(1-\hat\lambda)R+\hat\lambda I} with
-#' \eqn{\mathrm{diag}(R_{\mathrm{shr}})=1}, stabilising estimates when
-#' \eqn{p \ge n}.
-#'
-#' This function uses a high-performance 'C++' backend that forms
-#' \eqn{X^\top X} via 'BLAS' 'SYRK', applies centring via a rank-1 update,
-#' converts to Pearson correlation, estimates \eqn{\hat\lambda}, and shrinks
-#' the off-diagonals:
-#' \eqn{R_{\mathrm{shr}} = (1-\hat\lambda)R + \hat\lambda I}.
+#' Computes a Schafer-Strimmer shrinkage correlation matrix for numeric data
+#' using a high-performance 'C++' backend. This stabilises Pearson correlation
+#' estimates by shrinking off-diagonal entries towards zero.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Columns must be numeric
@@ -59,7 +50,7 @@
 #' colnames(X) <- paste0("V", seq_len(p))
 #'
 #' Rshr <- schafer_corr(X)
-#' print(Rshr, digits = 2, max_rows = 6, max_cols = 6)
+#' print(Rshr, digits = 2, n = 6, max_vars = 6)
 #' summary(Rshr)
 #' plot(Rshr)
 #'
@@ -101,27 +92,30 @@ schafer_corr <- function(data) {
 #' @method print schafer_corr
 #' @title Print Method for \code{schafer_corr} Objects
 #'
-#' @description Prints a summary of the shrinkage correlation matrix with
-#' optional truncation for large objects.
-#'
 #' @param x An object of class \code{schafer_corr}.
 #' @param digits Integer; number of decimal places to print.
-#' @param max_rows Optional integer; maximum number of rows to display.
-#' If \code{NULL}, all rows are shown.
-#' @param max_cols Optional integer; maximum number of columns to display.
-#' If \code{NULL}, all columns are shown.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to \code{print}.
 #'
 #' @return Invisibly returns \code{x}.
 #' @export
-print.schafer_corr <- function(x, digits = 4, max_rows = NULL,
-                               max_cols = NULL, ...) {
+print.schafer_corr <- function(x, digits = 4, n = NULL, topn = NULL,
+                               max_vars = NULL, width = NULL,
+                               show_ci = NULL, ...) {
   .mc_print_corr_matrix(
     x,
-    header = "Schafer-Strimmer shrinkage correlation matrix:",
+    header = "Schafer-Strimmer shrinkage correlation matrix",
     digits = digits,
-    max_rows = max_rows,
-    max_cols = max_cols,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
     ...
   )
 }
@@ -130,10 +124,6 @@ print.schafer_corr <- function(x, digits = 4, max_rows = NULL,
 #' @method plot schafer_corr
 #' @title Plot Method for \code{schafer_corr} Objects
 #'
-#' @description Heatmap of the shrinkage correlation matrix with optional
-#' hierarchical clustering and triangular display. Uses \pkg{ggplot2} and
-#' \code{geom_raster()} for speed on larger matrices.
-#'
 #' @param x An object of class \code{schafer_corr}.
 #' @param title Plot title.
 #' @param cluster Logical; if TRUE, reorder rows/cols by hierarchical clustering
@@ -141,8 +131,10 @@ print.schafer_corr <- function(x, digits = 4, max_rows = NULL,
 #' @param hclust_method Linkage method for \code{hclust}; default \code{"complete"}.
 #' @param triangle One of \code{"full"}, \code{"upper"}, \code{"lower"}.
 #' Default to \code{upper}.
-#' @param show_values Logical; print correlation values inside tiles (only if
-#'        matrix dimension \eqn{\le} \code{value_text_limit}).
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles (subject to \code{value_text_limit}).
+#' @param show_values Deprecated compatibility alias for \code{show_value}. If
+#'   supplied, it overrides \code{show_value}.
 #' @param value_text_limit Integer threshold controlling when values are drawn.
 #' @param value_text_size Font size for values if shown.
 #' @param palette Character; \code{"diverging"} (default) or \code{"viridis"}.
@@ -157,13 +149,18 @@ plot.schafer_corr <- function(
     cluster = TRUE,
     hclust_method = "complete",
     triangle = c("upper", "lower", "full"),
-    show_values = FALSE,
+    show_value = TRUE,
+    show_values = NULL,
     value_text_limit = 60,
     value_text_size = 3,
     palette = c("diverging", "viridis"),
     ...
 ) {
   check_inherits(x, "schafer_corr")
+  if (!is.null(show_values)) {
+    show_value <- show_values
+  }
+  check_bool(show_value, arg = "show_value")
   triangle <- match.arg(triangle)
   palette  <- match.arg(palette)
 
@@ -222,7 +219,7 @@ plot.schafer_corr <- function(
     )
 
   # Draw numbers only for small matrices
-  if (show_values && p <= value_text_limit) {
+  if (show_value && p <= value_text_limit) {
     p_ <- p_ + ggplot2::geom_text(
       ggplot2::aes(label = sprintf("%.2f", r)),
       size = value_text_size, colour = "black"
@@ -242,6 +239,8 @@ plot.schafer_corr <- function(
 #' @method summary schafer_corr
 #' @param object An object of class \code{schafer_corr}.
 #' @export
-summary.schafer_corr <- function(object, ...) {
-  .mc_summary_corr_matrix(object)
+summary.schafer_corr <- function(object, n = NULL, topn = NULL,
+                                 max_vars = NULL, width = NULL,
+                                 show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, topn = topn)
 }

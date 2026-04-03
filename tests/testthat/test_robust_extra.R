@@ -524,9 +524,8 @@ test_that("skipped_corr summary surfaces pairwise inference details when availab
   expect_equal(nrow(sm_ci), choose(ncol(X), 2))
   expect_true(isTRUE(attr(sm_ci, "has_ci")))
   expect_false(isTRUE(attr(sm_ci, "has_p")))
-  expect_match(paste(txt_ci, collapse = "\n"), "Skipped-correlation pairs")
-  expect_match(paste(txt_ci, collapse = "\n"), "lwr")
-  expect_match(paste(txt_ci, collapse = "\n"), "upr")
+  expect_match(paste(txt_ci, collapse = "\n"), "Skipped correlation summary")
+  expect_match(paste(txt_ci, collapse = "\n"), "ci_width")
 
   R_p <- skipped_corr(X, ci = TRUE, p_value = TRUE, n_boot = 60, seed = 456)
   sm_p <- summary(R_p)
@@ -535,8 +534,8 @@ test_that("skipped_corr summary surfaces pairwise inference details when availab
   expect_s3_class(sm_p, "summary.skipped_corr")
   expect_true(isTRUE(attr(sm_p, "has_ci")))
   expect_true(isTRUE(attr(sm_p, "has_p")))
-  expect_match(paste(txt_p, collapse = "\n"), "p_value")
-  expect_match(paste(txt_p, collapse = "\n"), "Inference method")
+  expect_match(paste(txt_p, collapse = "\n"), "inference")
+  expect_match(paste(txt_p, collapse = "\n"), "bootstrap")
 })
 
 test_that("skipped_corr masks reconstruct the reported pairwise correlations", {

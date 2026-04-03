@@ -25,9 +25,11 @@ diag.bicor(x, ...)
 \method{print}{bicor}(
   x,
   digits = 4,
-  max_rows = NULL,
-  max_cols = NULL,
-  width = getOption("width", 80L),
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
   na_print = "NA",
   ...
 )
@@ -41,11 +43,20 @@ diag.bicor(x, ...)
   mid_color = "white",
   high_color = "steelblue1",
   value_text_size = 3,
+  show_value = TRUE,
   na_fill = "grey90",
   ...
 )
 
-\method{summary}{bicor}(object, ...)
+\method{summary}{bicor}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame containing numeric columns.
@@ -94,13 +105,16 @@ entries with \code{|r| < sparse_threshold} to 0 and returns a sparse
 
 \item{digits}{Integer; number of decimal places used for the matrix.}
 
-\item{max_rows}{Optional integer; maximum number of rows to display
-(default shows all).}
+\item{n}{Optional row threshold for compact preview output.}
 
-\item{max_cols}{Optional integer; maximum number of columns to display
-(default shows all).}
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
 
-\item{width}{Integer; target console width for wrapping header text.}
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{na_print}{Character; how to display missing values.}
 
@@ -120,6 +134,9 @@ to display the full matrix or a single triangle.}
 
 \item{value_text_size}{Numeric; font size for cell labels. Set to \code{NULL}
 to suppress labels (recommended for large matrices).}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
 
 \item{na_fill}{Fill colour for \code{NA} cells. Default \code{"grey90"}.}
 
@@ -141,21 +158,9 @@ Invisibly returns \code{x}.
 A \code{ggplot} object.
 }
 \description{
-Use biweight mid-correlatio when you want a Pearson-like measure that is
-robust to outliers and
-heavy-tailed noise. Bicor down-weights extreme observations via Tukey’s
-biweight while preserving location/scale invariance, making it well suited
-to high-throughput data (e.g., gene expression) where occasional gross errors
-or platform artefacts occur. Prefer Spearman/Kendall for purely ordinal
-structure or strongly non-linear monotone relations.
-
-Prints a matrix with a compact header,
-optional truncation for large matrices, and a small summary of
-off-diagonal values.
-
-Produces a \pkg{ggplot2} heatmap of the biweight
-mid-correlation matrix. Optionally reorders variables via hierarchical
-clustering on \eqn{1 - r_{\text{bicor}}}, and can show only a triangle.
+Computes pairwise biweight mid-correlations for numeric data. Bicor is a
+robust, Pearson-like correlation that down-weights outliers and heavy-tailed
+observations.
 }
 \details{
 For a column \eqn{x = (x_a)_{a=1}^m}, let \eqn{\mathrm{med}(x)} be the median and

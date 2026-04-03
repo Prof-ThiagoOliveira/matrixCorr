@@ -211,8 +211,12 @@ spearman_rho <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
 .mc_spearman_pairwise_summary <- function(object,
                                           digits = 4,
                                           ci_digits = 3,
-                                          show_ci = c("auto", "yes", "no")) {
-  show_ci <- match.arg(show_ci)
+                                          show_ci = NULL) {
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
   check_inherits(object, "spearman_rho")
 
   est <- as.matrix(object)
@@ -222,7 +226,7 @@ spearman_rho <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
 
   ci <- .mc_spearman_ci_attr(object)
   diag_attr <- attr(object, "diagnostics", exact = TRUE)
-  include_ci <- switch(show_ci, auto = !is.null(ci), yes = TRUE, no = FALSE)
+  include_ci <- identical(show_ci, "yes") && !is.null(ci)
 
   rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
   k <- 0L
@@ -265,60 +269,45 @@ spearman_rho <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
 #' @method print spearman_rho
 #' @title Print Method for \code{spearman_rho} Objects
 #'
-#' @description Prints a summary of the Spearman's correlation matrix,
-#' including description and method metadata.
-#'
 #' @param x An object of class \code{spearman_rho}.
 #' @param digits Integer; number of decimal places to print.
-#' @param max_rows Optional integer; maximum number of rows to display.
-#'  If \code{NULL}, all rows are shown.
-#' @param max_cols Optional integer; maximum number of columns to display.
-#' If \code{NULL}, all columns are shown.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
 #' @param ci_digits Integer; digits for Spearman confidence limits.
-#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
-#'   \code{print()}, \code{"auto"} keeps the compact matrix-only display;
-#'   use \code{"yes"} to also print the pairwise CI table.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Additional arguments passed to \code{print}.
 #'
 #' @return Invisibly returns the \code{spearman_rho} object.
 #' @export
 print.spearman_rho <- function(x,
                                digits = 4,
-                               max_rows = NULL,
-                               max_cols = NULL,
+                               n = NULL,
+                               topn = NULL,
+                               max_vars = NULL,
+                               width = NULL,
                                ci_digits = 3,
-                               show_ci = c("auto", "yes", "no"),
+                               show_ci = NULL,
                                ...) {
-  show_ci <- match.arg(show_ci)
   .mc_print_corr_matrix(
     x,
-    header = "Spearman correlation matrix:",
+    header = "Spearman correlation matrix",
     digits = digits,
-    max_rows = max_rows,
-    max_cols = max_cols,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
     ...
   )
-  include_ci <- switch(show_ci, auto = FALSE, yes = TRUE, no = FALSE)
-  if (include_ci) {
-    sm <- .mc_spearman_pairwise_summary(
-      x,
-      digits = digits,
-      ci_digits = ci_digits,
-      show_ci = "yes"
-    )
-    attr(sm, "show_overview") <- FALSE
-    cat("\n")
-    print(sm, ...)
-  }
   invisible(x)
 }
 
 #' @rdname spearman_rho
 #' @method plot spearman_rho
 #' @title Plot Method for \code{spearman_rho} Objects
-#'
-#' @description Generates a ggplot2-based heatmap of the Spearman's rank
-#' correlation matrix.
 #'
 #' @param x An object of class \code{spearman_rho}.
 #' @param title Plot title. Default is \code{"Spearman's rank correlation
@@ -331,6 +320,8 @@ print.spearman_rho <- function(x,
 #' @param value_text_size Font size for displaying correlation values. Default
 #' is \code{4}.
 #' @param ci_text_size Text size for confidence intervals in the heatmap.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @param ... Additional arguments passed to \code{ggplot2::theme()} or other
 #' \code{ggplot2} layers.
 #'
@@ -341,13 +332,15 @@ plot.spearman_rho <-
   function(x, title = "Spearman's rank correlation heatmap",
            low_color = "indianred1", high_color = "steelblue1",
            mid_color = "white", value_text_size = 4,
-           ci_text_size = 3, ...) {
+           ci_text_size = 3, show_value = TRUE, ...) {
+    check_bool(show_value, arg = "show_value")
     ci <- .mc_spearman_ci_attr(x)
     if (is.null(ci) || is.null(ci$lwr.ci) || is.null(ci$upr.ci)) {
       return(.mc_plot_corr_matrix(
         x, class_name = "spearman_rho", fill_name = "Rho",
         title = title, low_color = low_color, high_color = high_color,
-        mid_color = mid_color, value_text_size = value_text_size, ...
+        mid_color = mid_color, value_text_size = value_text_size,
+        show_value = show_value, ...
       ))
     }
 
@@ -379,9 +372,8 @@ plot.spearman_rho <-
     df$Var2 <- factor(df$Var2, levels = lev_col)
     df$label <- sprintf("%.2f", df$rho)
 
-    p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = rho)) +
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = .data$rho)) +
       ggplot2::geom_tile(color = "white") +
-      ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size, color = "black") +
       ggplot2::scale_fill_gradient2(
         low = low_color,
         high = high_color,
@@ -399,7 +391,11 @@ plot.spearman_rho <-
       ggplot2::coord_fixed() +
       ggplot2::labs(title = title, x = NULL, y = NULL)
 
-    if (any(!is.na(df$ci_label))) {
+    if (isTRUE(show_value)) {
+      p <- p + ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size, color = "black")
+    }
+
+    if (isTRUE(show_value) && any(!is.na(df$ci_label))) {
       p <- p + ggplot2::geom_text(
         ggplot2::aes(label = ci_label, y = as.numeric(Var1) - 0.25),
         size = ci_text_size,
@@ -416,16 +412,24 @@ plot.spearman_rho <-
 #' @param object An object of class \code{spearman_rho}.
 #' @param ci_digits Integer; digits for Spearman confidence limits in the
 #'   pairwise summary.
-#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @export
 summary.spearman_rho <- function(object,
+                                 n = NULL,
+                                 topn = NULL,
+                                 max_vars = NULL,
+                                 width = NULL,
                                  ci_digits = 3,
-                                 show_ci = c("auto", "yes", "no"),
+                                 show_ci = NULL,
                                  ...) {
   check_inherits(object, "spearman_rho")
-  show_ci <- match.arg(show_ci)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
   if (is.null(.mc_spearman_ci_attr(object))) {
-    return(.mc_summary_corr_matrix(object))
+    return(.mc_summary_corr_matrix(object, topn = topn))
   }
   .mc_spearman_pairwise_summary(
     object,
@@ -438,34 +442,20 @@ summary.spearman_rho <- function(object,
 #' @method print summary.spearman_rho
 #' @param x An object of class \code{summary.spearman_rho}.
 #' @export
-print.summary.spearman_rho <- function(x, ...) {
-  overview <- attr(x, "overview", exact = TRUE)
-  if (isTRUE(attr(x, "show_overview", exact = TRUE)) || is.null(attr(x, "show_overview", exact = TRUE))) {
-    if (!is.null(overview)) {
-      class(overview) <- "summary_corr_matrix"
-      print.summary_corr_matrix(overview, ...)
-    }
-  }
-
-  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (isTRUE(attr(x, "has_ci")) && is.finite(cl)) {
-    cat(sprintf("\nSpearman-correlation pairs (%g%% CI)\n\n", 100 * cl))
-  } else {
-    cat("\nSpearman-correlation pairs\n\n")
-  }
-
-  digits <- attr(x, "digits"); if (!is.numeric(digits)) digits <- 4
-  ci_digits <- attr(x, "ci_digits"); if (!is.numeric(ci_digits)) ci_digits <- 3
-  df <- x
-  if ("estimate" %in% names(df) && is.numeric(df$estimate)) {
-    df$estimate <- ifelse(is.na(df$estimate), NA, formatC(df$estimate, format = "f", digits = digits))
-  }
-  if ("lwr" %in% names(df) && is.numeric(df$lwr)) {
-    df$lwr <- ifelse(is.na(df$lwr), NA, formatC(df$lwr, format = "f", digits = ci_digits))
-  }
-  if ("upr" %in% names(df) && is.numeric(df$upr)) {
-    df$upr <- ifelse(is.na(df$upr), NA, formatC(df$upr, format = "f", digits = ci_digits))
-  }
-  print.data.frame(df, row.names = FALSE, right = FALSE, ...)
+print.summary.spearman_rho <- function(x, digits = NULL, n = NULL,
+                                       topn = NULL, max_vars = NULL,
+                                       width = NULL, show_ci = NULL, ...) {
+  .mc_print_pairwise_summary_digest(
+    x,
+    title = "Spearman correlation summary",
+    digits = .mc_coalesce(digits, 4),
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    ci_method = "jackknife_euclidean_likelihood",
+    ...
+  )
   invisible(x)
 }

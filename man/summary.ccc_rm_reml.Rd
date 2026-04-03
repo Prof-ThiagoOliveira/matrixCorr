@@ -9,11 +9,24 @@
   object,
   digits = 4,
   ci_digits = 2,
-  show_ci = c("auto", "yes", "no"),
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
   ...
 )
 
-\method{print}{summary.ccc_rm_reml}(x, ...)
+\method{print}{summary.ccc_rm_reml}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{An object of class \code{"ccc_rm_reml"}, as returned by \code{\link[=ccc_rm_reml]{ccc_rm_reml()}}.}
@@ -22,9 +35,18 @@
 
 \item{ci_digits}{Integer; decimal places for confidence interval bounds.}
 
-\item{show_ci}{Character string indicating whether to show confidence intervals:
-\code{"auto"} (default) shows only if non-NA CIs exist, \code{"yes"} always shows CIs,
-\code{"no"} never shows them.}
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives
+this from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{Character string indicating whether to show confidence
+intervals: \code{"yes"} shows CI information when available and \code{"no"}
+suppresses it.}
 
 \item{...}{Passed to \code{\link[base]{print.data.frame}}.}
 

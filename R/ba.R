@@ -134,10 +134,20 @@ ba <- function(group1,
 #' @param x A \code{"ba"} object.
 #' @param digits Number of digits for estimates (default 3).
 #' @param ci_digits Number of digits for CI bounds (default 3).
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Unused.
 #' @export
-print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
+print.ba <- function(x, digits = 3, ci_digits = 3,
+                     n = NULL, topn = NULL,
+                     max_vars = NULL, width = NULL,
+                     show_ci = NULL, ...) {
   check_inherits(x, "ba")
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "print")
 
   n   <- as.integer(x$based.on)
   loa_multiplier <- as.numeric(x$loa_multiplier)
@@ -149,7 +159,7 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
   loa_lo <- as.numeric(x$lower.limit)
   loa_hi <- as.numeric(x$upper.limit)
   sd_d   <- as.numeric(x$critical.diff) / loa_multiplier
-  width  <- loa_hi - loa_lo
+  loa_width <- loa_hi - loa_lo
 
   # CIs (robust extraction by name)
   cil <- function(nm) as.numeric(x$CI.lines[[nm]])
@@ -157,12 +167,17 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
   lo_l   <- cil("lower.limit.ci.lower"); lo_u <- cil("lower.limit.ci.upper")
   hi_l   <- cil("upper.limit.ci.lower"); hi_u <- cil("upper.limit.ci.upper")
 
-  # header
-  if (is.finite(cl)) {
-    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD, %g%% CI\n\n", n, loa_multiplier, 100*cl))
-  } else {
-    cat(sprintf("Bland-Altman (n = %d) - LoA = mean +/- %.3g * SD\n\n", n, loa_multiplier))
-  }
+  .mc_print_named_digest(
+    c(
+      based_on = n,
+      loa_rule = sprintf("mean +/- %.3g * SD", loa_multiplier),
+      if (identical(show_ci, "yes") && is.finite(cl)) c(ci = sprintf("%g%%", 100 * cl)),
+      sd_diff = formatC(sd_d, format = "f", digits = digits),
+      width = formatC(loa_width, format = "f", digits = digits)
+    ),
+    header = "Bland-Altman preview:"
+  )
+  cat("\n")
 
   # nicely aligned three-row table
   df <- data.frame(
@@ -174,13 +189,25 @@ print.ba <- function(x, digits = 3, ci_digits = 3, ...) {
     row.names   = NULL
   )
   df$estimate <- formatC(df$estimate, format = "f", digits = digits)
-  df$lwr      <- formatC(df$lwr,      format = "f", digits = ci_digits)
-  df$upr      <- formatC(df$upr,      format = "f", digits = ci_digits)
+  if (identical(show_ci, "yes")) {
+    df$lwr <- formatC(df$lwr, format = "f", digits = ci_digits)
+    df$upr <- formatC(df$upr, format = "f", digits = ci_digits)
+  } else {
+    df$lwr <- NULL
+    df$upr <- NULL
+  }
 
-  print(df, row.names = FALSE, right = FALSE)
-  cat(sprintf("\nSD(differences): %s   LoA width: %s\n",
-              formatC(sd_d, format = "f", digits = digits),
-              formatC(width, format = "f", digits = digits)))
+  .mc_print_preview_table(
+    df,
+    n = .mc_coalesce(n, .mc_display_option("print_max_rows", 20L)),
+    topn = .mc_coalesce(topn, .mc_display_option("print_topn", 5L)),
+    max_vars = .mc_coalesce(max_vars, .mc_display_option("print_max_vars", NULL)),
+    width = .mc_coalesce(width, getOption("width", 80L)),
+    context = "print",
+    full_hint = TRUE,
+    summary_hint = TRUE,
+    ...
+  )
   invisible(x)
 }
 
@@ -224,33 +251,33 @@ summary.ba <- function(object,
 #' @method print summary.ba
 #' @param ... Passed to \code{\link[base]{print.data.frame}}.
 #' @export
-print.summary.ba <- function(x, ...) {
+print.summary.ba <- function(x, digits = NULL, n = NULL,
+                             topn = NULL, max_vars = NULL,
+                             width = NULL, show_ci = NULL, ...) {
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (is.finite(cl)) cat(sprintf("Bland-Altman (two methods), %g%% CI\n\n", 100 * cl))
-  else               cat("Bland-Altman (two methods)\n\n")
-
-  sections <- list(
-    list(
-      title = "Agreement estimates",
-      cols = c("n", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "summary")
+  header <- .mc_header_with_ci("Bland-Altman (two methods)", cl, show_ci)
+  .mc_print_sectioned_table(
+    x,
+    sections = list(
+      list(
+        title = "Agreement estimates",
+        cols = c("n", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
+      ),
+      list(
+        title = "Confidence intervals",
+        cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+      )
     ),
-    list(
-      title = "Confidence intervals",
-      cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
-    )
+    header = header,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    print_overview = FALSE,
+    ...
   )
-
-  printed <- 0L
-  for (section in sections) {
-    cols <- section$cols[section$cols %in% names(x)]
-    if (!length(cols)) next
-
-    if (printed > 0L) cat("\n")
-    cat(section$title, "\n\n", sep = "")
-    print.data.frame(x[cols], row.names = FALSE, right = FALSE, ...)
-    printed <- printed + 1L
-  }
-
   invisible(x)
 }
 
@@ -268,6 +295,9 @@ print.summary.ba <- function(x, ...) {
 #' @param smoother One of "none", "loess", "lm" to visualize proportional bias.
 #' @param symmetrize_y Logical; if TRUE, y-axis centered at mean difference
 #' with symmetric limits.
+#' @param show_value Logical; included for a consistent plotting interface.
+#'   Bland-Altman plots do not overlay numeric cell values, so this argument
+#'   currently has no effect.
 #' @param ... Passed to \code{ggplot2::theme()} (ggplot path) or \code{plot()}.
 #' @importFrom graphics abline lines par rect
 #' @export
@@ -281,8 +311,10 @@ plot.ba <- function(x,
                     shade_alpha = 0.08,
                     smoother    = c("none", "loess", "lm"),
                     symmetrize_y = TRUE,
+                    show_value = TRUE,
                     ...) {
   check_inherits(x, "ba")
+  check_bool(show_value, arg = "show_value")
   smoother <- match.arg(smoother)
 
   means <- as.numeric(x$means)

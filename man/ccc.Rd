@@ -10,17 +10,40 @@
 \usage{
 ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
 
-\method{print}{ccc}(x, digits = 4, ci_digits = 4, show_ci = c("auto", "yes", "no"), ...)
+\method{print}{ccc}(
+  x,
+  digits = 4,
+  ci_digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{summary}{ccc}(
   object,
   digits = 4,
   ci_digits = 2,
-  show_ci = c("auto", "yes", "no"),
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
   ...
 )
 
-\method{print}{summary.ccc}(x, ...)
+\method{print}{summary.ccc}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{ccc}(
   x,
@@ -30,6 +53,7 @@ ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
   mid_color = "white",
   value_text_size = 4,
   ci_text_size = 3,
+  show_value = TRUE,
   ...
 )
 }
@@ -49,12 +73,16 @@ Non-numeric columns will be ignored.}
 
 \item{ci_digits}{Integer; decimals for CI bounds (default 2).}
 
-\item{show_ci}{One of \code{"auto"}, \code{"yes"}, \code{"no"}.
-\itemize{
-\item \code{"auto"} (default): include CI columns only if the object has non-NA CIs.
-\item \code{"yes"}: always include CI columns (may contain NA).
-\item \code{"no"}: never include CI columns.
-}}
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Passed to \code{ggplot2::theme()}.}
 
@@ -71,6 +99,9 @@ Non-numeric columns will be ignored.}
 \item{value_text_size}{Text size for CCC values in the heatmap.}
 
 \item{ci_text_size}{Text size for confidence intervals.}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
 }
 \value{
 A symmetric numeric matrix with class \code{"ccc"} and attributes:

@@ -5,6 +5,52 @@ pcor_from_precision <- function(Theta) {
   S
 }
 
+strip_matrix_metadata <- function(x) {
+  attrs <- attributes(x)
+  keep <- intersect(names(attrs), c("dim", "dimnames"))
+  attributes(x) <- attrs[keep]
+  x
+}
+
+manual_partial_fisher_ci_R <- function(X, conf_level = 0.95) {
+  X <- as.matrix(X)
+  n <- nrow(X)
+  p <- ncol(X)
+  c_vars <- p - 2L
+  S <- stats::cov(X)
+  Theta <- solve(S)
+  pcor <- pcor_from_precision(Theta)
+
+  lwr <- matrix(NA_real_, p, p, dimnames = dimnames(pcor))
+  upr <- matrix(NA_real_, p, p, dimnames = dimnames(pcor))
+  diag(lwr) <- 1
+  diag(upr) <- 1
+
+  se <- 1 / sqrt(n - 3 - c_vars)
+  crit <- stats::qnorm(0.5 * (1 + conf_level))
+  eps <- sqrt(.Machine$double.eps)
+
+  for (j in seq_len(p - 1L)) {
+    for (i in (j + 1L):p) {
+      r <- pcor[j, i]
+      if (!is.finite(r) || abs(r) >= 1) next
+      z <- atanh(max(min(r, 1 - eps), -1 + eps))
+      lo <- tanh(z - crit * se)
+      hi <- tanh(z + crit * se)
+      lwr[j, i] <- lwr[i, j] <- lo
+      upr[j, i] <- upr[i, j] <- hi
+    }
+  }
+
+  list(
+    pcor = pcor,
+    lwr = lwr,
+    upr = upr,
+    n_complete = n,
+    n_conditioning = c_vars
+  )
+}
+
 oas_shrink_R <- function(X) {
   n <- nrow(X)
   p <- ncol(X)
@@ -138,6 +184,81 @@ test_that("pcorr exposes shrinkage metadata without cov/precision", {
   expect_null(samp$p_value)
 })
 
+test_that("pcorr default CI behaviour remains estimate-only", {
+  set.seed(334)
+  X <- matrix(rnorm(120), nrow = 30, ncol = 4)
+
+  fit <- pcorr(X, method = "sample")
+
+  expect_null(fit$ci)
+  expect_null(attr(fit, "ci", exact = TRUE))
+  expect_null(attr(fit, "conf.level", exact = TRUE))
+  expect_true(is.list(fit$diagnostics))
+})
+
+test_that("pcorr Fisher-z CI matches manual partial-correlation calculation", {
+  set.seed(335)
+  X <- matrix(rnorm(240), nrow = 60, ncol = 4)
+  colnames(X) <- paste0("V", 1:4)
+
+  fit <- pcorr(X, method = "sample", ci = TRUE, return_p_value = TRUE)
+  ref <- manual_partial_fisher_ci_R(X, conf_level = 0.95)
+  ci <- attr(fit, "ci", exact = TRUE)
+
+  expect_true(is.list(ci))
+  expect_identical(ci$ci.method, "fisher_z_partial")
+  expect_equal(ci$conf.level, 0.95)
+  expect_equal(
+    strip_matrix_metadata(fit$pcor),
+    strip_matrix_metadata(ref$pcor),
+    tolerance = 1e-10
+  )
+  expect_equal(ci$lwr.ci, ref$lwr, tolerance = 1e-10)
+  expect_equal(ci$upr.ci, ref$upr, tolerance = 1e-10)
+  expect_identical(unique(as.integer(fit$diagnostics$n_complete)), as.integer(ref$n_complete))
+  expect_identical(unique(as.integer(fit$diagnostics$n_conditioning[upper.tri(fit$diagnostics$n_conditioning)])), as.integer(ref$n_conditioning))
+  expect_true(is.matrix(fit$p_value))
+})
+
+test_that("pcorr custom conf_level changes CI width", {
+  set.seed(336)
+  X <- matrix(rnorm(320), nrow = 80, ncol = 4)
+  colnames(X) <- paste0("V", 1:4)
+
+  fit90 <- pcorr(X, method = "sample", ci = TRUE, conf_level = 0.90)
+  fit99 <- pcorr(X, method = "sample", ci = TRUE, conf_level = 0.99)
+
+  ci90 <- attr(fit90, "ci", exact = TRUE)
+  ci99 <- attr(fit99, "ci", exact = TRUE)
+  width90 <- ci90$upr.ci["V1", "V2"] - ci90$lwr.ci["V1", "V2"]
+  width99 <- ci99$upr.ci["V1", "V2"] - ci99$lwr.ci["V1", "V2"]
+
+  expect_equal(attr(fit90, "conf.level", exact = TRUE), 0.90)
+  expect_equal(attr(fit99, "conf.level", exact = TRUE), 0.99)
+  expect_true(width99 > width90)
+})
+
+test_that("pcorr CI integrates with the existing summary contract", {
+  set.seed(337)
+  X <- matrix(rnorm(240), nrow = 60, ncol = 4)
+  colnames(X) <- paste0("V", 1:4)
+
+  fit <- pcorr(X, method = "sample", ci = TRUE)
+  sm <- summary(fit)
+  txt <- capture.output(print(sm, show_ci = "yes"))
+
+  expect_s3_class(sm, "summary_partial_corr")
+  expect_s3_class(sm, "data.frame")
+  expect_true(isTRUE(attr(sm, "has_ci")))
+  expect_true(all(c("estimate", "lwr", "upr") %in% names(sm)))
+  expect_match(paste(txt, collapse = "\n"), "Partial correlation summary")
+  expect_match(paste(txt, collapse = "\n"), "ci_method")
+  expect_match(paste(txt, collapse = "\n"), "ci_width")
+  expect_match(paste(txt, collapse = "\n"), "Strongest pairs by \\|estimate\\|")
+  expect_true(any(grepl("\\blwr\\b", txt)))
+  expect_true(any(grepl("\\bupr\\b", txt)))
+})
+
 test_that("sample partial-correlation p-values match the reference example", {
   y.data <- data.frame(
     hl = c(7, 15, 19, 15, 21, 22, 57, 15, 20, 18),
@@ -172,7 +293,11 @@ test_that("sample partial-correlation p-values match the reference example", {
     dimnames = list(vars, vars)
   )
 
-  expect_equal(ours$pcor, expected_pcor, tolerance = 1e-7)
+  expect_equal(
+    strip_matrix_metadata(ours$pcor),
+    strip_matrix_metadata(expected_pcor),
+    tolerance = 1e-7
+  )
   expect_equal(ours$p_value, expected_p_value, tolerance = 1e-8)
   expect_equal(unname(diag(ours$p_value)), rep(0, ncol(y.data)))
 })
@@ -190,6 +315,48 @@ test_that("pcorr p-values are restricted to the classical sample setting", {
     pcorr(X_wide, method = "sample", return_p_value = TRUE),
     "requires .*n > p"
   )
+})
+
+test_that("pcorr CI is restricted to the classical sample setting", {
+  X <- matrix(rnorm(80), nrow = 20, ncol = 4)
+
+  expect_error(
+    pcorr(X, method = "ridge", ci = TRUE),
+    "available only for the classical .*method = \"sample\""
+  )
+  expect_error(
+    pcorr(X, method = "oas", ci = TRUE),
+    "available only for the classical .*method = \"sample\""
+  )
+  expect_error(
+    pcorr(X, method = "glasso", ci = TRUE),
+    "available only for the classical .*method = \"sample\""
+  )
+})
+
+test_that("pcorr CI requires positive Fisher-z residual degrees of freedom", {
+  X <- matrix(rnorm(20), nrow = 5, ncol = 4)
+
+  expect_error(
+    pcorr(X, method = "sample", ci = TRUE),
+    "requires .*n > p \\+ 1"
+  )
+})
+
+test_that("pcorr CI warns and returns NA bounds when the sample covariance needs jitter", {
+  x1 <- 1:20
+  x2 <- x1
+  x3 <- rep(c(0, 1), each = 10)
+  X <- cbind(x1 = x1, x2 = x2, x3 = x3)
+
+  expect_warning(
+    fit <- pcorr(X, method = "sample", ci = TRUE),
+    class = "matrixCorr_ci_warning"
+  )
+
+  ci <- attr(fit, "ci", exact = TRUE)
+  expect_true(all(is.na(ci$lwr.ci[upper.tri(ci$lwr.ci)])))
+  expect_true(all(is.na(ci$upr.ci[upper.tri(ci$upr.ci)])))
 })
 
 test_that("sample partial correlation is close to truth in a structured MVN model", {
@@ -237,7 +404,11 @@ test_that("sample method equals the base-R precision construction", {
   Theta <- solve(S_unb)
   ref <- pcor_from_precision(Theta)
 
-  expect_equal(ours$pcor, ref, tolerance = 1e-10)
+  expect_equal(
+    strip_matrix_metadata(ours$pcor),
+    strip_matrix_metadata(ref),
+    tolerance = 1e-10
+  )
   expect_true(isSymmetric(ours$pcor))
   expect_equal(as.numeric(diag(ours$pcor)), rep(1, p))
 })
@@ -258,7 +429,11 @@ test_that("ridge method equals the base-R ridge construction", {
   Theta <- solve(S_unb)
   ref <- pcor_from_precision(Theta)
 
-  expect_equal(ours$pcor, ref, tolerance = 1e-10)
+  expect_equal(
+    strip_matrix_metadata(ours$pcor),
+    strip_matrix_metadata(ref),
+    tolerance = 1e-10
+  )
   I <- diag(p)
   dimnames(I) <- dimnames(S_unb)
   expect_equal(S_unb %*% Theta, I, tolerance = 1e-8)
@@ -278,7 +453,11 @@ test_that("OAS method matches an R implementation of the same formula", {
   Theta <- solve(Sigma)
   ref <- pcor_from_precision(Theta)
 
-  expect_equal(ours$pcor, ref, tolerance = 1e-10)
+  expect_equal(
+    strip_matrix_metadata(ours$pcor),
+    strip_matrix_metadata(ref),
+    tolerance = 1e-10
+  )
   expect_true(isSymmetric(ours$pcor))
   expect_equal(as.numeric(diag(ours$pcor)), rep(1, p))
 })
@@ -298,7 +477,11 @@ test_that("glasso method matches fixed graphical-lasso reference values", {
 
   expect_equal(ours$precision, ref$Theta, tolerance = 2e-4)
   expect_equal(ours$cov, ref$Sigma, tolerance = 2e-4)
-  expect_equal(ours$pcor, ref_pcor, tolerance = 2e-4)
+  expect_equal(
+    strip_matrix_metadata(ours$pcor),
+    strip_matrix_metadata(ref_pcor),
+    tolerance = 2e-4
+  )
   expect_true(isSymmetric(ours$pcor, tol = 1e-12))
   expect_equal(as.numeric(diag(ours$pcor)), rep(1, p), tolerance = 1e-12)
 })

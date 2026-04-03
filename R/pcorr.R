@@ -1,26 +1,12 @@
 #' @title Partial correlation matrix (sample / ridge / OAS / graphical lasso)
 #'
 #' @description
-#' Computes the Gaussian partial correlation matrix from a numeric data frame
-#' or matrix. The covariance matrix can be estimated using:
-#' \itemize{
-#'   \item \strong{Unbiased sample covariance}: the standard empirical
-#'   covariance estimator.
-#'   \item \strong{Ridge-regularised covariance}: adds a positive ridge
-#'   penalty to improve stability when the covariance matrix is near-singular.
-#'   \item \strong{OAS shrinkage to a scaled identity}: recommended when
-#'   \eqn{p \gg n}, as it reduces estimation error by shrinking towards a
-#'   scaled identity matrix.
-#'   \item \strong{Graphical lasso}: estimates a sparse precision matrix using
-#'   an \eqn{\ell_1} penalty on off-diagonal precision entries.
-#' }
-#'
-#' The method uses a high-performance 'C++' backend.
-#'
-#' This help page also documents the associated S3 methods.
-#' \code{print.partial_corr()} prints a \code{pcorr()} result directly,
-#' whereas \code{print.summary_partial_corr()} prints the compact object
-#' returned by \code{summary()}.
+#' Computes Gaussian partial correlations for the numeric columns of a matrix
+#' or data frame using a high-performance 'C++' backend. Covariance estimation
+#' is available via the classical sample estimator, ridge regularisation, OAS
+#' shrinkage, or graphical lasso. Optional p-values and Fisher-z confidence
+#' intervals are available for the classical sample estimator in the ordinary
+#' low-dimensional setting.
 #'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #'   Non-numeric columns are ignored.
@@ -38,6 +24,12 @@
 #'   two-sided p-values for testing whether each sample partial correlation is
 #'   zero. This option is available only for \code{method = "sample"} and
 #'   requires \eqn{n > p}. Default to \code{FALSE}.
+#' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach Fisher-z
+#'   confidence intervals for the off-diagonal partial correlations. This
+#'   option is available only for the classical \code{method = "sample"}
+#'   estimator in the ordinary low-dimensional setting.
+#' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
+#'   \code{0.95}.
 #'
 #' @return An object of class \code{"partial_corr"} (a list) with elements:
 #'   \itemize{
@@ -46,6 +38,10 @@
 #'     \item \code{precision} (if requested): precision matrix \eqn{\Theta}.
 #'     \item \code{p_value} (if requested): matrix of two-sided p-values for
 #'     the sample partial correlations.
+#'     \item \code{ci} (if requested): a list with elements \code{est},
+#'     \code{lwr.ci}, \code{upr.ci}, \code{conf.level}, and \code{ci.method}.
+#'     \item \code{diagnostics}: metadata used for inference, including the
+#'     effective complete-case sample size and number of conditioned variables.
 #'     \item \code{method}: the estimator used (\code{"oas"}, \code{"ridge"},
 #'     \code{"sample"}, or \code{"glasso"}).
 #'     \item \code{lambda}: ridge or graphical-lasso penalty
@@ -107,6 +103,22 @@
 #' \code{method = "sample"}, where they match the standard full-model partial
 #' correlation test.
 #'
+#' When \code{ci = TRUE}, the function reports Fisher-\eqn{z} confidence
+#' intervals for the sample partial correlations. For a partial correlation
+#' \eqn{r_{xy \cdot Z}} conditioning on \eqn{c} variables, the transformed
+#' statistic is \eqn{z = \operatorname{atanh}(r_{xy \cdot Z})} with standard
+#' error
+#' \deqn{\operatorname{SE}(z) = \frac{1}{\sqrt{n - 3 - c}},}
+#' where \eqn{n} is the effective complete-case sample size used for the
+#' estimate. The two-sided normal-theory interval is formed on the transformed
+#' scale using \code{conf_level} and then mapped back with \code{tanh()}. In
+#' the full matrix path implemented here, each off-diagonal entry conditions on
+#' all remaining variables, so \eqn{c = p - 2} and the classical CI requires
+#' \eqn{n > p + 1}. This inference is only supported for
+#' \code{method = "sample"} without positive-definiteness repair; in
+#' unsupported or numerically singular settings, CI bounds are returned as
+#' \code{NA} with an informative \pkg{cli} warning or the request is rejected.
+#'
 #' \strong{Interpretation.} For Gaussian data, \eqn{\mathrm{pcor}_{ij}} equals
 #' the correlation between residuals from regressing variable \eqn{i} and
 #' variable \eqn{j} on all the remaining variables; equivalently, it encodes
@@ -122,7 +134,7 @@
 #' well-conditioned \eqn{\Sigma}. Ridge adds a fixed \eqn{\lambda} on the
 #' diagonal, whereas OAS shrinks adaptively towards \eqn{\mu_I I_p} with a
 #' weight chosen to minimise (approximately) the Frobenius risk under a
-#' Gaussian model, often improving mean–square accuracy in high dimension.
+#' Gaussian model, often improving mean-square accuracy in high dimension.
 #'
 #' \strong{Why glasso?} Glasso is useful when the goal is not just to
 #' stabilise a covariance estimate, but to recover a manageable network of
@@ -284,7 +296,7 @@
 #' @references
 #' Ledoit, O., & Wolf, M. (2004).
 #' A well-conditioned estimator for large-dimensional covariance matrices.
-#' Journal of Multivariate Analysis, 88(2), 365–411.
+#' Journal of Multivariate Analysis, 88(2), 365-411.
 #'
 #' @references
 #' Schafer, J., & Strimmer, K. (2005).
@@ -295,12 +307,17 @@
 #' @export
 pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
                                 lambda = 1e-3, return_cov_precision = FALSE,
-                                return_p_value = FALSE) {
+                                return_p_value = FALSE, ci = FALSE,
+                                conf_level = 0.95) {
   method <- match.arg(method)
   lambda <- check_scalar_numeric(lambda, arg = "lambda", lower = 0, closed_lower = TRUE)
   lambda <- as.numeric(lambda)
   check_bool(return_cov_precision, arg = "return_cov_precision")
   check_bool(return_p_value, arg = "return_p_value")
+  check_bool(ci, arg = "ci")
+  if (isTRUE(ci)) {
+    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  }
 
   numeric_data <-
     if (is.matrix(data) && is.double(data)) {
@@ -318,6 +335,16 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   if (isTRUE(return_p_value) && nrow(numeric_data) <= ncol(numeric_data)) {
     cli::cli_abort(
       "{.arg return_p_value} requires {.code n > p} so that the sample partial-correlation test has positive degrees of freedom."
+    )
+  }
+  if (isTRUE(ci) && !identical(method, "sample")) {
+    cli::cli_abort(
+      "{.arg ci} is available only for the classical {.code method = \"sample\"} partial correlation."
+    )
+  }
+  if (isTRUE(ci) && nrow(numeric_data) <= (ncol(numeric_data) + 1L)) {
+    cli::cli_abort(
+      "{.arg ci} requires {.code n > p + 1} so that the Fisher-z partial-correlation interval has positive degrees of freedom."
     )
   }
 
@@ -340,10 +367,60 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     pcor <- res[[1]]; dimnames(pcor) <- dn; res <- list(pcor = pcor)
   }
 
+  diagnostics <- list(
+    n_complete = matrix(
+      as.integer(nrow(numeric_data)),
+      nrow = ncol(numeric_data),
+      ncol = ncol(numeric_data),
+      dimnames = dn
+    ),
+    n_conditioning = matrix(
+      as.integer(ncol(numeric_data) - 2L),
+      nrow = ncol(numeric_data),
+      ncol = ncol(numeric_data),
+      dimnames = dn
+    )
+  )
+  diag(diagnostics$n_conditioning) <- 0L
+  ci_attr <- NULL
+  if (isTRUE(ci)) {
+    ci_attr <- .mc_partial_corr_fisher_ci(
+      pcor = res$pcor,
+      n_complete = nrow(numeric_data),
+      n_conditioning = ncol(numeric_data) - 2L,
+      conf_level = conf_level,
+      jitter = res$jitter %||% NA_real_
+    )
+  }
+
   res$method <- method
   res$lambda <- if (method %in% c("ridge", "glasso")) lambda else NA_real_
   res$rho    <- if (identical(method, "oas"))   res$rho %||% NA_real_ else NA_real_
   res$jitter <- res$jitter %||% NA_real_
+  res$diagnostics <- diagnostics
+  if (!is.null(res$p_value)) {
+    res$inference <- list(
+      method = "partial_t_test",
+      p_value = res$p_value
+    )
+  }
+  if (!is.null(ci_attr)) {
+    res$ci <- ci_attr
+  }
+  attr(res$pcor, "diagnostics") <- diagnostics
+  if (!is.null(res$inference)) {
+    attr(res$pcor, "inference") <- res$inference
+    attr(res, "inference") <- res$inference
+  }
+  if (!is.null(ci_attr)) {
+    attr(res$pcor, "ci") <- ci_attr
+    attr(res$pcor, "conf.level") <- conf_level
+    attr(res$pcor, "ci.method") <- ci_attr$ci.method
+    attr(res, "ci") <- ci_attr
+    attr(res, "conf.level") <- conf_level
+    attr(res, "ci.method") <- ci_attr$ci.method
+  }
+  attr(res, "diagnostics") <- diagnostics
   res <- structure(res, class = c("partial_corr", "list"))
   attr(res, "method") <- method
   res
@@ -353,17 +430,168 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
 # small helper for older R versions without %||%
 `%||%` <- function(a, b) if (!is.null(a)) a else b
 
+.mc_partial_corr_ci_attr <- function(x) {
+  attr(x, "ci", exact = TRUE)
+}
+
+.mc_partial_corr_pairwise_summary <- function(object,
+                                              digits = 4,
+                                              ci_digits = 3,
+                                              show_ci = NULL) {
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
+  check_inherits(object, "partial_corr")
+
+  est <- as.matrix(object$pcor)
+  rn <- rownames(est)
+  cn <- colnames(est)
+  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
+  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
+
+  ci <- attr(object, "ci", exact = TRUE)
+  diag_attr <- attr(object, "diagnostics", exact = TRUE)
+  p_value <- object$p_value %||% NULL
+  include_ci <- identical(show_ci, "yes") && !is.null(ci)
+
+  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
+  k <- 0L
+  for (i in seq_len(nrow(est) - 1L)) {
+    for (j in (i + 1L):ncol(est)) {
+      k <- k + 1L
+      rec <- list(
+        var1 = rn[i],
+        var2 = cn[j],
+        estimate = round(est[i, j], digits)
+      )
+      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
+        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
+      }
+      if (!is.null(p_value) && is.matrix(p_value) && identical(dim(p_value), dim(est))) {
+        rec$p_value <- p_value[i, j]
+      }
+      if (include_ci) {
+        rec$lwr <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) {
+          round(ci$lwr.ci[i, j], ci_digits)
+        } else {
+          NA_real_
+        }
+        rec$upr <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) {
+          round(ci$upr.ci[i, j], ci_digits)
+        } else {
+          NA_real_
+        }
+      }
+      rows[[k]] <- rec
+    }
+  }
+
+  df <- do.call(rbind.data.frame, rows)
+  rownames(df) <- NULL
+  if ("estimate" %in% names(df)) df$estimate <- as.numeric(df$estimate)
+  if ("lwr" %in% names(df)) df$lwr <- as.numeric(df$lwr)
+  if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
+  if ("p_value" %in% names(df)) df$p_value <- as.numeric(df$p_value)
+  if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
+
+  out <- structure(df, class = c("summary_partial_corr", "data.frame"))
+  attr(out, "overview") <- .mc_summary_corr_matrix(object$pcor)
+  attr(out, "has_ci") <- include_ci
+  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
+  attr(out, "digits") <- digits
+  attr(out, "ci_digits") <- ci_digits
+  out
+}
+
+.mc_partial_corr_fisher_ci <- function(pcor,
+                                       n_complete,
+                                       n_conditioning,
+                                       conf_level = 0.95,
+                                       jitter = NA_real_) {
+  pcor <- as.matrix(pcor)
+  p <- ncol(pcor)
+  dn <- dimnames(pcor)
+  lwr <- matrix(NA_real_, p, p, dimnames = dn)
+  upr <- matrix(NA_real_, p, p, dimnames = dn)
+  diag(lwr) <- 1
+  diag(upr) <- 1
+
+  out <- list(
+    est = unclass(pcor),
+    lwr.ci = lwr,
+    upr.ci = upr,
+    conf.level = conf_level,
+    ci.method = "fisher_z_partial"
+  )
+
+  if (!is.na(jitter) && is.finite(jitter) && jitter > 0) {
+    cli::cli_warn(
+      c(
+        "Partial-correlation confidence intervals are unavailable for this fit.",
+        "i" = "The sample covariance required positive-definiteness repair (`jitter > 0`), so the classical Fisher-z partial-correlation interval is not identified.",
+        "i" = "Returning {.code NA} confidence bounds."
+      ),
+      class = c("matrixCorr_warning", "matrixCorr_ci_warning")
+    )
+    return(out)
+  }
+
+  se_denom <- as.numeric(n_complete - 3L - n_conditioning)
+  if (!is.finite(se_denom) || se_denom <= 0) {
+    cli::cli_abort(
+      "{.arg ci} requires positive Fisher-z residual degrees of freedom; got {.code n_complete - 3 - c = {se_denom}}."
+    )
+  }
+
+  crit <- stats::qnorm(0.5 * (1 + conf_level))
+  se <- 1 / sqrt(se_denom)
+  eps <- sqrt(.Machine$double.eps)
+  boundary_pairs <- 0L
+
+  for (j in seq_len(p - 1L)) {
+    for (i in (j + 1L):p) {
+      r <- pcor[j, i]
+      if (!is.finite(r)) next
+      if (abs(r) >= 1) {
+        boundary_pairs <- boundary_pairs + 1L
+        next
+      }
+      r_safe <- max(min(r, 1 - eps), -1 + eps)
+      z <- atanh(r_safe)
+      lo <- tanh(z - crit * se)
+      hi <- tanh(z + crit * se)
+      lwr[j, i] <- lwr[i, j] <- max(-1, lo)
+      upr[j, i] <- upr[i, j] <- min(1, hi)
+    }
+  }
+
+  out$lwr.ci <- lwr
+  out$upr.ci <- upr
+  if (boundary_pairs > 0L) {
+    cli::cli_warn(
+      "{boundary_pairs} partial-correlation pair{?s} were at the boundary +/-1; returning {.code NA} confidence bounds for those pair{?s}.",
+      boundary_pairs = boundary_pairs,
+      class = c("matrixCorr_warning", "matrixCorr_ci_warning")
+    )
+  }
+  out
+}
+
 #' @rdname pcorr
 #' @title Print method for \code{partial_corr}
-#' @description Prints only the partial correlation matrix (no attribute spam),
-#'   with an optional one-line header stating the estimator used.
 #'
 #' @param x An object of class \code{partial_corr}.
 #' @param digits Integer; number of decimal places for display (default 3).
 #' @param show_method Logical; print a one-line header with \code{method}
 #'   (and \code{lambda}/\code{rho} if available). Default \code{TRUE}.
-#' @param max_rows,max_cols Optional integer limits for display; if provided,
-#'   the printed matrix is truncated with a note about omitted rows/cols.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Further arguments passed to \code{print.matrix()}.
 #' @return Invisibly returns \code{x}.
 #' @method print partial_corr
@@ -373,8 +601,11 @@ print.partial_corr <- function(
     x,
     digits = 3,
     show_method = TRUE,
-    max_rows = NULL,
-    max_cols = NULL,
+    n = NULL,
+    topn = NULL,
+    max_vars = NULL,
+    width = NULL,
+    show_ci = NULL,
     ...
 ) {
   check_inherits(x, "partial_corr")
@@ -407,27 +638,20 @@ print.partial_corr <- function(
     lines <- c(lines, "Partial correlation matrix:")
   }
 
-  # keep only dim + dimnames attributes to print like a plain matrix
-  attributes(M) <- attributes(M)[c("dim", "dimnames")]
-
-  if (!is.null(max_rows) || !is.null(max_cols)) {
-    nr <- nrow(M); nc <- ncol(M)
-    r  <- if (is.null(max_rows)) nr else min(nr, max_rows)
-    c  <- if (is.null(max_cols)) nc else min(nc, max_cols)
-    mm <- round(M[seq_len(r), seq_len(c), drop = FALSE], digits)
-    if (nr > r || nc > c) {
-      lines <- c(lines, sprintf("omitted: %d rows, %d cols", nr - r, nc - c))
-    }
-    body <- capture.output(print(mm, ...))
-    lines <- c(lines, body)
-  } else {
-    body <- capture.output(print(round(M, digits), ...))
-    lines <- c(lines, body)
-  }
-
-  if (length(lines)) {
-    writeLines(lines)
-  }
+  if (length(lines)) writeLines(lines)
+  cat("\n")
+  .mc_print_corr_matrix(
+    x,
+    header = "Partial correlation matrix",
+    digits = digits,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    mat = M,
+    ...
+  )
 
   invisible(x)
 }
@@ -436,20 +660,27 @@ print.partial_corr <- function(
 #' @method summary partial_corr
 #' @title Summary Method for \code{partial_corr} Objects
 #'
-#' @description
-#' Prints the same compact matrix summary used by the other correlation
-#' methods, based on the partial-correlation matrix stored in
-#' \code{object$pcor}. This method is used for the object returned by
-#' \code{summary(pcorr(...))}, not for the direct \code{pcorr()} result.
-#'
 #' @param object An object of class \code{partial_corr}.
 #' @param ... Unused.
 #'
 #' @return A compact summary object of class \code{summary_partial_corr}.
 #' @export
-summary.partial_corr <- function(object, ...) {
+summary.partial_corr <- function(object, n = NULL, topn = NULL,
+                                 max_vars = NULL, width = NULL,
+                                 show_ci = NULL, ...) {
   check_inherits(object, "partial_corr")
-  out <- .mc_summary_corr_matrix(object$pcor)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
+  if (!is.null(.mc_partial_corr_ci_attr(object))) {
+    return(.mc_partial_corr_pairwise_summary(
+      object,
+      show_ci = show_ci
+    ))
+  }
+  out <- .mc_summary_corr_matrix(object$pcor, topn = topn)
   out$class <- "partial_corr"
   out$method <- object$method %||% attr(object, "method")
   out$lambda <- object$lambda %||% NA_real_
@@ -463,19 +694,40 @@ summary.partial_corr <- function(object, ...) {
 #' @rdname pcorr
 #' @method print summary_partial_corr
 #' @export
-print.summary_partial_corr <- function(x, digits = 4, ...) {
-  print.summary_corr_matrix(x, digits = digits, ...)
+print.summary_partial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
+                                       max_vars = NULL, width = NULL,
+                                       show_ci = NULL, ...) {
+  if (inherits(x, "data.frame")) {
+    .mc_print_pairwise_summary_digest(
+      x,
+      title = "Partial correlation summary",
+      digits = .mc_coalesce(digits, 4),
+      n = n,
+      topn = topn,
+      max_vars = max_vars,
+      width = width,
+      show_ci = show_ci,
+      ci_method = "fisher_z_partial",
+      ...
+    )
+    return(invisible(x))
+  }
+  print.summary_corr_matrix(
+    x,
+    digits = digits,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    ...
+  )
 }
 
 
 #' @rdname pcorr
 #' @method plot partial_corr
 #' @title Plot Method for \code{partial_corr} Objects
-#'
-#' @description
-#' Produces a \pkg{ggplot2}-based heatmap of the partial correlation matrix
-#' stored in \code{x$pcor}. Optionally masks the diagonal and/or reorders
-#' variables via hierarchical clustering of \eqn{1 - |pcor|}.
 #'
 #' @param x An object of class \code{partial_corr}.
 #' @param title Plot title. By default, constructed from the estimator in
@@ -486,6 +738,8 @@ print.summary_partial_corr <- function(x, digits = 4, ...) {
 #' \code{"steelblue1"}.
 #' @param mid_color Colour for zero. Default \code{"white"}.
 #' @param value_text_size Font size for cell labels. Default \code{4}.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @param mask_diag Logical; if \code{TRUE}, the diagonal is masked
 #' (set to \code{NA}) and not labelled. Default \code{TRUE}.
 #' @param reorder Logical; if \code{TRUE}, variables are reordered by
@@ -504,11 +758,13 @@ plot.partial_corr <- function(
     high_color = "steelblue1",
     mid_color  = "white",
     value_text_size = 4,
+    show_value = TRUE,
     mask_diag = TRUE,
     reorder   = FALSE,
     ...
 ) {
   check_inherits(x, "partial_corr")
+  check_bool(show_value, arg = "show_value")
   check_bool(mask_diag, arg = "mask_diag")
   check_bool(reorder,   arg = "reorder")
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -592,7 +848,7 @@ plot.partial_corr <- function(
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
 
-  if (!is.null(value_text_size) && is.finite(value_text_size)) {
+  if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
     p <- p + ggplot2::geom_text(
       ggplot2::aes(label = ifelse(is.na(PCor), "", sprintf("%.2f", PCor))),
       size = value_text_size, colour = "black"

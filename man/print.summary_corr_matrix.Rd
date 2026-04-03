@@ -4,12 +4,32 @@
 \alias{print.summary_corr_matrix}
 \title{Summary Method for Correlation Matrices}
 \usage{
-\method{print}{summary_corr_matrix}(x, digits = 4, ...)
+\method{print}{summary_corr_matrix}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{x}{An object of class \code{summary_corr_matrix}.}
 
 \item{digits}{Integer; number of decimal places to print.}
+
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Unused.}
 }

@@ -988,10 +988,21 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 #' @param x A \code{"ba_repeated"} object.
 #' @param digits Number of digits for estimates (default 3).
 #' @param ci_digits Number of digits for CI bounds (default 3).
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to `getOption("width")`.
+#' @param show_ci One of `"yes"` or `"no"`.
 #' @param ... Unused.
 #' @export
-print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
+print.ba_repeated <- function(x, digits = 3, ci_digits = 3,
+                              n = NULL, topn = NULL,
+                              max_vars = NULL, width = NULL,
+                              show_ci = NULL, ...) {
   check_inherits(x, "ba_repeated")
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "print")
+  display_width <- width
   n   <- as.integer(x$based.on)
   loa_multiplier <- as.numeric(x$loa_multiplier)
   cl  <- suppressWarnings(as.numeric(attr(x, "conf.level")))
@@ -1001,16 +1012,24 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
   loaL  <- as.numeric(x$lower.limit)
   loaU  <- as.numeric(x$upper.limit)
   sd_d  <- as.numeric(x$critical.diff) / loa_multiplier
-  width <- loaU - loaL
+  loa_width <- loaU - loaL
 
   cil <- function(nm) as.numeric(x$CI.lines[[nm]])
   bias_l <- cil("mean.diff.ci.lower"); bias_u <- cil("mean.diff.ci.upper")
   lo_l   <- cil("lower.limit.ci.lower"); lo_u <- cil("lower.limit.ci.upper")
   hi_l   <- cil("upper.limit.ci.lower"); hi_u <- cil("upper.limit.ci.upper")
 
-  head <- sprintf("Repeated-measures Bland-Altman (pairs = %d) - LoA = mean \u00B1 %.3g | SD%s\n\n",
-                  n, loa_multiplier, if (is.finite(cl)) sprintf(", %g%% CI", 100*cl) else "")
-  cat(head)
+  .mc_print_named_digest(
+    c(
+      pairs = n,
+      loa_rule = sprintf("mean +/- %.3g * SD", loa_multiplier),
+      if (identical(show_ci, "yes") && is.finite(cl)) c(ci = sprintf("%g%%", 100 * cl)),
+      sd_single_pair = formatC(sd_d, format = "f", digits = digits),
+      width = formatC(loa_width, format = "f", digits = digits)
+    ),
+    header = "Repeated-measures Bland-Altman preview:"
+  )
+  cat("\n")
 
   df <- data.frame(
     quantity = c("Mean difference", "Lower LoA", "Upper LoA"),
@@ -1020,13 +1039,25 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
     check.names = FALSE
   )
   df$estimate <- formatC(df$estimate, format = "f", digits = digits)
-  df$lwr      <- formatC(df$lwr,      format = "f", digits = ci_digits)
-  df$upr      <- formatC(df$upr,      format = "f", digits = ci_digits)
-  print(df, row.names = FALSE, right = FALSE)
+  if (identical(show_ci, "yes")) {
+    df$lwr <- formatC(df$lwr, format = "f", digits = ci_digits)
+    df$upr <- formatC(df$upr, format = "f", digits = ci_digits)
+  } else {
+    df$lwr <- NULL
+    df$upr <- NULL
+  }
+  .mc_print_preview_table(
+    df,
+    n = .mc_coalesce(n, .mc_display_option("print_max_rows", 20L)),
+    topn = .mc_coalesce(topn, .mc_display_option("print_topn", 5L)),
+    max_vars = .mc_coalesce(max_vars, .mc_display_option("print_max_vars", NULL)),
+    width = .mc_coalesce(display_width, getOption("width", 80L)),
+    context = "print",
+    full_hint = TRUE,
+    summary_hint = TRUE,
+    ...
+  )
 
-  cat(sprintf("\nSD(single-pair differences): %s   LoA width: %s",
-              formatC(sd_d, format = "f", digits = digits),
-              formatC(width, format = "f", digits = digits)))
   if (isTRUE(x$include_slope) && is.finite(x$beta_slope)) {
     cat(sprintf("\nProportional bias slope (vs pair mean): %s\n",
                 formatC(x$beta_slope, format = "f", digits = digits)))
@@ -1047,41 +1078,67 @@ print.ba_repeated <- function(x, digits = 3, ci_digits = 3, ...) {
 print.ba_repeated_matrix <- function(x,
                                      digits = 3,
                                      ci_digits = 3,
+                                     n = NULL,
+                                     topn = NULL,
+                                     max_vars = NULL,
+                                     width = NULL,
+                                     show_ci = NULL,
                                      style = c("pairs","matrices"),
                                      ...) {
   check_inherits(x, "ba_repeated_matrix")
   style <- match.arg(style)
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "print")
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   has_ci <- all(c("mean_ci_low","mean_ci_high",
                   "loa_lower_ci_low","loa_lower_ci_high",
                   "loa_upper_ci_low","loa_upper_ci_high") %in% names(x))
 
   if (style == "matrices") {
-    if (is.finite(cl)) cat(sprintf("Bland-Altman (pairwise matrices), %g%% CI\n\n", 100*cl))
-    else               cat("Bland-Altman (pairwise matrices)\n\n")
-    mats <- list(
-      bias    = x$bias,
-      sd_loa  = x$sd_loa,
-      loa_low = x$loa_lower,
-      loa_up  = x$loa_upper,
-      width   = x$width,
-      n       = x$n
+    .mc_print_named_digest(
+      c(
+        methods = nrow(x$bias),
+        if (identical(show_ci, "yes") && is.finite(cl)) c(ci = sprintf("%g%%", 100 * cl)),
+        components = "bias, sd_loa, loa_low, loa_up, width, n"
+      ),
+      header = "Repeated-measures Bland-Altman matrix preview:"
     )
-    for (nm in names(mats)) {
-      cat("\n", nm, ":\n", sep = "")
-      print(round(mats[[nm]], if (nm == "n") 0 else digits))
-    }
+    cat("\nPrimary component: bias\n\n")
+    .mc_print_preview_matrix(
+      x$bias,
+      digits = digits,
+      n = .mc_coalesce(n, .mc_display_option("print_max_rows", 20L)),
+      topn = .mc_coalesce(topn, .mc_display_option("print_topn", 5L)),
+      max_vars = .mc_coalesce(max_vars, .mc_display_option("print_max_vars", NULL)),
+      width = .mc_coalesce(width, getOption("width", 80L)),
+      context = "print",
+      full_hint = TRUE,
+      summary_hint = TRUE,
+      ...
+    )
     return(invisible(x))
   }
 
   sm <- summary(x, digits = digits, ci_digits = ci_digits)
   cols <- c("method1", "method2", "bias", "sd_loa", "loa_low", "loa_up", "width", "n")
   if ("slope" %in% names(sm)) cols <- c(cols, "slope")
+  if (identical(show_ci, "yes") && has_ci) {
+    cols <- c(cols, "bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+  }
   df <- as.data.frame(sm)[, cols[cols %in% names(sm)], drop = FALSE]
 
-  if (is.finite(cl)) cat(sprintf("Bland-Altman (row \u2212 column), %g%% CI\n\n", 100*cl))
-  else               cat("Bland-Altman (row \u2212 column)\n\n")
-  print.data.frame(df, row.names = FALSE, right = FALSE)
+  header <- .mc_header_with_ci("Bland-Altman (row \u2212 column)", cl, if (has_ci) show_ci else "no")
+  .mc_print_summary_table(
+    df,
+    header = header,
+    digits = digits,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    print_overview = FALSE,
+    ...
+  )
   invisible(x)
 }
 
@@ -1205,56 +1262,103 @@ summary.ba_repeated_matrix <- function(object,
 }
 
 .print_ba_summary_blocks <- function(x, ...) {
-  sections <- list(
-    list(
-      title = "Agreement estimates",
-      cols = c("method1", "method2", "n", "bias", "sd_loa",
-               "loa_low", "loa_up", "width", "slope")
+  .mc_print_sectioned_table(
+    x,
+    sections = list(
+      list(
+        title = "Agreement estimates",
+        cols = c("method1", "method2", "n", "bias", "sd_loa",
+                 "loa_low", "loa_up", "width", "slope")
+      ),
+      list(
+        title = "Confidence intervals",
+        cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+      ),
+      list(
+        title = "Model details",
+        cols = c("sigma2_subject", "sigma2_resid",
+                 "residual_model", "ar1_rho", "ar1_estimated")
+      )
     ),
-    list(
-      title = "Confidence intervals",
-      cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
-    ),
-    list(
-      title = "Model details",
-      cols = c("sigma2_subject", "sigma2_resid",
-               "residual_model",
-               "ar1_rho", "ar1_estimated")
-    )
+    header = NULL,
+    ...
   )
-
-  printed <- 0L
-  for (section in sections) {
-    cols <- section$cols[section$cols %in% names(x)]
-    if (!length(cols)) next
-
-    if (printed > 0L) cat("\n")
-    cat(section$title, "\n\n", sep = "")
-    print.data.frame(x[cols], row.names = FALSE, right = FALSE, ...)
-    printed <- printed + 1L
-  }
-
-  invisible(NULL)
 }
 
 
 #' @method print summary.ba_repeated
 #' @export
-print.summary.ba_repeated <- function(x, ...) {
+print.summary.ba_repeated <- function(x, digits = NULL, n = NULL,
+                                      topn = NULL, max_vars = NULL,
+                                      width = NULL, show_ci = NULL, ...) {
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (is.finite(cl)) cat(sprintf("Bland-Altman (two methods), %g%% CI\n\n", 100*cl))
-  else               cat("Bland-Altman (two methods)\n\n")
-  .print_ba_summary_blocks(x, ...)
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "summary")
+  header <- .mc_header_with_ci("Bland-Altman (two methods)", cl, show_ci)
+  .mc_print_sectioned_table(
+    x,
+    sections = list(
+      list(
+        title = "Agreement estimates",
+        cols = c("method1", "method2", "n", "bias", "sd_loa",
+                 "loa_low", "loa_up", "width", "slope")
+      ),
+      list(
+        title = "Confidence intervals",
+        cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+      ),
+      list(
+        title = "Model details",
+        cols = c("sigma2_subject", "sigma2_resid",
+                 "residual_model", "ar1_rho", "ar1_estimated")
+      )
+    ),
+    header = header,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    print_overview = FALSE,
+    ...
+  )
   invisible(x)
 }
 
 #' @method print summary.ba_repeated_matrix
 #' @export
-print.summary.ba_repeated_matrix <- function(x, ...) {
+print.summary.ba_repeated_matrix <- function(x, digits = NULL, n = NULL,
+                                             topn = NULL, max_vars = NULL,
+                                             width = NULL, show_ci = NULL, ...) {
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (is.finite(cl)) cat(sprintf("Bland-Altman (pairwise), %g%% CI\n\n", 100*cl))
-  else               cat("Bland-Altman (pairwise)\n\n")
-  .print_ba_summary_blocks(x, ...)
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "summary")
+  header <- .mc_header_with_ci("Bland-Altman (pairwise)", cl, show_ci)
+  .mc_print_sectioned_table(
+    x,
+    sections = list(
+      list(
+        title = "Agreement estimates",
+        cols = c("method1", "method2", "n", "bias", "sd_loa",
+                 "loa_low", "loa_up", "width", "slope")
+      ),
+      list(
+        title = "Confidence intervals",
+        cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+      ),
+      list(
+        title = "Model details",
+        cols = c("sigma2_subject", "sigma2_resid",
+                 "residual_model", "ar1_rho", "ar1_estimated")
+      )
+    ),
+    header = header,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    print_overview = FALSE,
+    ...
+  )
   invisible(x)
 }
 
@@ -1307,6 +1411,9 @@ print.summary.ba_repeated_matrix <- function(x, ...) {
 #'   Default `TRUE`.
 #' @param ... Additional theme adjustments passed to `ggplot2::theme(...)`
 #'   (e.g., `plot.title.position = "plot"`, `axis.title.x = element_text(size=11)`).
+#' @param show_value Logical; included for a consistent plotting interface.
+#'   Repeated-measures Bland-Altman plots do not overlay numeric cell values,
+#'   so this argument currently has no effect.
 #' @importFrom graphics abline lines par rect plot
 #' @export
 plot.ba_repeated <- function(x,
@@ -1320,8 +1427,10 @@ plot.ba_repeated <- function(x,
                              smoother    = c("none", "loess", "lm"),
                              symmetrize_y = TRUE,
                              show_points = TRUE,
+                             show_value = TRUE,
                              ...) {
   check_inherits(x, "ba_repeated")
+  check_bool(show_value, arg = "show_value")
   smoother <- match.arg(smoother)
 
   # Prefer pre-computed points if present
@@ -1448,9 +1557,11 @@ plot.ba_repeated_matrix <- function(
     line_size = 0.7, shade_ci = TRUE, shade_alpha = 0.08,
     smoother = c("none","loess","lm"),
     show_points = TRUE,
+    show_value = TRUE,
     ...
 ) {
   check_inherits(x, "ba_repeated_matrix")
+  check_bool(show_value, arg = "show_value")
   facet_scales <- match.arg(facet_scales)
   smoother <- match.arg(smoother)
   methods <- x$methods

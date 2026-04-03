@@ -9,7 +9,16 @@
 \usage{
 tetrachoric(data, y = NULL, correct = 0.5, check_na = TRUE)
 
-\method{print}{tetrachoric_corr}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{tetrachoric_corr}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{tetrachoric_corr}(
   x,
@@ -18,10 +27,19 @@ tetrachoric(data, y = NULL, correct = 0.5, check_na = TRUE)
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  show_value = TRUE,
   ...
 )
 
-\method{summary}{tetrachoric_corr}(object, ...)
+\method{summary}{tetrachoric_corr}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{A binary vector, matrix, or data frame. In matrix/data-frame mode,
@@ -40,9 +58,16 @@ are rejected. If \code{FALSE}, pairwise complete cases are used.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
-\item{max_rows}{Optional integer; maximum number of rows to display.}
+\item{n}{Optional row threshold for compact preview output.}
 
-\item{max_cols}{Optional integer; maximum number of columns to display.}
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to \code{print()}.}
 
@@ -55,6 +80,9 @@ are rejected. If \code{FALSE}, pairwise complete cases are used.}
 \item{mid_color}{Color for zero correlation.}
 
 \item{value_text_size}{Font size used in tile labels.}
+
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles.}
 
 \item{object}{An object of class \code{tetrachoric_corr}.}
 }

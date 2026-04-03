@@ -7,11 +7,37 @@
 \alias{plot.rmcorr}
 \title{Methods for Pairwise rmcorr Objects}
 \usage{
-\method{print}{rmcorr}(x, digits = 4, ...)
+\method{print}{rmcorr}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
-\method{summary}{rmcorr}(object, ...)
+\method{summary}{rmcorr}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
-\method{print}{summary_rmcorr}(x, digits = 4, ...)
+\method{print}{summary_rmcorr}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{rmcorr}(
   x,
@@ -19,6 +45,7 @@
   point_alpha = 0.8,
   line_width = 0.8,
   show_legend = FALSE,
+  show_value = TRUE,
   ...
 )
 }
@@ -26,6 +53,17 @@
 \item{x}{An object of class \code{"rmcorr"} or \code{"summary_rmcorr"}.}
 
 \item{digits}{Number of significant digits to print.}
+
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to downstream methods. For
 \code{plot.rmcorr()}, these are passed to \code{ggplot2::theme()}.}
@@ -41,6 +79,10 @@ title containing the estimated repeated-measures correlation.}
 
 \item{show_legend}{Logical; if \code{TRUE}, shows the subject legend in the
 pairwise scatterplot.}
+
+\item{show_value}{Logical; included for a consistent plotting interface.
+Pairwise repeated-measures plots do not overlay numeric cell values, so this
+argument currently has no effect.}
 }
 \description{
 Print, summarize, and plot methods for pairwise

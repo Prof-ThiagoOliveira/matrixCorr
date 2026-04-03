@@ -263,7 +263,32 @@ test_that("latent correlation print, plot, and summary methods work", {
   sum_out <- capture.output(print(sm, digits = 3))
   expect_true(any(grepl("Latent correlation summary", sum_out)))
   expect_true(any(grepl("thresholds", sum_out)))
-  expect_true(any(grepl("zero_cells", sum_out)))
+  expect_false(any(grepl("zero_cells", sum_out)))
+})
+
+test_that("latent summaries keep all pairs for square but non-symmetric outputs", {
+  set.seed(1006)
+  X <- data.frame(x1 = rnorm(200), x2 = rnorm(200))
+  Y <- data.frame(
+    g1 = sample(c(FALSE, TRUE), 200, replace = TRUE),
+    g2 = sample(c(FALSE, TRUE), 200, replace = TRUE)
+  )
+
+  bs <- biserial(X, Y)
+  expect_false(isSymmetric(unclass(as.matrix(bs))))
+
+  sm <- summary(bs)
+
+  expect_s3_class(sm, "summary_latent_corr")
+  expect_identical(sm$n_pairs, 4L)
+  expect_s3_class(sm$top_results, "data.frame")
+  expect_identical(nrow(sm$top_results), 4L)
+
+  out <- capture.output(print(sm, digits = 3))
+  expect_true(any(grepl("x1", out, fixed = TRUE)))
+  expect_true(any(grepl("x2", out, fixed = TRUE)))
+  expect_true(any(grepl("g1", out, fixed = TRUE)))
+  expect_true(any(grepl("g2", out, fixed = TRUE)))
 })
 
 test_that("regular table-input latent fits match known regression values", {

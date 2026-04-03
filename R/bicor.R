@@ -1,13 +1,10 @@
 #' Biweight mid-correlation (bicor)
 #'
 #' @description
-#' Use biweight mid-correlatio when you want a Pearson-like measure that is
-#' robust to outliers and
-#' heavy-tailed noise. Bicor down-weights extreme observations via Tukey’s
-#' biweight while preserving location/scale invariance, making it well suited
-#' to high-throughput data (e.g., gene expression) where occasional gross errors
-#' or platform artefacts occur. Prefer Spearman/Kendall for purely ordinal
-#' structure or strongly non-linear monotone relations.
+#' Computes pairwise biweight mid-correlations for numeric data. Bicor is a
+#' robust, Pearson-like correlation that down-weights outliers and heavy-tailed
+#' observations.
+#'
 #'
 #' @param data A numeric matrix or a data frame containing numeric columns.
 #'   Factors, logicals and common time classes are dropped in the data-frame
@@ -292,37 +289,38 @@ diag.bicor <- function(x, ...) {
 #' @method print bicor
 #' @title Print Method for \code{bicor} Objects
 #'
-#' @description
-#' Prints a matrix with a compact header,
-#' optional truncation for large matrices, and a small summary of
-#' off-diagonal values.
-#'
 #' @param x An object of class \code{bicor}.
 #' @param digits Integer; number of decimal places used for the matrix.
-#' @param max_rows Optional integer; maximum number of rows to display
-#'   (default shows all).
-#' @param max_cols Optional integer; maximum number of columns to display
-#'   (default shows all).
-#' @param width Integer; target console width for wrapping header text.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param na_print Character; how to display missing values.
 #' @param ... Additional arguments passed to \code{print()}.
 #'
 #' @return Invisibly returns \code{x}.
 #' @export
 print.bicor <- function(x,
-                                    digits   = 4,
-                                    max_rows = NULL,
-                                    max_cols = NULL,
-                                    width    = getOption("width", 80L),
-                                    na_print = "NA",
-                                    ...) {
+                        digits   = 4,
+                        n = NULL,
+                        topn = NULL,
+                        max_vars = NULL,
+                        width    = NULL,
+                        show_ci = NULL,
+                        na_print = "NA",
+                        ...) {
   check_inherits(x, "bicor")
   .mc_print_corr_matrix(
     x,
-    header = "Biweight mid-correlation matrix (bicor):",
+    header = "Biweight mid-correlation matrix (bicor)",
     digits = digits,
-    max_rows = max_rows,
-    max_cols = max_cols,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
     na.print = na_print,
     ...
   )
@@ -331,10 +329,6 @@ print.bicor <- function(x,
 #' @rdname bicor
 #' @method plot bicor
 #' @title Plot Method for \code{bicor} Objects
-#'
-#' @description Produces a \pkg{ggplot2} heatmap of the biweight
-#' mid-correlation matrix. Optionally reorders variables via hierarchical
-#' clustering on \eqn{1 - r_{\text{bicor}}}, and can show only a triangle.
 #'
 #' @param x An object of class \code{bicor}.
 #' @param title Plot title. Default is \code{"Biweight mid-correlation heatmap"}.
@@ -349,6 +343,8 @@ print.bicor <- function(x,
 #'   \code{"white"}, \code{"steelblue1"}.
 #' @param value_text_size Numeric; font size for cell labels. Set to \code{NULL}
 #'   to suppress labels (recommended for large matrices).
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @param na_fill Fill colour for \code{NA} cells. Default \code{"grey90"}.
 #' @param ... Additional arguments passed to \code{ggplot2::theme()} or other layers.
 #'
@@ -365,10 +361,12 @@ plot.bicor <- function(
     mid_color = "white",
     high_color = "steelblue1",
     value_text_size = 3,
+    show_value = TRUE,
     na_fill = "grey90",
     ...
 ) {
   check_inherits(x, "bicor")
+  check_bool(show_value, arg = "show_value")
 
   reorder  <- match.arg(reorder)
   triangle <- match.arg(triangle)
@@ -436,7 +434,7 @@ plot.bicor <- function(
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
 
-  if (!is.null(value_text_size) && is.finite(value_text_size)) {
+  if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
     p <- p + ggplot2::geom_text(
       ggplot2::aes(label = ifelse(is.na(bicor), "NA", sprintf("%.2f", bicor))),
       size = value_text_size, color = "black"
@@ -450,7 +448,9 @@ plot.bicor <- function(
 #' @method summary bicor
 #' @param object An object of class \code{bicor}.
 #' @export
-summary.bicor <- function(object, ...) {
-  .mc_summary_corr_matrix(object)
+summary.bicor <- function(object, n = NULL, topn = NULL,
+                          max_vars = NULL, width = NULL,
+                          show_ci = NULL, ...) {
+  .mc_summary_corr_matrix(object, topn = topn)
 }
 

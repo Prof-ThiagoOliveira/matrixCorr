@@ -17,11 +17,30 @@ ba(
   verbose = FALSE
 )
 
-\method{print}{ba}(x, digits = 3, ci_digits = 3, ...)
+\method{print}{ba}(
+  x,
+  digits = 3,
+  ci_digits = 3,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{summary}{ba}(object, digits = 3, ci_digits = 3, ...)
 
-\method{print}{summary.ba}(x, ...)
+\method{print}{summary.ba}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{ba}(
   x,
@@ -34,6 +53,7 @@ ba(
   shade_alpha = 0.08,
   smoother = c("none", "loess", "lm"),
   symmetrize_y = TRUE,
+  show_value = TRUE,
   ...
 )
 }
@@ -55,6 +75,17 @@ intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.}
 \item{digits}{Number of digits for estimates (default 3).}
 
 \item{ci_digits}{Number of digits for CI bounds (default 3).}
+
+\item{n}{Optional row threshold for compact preview output.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Passed to \code{ggplot2::theme()} (ggplot path) or \code{plot()}.}
 
@@ -79,6 +110,10 @@ lines.}
 
 \item{symmetrize_y}{Logical; if TRUE, y-axis centered at mean difference
 with symmetric limits.}
+
+\item{show_value}{Logical; included for a consistent plotting interface.
+Bland-Altman plots do not overlay numeric cell values, so this argument
+currently has no effect.}
 }
 \value{
 An object of class \code{"ba"} (list) with elements:

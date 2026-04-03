@@ -2053,16 +2053,29 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
 #' @param x A `matrixCorr_ccc` or `matrixCorr_ccc_ci` object.
 #' @param digits Number of digits for CCC estimates.
 #' @param ci_digits Number of digits for CI bounds.
-#' @param show_ci One of `"auto"`, `"yes"`, `"no"`.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives
+#'   this from console width.
+#' @param width Optional display width; defaults to `getOption("width")`.
+#' @param show_ci One of `"yes"` or `"no"`.
 #' @param ... Passed to underlying printers.
 #' @export
 #' @method print matrixCorr_ccc
 print.matrixCorr_ccc <- function(x,
                                  digits = 4,
                                  ci_digits = 4,
-                                 show_ci = c("auto", "yes", "no"),
+                                 n = NULL,
+                                 topn = NULL,
+                                 max_vars = NULL,
+                                 width = NULL,
+                                 show_ci = NULL,
                                  ...) {
-  show_ci <- match.arg(show_ci)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("print_show_ci", "yes")
+  )
   is_ci_obj <- inherits(x, "matrixCorr_ccc_ci") ||
     (is.list(x) && all(c("est", "lwr.ci", "upr.ci") %in% names(x)))
 
@@ -2084,54 +2097,18 @@ print.matrixCorr_ccc <- function(x,
   if (is.null(rn)) rn <- paste0("m", seq_len(nrow(est)))
   if (is.null(cn)) cn <- rn
 
-  has_any_ci <- any(is.finite(lwr) | is.finite(upr))
-  include_ci <- switch(show_ci, auto = has_any_ci, yes = TRUE, no = FALSE)
-
-  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (include_ci && is.finite(cl)) {
-    cat(sprintf("Concordance pairs (Lin's CCC, %g%% CI)\n\n", 100 * cl))
-  } else {
-    cat("Concordance pairs (Lin's CCC)\n\n")
-  }
-
-  if (nrow(est) == 1L && ncol(est) == 1L) {
-    df <- data.frame(
-      method1  = rn[1],
-      method2  = cn[1],
-      estimate = formatC(est[1,1], format = "f", digits = digits),
-      stringsAsFactors = FALSE, check.names = FALSE
-    )
-    if (include_ci) {
-      df$lwr <- ifelse(is.na(lwr[1,1]), NA,
-                       formatC(lwr[1,1], format = "f", digits = ci_digits))
-      df$upr <- ifelse(is.na(upr[1,1]), NA,
-                       formatC(upr[1,1], format = "f", digits = ci_digits))
-    }
-    print(df, row.names = FALSE, right = FALSE, ...)
-    return(invisible(x))
-  }
-
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L); k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      row <- list(
-        method1  = rn[i],
-        method2  = cn[j],
-        estimate = formatC(est[i, j], format = "f", digits = digits)
-      )
-      if (include_ci) {
-        row$lwr <- ifelse(is.na(lwr[i, j]), NA,
-                          formatC(lwr[i, j], format = "f", digits = ci_digits))
-        row$upr <- ifelse(is.na(upr[i, j]), NA,
-                          formatC(upr[i, j], format = "f", digits = ci_digits))
-      }
-      rows[[k]] <- row
-    }
-  }
-
-  df <- do.call(rbind.data.frame, rows); rownames(df) <- NULL
-  print(df, row.names = FALSE, right = FALSE, ...)
+  .mc_print_corr_matrix(
+    x,
+    header = "Repeated-measures concordance matrix",
+    digits = digits,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    mat = est,
+    ...
+  )
   invisible(x)
 }
 
@@ -2162,9 +2139,14 @@ print.ccc_ci <- function(x, ...) {
 #' @param object An object of class `"ccc_rm_reml"`, as returned by [ccc_rm_reml()].
 #' @param digits Integer; number of decimal places to round CCC estimates and components.
 #' @param ci_digits Integer; decimal places for confidence interval bounds.
-#' @param show_ci Character string indicating whether to show confidence intervals:
-#'   `"auto"` (default) shows only if non-NA CIs exist, `"yes"` always shows CIs,
-#'   `"no"` never shows them.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives
+#'   this from console width.
+#' @param width Optional display width; defaults to `getOption("width")`.
+#' @param show_ci Character string indicating whether to show confidence
+#'   intervals: `"yes"` shows CI information when available and `"no"`
+#'   suppresses it.
 #' @param ... Additional arguments (ignored).
 #'
 #' @return A data frame of class `"summary.ccc_rm_reml"` with columns:
@@ -2177,13 +2159,23 @@ print.ccc_ci <- function(x, ...) {
 summary.ccc_rm_reml <- function(object,
                                  digits = 4,
                                  ci_digits = 2,
-                                 show_ci = c("auto", "yes", "no"),
+                                 n = NULL,
+                                 topn = NULL,
+                                 max_vars = NULL,
+                                 width = NULL,
+                                 show_ci = NULL,
                                  ...) {
-  show_ci <- match.arg(show_ci)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
 
   # Base CCC summary (handles CI and formatting choices)
   base_summary <- summary.ccc(object, digits = digits,
-                              ci_digits = ci_digits, show_ci = show_ci)
+                              ci_digits = ci_digits, topn = topn,
+                              max_vars = max_vars, width = width,
+                              show_ci = show_ci)
 
   # Pull the estimate matrix to know the size/order of pairs
   est_mat <- if (is.list(object) && !is.null(object$est)) {
@@ -2440,18 +2432,41 @@ summary.ccc_rm_reml <- function(object,
 #' @param x An object of class \code{"summary.ccc_rm_reml"}.
 #' @param ... Passed to \code{\link[base]{print.data.frame}}.
 #' @export
-print.summary.ccc_rm_reml <- function(x, ...) {
+print.summary.ccc_rm_reml <- function(x, digits = NULL, n = NULL,
+                                      topn = NULL, max_vars = NULL,
+                                      width = NULL, show_ci = NULL, ...) {
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "summary")
   has_ci <- isTRUE(attr(x, "has_ci")) ||
     all(c("lwr", "upr") %in% names(x))
   cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
   if (!is.finite(cl)) cl <- NA_real_
 
-  if (has_ci && is.finite(cl)) {
-    cat(sprintf("Repeated-measures concordance (REML), %g%% CI\n\n", 100 * cl))
-  } else {
-    cat("Repeated-measures concordance (REML)\n\n")
-  }
-
-  .print_ccc_rm_reml_summary_blocks(x, ...)
+  header <- .mc_header_with_ci("Repeated-measures concordance (REML)", cl, if (has_ci) show_ci else "no")
+  .mc_print_sectioned_table(
+    x,
+    sections = list(
+      list(
+        title = "Concordance estimates",
+        cols = c("method1", "method2", "estimate", "lwr", "upr", "SB", "se_ccc")
+      ),
+      list(
+        title = "Variance components",
+        cols = c("sigma2_subject", "sigma2_subject_method", "sigma2_subject_time",
+                 "sigma2_error", grep("^sigma2_extra", names(x), value = TRUE))
+      ),
+      list(
+        title = "AR(1) diagnostics",
+        cols = c("ar1_rho", "ar1_rho_lag1", "ar1_rho_mom",
+                 "ar1_pairs", "ar1_pval", "use_ar1", "ar1_recommend")
+      )
+    ),
+    header = header,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    ...
+  )
   invisible(x)
 }

@@ -9,7 +9,16 @@
 \usage{
 schafer_corr(data)
 
-\method{print}{schafer_corr}(x, digits = 4, max_rows = NULL, max_cols = NULL, ...)
+\method{print}{schafer_corr}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 
 \method{plot}{schafer_corr}(
   x,
@@ -17,14 +26,23 @@ schafer_corr(data)
   cluster = TRUE,
   hclust_method = "complete",
   triangle = c("upper", "lower", "full"),
-  show_values = FALSE,
+  show_value = TRUE,
+  show_values = NULL,
   value_text_limit = 60,
   value_text_size = 3,
   palette = c("diverging", "viridis"),
   ...
 )
 
-\method{summary}{schafer_corr}(object, ...)
+\method{summary}{schafer_corr}(
+  object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
 }
 \arguments{
 \item{data}{A numeric matrix or a data frame with at least two numeric
@@ -35,11 +53,16 @@ and contain no \code{NA}s.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
-\item{max_rows}{Optional integer; maximum number of rows to display.
-If \code{NULL}, all rows are shown.}
+\item{n}{Optional row threshold for compact preview output.}
 
-\item{max_cols}{Optional integer; maximum number of columns to display.
-If \code{NULL}, all columns are shown.}
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns; \code{NULL} derives this
+from console width.}
+
+\item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()}.}
 
@@ -53,8 +76,11 @@ on distance \eqn{1 - r}.}
 \item{triangle}{One of \code{"full"}, \code{"upper"}, \code{"lower"}.
 Default to \code{upper}.}
 
-\item{show_values}{Logical; print correlation values inside tiles (only if
-matrix dimension \eqn{\le} \code{value_text_limit}).}
+\item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
+on the heatmap tiles (subject to \code{value_text_limit}).}
+
+\item{show_values}{Deprecated compatibility alias for \code{show_value}. If
+supplied, it overrides \code{show_value}.}
 
 \item{value_text_limit}{Integer threshold controlling when values are drawn.}
 
@@ -82,25 +108,9 @@ Invisibly returns \code{x}.
 A \code{ggplot} object.
 }
 \description{
-Computes a shrinkage correlation matrix using the Schafer-Strimmer approach
-with an analytic, data-driven intensity \eqn{\hat\lambda}. The off-diagonals
-of the sample Pearson correlation \eqn{R} are shrunk towards zero, yielding
-\eqn{R_{\mathrm{shr}}=(1-\hat\lambda)R+\hat\lambda I} with
-\eqn{\mathrm{diag}(R_{\mathrm{shr}})=1}, stabilising estimates when
-\eqn{p \ge n}.
-
-This function uses a high-performance 'C++' backend that forms
-\eqn{X^\top X} via 'BLAS' 'SYRK', applies centring via a rank-1 update,
-converts to Pearson correlation, estimates \eqn{\hat\lambda}, and shrinks
-the off-diagonals:
-\eqn{R_{\mathrm{shr}} = (1-\hat\lambda)R + \hat\lambda I}.
-
-Prints a summary of the shrinkage correlation matrix with
-optional truncation for large objects.
-
-Heatmap of the shrinkage correlation matrix with optional
-hierarchical clustering and triangular display. Uses \pkg{ggplot2} and
-\code{geom_raster()} for speed on larger matrices.
+Computes a Schafer-Strimmer shrinkage correlation matrix for numeric data
+using a high-performance 'C++' backend. This stabilises Pearson correlation
+estimates by shrinking off-diagonal entries towards zero.
 }
 \details{
 Let \eqn{R} be the sample Pearson correlation matrix. The Schafer-Strimmer
@@ -126,7 +136,7 @@ X <- MASS::mvrnorm(n, mu = rep(0, p), Sigma = Sigma)
 colnames(X) <- paste0("V", seq_len(p))
 
 Rshr <- schafer_corr(X)
-print(Rshr, digits = 2, max_rows = 6, max_cols = 6)
+print(Rshr, digits = 2, n = 6, max_vars = 6)
 summary(Rshr)
 plot(Rshr)
 

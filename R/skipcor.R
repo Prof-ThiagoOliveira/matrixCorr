@@ -69,11 +69,17 @@
 #' @param var1,var2 Optional column names or 1-based column indices used by
 #'   [skipped_corr_masks()] to extract the skipped-row indices for one pair.
 #' @param digits Integer; number of digits to print.
-#' @param max_rows,max_cols Optional integers limiting the printed matrix size.
+#' @param n Optional row threshold for compact preview output.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns; `NULL` derives this
+#'   from console width.
+#' @param width Optional display width; defaults to \code{getOption("width")}.
 #' @param ... Additional arguments passed to the underlying print or plot helper.
 #' @param title Character; plot title.
 #' @param low_color,high_color,mid_color Colors used in the heatmap.
 #' @param value_text_size Numeric text size for overlaid cell values.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #'
 #' @return A symmetric correlation matrix with class \code{skipped_corr} and
 #'   attributes \code{method = "skipped_correlation"}, \code{description}, and
@@ -532,59 +538,45 @@ skipped_corr_masks <- function(x, var1 = NULL, var2 = NULL) {
 #' @rdname skipped_corr
 #' @method print skipped_corr
 #' @param ci_digits Integer; digits for skipped-correlation confidence limits.
-#' @param show_ci One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
-#'   \code{print()}, \code{"auto"} keeps the compact matrix-only display;
-#'   use \code{"yes"} to also print the pairwise CI table.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param show_p One of \code{"auto"}, \code{"yes"}, \code{"no"}. For
 #'   \code{print()}, \code{"auto"} keeps the compact matrix-only display;
 #'   use \code{"yes"} to also print pairwise p-values.
 #' @export
 print.skipped_corr <- function(x,
                                digits = 4,
-                               max_rows = NULL,
-                               max_cols = NULL,
+                               n = NULL,
+                               topn = NULL,
+                               max_vars = NULL,
+                               width = NULL,
                                ci_digits = 4,
-                               show_ci = c("auto", "yes", "no"),
+                               show_ci = NULL,
                                show_p = c("auto", "yes", "no"),
                                ...) {
-  show_ci <- match.arg(show_ci)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("print_show_ci", "yes")
+  )
   show_p <- match.arg(show_p)
   .mc_print_corr_matrix(
     x,
-    header = "Skipped correlation matrix:",
+    header = "Skipped correlation matrix",
     digits = digits,
-    max_rows = max_rows,
-    max_cols = max_cols,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
     ...
   )
   ci <- .mc_skipcor_ci_attr(x)
   inf <- .mc_skipcor_inference_attr(x)
 
-  include_ci <- switch(
-    show_ci,
-    auto = FALSE,
-    yes = TRUE,
-    no = FALSE
-  )
-  include_p <- switch(
-    show_p,
-    auto = FALSE,
-    yes = TRUE,
-    no = FALSE
-  )
-
-  if (include_ci || include_p) {
-    sm <- .mc_skipcor_pairwise_summary(
-      x,
-      digits = digits,
-      ci_digits = ci_digits,
-      p_digits = digits,
-      show_ci = if (include_ci) "yes" else "no",
-      show_p = if (include_p) "yes" else "no"
-    )
-    attr(sm, "show_overview") <- FALSE
-    cat("\n")
-    print(sm, ...)
+  include_ci <- identical(show_ci, "yes") && !is.null(ci)
+  include_p <- identical(show_p, "yes") && !is.null(inf) && !is.null(inf$p_value)
+  if (include_p && !include_ci) {
+    cli::cli_inform("Use {.code summary(x, show_ci = \"no\")} for bounded pairwise p-value output.")
   }
   invisible(x)
 }
@@ -592,6 +584,8 @@ print.skipped_corr <- function(x,
 #' @rdname skipped_corr
 #' @method plot skipped_corr
 #' @param ci_text_size Text size for confidence intervals in the heatmap.
+#' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
+#'   on the heatmap tiles.
 #' @export
 plot.skipped_corr <- function(x,
                          title = "Skipped correlation heatmap",
@@ -600,8 +594,10 @@ plot.skipped_corr <- function(x,
                          mid_color = "white",
                          value_text_size = 4,
                          ci_text_size = 3,
+                         show_value = TRUE,
                          ...) {
   check_inherits(x, "skipped_corr")
+  check_bool(show_value, arg = "show_value")
 
   est_mat <- as.matrix(x)
   df_est <- as.data.frame(as.table(est_mat))
@@ -639,7 +635,6 @@ plot.skipped_corr <- function(x,
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = skipped_corr)) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size, color = "black") +
     ggplot2::scale_fill_gradient2(
       low = low_color,
       high = high_color,
@@ -657,7 +652,11 @@ plot.skipped_corr <- function(x,
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
 
-  if (any(!is.na(df$ci_label))) {
+  if (isTRUE(show_value)) {
+    p <- p + ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size, color = "black")
+  }
+
+  if (isTRUE(show_value) && any(!is.na(df$ci_label))) {
     p <- p + ggplot2::geom_text(
       ggplot2::aes(label = ci_label, y = as.numeric(Var1) - 0.25),
       size = ci_text_size,
@@ -673,9 +672,13 @@ plot.skipped_corr <- function(x,
                                          digits = 4,
                                          ci_digits = 2,
                                          p_digits = 4,
-                                         show_ci = c("auto", "yes", "no"),
+                                         show_ci = NULL,
                                          show_p = c("auto", "yes", "no")) {
-  show_ci <- match.arg(show_ci)
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
   show_p <- match.arg(show_p)
   check_inherits(object, "skipped_corr")
 
@@ -688,7 +691,7 @@ plot.skipped_corr <- function(x,
   inf <- .mc_skipcor_inference_attr(object)
   diag_attr <- attr(object, "diagnostics", exact = TRUE)
 
-  include_ci <- switch(show_ci, auto = !is.null(ci), yes = TRUE, no = FALSE)
+  include_ci <- identical(show_ci, "yes") && !is.null(ci)
   include_p <- switch(show_p, auto = !is.null(inf) && !is.null(inf$p_value), yes = TRUE, no = FALSE)
 
   rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
@@ -747,18 +750,24 @@ plot.skipped_corr <- function(x,
 #' @method summary skipped_corr
 #' @param object An object of class \code{skipped_corr}.
 #' @export
-summary.skipped_corr <- function(object, ...) {
+summary.skipped_corr <- function(object, n = NULL, topn = NULL,
+                                 max_vars = NULL, width = NULL,
+                                 show_ci = NULL, ...) {
   check_inherits(object, "skipped_corr")
   ci <- .mc_skipcor_ci_attr(object)
   inf <- .mc_skipcor_inference_attr(object)
 
   if (is.null(ci) && (is.null(inf) || is.null(inf$p_value))) {
-    return(.mc_summary_corr_matrix(object))
+    return(.mc_summary_corr_matrix(object, topn = topn))
   }
 
   .mc_skipcor_pairwise_summary(
     object,
-    show_ci = "auto",
+    show_ci = .mc_validate_yes_no(
+      show_ci,
+      arg = "show_ci",
+      default = .mc_display_option("summary_show_ci", "yes")
+    ),
     show_p = "auto"
   )
 }
@@ -767,54 +776,32 @@ summary.skipped_corr <- function(object, ...) {
 #' @method print summary.skipped_corr
 #' @param x An object of class \code{summary.skipped_corr}.
 #' @export
-print.summary.skipped_corr <- function(x, ...) {
-  overview <- attr(x, "overview")
-  if (isTRUE(attr(x, "show_overview", exact = TRUE)) || is.null(attr(x, "show_overview", exact = TRUE))) {
-    if (!is.null(overview)) {
-      class(overview) <- "summary_corr_matrix"
-      print.summary_corr_matrix(overview, ...)
-    }
-  }
-
+print.summary.skipped_corr <- function(x, digits = NULL, n = NULL,
+                                       topn = NULL, max_vars = NULL,
+                                       width = NULL, show_ci = NULL, ...) {
   has_ci <- isTRUE(attr(x, "has_ci"))
   has_p <- isTRUE(attr(x, "has_p"))
-  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
-  if (has_ci && is.finite(cl)) {
-    cat(sprintf("\nSkipped-correlation pairs (%g%% CI)\n\n", 100 * cl))
-  } else if (has_p) {
-    cat("\nSkipped-correlation pairs\n\n")
-  } else {
-    cat("\nSkipped-correlation pairs\n\n")
-  }
-
-  digits <- attr(x, "digits"); if (!is.numeric(digits)) digits <- 4
-  ci_digits <- attr(x, "ci_digits"); if (!is.numeric(ci_digits)) ci_digits <- 2
   p_digits <- attr(x, "p_digits"); if (!is.numeric(p_digits)) p_digits <- 4
-  df <- x
-  if (is.numeric(df$estimate)) df$estimate <- formatC(df$estimate, format = "f", digits = digits)
-  if ("lwr" %in% names(df) && is.numeric(df$lwr)) df$lwr <- ifelse(is.na(df$lwr), NA, formatC(df$lwr, format = "f", digits = ci_digits))
-  if ("upr" %in% names(df) && is.numeric(df$upr)) df$upr <- ifelse(is.na(df$upr), NA, formatC(df$upr, format = "f", digits = ci_digits))
-  if ("p_value" %in% names(df) && is.numeric(df$p_value)) df$p_value <- ifelse(is.na(df$p_value), NA, formatC(df$p_value, format = "f", digits = p_digits))
-  if ("p_value_adjusted" %in% names(df) && is.numeric(df$p_value_adjusted)) {
-    df$p_value_adjusted <- ifelse(is.na(df$p_value_adjusted), NA, formatC(df$p_value_adjusted, format = "f", digits = p_digits))
-  }
-  if ("skipped_prop" %in% names(df) && is.numeric(df$skipped_prop)) {
-    df$skipped_prop <- ifelse(is.na(df$skipped_prop), NA, formatC(df$skipped_prop, format = "f", digits = p_digits))
-  }
-
-  print.data.frame(df, row.names = FALSE, right = FALSE, ...)
-
-  inference_method <- attr(x, "inference_method")
-  if (is.character(inference_method) && length(inference_method) == 1L && !is.na(inference_method)) {
-    cat(sprintf("\nInference method: %s\n", inference_method))
-  }
-  p_adjust <- attr(x, "p_adjust")
-  if (is.character(p_adjust) && length(p_adjust) == 1L && !is.na(p_adjust) && p_adjust != "none") {
-    cat(sprintf("Multiplicity   : %s\n", p_adjust))
-  }
+  extra_items <- c(
+    if (has_p) c(inference = attr(x, "inference_method")),
+    if (has_p) c(multiplicity = attr(x, "p_adjust"))
+  )
   crit <- suppressWarnings(as.numeric(attr(x, "critical_p_value")))
   if (is.finite(crit)) {
-    cat(sprintf("Critical p     : %s\n", format(signif(crit, digits = p_digits))))
+    extra_items <- c(extra_items, critical_p = format(signif(crit, digits = p_digits)))
   }
+  .mc_print_pairwise_summary_digest(
+    x,
+    title = "Skipped correlation summary",
+    digits = .mc_coalesce(digits, 4),
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    ci_method = if (has_ci) "bootstrap_b2" else NULL,
+    extra_items = extra_items,
+    ...
+  )
   invisible(x)
 }
