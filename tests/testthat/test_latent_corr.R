@@ -60,7 +60,7 @@ polyserial_reference_old <- function(x, y, check_na = TRUE) {
     tryCatch(
       stats::optim(
         c(rho, cuts),
-        function(pars) matrixCorr_polyserial_negloglik_cpp(z, y, pars, maxcor = maxcor)
+        function(pars) matrixCorr:::matrixCorr_polyserial_negloglik_cpp(z, y, pars, maxcor = maxcor)
       )$par[1L],
       error = function(e) NA_real_
     )
@@ -75,6 +75,76 @@ polyserial_reference_old <- function(x, y, check_na = TRUE) {
     out <- -maxcor
   }
   as.numeric(out)
+}
+
+latent_estimate_template <- function(fit) {
+  if (is.null(dim(fit))) {
+    return(as.numeric(fit))
+  }
+
+  est_mat <- as.matrix(fit)
+  attributes(est_mat) <- attributes(est_mat)[c("dim", "dimnames")]
+  est_mat
+}
+
+expect_same_shape <- function(object, template) {
+  if (is.null(dim(template))) {
+    expect_length(object, length(template))
+    return(invisible(NULL))
+  }
+
+  expect_equal(dim(object), dim(template))
+  expect_identical(dimnames(object), dimnames(template))
+  invisible(NULL)
+}
+
+expect_latent_wald_payloads <- function(fit,
+                                        ci_method,
+                                        inference_method) {
+  est <- latent_estimate_template(fit)
+  inf <- attr(fit, "inference", exact = TRUE)
+  ci <- attr(fit, "ci", exact = TRUE)
+
+  if (is.list(inf)) {
+    expect_identical(inf$method, inference_method)
+    expect_identical(inf$alternative, "two.sided")
+    expect_same_shape(inf$estimate, est)
+    expect_same_shape(inf$statistic, est)
+    expect_same_shape(inf$parameter, est)
+    expect_same_shape(inf$p_value, est)
+    expect_same_shape(inf$n_obs, est)
+    expect_equal(as.numeric(inf$estimate), as.numeric(est), tolerance = 1e-12)
+    expect_true(all(is.na(as.numeric(inf$parameter))))
+    expect_true(all(is.na(as.numeric(inf$statistic)) | is.finite(as.numeric(inf$statistic))))
+    expect_true(all(is.na(as.numeric(inf$p_value)) |
+      (as.numeric(inf$p_value) >= 0 & as.numeric(inf$p_value) <= 1)))
+    expect_true(all(is.na(as.numeric(inf$n_obs)) | as.numeric(inf$n_obs) >= 0))
+  }
+
+  if (is.list(ci)) {
+    expect_identical(ci$ci.method, ci_method)
+    expect_same_shape(ci$est, est)
+    expect_same_shape(ci$lwr.ci, est)
+    expect_same_shape(ci$upr.ci, est)
+    expect_equal(as.numeric(ci$est), as.numeric(est), tolerance = 1e-12)
+    expect_equal(attr(fit, "conf.level", exact = TRUE), ci$conf.level, tolerance = 1e-12)
+    expect_true(all(is.na(as.numeric(ci$lwr.ci)) |
+      (as.numeric(ci$lwr.ci) >= -1 & as.numeric(ci$lwr.ci) <= 1)))
+    expect_true(all(is.na(as.numeric(ci$upr.ci)) |
+      (as.numeric(ci$upr.ci) >= -1 & as.numeric(ci$upr.ci) <= 1)))
+    expect_true(all(
+      is.na(as.numeric(ci$lwr.ci)) |
+      is.na(as.numeric(ci$upr.ci)) |
+      as.numeric(ci$lwr.ci) <= as.numeric(ci$upr.ci)
+    ))
+    keep <- is.finite(as.numeric(est)) &
+      is.finite(as.numeric(ci$lwr.ci)) &
+      is.finite(as.numeric(ci$upr.ci))
+    expect_true(all(
+      as.numeric(est)[keep] >= as.numeric(ci$lwr.ci)[keep] &
+        as.numeric(est)[keep] <= as.numeric(ci$upr.ci)[keep]
+    ))
+  }
 }
 
 test_that("tetrachoric pair and matrix modes match fixed regression values", {
@@ -200,6 +270,207 @@ test_that("polyserial matches the previous R optim reference path", {
     as.numeric(ref_mat),
     tolerance = 1e-12
   )
+})
+
+test_that("tetrachoric Wald inference preserves the established estimates", {
+  set.seed(1101)
+  x <- sample(c(FALSE, TRUE), 320, replace = TRUE)
+  y <- sample(c(FALSE, TRUE), 320, replace = TRUE)
+  dat <- data.frame(
+    a = x,
+    b = y,
+    c = sample(c(FALSE, TRUE), 320, replace = TRUE)
+  )
+
+  fit_pair <- tetrachoric(x, y, ci = TRUE, p_value = TRUE)
+  fit_mat <- tetrachoric(dat, ci = TRUE, p_value = TRUE)
+
+  expect_equal_abs(as.numeric(fit_pair), as.numeric(tetrachoric(x, y)))
+  expect_equal_abs(as.numeric(fit_mat), as.numeric(tetrachoric(dat)))
+  expect_latent_wald_payloads(
+    fit_pair,
+    ci_method = "wald_information_tetrachoric",
+    inference_method = "wald_z_tetrachoric"
+  )
+  expect_latent_wald_payloads(
+    fit_mat,
+    ci_method = "wald_information_tetrachoric",
+    inference_method = "wald_z_tetrachoric"
+  )
+})
+
+test_that("polychoric Wald inference preserves the established estimates", {
+  set.seed(1102)
+  x <- ordered(sample(1:4, 360, replace = TRUE))
+  y <- ordered(sample(1:5, 360, replace = TRUE))
+  dat <- data.frame(
+    x = x,
+    y = y,
+    z = ordered(sample(1:3, 360, replace = TRUE))
+  )
+
+  fit_pair <- polychoric(x, y, ci = TRUE, p_value = TRUE)
+  fit_mat <- polychoric(dat, ci = TRUE, p_value = TRUE)
+
+  expect_equal_abs(as.numeric(fit_pair), as.numeric(polychoric(x, y)))
+  expect_equal_abs(as.numeric(fit_mat), as.numeric(polychoric(dat)))
+  expect_latent_wald_payloads(
+    fit_pair,
+    ci_method = "wald_information_polychoric",
+    inference_method = "wald_z_polychoric"
+  )
+  expect_latent_wald_payloads(
+    fit_mat,
+    ci_method = "wald_information_polychoric",
+    inference_method = "wald_z_polychoric"
+  )
+})
+
+test_that("polyserial Wald inference preserves the established estimates", {
+  set.seed(1103)
+  X <- data.frame(x1 = rnorm(280), x2 = rnorm(280))
+  Y <- data.frame(
+    y1 = ordered(sample(1:4, 280, replace = TRUE)),
+    y2 = ordered(sample(c(1, 3, 4), 280, replace = TRUE))
+  )
+
+  fit_pair <- polyserial(X$x1, Y$y1, ci = TRUE, p_value = TRUE)
+  fit_mat <- polyserial(X, Y, ci = TRUE, p_value = TRUE)
+
+  expect_equal_abs(as.numeric(fit_pair), as.numeric(polyserial(X$x1, Y$y1)))
+  expect_equal_abs(as.numeric(fit_mat), as.numeric(polyserial(X, Y)))
+  expect_latent_wald_payloads(
+    fit_pair,
+    ci_method = "wald_information_polyserial",
+    inference_method = "wald_z_polyserial"
+  )
+  expect_latent_wald_payloads(
+    fit_mat,
+    ci_method = "wald_information_polyserial",
+    inference_method = "wald_z_polyserial"
+  )
+})
+
+test_that("latent inference payloads are attached only when requested", {
+  set.seed(1104)
+  x_bin <- sample(c(FALSE, TRUE), 180, replace = TRUE)
+  y_bin <- sample(c(FALSE, TRUE), 180, replace = TRUE)
+  x_ord <- ordered(sample(1:4, 180, replace = TRUE))
+  y_ord <- ordered(sample(1:5, 180, replace = TRUE))
+  X <- data.frame(x1 = rnorm(180), x2 = rnorm(180))
+  Y <- data.frame(y1 = x_ord, y2 = y_ord)
+
+  tetra_0 <- tetrachoric(data.frame(a = x_bin, b = y_bin), ci = FALSE, p_value = FALSE)
+  tetra_ci <- tetrachoric(data.frame(a = x_bin, b = y_bin), ci = TRUE, p_value = FALSE)
+  tetra_p <- tetrachoric(data.frame(a = x_bin, b = y_bin), ci = FALSE, p_value = TRUE)
+  tetra_both <- tetrachoric(data.frame(a = x_bin, b = y_bin), ci = TRUE, p_value = TRUE)
+
+  poly_0 <- polychoric(data.frame(x = x_ord, y = y_ord), ci = FALSE, p_value = FALSE)
+  poly_ci <- polychoric(data.frame(x = x_ord, y = y_ord), ci = TRUE, p_value = FALSE)
+  poly_p <- polychoric(data.frame(x = x_ord, y = y_ord), ci = FALSE, p_value = TRUE)
+  poly_both <- polychoric(data.frame(x = x_ord, y = y_ord), ci = TRUE, p_value = TRUE)
+
+  ps_0 <- polyserial(X, Y, ci = FALSE, p_value = FALSE)
+  ps_ci <- polyserial(X, Y, ci = TRUE, p_value = FALSE)
+  ps_p <- polyserial(X, Y, ci = FALSE, p_value = TRUE)
+  ps_both <- polyserial(X, Y, ci = TRUE, p_value = TRUE)
+
+  for (fit in list(tetra_0, poly_0, ps_0)) {
+    expect_null(attr(fit, "ci", exact = TRUE))
+    expect_null(attr(fit, "inference", exact = TRUE))
+  }
+
+  for (fit in list(tetra_ci, poly_ci, ps_ci)) {
+    expect_true(is.list(attr(fit, "ci", exact = TRUE)))
+    expect_null(attr(fit, "inference", exact = TRUE))
+  }
+
+  for (fit in list(tetra_p, poly_p, ps_p)) {
+    expect_true(is.list(attr(fit, "inference", exact = TRUE)))
+    expect_null(attr(fit, "ci", exact = TRUE))
+  }
+
+  for (fit in list(tetra_both, poly_both, ps_both)) {
+    expect_true(is.list(attr(fit, "ci", exact = TRUE)))
+    expect_true(is.list(attr(fit, "inference", exact = TRUE)))
+  }
+})
+
+test_that("latent core estimates are unchanged when CI and p-values are disabled", {
+  set.seed(1105)
+  dat_bin <- data.frame(
+    a = sample(c(FALSE, TRUE), 160, replace = TRUE),
+    b = sample(c(FALSE, TRUE), 160, replace = TRUE),
+    c = sample(c(FALSE, TRUE), 160, replace = TRUE)
+  )
+  dat_ord <- data.frame(
+    x = ordered(sample(1:4, 160, replace = TRUE)),
+    y = ordered(sample(1:5, 160, replace = TRUE)),
+    z = ordered(sample(1:3, 160, replace = TRUE))
+  )
+  X <- data.frame(x1 = rnorm(160), x2 = rnorm(160))
+  Y <- data.frame(
+    y1 = ordered(sample(1:4, 160, replace = TRUE)),
+    y2 = ordered(sample(c(1, 3, 4), 160, replace = TRUE))
+  )
+
+  fit_t_base <- tetrachoric(dat_bin)
+  fit_t_false <- tetrachoric(dat_bin, ci = FALSE, p_value = FALSE)
+  fit_p_base <- polychoric(dat_ord)
+  fit_p_false <- polychoric(dat_ord, ci = FALSE, p_value = FALSE)
+  fit_ps_base <- polyserial(X, Y)
+  fit_ps_false <- polyserial(X, Y, ci = FALSE, p_value = FALSE)
+
+  expect_equal(unclass(fit_t_base), unclass(fit_t_false), tolerance = 1e-12)
+  expect_equal(unclass(fit_p_base), unclass(fit_p_false), tolerance = 1e-12)
+  expect_equal(unclass(fit_ps_base), unclass(fit_ps_false), tolerance = 1e-12)
+  expect_identical(attributes(fit_t_base), attributes(fit_t_false))
+  expect_identical(attributes(fit_p_base), attributes(fit_p_false))
+  expect_identical(attributes(fit_ps_base), attributes(fit_ps_false))
+})
+
+test_that("latent inference summaries switch to the pairwise view only when requested", {
+  set.seed(1106)
+  dat_bin <- data.frame(
+    a = sample(c(FALSE, TRUE), 150, replace = TRUE),
+    b = sample(c(FALSE, TRUE), 150, replace = TRUE),
+    c = sample(c(FALSE, TRUE), 150, replace = TRUE)
+  )
+  dat_ord <- data.frame(
+    x = ordered(sample(1:4, 150, replace = TRUE)),
+    y = ordered(sample(1:5, 150, replace = TRUE)),
+    z = ordered(sample(1:3, 150, replace = TRUE))
+  )
+  X <- data.frame(x1 = rnorm(150), x2 = rnorm(150))
+  Y <- data.frame(
+    y1 = ordered(sample(1:4, 150, replace = TRUE)),
+    y2 = ordered(sample(c(1, 3, 4), 150, replace = TRUE))
+  )
+
+  fits0 <- list(
+    tetrachoric(dat_bin),
+    polychoric(dat_ord),
+    polyserial(X, Y)
+  )
+  fits1 <- list(
+    tetrachoric(dat_bin, ci = TRUE, p_value = TRUE),
+    polychoric(dat_ord, ci = TRUE, p_value = TRUE),
+    polyserial(X, Y, ci = TRUE, p_value = TRUE)
+  )
+  summary_classes <- c("summary.tetrachoric_corr", "summary.polychoric_corr", "summary.polyserial_corr")
+  summary_titles <- c("Tetrachoric correlation summary", "Polychoric correlation summary", "Polyserial correlation summary")
+
+  for (fit in fits0) {
+    expect_s3_class(summary(fit), "summary_latent_corr")
+  }
+
+  for (i in seq_along(fits1)) {
+    sm <- summary(fits1[[i]])
+    expect_s3_class(sm, summary_classes[[i]])
+    expect_true(all(c("var1", "var2", "estimate", "lwr", "upr", "statistic", "df", "p_value", "n_complete") %in% names(sm)))
+    out <- capture.output(print(sm, digits = 3))
+    expect_true(any(grepl(summary_titles[[i]], out, fixed = TRUE)))
+  }
 })
 
 test_that("biserial matches the closed-form estimator in pair and matrix mode", {
@@ -451,6 +722,31 @@ test_that("regular table-input latent fits match known regression values", {
   thr <- attr(pc_3x3, "thresholds")
   expect_equal(unname(thr$row), c(-1.77438191034496, -0.135773931302112), tolerance = 1e-12)
   expect_equal(unname(thr$col), c(-0.687131286795469, 0.668209299725723), tolerance = 1e-12)
+})
+
+test_that("table-input latent fits attach optional inference payloads", {
+  tab_2x2 <- as.table(matrix(c(61661, 1610, 85, 20), 2, 2))
+  tab_3x3 <- as.table(matrix(c(13, 69, 41, 6, 113, 132, 0, 22, 104), 3, 3))
+
+  tc <- tetrachoric(tab_2x2, ci = TRUE, p_value = TRUE)
+  pc <- polychoric(tab_3x3, correct = 0, ci = TRUE, p_value = TRUE)
+
+  expect_true(is.list(attr(tc, "ci", exact = TRUE)))
+  expect_true(is.list(attr(tc, "inference", exact = TRUE)))
+  expect_true(is.list(attr(pc, "ci", exact = TRUE)))
+  expect_true(is.list(attr(pc, "inference", exact = TRUE)))
+  expect_equal(as.numeric(tc), as.numeric(tetrachoric(tab_2x2, correct = 0.5)), tolerance = 1e-12)
+  expect_equal(as.numeric(pc), as.numeric(polychoric(tab_3x3, correct = 0)), tolerance = 1e-12)
+  expect_latent_wald_payloads(
+    tc,
+    ci_method = "wald_information_tetrachoric",
+    inference_method = "wald_z_tetrachoric"
+  )
+  expect_latent_wald_payloads(
+    pc,
+    ci_method = "wald_information_polychoric",
+    inference_method = "wald_z_polychoric"
+  )
 })
 
 test_that("sparse zero-cell latent fits expose diagnostics and thresholds", {

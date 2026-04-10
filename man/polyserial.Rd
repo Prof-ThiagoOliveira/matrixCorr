@@ -5,9 +5,11 @@
 \alias{print.polyserial_corr}
 \alias{plot.polyserial_corr}
 \alias{summary.polyserial_corr}
+\alias{print.summary.polyserial_corr}
 \title{Polyserial Correlation Between Continuous and Ordinal Variables}
 \usage{
-polyserial(data, y, check_na = TRUE)
+polyserial(data, y, check_na = TRUE, ci = FALSE, p_value = FALSE,
+  conf_level = 0.95)
 
 \method{print}{polyserial_corr}(
   x,
@@ -37,6 +39,19 @@ polyserial(data, y, check_na = TRUE)
   topn = NULL,
   max_vars = NULL,
   width = NULL,
+  ci_digits = 3,
+  p_digits = 4,
+  show_ci = NULL,
+  ...
+)
+
+\method{print}{summary.polyserial_corr}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
   show_ci = NULL,
   ...
 )
@@ -52,7 +67,18 @@ or integer-like numerics.}
 \item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, missing values
 are rejected. If \code{FALSE}, pairwise complete cases are used.}
 
-\item{x}{An object of class \code{polyserial_corr}.}
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach
+model-based large-sample Wald confidence intervals derived from the observed
+information matrix of the latent-variable likelihood.}
+
+\item{p_value}{Logical (default \code{FALSE}). If \code{TRUE}, attach
+model-based large-sample Wald p-values and test statistics for each
+estimated latent correlation.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
+\item{x}{An object of class \code{summary.polyserial_corr}.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
@@ -83,13 +109,25 @@ from console width.}
 on the heatmap tiles.}
 
 \item{object}{An object of class \code{polyserial_corr}.}
+
+\item{ci_digits}{Integer; digits for confidence limits in the pairwise
+summary.}
+
+\item{p_digits}{Integer; digits for p-values in the pairwise summary.}
 }
 \value{
 If both \code{data} and \code{y} are vectors, a numeric scalar. Otherwise a
 numeric matrix of class \code{polyserial_corr} with rows corresponding to
 the continuous variables in \code{data} and columns to the ordinal variables
 in \code{y}. Matrix outputs carry attributes \code{method},
-\code{description}, and \code{package = "matrixCorr"}.
+\code{description}, and \code{package = "matrixCorr"}. When
+\code{p_value = TRUE}, the returned object also carries an \code{inference}
+attribute with elements \code{estimate}, \code{statistic}, \code{parameter},
+\code{p_value}, and \code{n_obs}. When \code{ci = TRUE}, it also carries a
+\code{ci} attribute with elements \code{est}, \code{lwr.ci},
+\code{upr.ci}, \code{conf.level}, and \code{ci.method}, plus
+\code{attr(x, "conf.level")}. Scalar outputs keep the same point estimate
+and gain the same metadata only when inference is requested.
 }
 \description{
 Computes polyserial correlations between continuous variables in \code{data}
@@ -122,6 +160,23 @@ The returned estimate maximises the log-likelihood
 \ell(\rho) = \sum_{i=1}^{n}\log \Pr(Y_i = y_i \mid X_i = x_i, \rho)
 }
 over \eqn{\rho \in (-1,1)} via a one-dimensional Brent search in C++.
+
+\strong{Assumptions.} The coefficient is appropriate when the ordinal
+variable is viewed as the discretised version of a latent normal variable
+that is jointly normal with the observed continuous variable. The optional
+p-values and confidence intervals adopt this latent-normal interpretation
+and use the same likelihood that defines the polyserial estimate. These
+inferential quantities are therefore model-based and should not be
+interpreted as distribution-free summaries.
+
+\strong{Inference.} When \code{ci = TRUE} or \code{p_value = TRUE}, the
+function refits the pairwise polyserial model by maximum likelihood and
+obtains the observed information matrix numerically in C++. The reported
+confidence interval is a Wald interval
+\eqn{\hat\rho \pm z_{1-\alpha/2}\operatorname{SE}(\hat\rho)}, and the
+reported p-value is from the large-sample Wald \eqn{z}-test for
+\eqn{H_0:\rho = 0}. These inferential quantities are only computed when
+explicitly requested.
 
 In vector mode a single estimate is returned. In matrix/data-frame mode,
 every numeric column of \code{data} is paired with every ordinal column of

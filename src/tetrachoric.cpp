@@ -28,6 +28,16 @@ struct PolyserialPrepared {
   std::vector<int> y;
 };
 
+struct PolyserialFitDetails {
+  std::vector<double> z;
+  std::vector<int> y;
+  std::vector<double> par;
+  double estimate{NA_REAL};
+  double fmin{NA_REAL};
+  int ncat{0};
+  int n_obs{0};
+};
+
 struct PolyserialOptimData {
   const std::vector<double>* z;
   const std::vector<int>* y;
@@ -123,9 +133,15 @@ double polyserial_optim_fn(int n, double* par, void* ex) {
 
 double polyserial_fit_full_mle(const std::vector<double>& x,
                                const std::vector<int>& y,
-                               const double maxcor = 0.9999) {
+                               const double maxcor = 0.9999);
+
+bool polyserial_fit_full_details(const std::vector<double>& x,
+                                 const std::vector<int>& y,
+                                 PolyserialFitDetails& fit,
+                                 const double maxcor = 0.9999) {
   const int n = static_cast<int>(x.size());
-  if (n != static_cast<int>(y.size()) || n < 2) return NA_REAL;
+  fit = PolyserialFitDetails{};
+  if (n != static_cast<int>(y.size()) || n < 2) return false;
 
   double mx = 0.0;
   double my = 0.0;
@@ -149,21 +165,21 @@ double polyserial_fit_full_mle(const std::vector<double>& x,
     z[i] = dx;
   }
 
-  if (!(sxx > 0.0) || !(syy > 0.0)) return NA_REAL;
+  if (!(sxx > 0.0) || !(syy > 0.0)) return false;
 
   const double sx = std::sqrt(sxx / (n - 1));
   const double sy = std::sqrt(syy / (n - 1));
-  if (!(sx > 0.0) || !(sy > 0.0)) return NA_REAL;
+  if (!(sx > 0.0) || !(sy > 0.0)) return false;
 
   for (double& zi : z) zi /= sx;
 
   const int ncat = *std::max_element(y.begin(), y.end());
-  if (ncat < 2) return NA_REAL;
+  if (ncat < 2) return false;
 
   std::vector<double> freq(ncat, 0.0);
   for (int yi : y) freq[yi - 1] += 1.0;
   if (std::count_if(freq.begin(), freq.end(), [](double f) { return f > 0.0; }) < 2) {
-    return NA_REAL;
+    return false;
   }
 
   std::vector<double> par(ncat);
@@ -175,7 +191,7 @@ double polyserial_fit_full_mle(const std::vector<double>& x,
 
   double denom = 0.0;
   for (int k = 1; k < ncat; ++k) denom += phi(par[k]);
-  if (!(denom > 0.0) || !std::isfinite(denom)) return NA_REAL;
+  if (!(denom > 0.0) || !std::isfinite(denom)) return false;
 
   double rho = std::sqrt(static_cast<double>(n - 1) / n) * sy * (sxy / std::sqrt(sxx * syy)) / denom;
   if (std::abs(rho) > maxcor) rho = (rho > 0.0 ? maxcor : -maxcor);
@@ -204,8 +220,25 @@ double polyserial_fit_full_mle(const std::vector<double>& x,
     500
   );
 
-  if (fail != 0 || !std::isfinite(opt_par[0])) return NA_REAL;
-  return nan_preserve(opt_par[0], -maxcor, maxcor);
+  if (fail != 0 || !std::isfinite(opt_par[0])) return false;
+
+  fit.z = std::move(z);
+  fit.y = y;
+  fit.par = std::move(opt_par);
+  fit.estimate = nan_preserve(fit.par[0], -maxcor, maxcor);
+  fit.fmin = fmin;
+  fit.ncat = ncat;
+  fit.n_obs = n;
+  fit.par[0] = fit.estimate;
+  return true;
+}
+
+double polyserial_fit_full_mle(const std::vector<double>& x,
+                               const std::vector<int>& y,
+                               const double maxcor) {
+  PolyserialFitDetails fit;
+  if (!polyserial_fit_full_details(x, y, fit, maxcor)) return NA_REAL;
+  return fit.estimate;
 }
 
 } // namespace
@@ -833,6 +866,453 @@ double matrixCorr_polyserial_negloglik_cpp(NumericVector z, IntegerVector y,
   }
 
   return polyserial_negloglik_core(z_std, y_int, REAL(pars), ncat, maxcor);
+}
+
+namespace {
+
+constexpr double kLatentMaxcor = 0.9999;
+
+struct GenericOptimData {
+  std::function<double(const std::vector<double>&)> fn;
+};
+
+double generic_nmmin_fn(int n, double* par, void* ex) {
+  GenericOptimData* data = static_cast<GenericOptimData*>(ex);
+  std::vector<double> theta(par, par + n);
+  return data->fn(theta);
+}
+
+bool latent_nmmin_optimize(const std::vector<double>& start,
+                           const std::function<double(const std::vector<double>&)>& fn,
+                           std::vector<double>& opt_par,
+                           double& fmin,
+                           int maxit = 1000) {
+  const int npar = static_cast<int>(start.size());
+  if (npar < 1) return false;
+
+  std::vector<double> par = start;
+  opt_par = start;
+  fmin = std::numeric_limits<double>::infinity();
+  int fail = 0;
+  int fncount = 0;
+  GenericOptimData data{fn};
+
+  nmmin(
+    npar,
+    par.data(),
+    opt_par.data(),
+    &fmin,
+    generic_nmmin_fn,
+    &fail,
+    R_NegInf,
+    std::sqrt(std::numeric_limits<double>::epsilon()),
+    &data,
+    1.0,
+    0.5,
+    2.0,
+    0,
+    &fncount,
+    maxit
+  );
+
+  return fail == 0 && std::isfinite(fmin);
+}
+
+inline double rho_from_theta(double theta) {
+  return kLatentMaxcor * std::tanh(theta);
+}
+
+inline double drho_dtheta(double theta) {
+  const double th = std::tanh(theta);
+  return kLatentMaxcor * (1.0 - th * th);
+}
+
+void ordered_cuts_from_theta(const std::vector<double>& theta,
+                             int offset,
+                             int n_cuts,
+                             std::vector<double>& cuts) {
+  cuts.assign(static_cast<std::size_t>(std::max(n_cuts, 0)), 0.0);
+  if (n_cuts <= 0) return;
+  cuts[0] = theta[static_cast<std::size_t>(offset)];
+  for (int j = 1; j < n_cuts; ++j) {
+    cuts[static_cast<std::size_t>(j)] =
+      cuts[static_cast<std::size_t>(j - 1)] + std::exp(theta[static_cast<std::size_t>(offset + j)]);
+  }
+}
+
+void ordered_theta_from_cuts(const std::vector<double>& cuts,
+                             std::vector<double>& theta,
+                             int offset) {
+  const int n_cuts = static_cast<int>(cuts.size());
+  if (n_cuts <= 0) return;
+  theta[static_cast<std::size_t>(offset)] = cuts[0];
+  for (int j = 1; j < n_cuts; ++j) {
+    const double gap = std::max(cuts[static_cast<std::size_t>(j)] - cuts[static_cast<std::size_t>(j - 1)], 1e-8);
+    theta[static_cast<std::size_t>(offset + j)] = std::log(gap);
+  }
+}
+
+double latent_safe_step(const std::vector<double>& theta,
+                        int idx,
+                        const std::function<double(const std::vector<double>&)>& fn) {
+  double h = std::pow(std::numeric_limits<double>::epsilon(), 0.25) *
+    std::max(1.0, std::abs(theta[static_cast<std::size_t>(idx)]));
+  for (int it = 0; it < 12; ++it) {
+    std::vector<double> tp = theta;
+    std::vector<double> tm = theta;
+    tp[static_cast<std::size_t>(idx)] += h;
+    tm[static_cast<std::size_t>(idx)] -= h;
+    const double fp = fn(tp);
+    const double fm = fn(tm);
+    if (std::isfinite(fp) && std::isfinite(fm)) return h;
+    h *= 0.5;
+  }
+  return NA_REAL;
+}
+
+arma::mat latent_numeric_hessian(const std::vector<double>& theta,
+                                 const std::function<double(const std::vector<double>&)>& fn) {
+  const int p = static_cast<int>(theta.size());
+  arma::mat H(p, p, arma::fill::zeros);
+  const double f0 = fn(theta);
+  if (!std::isfinite(f0)) {
+    H.fill(NA_REAL);
+    return H;
+  }
+
+  std::vector<double> step(static_cast<std::size_t>(p), NA_REAL);
+  for (int i = 0; i < p; ++i) {
+    step[static_cast<std::size_t>(i)] = latent_safe_step(theta, i, fn);
+    if (!std::isfinite(step[static_cast<std::size_t>(i)])) {
+      H.fill(NA_REAL);
+      return H;
+    }
+  }
+
+  for (int i = 0; i < p; ++i) {
+    const double hi = step[static_cast<std::size_t>(i)];
+    std::vector<double> tp = theta;
+    std::vector<double> tm = theta;
+    tp[static_cast<std::size_t>(i)] += hi;
+    tm[static_cast<std::size_t>(i)] -= hi;
+    const double fp = fn(tp);
+    const double fm = fn(tm);
+    if (!std::isfinite(fp) || !std::isfinite(fm)) {
+      H.fill(NA_REAL);
+      return H;
+    }
+    H(i, i) = (fp - 2.0 * f0 + fm) / (hi * hi);
+
+    for (int j = i + 1; j < p; ++j) {
+      const double hj = step[static_cast<std::size_t>(j)];
+      std::vector<double> tpp = theta;
+      std::vector<double> tpm = theta;
+      std::vector<double> tmp = theta;
+      std::vector<double> tmm = theta;
+      tpp[static_cast<std::size_t>(i)] += hi;
+      tpp[static_cast<std::size_t>(j)] += hj;
+      tpm[static_cast<std::size_t>(i)] += hi;
+      tpm[static_cast<std::size_t>(j)] -= hj;
+      tmp[static_cast<std::size_t>(i)] -= hi;
+      tmp[static_cast<std::size_t>(j)] += hj;
+      tmm[static_cast<std::size_t>(i)] -= hi;
+      tmm[static_cast<std::size_t>(j)] -= hj;
+      const double fpp = fn(tpp);
+      const double fpm = fn(tpm);
+      const double fmp = fn(tmp);
+      const double fmm = fn(tmm);
+      if (!std::isfinite(fpp) || !std::isfinite(fpm) ||
+          !std::isfinite(fmp) || !std::isfinite(fmm)) {
+        H.fill(NA_REAL);
+        return H;
+      }
+      const double hij = (fpp - fpm - fmp + fmm) / (4.0 * hi * hj);
+      H(i, j) = hij;
+      H(j, i) = hij;
+    }
+  }
+
+  return 0.5 * (H + H.t());
+}
+
+List latent_wald_result(double estimate,
+                        double jacobian_rho,
+                        const arma::mat& hessian,
+                        int n_obs,
+                        double conf_level,
+                        const std::string& ci_method,
+                        const std::string& inference_method,
+                        double nll) {
+  double se = NA_REAL;
+  double statistic = NA_REAL;
+  double p_value = NA_REAL;
+  double lwr = NA_REAL;
+  double upr = NA_REAL;
+
+  if (hessian.n_rows >= 1 && hessian.n_cols >= 1 &&
+      hessian.is_finite() &&
+      std::isfinite(hessian(0, 0)) &&
+      hessian(0, 0) > 0.0) {
+    arma::mat vcov_theta;
+    bool ok = arma::inv_sympd(vcov_theta, hessian);
+    if (!ok) ok = arma::inv(vcov_theta, hessian);
+    if (ok && vcov_theta.n_rows >= 1 && vcov_theta.n_cols >= 1 &&
+        std::isfinite(vcov_theta(0, 0)) && vcov_theta(0, 0) >= 0.0) {
+      const double var_rho = jacobian_rho * jacobian_rho * vcov_theta(0, 0);
+      if (std::isfinite(var_rho) && var_rho >= 0.0) {
+        se = std::sqrt(var_rho);
+      }
+    }
+  }
+
+  if (std::isfinite(estimate) && std::isfinite(se) && se > 0.0) {
+    statistic = estimate / se;
+    p_value = 2.0 * R::pnorm5(std::abs(statistic), 0.0, 1.0, false, false);
+    const double zcrit = R::qnorm5(0.5 * (1.0 + conf_level), 0.0, 1.0, true, false);
+    lwr = std::max(-1.0, estimate - zcrit * se);
+    upr = std::min(1.0, estimate + zcrit * se);
+  }
+
+  return List::create(
+    _["estimate"] = estimate,
+    _["se"] = se,
+    _["statistic"] = statistic,
+    _["parameter"] = NA_REAL,
+    _["p_value"] = p_value,
+    _["lwr"] = lwr,
+    _["upr"] = upr,
+    _["n_obs"] = n_obs,
+    _["conf.level"] = conf_level,
+    _["ci.method"] = ci_method,
+    _["inference.method"] = inference_method,
+    _["nll"] = nll
+  );
+}
+
+double tetra_nll_full_theta(const std::vector<double>& theta,
+                            double a, double b, double c, double d) {
+  if (theta.size() != 3) return R_PosInf;
+  const double rho = rho_from_theta(theta[0]);
+  const double rc = theta[1];
+  const double cc = theta[2];
+  return tetra_nll_fixed_thresholds(rho, a, b, c, d, rc, cc);
+}
+
+List tetrachoric_inference_impl(const NumericMatrix& tab,
+                                double correct,
+                                double conf_level) {
+  if (tab.nrow() != 2 || tab.ncol() != 2) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              0, conf_level,
+                              "wald_information_tetrachoric",
+                              "wald_z_tetrachoric",
+                              NA_REAL);
+  }
+
+  double a = tab(0, 0), b = tab(1, 0), c = tab(0, 1), d = tab(1, 1);
+  const double n_obs = a + b + c + d;
+  if (!(n_obs > 0.0)) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              0, conf_level,
+                              "wald_information_tetrachoric",
+                              "wald_z_tetrachoric",
+                              NA_REAL);
+  }
+
+  const bool any_zero = (a <= 0.0) || (b <= 0.0) || (c <= 0.0) || (d <= 0.0);
+  if (correct > 0.0 && any_zero) {
+    if (a <= 0.0) a += correct;
+    if (b <= 0.0) b += correct;
+    if (c <= 0.0) c += correct;
+    if (d <= 0.0) d += correct;
+  }
+  const double tot = a + b + c + d;
+  if (!(tot > 0.0)) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              static_cast<int>(n_obs), conf_level,
+                              "wald_information_tetrachoric",
+                              "wald_z_tetrachoric",
+                              NA_REAL);
+  }
+
+  const double pa = a / tot;
+  const double pb = b / tot;
+  const double pc = c / tot;
+  const double pd = d / tot;
+  const double rc0 = qnorm01(nan_preserve(pa + pb, 1e-12, 1.0 - 1e-12));
+  const double cc0 = qnorm01(nan_preserve(pa + pc, 1e-12, 1.0 - 1e-12));
+  auto nll_fixed = [&](double rho) { return tetra_nll_fixed_thresholds(rho, pa, pb, pc, pd, rc0, cc0); };
+  const double est = nan_preserve(optimize(nll_fixed, -1.0, 1.0, 1e-8, 250), -1.0, 1.0);
+  const double est_clamped = nan_preserve(est, -kLatentMaxcor, kLatentMaxcor);
+  if (!std::isfinite(est_clamped)) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              static_cast<int>(n_obs), conf_level,
+                              "wald_information_tetrachoric",
+                              "wald_z_tetrachoric",
+                              NA_REAL);
+  }
+
+  std::vector<double> theta0(1);
+  theta0[0] = std::atanh(est_clamped / kLatentMaxcor);
+  auto fn = [&](const std::vector<double>& theta) {
+    return tetra_nll_fixed_thresholds(rho_from_theta(theta[0]), a, b, c, d, rc0, cc0);
+  };
+  const arma::mat H = latent_numeric_hessian(theta0, fn);
+  return latent_wald_result(est_clamped, drho_dtheta(theta0[0]), H, static_cast<int>(n_obs), conf_level,
+                            "wald_information_tetrachoric",
+                            "wald_z_tetrachoric",
+                            fn(theta0));
+}
+
+List polychoric_inference_impl(const NumericMatrix& tab,
+                               double correct,
+                               double conf_level) {
+  if (tab.nrow() < 2 || tab.ncol() < 2) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              0, conf_level,
+                              "wald_information_polychoric",
+                              "wald_z_polychoric",
+                              NA_REAL);
+  }
+
+  NumericMatrix N = clone(tab);
+  double n_obs = 0.0;
+  for (int i = 0; i < N.nrow(); ++i) {
+    for (int j = 0; j < N.ncol(); ++j) n_obs += N(i, j);
+  }
+  if (!(n_obs > 0.0)) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              0, conf_level,
+                              "wald_information_polychoric",
+                              "wald_z_polychoric",
+                              NA_REAL);
+  }
+
+  for (int i = 0; i < N.nrow(); ++i) {
+    for (int j = 0; j < N.ncol(); ++j) N(i, j) /= n_obs;
+  }
+
+  N = drop_zero_margins(N);
+  if (N.nrow() < 2 || N.ncol() < 2) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              static_cast<int>(n_obs), conf_level,
+                              "wald_information_polychoric",
+                              "wald_z_polychoric",
+                              NA_REAL);
+  }
+
+  if (correct > 0.0) {
+    for (int i = 0; i < N.nrow(); ++i) {
+      for (int j = 0; j < N.ncol(); ++j) {
+        if (N(i, j) <= 0.0) N(i, j) = correct / n_obs;
+      }
+    }
+  }
+
+  const int nr = N.nrow();
+  const int nc = N.ncol();
+  std::vector<double> tab_weights(static_cast<std::size_t>(nr * nc), 0.0);
+  for (int i = 0; i < nr; ++i) {
+    for (int j = 0; j < nc; ++j) {
+      tab_weights[static_cast<std::size_t>(i * nc + j)] = n_obs * N(i, j);
+    }
+  }
+  std::vector<double> probs(static_cast<std::size_t>(nr * nc), 0.0);
+  for (int i = 0; i < nr; ++i) {
+    for (int j = 0; j < nc; ++j) {
+      probs[static_cast<std::size_t>(i * nc + j)] = N(i, j);
+    }
+  }
+
+  std::vector<double> rc0, cc0;
+  cutpoints_from_table(N, rc0, cc0);
+  if (rc0.empty() || cc0.empty()) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              static_cast<int>(n_obs), conf_level,
+                              "wald_information_polychoric",
+                              "wald_z_polychoric",
+                              NA_REAL);
+  }
+
+  PolyWorkspace ws0;
+  ws0.reset(rc0, cc0);
+  auto nll_fixed = [&](double rho) { return poly_nll_fixed_thresholds(rho, probs.data(), ws0); };
+  const double est = nan_preserve(optimize(nll_fixed, -1.0, 1.0, 1e-8, 250), -1.0, 1.0);
+  const double est_clamped = nan_preserve(est, -kLatentMaxcor, kLatentMaxcor);
+  if (!std::isfinite(est_clamped)) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              static_cast<int>(n_obs), conf_level,
+                              "wald_information_polychoric",
+                              "wald_z_polychoric",
+                              NA_REAL);
+  }
+
+  std::vector<double> theta0(1);
+  theta0[0] = std::atanh(est_clamped / kLatentMaxcor);
+  PolyWorkspace ws;
+  ws.reset(rc0, cc0);
+  auto fn = [&](const std::vector<double>& theta) {
+    return poly_nll_fixed_thresholds(rho_from_theta(theta[0]), tab_weights.data(), ws);
+  };
+  const arma::mat H = latent_numeric_hessian(theta0, fn);
+  return latent_wald_result(est_clamped, drho_dtheta(theta0[0]), H, static_cast<int>(n_obs), conf_level,
+                            "wald_information_polychoric",
+                            "wald_z_polychoric",
+                            fn(theta0));
+}
+
+List polyserial_inference_impl(const NumericVector& x,
+                               const IntegerVector& y,
+                               double conf_level) {
+  PolyserialPrepared prep;
+  if (!polyserial_prepare_xy(x, y, false, prep)) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              0, conf_level,
+                              "wald_information_polyserial",
+                              "wald_z_polyserial",
+                              NA_REAL);
+  }
+
+  PolyserialFitDetails fit;
+  if (!polyserial_fit_full_details(prep.x, prep.y, fit, kLatentMaxcor)) {
+    return latent_wald_result(NA_REAL, NA_REAL, arma::mat(1, 1, arma::fill::value(NA_REAL)),
+                              static_cast<int>(prep.x.size()), conf_level,
+                              "wald_information_polyserial",
+                              "wald_z_polyserial",
+                              NA_REAL);
+  }
+
+  auto fn = [&](const std::vector<double>& par) {
+    return polyserial_negloglik_core(fit.z, fit.y, par.data(), fit.ncat, kLatentMaxcor);
+  };
+  const arma::mat H = latent_numeric_hessian(fit.par, fn);
+  return latent_wald_result(fit.estimate, 1.0, H, fit.n_obs, conf_level,
+                            "wald_information_polyserial",
+                            "wald_z_polyserial",
+                            fit.fmin);
+}
+
+} // namespace
+
+// [[Rcpp::export]]
+List matrixCorr_tetrachoric_inference_cpp(NumericMatrix tab,
+                                          double correct = 0.5,
+                                          double conf_level = 0.95) {
+  return tetrachoric_inference_impl(tab, correct, conf_level);
+}
+
+// [[Rcpp::export]]
+List matrixCorr_polychoric_inference_cpp(NumericMatrix tab,
+                                         double correct = 0.5,
+                                         double conf_level = 0.95) {
+  return polychoric_inference_impl(tab, correct, conf_level);
+}
+
+// [[Rcpp::export]]
+List matrixCorr_polyserial_inference_cpp(NumericVector x,
+                                         IntegerVector y,
+                                         double conf_level = 0.95) {
+  return polyserial_inference_impl(x, y, conf_level);
 }
 
 // [[Rcpp::export]]

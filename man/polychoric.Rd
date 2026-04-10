@@ -5,9 +5,18 @@
 \alias{print.polychoric_corr}
 \alias{plot.polychoric_corr}
 \alias{summary.polychoric_corr}
+\alias{print.summary.polychoric_corr}
 \title{Pairwise Polychoric Correlation}
 \usage{
-polychoric(data, y = NULL, correct = 0.5, check_na = TRUE)
+polychoric(
+  data,
+  y = NULL,
+  correct = 0.5,
+  check_na = TRUE,
+  ci = FALSE,
+  p_value = FALSE,
+  conf_level = 0.95
+)
 
 \method{print}{polychoric_corr}(
   x,
@@ -37,6 +46,19 @@ polychoric(data, y = NULL, correct = 0.5, check_na = TRUE)
   topn = NULL,
   max_vars = NULL,
   width = NULL,
+  ci_digits = 3,
+  p_digits = 4,
+  show_ci = NULL,
+  ...
+)
+
+\method{print}{summary.polychoric_corr}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
   show_ci = NULL,
   ...
 )
@@ -55,7 +77,18 @@ Default is \code{0.5}.}
 \item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, missing values
 are rejected. If \code{FALSE}, pairwise complete cases are used.}
 
-\item{x}{An object of class \code{polychoric_corr}.}
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach
+model-based large-sample Wald confidence intervals derived from the observed
+information matrix of the latent-variable likelihood.}
+
+\item{p_value}{Logical (default \code{FALSE}). If \code{TRUE}, attach
+model-based large-sample Wald p-values and test statistics for each
+estimated latent correlation.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
+\item{x}{An object of class \code{summary.polychoric_corr}.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
@@ -86,13 +119,25 @@ from console width.}
 on the heatmap tiles.}
 
 \item{object}{An object of class \code{polychoric_corr}.}
+
+\item{ci_digits}{Integer; digits for confidence limits in the pairwise
+summary.}
+
+\item{p_digits}{Integer; digits for p-values in the pairwise summary.}
 }
 \value{
 If \code{y} is supplied, a numeric scalar with attributes
 \code{diagnostics} and \code{thresholds}. Otherwise a symmetric matrix of
 class \code{polychoric_corr} with attributes \code{method},
 \code{description}, \code{package = "matrixCorr"}, \code{diagnostics},
-\code{thresholds}, and \code{correct}.
+\code{thresholds}, and \code{correct}. When \code{p_value = TRUE}, the
+returned object also carries an \code{inference} attribute with elements
+\code{estimate}, \code{statistic}, \code{parameter}, \code{p_value}, and
+\code{n_obs}. When \code{ci = TRUE}, it also carries a \code{ci} attribute
+with elements \code{est}, \code{lwr.ci}, \code{upr.ci}, \code{conf.level},
+and \code{ci.method}, plus \code{attr(x, "conf.level")}. Scalar outputs keep
+the same point estimate and gain the same metadata only when inference is
+requested.
 }
 \description{
 Computes the polychoric correlation for either a pair of ordinal variables
@@ -137,6 +182,22 @@ When \code{correct = 0} and zero cells are present, the corresponding fit can
 be boundary-driven rather than a regular interior maximum-likelihood problem.
 The returned object stores sparse-fit diagnostics and the thresholds used for
 estimation so those cases can be inspected explicitly.
+
+\strong{Assumptions.} The coefficient is appropriate when both observed
+ordinal variables are viewed as discretisations of jointly normal latent
+variables. The optional p-values and confidence intervals adopt this
+latent-normal interpretation and use the same likelihood that defines the
+polychoric estimate. These inferential quantities are therefore model-based
+and should not be interpreted as distribution-free summaries.
+
+\strong{Inference.} When \code{ci = TRUE} or \code{p_value = TRUE}, the
+function refits the pairwise polychoric model by maximum likelihood and
+obtains the observed information matrix numerically in C++. The reported
+confidence interval is a Wald interval
+\eqn{\hat\rho \pm z_{1-\alpha/2}\operatorname{SE}(\hat\rho)}, and the
+reported p-value is from the large-sample Wald \eqn{z}-test for
+\eqn{H_0:\rho = 0}. These inferential quantities are only computed when
+explicitly requested.
 
 In matrix/data-frame mode, all pairwise polychoric correlations are computed
 between supported ordinal columns. Diagonal entries are \code{1} for

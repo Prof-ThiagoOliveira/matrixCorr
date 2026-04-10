@@ -690,6 +690,45 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// matrixCorr_tetrachoric_inference_cpp
+List matrixCorr_tetrachoric_inference_cpp(NumericMatrix tab, double correct, double conf_level);
+RcppExport SEXP _matrixCorr_matrixCorr_tetrachoric_inference_cpp(SEXP tabSEXP, SEXP correctSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< double >::type correct(correctSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_tetrachoric_inference_cpp(tab, correct, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
+// matrixCorr_polychoric_inference_cpp
+List matrixCorr_polychoric_inference_cpp(NumericMatrix tab, double correct, double conf_level);
+RcppExport SEXP _matrixCorr_matrixCorr_polychoric_inference_cpp(SEXP tabSEXP, SEXP correctSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type tab(tabSEXP);
+    Rcpp::traits::input_parameter< double >::type correct(correctSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_polychoric_inference_cpp(tab, correct, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
+// matrixCorr_polyserial_inference_cpp
+List matrixCorr_polyserial_inference_cpp(NumericVector x, IntegerVector y, double conf_level);
+RcppExport SEXP _matrixCorr_matrixCorr_polyserial_inference_cpp(SEXP xSEXP, SEXP ySEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(matrixCorr_polyserial_inference_cpp(x, y, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
 // matrixCorr_polydi_mle_cpp
 double matrixCorr_polydi_mle_cpp(NumericMatrix tab, double correct);
 RcppExport SEXP _matrixCorr_matrixCorr_polydi_mle_cpp(SEXP tabSEXP, SEXP correctSEXP) {
@@ -764,6 +803,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_matrixCorr_biserial_latent_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_biserial_latent_cpp, 2},
     {"_matrixCorr_matrixCorr_polyserial_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polyserial_mle_cpp, 2},
     {"_matrixCorr_matrixCorr_polyserial_negloglik_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polyserial_negloglik_cpp, 4},
+    {"_matrixCorr_matrixCorr_tetrachoric_inference_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_tetrachoric_inference_cpp, 3},
+    {"_matrixCorr_matrixCorr_polychoric_inference_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polychoric_inference_cpp, 3},
+    {"_matrixCorr_matrixCorr_polyserial_inference_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polyserial_inference_cpp, 3},
     {"_matrixCorr_matrixCorr_polydi_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polydi_mle_cpp, 2},
     {"_matrixCorr_validate_corr_input_cpp", (DL_FUNC) &_matrixCorr_validate_corr_input_cpp, 2},
     {NULL, NULL, 0}

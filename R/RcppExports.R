@@ -193,6 +193,18 @@ matrixCorr_polyserial_negloglik_cpp <- function(z, y, pars, maxcor = 0.9999) {
     .Call(`_matrixCorr_matrixCorr_polyserial_negloglik_cpp`, z, y, pars, maxcor)
 }
 
+matrixCorr_tetrachoric_inference_cpp <- function(tab, correct = 0.5, conf_level = 0.95) {
+    .Call(`_matrixCorr_matrixCorr_tetrachoric_inference_cpp`, tab, correct, conf_level)
+}
+
+matrixCorr_polychoric_inference_cpp <- function(tab, correct = 0.5, conf_level = 0.95) {
+    .Call(`_matrixCorr_matrixCorr_polychoric_inference_cpp`, tab, correct, conf_level)
+}
+
+matrixCorr_polyserial_inference_cpp <- function(x, y, conf_level = 0.95) {
+    .Call(`_matrixCorr_matrixCorr_polyserial_inference_cpp`, x, y, conf_level)
+}
+
 matrixCorr_polydi_mle_cpp <- function(tab, correct = 0.5) {
     .Call(`_matrixCorr_matrixCorr_polydi_mle_cpp`, tab, correct)
 }
