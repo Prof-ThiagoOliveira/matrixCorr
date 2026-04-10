@@ -5,20 +5,20 @@ Version: 0.10.0
 Authors@R: person(given = "Thiago de Paula", family = "Oliveira",
     email = "thiago.paula.oliveira@gmail.com", role = c("aut", "cre"),
     comment = c(ORCID = "0000-0002-4555-2584"))
-Description: Compute correlation, association, and agreement measures for
-    small to high-dimensional datasets through a consistent matrix-oriented
-    interface. Supports classical correlations (Pearson, Spearman, Kendall),
-    distance correlation, partial correlation with regularised estimators,
-    shrinkage correlation for p >= n settings, robust correlations including
-    biweight mid-correlation, percentage-bend, and skipped correlation,
-    latent-variable methods for binary and ordinal data, intraclass
-    correlation, repeated-measures correlation, and agreement analyses based on
-    Bland-Altman methods and Lin's concordance correlation coefficient,
-    including repeated-measures extensions. Implemented with optimized C++
-    backends using BLAS/OpenMP and
-    memory-aware symmetric updates, and returns standard R objects with
-    print/summary/plot methods plus optional Shiny viewers for matrix
-    inspection. Methods based on Ledoit and Wolf (2004)
+Description: Compute correlation, association, agreement, and reliability
+    measures for small to high-dimensional datasets through a consistent
+    matrix-oriented interface. Supports classical correlations (Pearson,
+    Spearman, Kendall), distance correlation, partial correlation with
+    regularised estimators, shrinkage correlation for p >= n settings, robust
+    correlations including biweight mid-correlation, percentage-bend, and
+    skipped correlation, latent-variable methods for binary and ordinal data,
+    pairwise and overall intraclass correlation for wide data,
+    repeated-measures correlation, and agreement analyses based on
+    Bland-Altman methods, Lin's concordance correlation coefficient, and
+    repeated-measures intraclass correlation. Implemented with optimized C++
+    backends using BLAS/OpenMP and memory-aware symmetric updates, and returns
+    standard R objects with print/summary/plot methods plus optional Shiny
+    viewers for matrix inspection. Methods based on Ledoit and Wolf (2004)
     <doi:10.1016/S0047-259X(03)00096-4>; high-dimensional shrinkage covariance
     estimation <doi:10.2202/1544-6115.1175>; Lin (1989)
     <doi:10.2307/2532051>; Wilcox (1994) <doi:10.1007/BF02294395>; Wilcox
