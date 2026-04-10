@@ -5,9 +5,11 @@
 \alias{print.biserial_corr}
 \alias{plot.biserial_corr}
 \alias{summary.biserial_corr}
+\alias{print.summary.biserial_corr}
 \title{Biserial Correlation Between Continuous and Binary Variables}
 \usage{
-biserial(data, y, check_na = TRUE)
+biserial(data, y, check_na = TRUE, ci = FALSE, p_value = FALSE,
+  conf_level = 0.95)
 
 \method{print}{biserial_corr}(
   x,
@@ -27,12 +29,26 @@ biserial(data, y, check_na = TRUE)
   high_color = "steelblue1",
   mid_color = "white",
   value_text_size = 4,
+  ci_text_size = 3,
   show_value = TRUE,
   ...
 )
 
 \method{summary}{biserial_corr}(
   object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  ci_digits = 3,
+  p_digits = 4,
+  show_ci = NULL,
+  ...
+)
+
+\method{print}{summary.biserial_corr}(
+  x,
+  digits = NULL,
   n = NULL,
   topn = NULL,
   max_vars = NULL,
@@ -51,7 +67,18 @@ two-level columns are retained.}
 \item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, missing values
 are rejected. If \code{FALSE}, pairwise complete cases are used.}
 
-\item{x}{An object of class \code{biserial_corr}.}
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach
+approximate large-sample confidence intervals derived from a Fisher
+\eqn{z}-transformation of the biserial estimate.}
+
+\item{p_value}{Logical (default \code{FALSE}). If \code{TRUE}, attach
+model-based large-sample p-values, test statistics, and degrees of freedom
+for each biserial estimate.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
+\item{x}{An object of class \code{summary.biserial_corr}.}
 
 \item{digits}{Integer; number of decimal places to print.}
 
@@ -78,17 +105,32 @@ from console width.}
 
 \item{value_text_size}{Font size used in tile labels.}
 
+\item{ci_text_size}{Text size for confidence intervals in the heatmap.}
+
 \item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
 on the heatmap tiles.}
 
 \item{object}{An object of class \code{biserial_corr}.}
+
+\item{ci_digits}{Integer; digits for biserial confidence limits in the
+pairwise summary.}
+
+\item{p_digits}{Integer; digits for biserial p-values in the pairwise
+summary.}
 }
 \value{
 If both \code{data} and \code{y} are vectors, a numeric scalar. Otherwise a
 numeric matrix of class \code{biserial_corr} with rows corresponding to
 the continuous variables in \code{data} and columns to the binary variables
 in \code{y}. Matrix outputs carry attributes \code{method},
-\code{description}, and \code{package = "matrixCorr"}.
+\code{description}, and \code{package = "matrixCorr"}. When
+\code{p_value = TRUE}, the object also carries an \code{inference}
+attribute with matrices \code{estimate}, \code{statistic},
+\code{parameter}, \code{p_value}, and \code{n_obs}. When \code{ci = TRUE},
+it additionally carries a \code{ci} attribute with matrices
+\code{lwr.ci} and \code{upr.ci}, plus \code{attr(x, "conf.level")}. Scalar
+outputs keep the same point estimate and gain the same metadata only when
+inference is requested.
 }
 \description{
 Computes biserial correlations between continuous variables in \code{data}
@@ -111,6 +153,28 @@ r_b =
 \frac{pq}{\phi(z_p)}.
 }
 This is exactly the estimator implemented in the underlying C++ kernel.
+
+\strong{Assumptions.} The biserial coefficient is appropriate when the
+observed binary variable is viewed as a thresholded version of an
+unobserved continuous latent variable that is jointly normal with the
+observed continuous variable. The optional p-values and confidence
+intervals adopt this latent-normal interpretation together with the usual
+large-sample approximations used for correlation coefficients. These
+inferential quantities are therefore model-based and should not be
+interpreted as distribution-free summaries.
+
+\strong{Inference.} When \code{p_value = TRUE}, the package reports the
+large-sample \eqn{t}-statistic
+\deqn{
+t = r_b \sqrt{\frac{n - 2}{1 - r_b^2}},
+}
+referenced to a Student \eqn{t}-distribution with \eqn{n - 2} degrees of
+freedom. When \code{ci = TRUE}, the package forms an approximate Fisher
+\eqn{z}-interval by transforming \eqn{r_b} with
+\eqn{z = \operatorname{atanh}(r_b)}, using standard error
+\eqn{1 / \sqrt{n - 3}}, and mapping the limits back with
+\eqn{\tanh(\cdot)}. The CI is therefore an internal large-sample
+extension and is only computed when explicitly requested.
 
 In vector mode a single biserial correlation is returned. In
 matrix/data-frame mode, every numeric column of \code{data} is paired with every
@@ -145,7 +209,7 @@ Y <- data.frame(
   g2 = Z[, 4] > stats::qnorm(0.55)
 )
 
-bs <- biserial(X, Y)
+bs <- biserial(X, Y, ci = TRUE, p_value = TRUE)
 print(bs, digits = 3)
 summary(bs)
 plot(bs)
@@ -154,6 +218,9 @@ plot(bs)
 \references{
 Olsson, U., Drasgow, F., & Dorans, N. J. (1982). The polyserial
 correlation coefficient. \emph{Psychometrika}, 47(3), 337-347.
+
+Fisher, R. A. (1921). On the probable error of a coefficient of
+correlation deduced from a small sample. \emph{Metron}, 1, 3-32.
 }
 \author{
 Thiago de Paula Oliveira

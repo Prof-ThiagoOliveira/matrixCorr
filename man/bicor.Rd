@@ -6,6 +6,7 @@
 \alias{print.bicor}
 \alias{plot.bicor}
 \alias{summary.bicor}
+\alias{print.summary.bicor}
 \title{Biweight mid-correlation (bicor)}
 \usage{
 bicor(
@@ -17,6 +18,8 @@ bicor(
   mad_consistent = FALSE,
   w = NULL,
   sparse_threshold = NULL,
+  ci = FALSE,
+  conf_level = 0.95,
   n_threads = getOption("matrixCorr.threads", 1L)
 )
 
@@ -29,6 +32,7 @@ diag.bicor(x, ...)
   topn = NULL,
   max_vars = NULL,
   width = NULL,
+  ci_digits = 3,
   show_ci = NULL,
   na_print = "NA",
   ...
@@ -43,6 +47,7 @@ diag.bicor(x, ...)
   mid_color = "white",
   high_color = "steelblue1",
   value_text_size = 3,
+  ci_text_size = 2.5,
   show_value = TRUE,
   na_fill = "grey90",
   ...
@@ -50,6 +55,19 @@ diag.bicor(x, ...)
 
 \method{summary}{bicor}(
   object,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  ci_digits = 3,
+  p_digits = 4,
+  show_ci = NULL,
+  ...
+)
+
+\method{print}{summary.bicor}(
+  x,
+  digits = NULL,
   n = NULL,
   topn = NULL,
   max_vars = NULL,
@@ -96,10 +114,18 @@ and Tukey weights are multiplied by \code{w} before normalisation.}
 entries with \code{|r| < sparse_threshold} to 0 and returns a sparse
 \code{"ddiMatrix"} (requires \pkg{Matrix}).}
 
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach approximate
+Fisher-z confidence intervals for the off-diagonal biweight
+mid-correlations. This confidence interval is provided as an additional
+large-sample approximation.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
 \item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
 
-\item{x}{An object of class \code{bicor}.}
+\item{x}{An object of class \code{summary.bicor}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other layers.}
 
@@ -113,6 +139,9 @@ entries with \code{|r| < sparse_threshold} to 0 and returns a sparse
 from console width.}
 
 \item{width}{Optional display width; defaults to \code{getOption("width")}.}
+
+\item{ci_digits}{Integer; digits for bicor confidence limits in the pairwise
+summary.}
 
 \item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 
@@ -135,19 +164,29 @@ to display the full matrix or a single triangle.}
 \item{value_text_size}{Numeric; font size for cell labels. Set to \code{NULL}
 to suppress labels (recommended for large matrices).}
 
+\item{ci_text_size}{Text size for confidence-interval labels in the heatmap.}
+
 \item{show_value}{Logical; if \code{TRUE} (default), overlay numeric values
 on the heatmap tiles.}
 
 \item{na_fill}{Fill colour for \code{NA} cells. Default \code{"grey90"}.}
 
 \item{object}{An object of class \code{bicor}.}
+
+\item{p_digits}{Integer; digits for bicor p-values in the pairwise summary.}
 }
 \value{
 A symmetric correlation matrix with class \code{bicor}
 (or a \code{dgCMatrix} if \code{sparse_threshold} is used), with attributes:
 \code{method = "biweight_mid_correlation"}, \code{description},
 and \code{package = "matrixCorr"}. Downstream code should be prepared to
-handle either a dense numeric matrix or a sparse \code{dgCMatrix}.
+handle either a dense numeric matrix or a sparse \code{dgCMatrix}. When
+\code{ci = TRUE}, the object also carries a \code{ci} attribute with
+elements \code{est}, \code{lwr.ci}, \code{upr.ci}, \code{conf.level}, and
+\code{ci.method}, together with an \code{inference} attribute containing
+the standard large-sample summary matrices \code{estimate},
+\code{statistic}, \code{p_value}, \code{Z}, and \code{n_obs}. Pairwise
+complete-case counts are stored in \code{attr(x, "diagnostics")$n_complete}.
 Internally, all medians/MADs, Tukey weights, optional pairwise-NA handling,
 and OpenMP loops are implemented in the C++ helpers
 (\code{bicor_*_cpp()}), so the R wrapper mostly validates arguments and
@@ -160,7 +199,8 @@ A \code{ggplot} object.
 \description{
 Computes pairwise biweight mid-correlations for numeric data. Bicor is a
 robust, Pearson-like correlation that down-weights outliers and heavy-tailed
-observations.
+observations. Optional large-sample confidence intervals are available as a
+derived feature.
 }
 \details{
 For a column \eqn{x = (x_a)_{a=1}^m}, let \eqn{\mathrm{med}(x)} be the median and
@@ -241,6 +281,26 @@ Columns are robust-standardised in parallel and the matrix is formed as
 \eqn{R = \tilde X^\top \tilde X}. \code{n_threads} selects the number of OpenMP
 threads; by default it uses \code{getOption("matrixCorr.threads", 1L)}.
 
+\strong{Large-sample inference.}
+For a pairwise estimate \eqn{r} computed from \eqn{n_{jk}} observed rows, the
+standard large-sample summaries use
+\deqn{
+Z_{jk} = \frac{1}{2}\log\!\left(\frac{1 + r}{1 - r}\right)\sqrt{n_{jk} - 2}
+}
+and
+\deqn{
+T_{jk} = \sqrt{n_{jk} - 2}\;\frac{|r|}{\sqrt{1-r^2}}.
+}
+The reported p-value is the two-sided Student-\eqn{t} tail probability with
+\eqn{n_{jk}-2} degrees of freedom. When \code{ci = TRUE}, the package also
+reports an approximate Fisher-z confidence interval obtained from
+\deqn{
+z_{jk} = \operatorname{atanh}(r), \qquad
+\operatorname{SE}(z_{jk}) = \frac{1}{\sqrt{n_{jk}-3}},
+}
+followed by back-transformation with \code{tanh()}. Confidence intervals are currently available only for dense,
+unweighted outputs.
+
 \strong{Basic properties.}
 \eqn{\mathrm{bicor}(a x + b,\; c y + d) = \mathrm{sign}(ac)\,\mathrm{bicor}(x,y)}.
 With no missing data (and with per-column hybrid/robust standardisation), the
@@ -254,6 +314,8 @@ R <- bicor(X, c_const = 9, max_p_outliers = 1,
                        pearson_fallback = "hybrid")
 print(attr(R, "method"))
 summary(R)
+R_ci <- bicor(X[, 1:5], ci = TRUE)
+summary(R_ci)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

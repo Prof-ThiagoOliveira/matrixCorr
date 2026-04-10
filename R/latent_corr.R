@@ -511,7 +511,7 @@
   )
 }
 
-.mc_tetrachoric_table_psych <- function(tab, correct) {
+.mc_tetrachoric_table_estimate <- function(tab, correct) {
   tab <- as.matrix(tab)
   if (all(dim(tab) == c(2L, 2L))) {
     if (correct > 0) {
@@ -525,7 +525,7 @@
   matrixCorr_tetrachoric_mle_cpp(unclass(tab), correct = correct)
 }
 
-.mc_polychoric_table_psych <- function(tab, correct) {
+.mc_polychoric_table_estimate <- function(tab, correct) {
   tab <- as.matrix(tab)
   if (all(dim(tab) == c(2L, 2L))) {
     tot <- sum(tab)
@@ -540,9 +540,9 @@
   matrixCorr_polychoric_mle_cpp(unclass(tab), correct = correct)
 }
 
-.mc_tetrachoric_estimate_psych <- function(x, y, correct,
-                                           tau_x = NULL, tau_y = NULL,
-                                           global = FALSE) {
+.mc_tetrachoric_estimate_internal <- function(x, y, correct,
+                                              tau_x = NULL, tau_y = NULL,
+                                              global = FALSE) {
   x01 <- as.integer(x) - min(as.integer(x), na.rm = TRUE)
   y01 <- as.integer(y) - min(as.integer(y), na.rm = TRUE)
   tab <- .mc_fast_binary_table01(x01, y01)
@@ -572,9 +572,9 @@
   }
 }
 
-.mc_polychoric_estimate_psych <- function(x, y, n_x, n_y, correct,
-                                          tau_x = NULL, tau_y = NULL,
-                                          global = FALSE) {
+.mc_polychoric_estimate_internal <- function(x, y, n_x, n_y, correct,
+                                             tau_x = NULL, tau_y = NULL,
+                                             global = FALSE) {
   tab <- .mc_fast_ordinal_table(x, y, n_x = n_x, n_y = n_y)
   tot <- sum(tab)
   if (tot <= 0) {
@@ -616,7 +616,7 @@
   if (length(ux) < 2L || length(uy) < 2L) {
     return(NA_real_)
   }
-  .mc_tetrachoric_estimate_psych(
+  .mc_tetrachoric_estimate_internal(
     pair$x, pair$y, correct = correct,
     tau_x = tau_x, tau_y = tau_y, global = global
   )
@@ -636,7 +636,7 @@
   if (length(ux) < 2L || length(uy) < 2L) {
     return(NA_real_)
   }
-  .mc_polychoric_estimate_psych(
+  .mc_polychoric_estimate_internal(
     pair$x, pair$y,
     n_x = n_x, n_y = n_y,
     correct = correct,
@@ -669,6 +669,72 @@
     return(NA_real_)
   }
   matrixCorr_biserial_latent_cpp(as.numeric(pair$x), as.logical(pair$y == 2L))
+}
+
+.mc_biserial_inference_one <- function(x, y, check_na,
+                                       return_ci = FALSE,
+                                       conf_level = 0.95) {
+  pair <- .mc_pair_complete(x, y, check_na)
+  n_complete <- length(pair$x)
+  out <- list(
+    estimate = NA_real_,
+    statistic = NA_real_,
+    parameter = NA_real_,
+    p_value = NA_real_,
+    n_obs = as.integer(n_complete),
+    lwr = NA_real_,
+    upr = NA_real_
+  )
+
+  if (n_complete < 2L) {
+    return(out)
+  }
+
+  yy <- pair$y[!is.na(pair$y)]
+  if (length(unique(yy)) < 2L) {
+    return(out)
+  }
+
+  est <- matrixCorr_biserial_latent_cpp(
+    as.numeric(pair$x),
+    as.logical(pair$y == 2L)
+  )
+  out$estimate <- est
+
+  df <- n_complete - 2L
+  out$parameter <- if (df > 0L) as.numeric(df) else NA_real_
+  if (is.finite(est) && df > 0L) {
+    if (abs(est) >= 1) {
+      statistic <- sign(est) * Inf
+    } else {
+      statistic <- est * sqrt(df / (1 - est^2))
+    }
+    out$statistic <- statistic
+    out$p_value <- 2 * stats::pt(abs(statistic), df = df, lower.tail = FALSE)
+  }
+
+  if (isTRUE(return_ci) && is.finite(est) && n_complete > 3L) {
+    if (abs(est) >= 1) {
+      out$lwr <- est
+      out$upr <- est
+    } else {
+      z_est <- atanh(est)
+      z_crit <- stats::qnorm(0.5 * (1 + conf_level))
+      z_half_width <- z_crit / sqrt(n_complete - 3)
+      out$lwr <- tanh(z_est - z_half_width)
+      out$upr <- tanh(z_est + z_half_width)
+    }
+  }
+
+  out
+}
+
+.mc_biserial_ci_attr <- function(x) {
+  attr(x, "ci", exact = TRUE)
+}
+
+.mc_biserial_inference_attr <- function(x) {
+  attr(x, "inference", exact = TRUE)
 }
 
 .mc_encode_list_to_matrix <- function(enc) {
@@ -813,7 +879,8 @@
 #' The argument \code{correct} adds a continuity correction only to zero-count
 #' cells before threshold estimation and likelihood evaluation. This stabilises
 #' the estimator for sparse tables and mirrors the conventional
-#' \code{correct = 0.5} behaviour used in several psychometric implementations.
+#' \code{correct = 0.5} continuity-correction behaviour used in several
+#' latent-correlation implementations.
 #' When \code{correct = 0} and the observed contingency table contains zero
 #' cells, the fit is non-regular and may be boundary-driven. In those cases the
 #' returned object stores sparse-fit diagnostics, including whether the fit was
@@ -876,7 +943,7 @@ tetrachoric <- function(data, y = NULL, correct = 0.5, check_na = TRUE) {
 
   if (is.null(y) && inherits(data, "table")) {
     tab <- as.matrix(data)
-    est <- .mc_tetrachoric_table_psych(tab, correct = correct)
+    est <- .mc_tetrachoric_table_estimate(tab, correct = correct)
     thresholds <- .mc_tetra_table_thresholds(tab, correct = correct)
     diagnostics <- .mc_latent_pair_metadata(
       est = est,
@@ -1162,7 +1229,7 @@ polychoric <- function(data, y = NULL, correct = 0.5, check_na = TRUE) {
 
   if (is.null(y) && inherits(data, "table")) {
     tab <- as.matrix(data)
-    est <- .mc_polychoric_table_psych(tab, correct = correct)
+    est <- .mc_polychoric_table_estimate(tab, correct = correct)
     thresholds <- .mc_poly_table_thresholds(tab, correct = correct)
     diagnostics <- .mc_latent_pair_metadata(
       est = est,
@@ -1540,7 +1607,8 @@ summary.polyserial_corr <- function(object, n = NULL, topn = NULL,
 #' and binary variables in \code{y}. Both pairwise vector mode and rectangular
 #' matrix/data-frame mode are supported.
 #'
-#' @usage biserial(data, y, check_na = TRUE)
+#' @usage biserial(data, y, check_na = TRUE, ci = FALSE, p_value = FALSE,
+#'   conf_level = 0.95)
 #'
 #' @param data A numeric vector, matrix, or data frame containing continuous
 #' variables.
@@ -1548,13 +1616,28 @@ summary.polyserial_corr <- function(object, n = NULL, topn = NULL,
 #' two-level columns are retained.
 #' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, missing values
 #' are rejected. If \code{FALSE}, pairwise complete cases are used.
+#' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
+#' approximate large-sample confidence intervals derived from a Fisher
+#' \eqn{z}-transformation of the biserial estimate.
+#' @param p_value Logical (default \code{FALSE}). If \code{TRUE}, attach
+#' model-based large-sample p-values, test statistics, and degrees of freedom
+#' for each biserial estimate.
+#' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
+#' \code{0.95}.
 #'
 #' @return
 #' If both \code{data} and \code{y} are vectors, a numeric scalar. Otherwise a
 #' numeric matrix of class \code{biserial_corr} with rows corresponding to
 #' the continuous variables in \code{data} and columns to the binary variables
 #' in \code{y}. Matrix outputs carry attributes \code{method},
-#' \code{description}, and \code{package = "matrixCorr"}.
+#' \code{description}, and \code{package = "matrixCorr"}. When
+#' \code{p_value = TRUE}, the object also carries an \code{inference}
+#' attribute with matrices \code{estimate}, \code{statistic},
+#' \code{parameter}, \code{p_value}, and \code{n_obs}. When \code{ci = TRUE},
+#' it additionally carries a \code{ci} attribute with matrices
+#' \code{lwr.ci} and \code{upr.ci}, plus \code{attr(x, "conf.level")}. Scalar
+#' outputs keep the same point estimate and gain the same metadata only when
+#' inference is requested.
 #'
 #' @details
 #' The biserial correlation is the special two-category case of the polyserial
@@ -1572,6 +1655,28 @@ summary.polyserial_corr <- function(object, n = NULL, topn = NULL,
 #' \frac{pq}{\phi(z_p)}.
 #' }
 #' This is exactly the estimator implemented in the underlying C++ kernel.
+#'
+#' \strong{Assumptions.} The biserial coefficient is appropriate when the
+#' observed binary variable is viewed as a thresholded version of an
+#' unobserved continuous latent variable that is jointly normal with the
+#' observed continuous variable. The optional p-values and confidence
+#' intervals adopt this latent-normal interpretation together with the usual
+#' large-sample approximations used for correlation coefficients. These
+#' inferential quantities are therefore model-based and should not be
+#' interpreted as distribution-free summaries.
+#'
+#' \strong{Inference.} When \code{p_value = TRUE}, the package reports the
+#' large-sample \eqn{t}-statistic
+#' \deqn{
+#' t = r_b \sqrt{\frac{n - 2}{1 - r_b^2}},
+#' }
+#' referenced to a Student \eqn{t}-distribution with \eqn{n - 2} degrees of
+#' freedom. When \code{ci = TRUE}, the package forms an approximate Fisher
+#' \eqn{z}-interval by transforming \eqn{r_b} with
+#' \eqn{z = \operatorname{atanh}(r_b)}, using standard error
+#' \eqn{1 / \sqrt{n - 3}}, and mapping the limits back with
+#' \eqn{\tanh(\cdot)}. The CI is therefore an internal large-sample
+#' extension and is only computed when explicitly requested.
 #'
 #' In vector mode a single biserial correlation is returned. In
 #' matrix/data-frame mode, every numeric column of \code{data} is paired with every
@@ -1592,6 +1697,9 @@ summary.polyserial_corr <- function(object, n = NULL, topn = NULL,
 #' Olsson, U., Drasgow, F., & Dorans, N. J. (1982). The polyserial
 #' correlation coefficient. \emph{Psychometrika}, 47(3), 337-347.
 #'
+#' Fisher, R. A. (1921). On the probable error of a coefficient of
+#' correlation deduced from a small sample. \emph{Metron}, 1, 3-32.
+#'
 #' @examplesIf requireNamespace("mnormt", quietly = TRUE)
 #' set.seed(126)
 #' n <- 1000
@@ -1609,14 +1717,22 @@ summary.polyserial_corr <- function(object, n = NULL, topn = NULL,
 #'   g2 = Z[, 4] > stats::qnorm(0.55)
 #' )
 #'
-#' bs <- biserial(X, Y)
+#' bs <- biserial(X, Y, ci = TRUE, p_value = TRUE)
 #' print(bs, digits = 3)
 #' summary(bs)
 #' plot(bs)
 #' @author Thiago de Paula Oliveira
 #' @export
-biserial <- function(data, y, check_na = TRUE) {
+biserial <- function(data, y, check_na = TRUE,
+                     ci = FALSE,
+                     p_value = FALSE,
+                     conf_level = 0.95) {
   check_bool(check_na)
+  check_bool(ci, arg = "ci")
+  check_bool(p_value, arg = "p_value")
+  if (isTRUE(ci)) {
+    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  }
 
   scalar <- is.null(dim(data)) && is.atomic(data) && !is.factor(data) &&
     is.null(dim(y)) && is.atomic(y)
@@ -1639,25 +1755,152 @@ biserial <- function(data, y, check_na = TRUE) {
 
   out <- matrix(NA_real_, nrow = ncol(x_mat), ncol = length(y_enc),
                 dimnames = list(colnames(x_mat), names(y_enc)))
+  diagnostics <- NULL
+  inference_attr <- NULL
+  ci_attr <- NULL
+
+  if (isTRUE(ci) || isTRUE(p_value)) {
+    n_complete <- matrix(
+      NA_integer_,
+      nrow = nrow(out),
+      ncol = ncol(out),
+      dimnames = dimnames(out)
+    )
+    statistic <- if (isTRUE(p_value)) matrix(
+      NA_real_,
+      nrow = nrow(out),
+      ncol = ncol(out),
+      dimnames = dimnames(out)
+    ) else NULL
+    parameter <- if (isTRUE(p_value)) matrix(
+      NA_real_,
+      nrow = nrow(out),
+      ncol = ncol(out),
+      dimnames = dimnames(out)
+    ) else NULL
+    p_mat <- if (isTRUE(p_value)) matrix(
+      NA_real_,
+      nrow = nrow(out),
+      ncol = ncol(out),
+      dimnames = dimnames(out)
+    ) else NULL
+    lwr <- if (isTRUE(ci)) matrix(
+      NA_real_,
+      nrow = nrow(out),
+      ncol = ncol(out),
+      dimnames = dimnames(out)
+    ) else NULL
+    upr <- if (isTRUE(ci)) matrix(
+      NA_real_,
+      nrow = nrow(out),
+      ncol = ncol(out),
+      dimnames = dimnames(out)
+    ) else NULL
+  }
 
   for (j in seq_len(ncol(x_mat))) {
     xj <- x_mat[, j]
     for (k in seq_along(y_enc)) {
-      out[j, k] <- .mc_pair_biserial(xj, y_enc[[k]]$code, check_na)
+      if (isTRUE(ci) || isTRUE(p_value)) {
+        fit <- .mc_biserial_inference_one(
+          xj,
+          y_enc[[k]]$code,
+          check_na = check_na,
+          return_ci = ci,
+          conf_level = conf_level
+        )
+        out[j, k] <- fit$estimate
+        n_complete[j, k] <- fit$n_obs
+        if (isTRUE(p_value)) {
+          statistic[j, k] <- fit$statistic
+          parameter[j, k] <- fit$parameter
+          p_mat[j, k] <- fit$p_value
+        }
+        if (isTRUE(ci)) {
+          lwr[j, k] <- fit$lwr
+          upr[j, k] <- fit$upr
+        }
+      } else {
+        out[j, k] <- .mc_pair_biserial(xj, y_enc[[k]]$code, check_na)
+      }
     }
   }
 
+  estimate_mat <- out
+  attributes(estimate_mat) <- attributes(estimate_mat)[c("dim", "dimnames")]
   out <- .mc_scalar_or_matrix(out, scalar = scalar)
   if (scalar) {
-    return(out)
+    if (!isTRUE(ci) && !isTRUE(p_value)) {
+      return(out)
+    }
+    diagnostics <- list(n_complete = as.integer(n_complete[1L, 1L]))
+    scalar_out <- .mc_attach_scalar_latent(
+      out,
+      method = "biserial",
+      description = "Biserial correlation",
+      diagnostics = diagnostics
+    )
+    if (isTRUE(p_value)) {
+      attr(scalar_out, "inference") <- list(
+        method = "biserial_t_test",
+        estimate = as.numeric(out),
+        statistic = as.numeric(statistic[1L, 1L]),
+        parameter = as.numeric(parameter[1L, 1L]),
+        p_value = as.numeric(p_mat[1L, 1L]),
+        n_obs = as.integer(n_complete[1L, 1L]),
+        alternative = "two.sided"
+      )
+    }
+    if (isTRUE(ci)) {
+      attr(scalar_out, "ci") <- list(
+        est = as.numeric(out),
+        lwr.ci = as.numeric(lwr[1L, 1L]),
+        upr.ci = as.numeric(upr[1L, 1L]),
+        conf.level = conf_level,
+        ci.method = "fisher_z_biserial"
+      )
+      attr(scalar_out, "conf.level") <- conf_level
+    }
+    return(scalar_out)
   }
 
-  .mc_structure_corr_matrix(
+  diagnostics <- if (isTRUE(ci) || isTRUE(p_value)) {
+    list(n_complete = n_complete)
+  } else {
+    NULL
+  }
+
+  out <- .mc_structure_corr_matrix(
     out,
     class_name = "biserial_corr",
     method = "biserial",
-    description = "Biserial correlation matrix (continuous x binary)"
+    description = "Biserial correlation matrix (continuous x binary)",
+    diagnostics = diagnostics
   )
+    if (isTRUE(p_value)) {
+      inference_attr <- list(
+        method = "biserial_t_test",
+        estimate = estimate_mat,
+        statistic = statistic,
+        parameter = parameter,
+        p_value = p_mat,
+      n_obs = n_complete,
+      alternative = "two.sided"
+    )
+    attr(out, "inference") <- inference_attr
+  }
+  if (isTRUE(ci)) {
+    ci_attr <- list(
+      est = estimate_mat,
+      lwr.ci = lwr,
+      upr.ci = upr,
+      conf.level = conf_level,
+      ci.method = "fisher_z_biserial"
+    )
+    attr(out, "ci") <- ci_attr
+    attr(out, "conf.level") <- conf_level
+  }
+  out
 }
 
 #' @rdname biserial
@@ -1689,6 +1932,7 @@ print.biserial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
 #' @param high_color Color for the maximum correlation.
 #' @param mid_color Color for zero correlation.
 #' @param value_text_size Font size used in tile labels.
+#' @param ci_text_size Text size for confidence intervals in the heatmap.
 #' @param show_value Logical; if \code{TRUE} (default), overlay numeric values
 #'   on the heatmap tiles.
 #' @export
@@ -1697,23 +1941,199 @@ plot.biserial_corr <- function(x, title = "Biserial correlation heatmap",
                                high_color = "steelblue1",
                                mid_color = "white",
                                value_text_size = 4,
+                               ci_text_size = 3,
                                show_value = TRUE, ...) {
-  .mc_plot_corr_matrix(
-    x, class_name = "biserial_corr", fill_name = "Biserial",
-    title = title, low_color = low_color, high_color = high_color,
-    mid_color = mid_color, value_text_size = value_text_size,
-    show_value = show_value, ...
+  check_bool(show_value, arg = "show_value")
+  ci <- .mc_biserial_ci_attr(x)
+  if (is.null(ci) || is.null(ci$lwr.ci) || is.null(ci$upr.ci)) {
+    return(.mc_plot_corr_matrix(
+      x, class_name = "biserial_corr", fill_name = "Biserial",
+      title = title, low_color = low_color, high_color = high_color,
+      mid_color = mid_color, value_text_size = value_text_size,
+      show_value = show_value, ...
+    ))
+  }
+
+  est_mat <- as.matrix(x)
+  df_est <- as.data.frame(as.table(est_mat))
+  names(df_est) <- c("Var1", "Var2", "biserial")
+
+  df_lwr <- as.data.frame(as.table(ci$lwr.ci))
+  names(df_lwr)[3L] <- "lwr"
+  df_upr <- as.data.frame(as.table(ci$upr.ci))
+  names(df_upr)[3L] <- "upr"
+  df <- Reduce(
+    function(a, b) merge(a, b, by = c("Var1", "Var2"), all = TRUE),
+    list(df_est, df_lwr, df_upr)
   )
+
+  lev_row <- unique(df_est$Var1)
+  lev_col <- unique(df_est$Var2)
+  df$Var1 <- factor(df$Var1, levels = rev(lev_row))
+  df$Var2 <- factor(df$Var2, levels = lev_col)
+  df$ci_label <- ifelse(
+    is.na(df$lwr) | is.na(df$upr),
+    NA_character_,
+    sprintf("[%.3f, %.3f]", df$lwr, df$upr)
+  )
+
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = .data$biserial)) +
+    ggplot2::geom_tile(color = "white") +
+    ggplot2::scale_fill_gradient2(
+      low = low_color,
+      high = high_color,
+      mid = mid_color,
+      midpoint = 0,
+      limits = c(-1, 1),
+      name = "Biserial"
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      panel.grid = ggplot2::element_blank(),
+      ...
+    ) +
+    ggplot2::coord_fixed() +
+    ggplot2::labs(title = title, x = NULL, y = NULL)
+
+  if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
+    p <- p + ggplot2::geom_text(
+      ggplot2::aes(label = ifelse(is.na(biserial), "NA", sprintf("%.2f", biserial))),
+      size = value_text_size,
+      color = "black"
+    )
+  }
+  if (isTRUE(show_value) && any(!is.na(df$ci_label))) {
+    p <- p + ggplot2::geom_text(
+      ggplot2::aes(label = ci_label, y = as.numeric(Var1) - 0.22),
+      size = ci_text_size,
+      color = "gray30",
+      na.rm = TRUE
+    )
+  }
+
+  p
+}
+
+.mc_biserial_pairwise_summary <- function(object,
+                                          digits = 4,
+                                          ci_digits = 3,
+                                          p_digits = 4,
+                                          show_ci = "yes") {
+  check_inherits(object, "biserial_corr")
+
+  est <- as.matrix(object)
+  rn <- rownames(est)
+  cn <- colnames(est)
+  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
+  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
+
+  ci <- .mc_biserial_ci_attr(object)
+  inf <- .mc_biserial_inference_attr(object)
+  diag_attr <- attr(object, "diagnostics", exact = TRUE)
+  include_ci <- identical(show_ci, "yes") && is.list(ci)
+  include_p <- is.list(inf) && !is.null(inf$p_value)
+
+  rows <- vector("list", nrow(est) * ncol(est))
+  k <- 0L
+  for (i in seq_len(nrow(est))) {
+    for (j in seq_len(ncol(est))) {
+      k <- k + 1L
+      rec <- list(
+        var1 = rn[i],
+        var2 = cn[j],
+        estimate = round(est[i, j], digits)
+      )
+      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
+        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
+      }
+      if (include_ci) {
+        rec$lwr <- if (is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
+        rec$upr <- if (is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
+      }
+      if (include_p) {
+        rec$statistic <- if (is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], digits) else NA_real_
+        rec$df <- if (is.finite(inf$parameter[i, j])) round(inf$parameter[i, j], digits) else NA_real_
+        rec$p_value <- if (is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
+      }
+      rows[[k]] <- rec
+    }
+  }
+
+  df <- do.call(rbind.data.frame, rows)
+  rownames(df) <- NULL
+  num_cols <- intersect(c("estimate", "lwr", "upr", "statistic", "df", "p_value"), names(df))
+  int_cols <- intersect(c("n_complete"), names(df))
+  for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
+  for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
+
+  out <- structure(df, class = c("summary.biserial_corr", "data.frame"))
+  attr(out, "overview") <- .mc_summary_corr_matrix(object)
+  attr(out, "has_ci") <- include_ci
+  attr(out, "has_p") <- include_p
+  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
+  attr(out, "digits") <- digits
+  attr(out, "ci_digits") <- ci_digits
+  attr(out, "p_digits") <- p_digits
+  attr(out, "inference_method") <- if (is.null(inf)) NA_character_ else inf$method
+  out
 }
 
 #' @rdname biserial
 #' @method summary biserial_corr
 #' @param object An object of class \code{biserial_corr}.
+#' @param ci_digits Integer; digits for biserial confidence limits in the
+#'   pairwise summary.
+#' @param p_digits Integer; digits for biserial p-values in the pairwise
+#'   summary.
 #' @export
 summary.biserial_corr <- function(object, n = NULL, topn = NULL,
                                   max_vars = NULL, width = NULL,
+                                  ci_digits = 3,
+                                  p_digits = 4,
                                   show_ci = NULL, ...) {
-  .mc_summary_corr_matrix(object, header = "Latent correlation summary", topn = topn)
+  check_inherits(object, "biserial_corr")
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
+
+  ci <- .mc_biserial_ci_attr(object)
+  inf <- .mc_biserial_inference_attr(object)
+  if (is.null(ci) && (is.null(inf) || is.null(inf$p_value))) {
+    return(.mc_summary_corr_matrix(object, header = "Latent correlation summary", topn = topn))
+  }
+
+  .mc_biserial_pairwise_summary(
+    object,
+    ci_digits = ci_digits,
+    p_digits = p_digits,
+    show_ci = show_ci
+  )
+}
+
+#' @rdname biserial
+#' @method print summary.biserial_corr
+#' @param x An object of class \code{summary.biserial_corr}.
+#' @export
+print.summary.biserial_corr <- function(x, digits = NULL, n = NULL,
+                                        topn = NULL, max_vars = NULL,
+                                        width = NULL, show_ci = NULL, ...) {
+  .mc_print_pairwise_summary_digest(
+    x,
+    title = "Biserial correlation summary",
+    digits = .mc_coalesce(digits, 4),
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    ci_method = if (isTRUE(attr(x, "has_ci"))) "fisher_z_biserial" else NULL,
+    extra_items = c(inference = attr(x, "inference_method", exact = TRUE)),
+    ...
+  )
+  invisible(x)
 }
 
 #' @title Summary Method for Correlation Matrices
@@ -1733,6 +2153,7 @@ summary.biserial_corr <- function(object, n = NULL, topn = NULL,
 #' @param ... Unused.
 #'
 #' @return Invisibly returns \code{x}.
+#' @method print summary_corr_matrix
 #' @export
 print.summary_corr_matrix <- function(x,
                                       digits = 4,
@@ -1814,6 +2235,7 @@ print.summary_corr_matrix <- function(x,
 #' @param ... Unused.
 #'
 #' @return Invisibly returns \code{x}.
+#' @method print summary_latent_corr
 #' @export
 print.summary_latent_corr <- function(x, digits = 4, ...) {
   print.summary_corr_matrix(x, digits = digits, ...)

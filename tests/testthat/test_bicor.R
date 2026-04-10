@@ -190,6 +190,135 @@ test_that("attributes and class are set correctly", {
   expect_equal(attr(R, "method"), "biweight_mid_correlation")
   expect_true(grepl("biweight mid-correlation", attr(R, "description")))
   expect_equal(attr(R, "package"), "matrixCorr")
+  expect_null(attr(R, "ci", exact = TRUE))
+  expect_null(attr(R, "inference", exact = TRUE))
+})
+
+test_that("bicor large-sample inference follows the established reference behaviour", {
+  set.seed(151)
+  X <- matrix(rnorm(90 * 4), nrow = 90, ncol = 4)
+  X[, 2] <- 0.7 * X[, 1] + rnorm(90, sd = 0.4)
+  X[, 4] <- -0.4 * X[, 3] + rnorm(90, sd = 0.6)
+  colnames(X) <- paste0("B", seq_len(ncol(X)))
+
+  ours <- bicor(X, ci = TRUE, pearson_fallback = "hybrid")
+  inf <- attr(ours, "inference", exact = TRUE)
+  ref_estimate <- structure(
+    c(
+      1, 0.87211433189796, -0.139821080789143, 0.0200531551858707,
+      0.87211433189796, 1, -0.100737855987848, 0.0600146995629313,
+      -0.139821080789143, -0.100737855987848, 1, -0.501164943217541,
+      0.0200531551858707, 0.0600146995629313, -0.501164943217541, 1
+    ),
+    dim = c(4L, 4L)
+  )
+  ref_p_value <- structure(
+    c(
+      0, 4.66844299908808e-29, 0.188716903130168, 0.851189832850908,
+      4.66844299908808e-29, 0, 0.344796594702779, 0.574185746219993,
+      0.188716903130168, 0.344796594702779, 0, 4.87601871367649e-07,
+      0.851189832850908, 0.574185746219993, 4.87601871367649e-07, 0
+    ),
+    dim = c(4L, 4L)
+  )
+  ref_statistic <- structure(
+    c(
+      Inf, 16.7200525192994, 1.32465032686288, 0.188153104953045,
+      16.7200525192994, Inf, 0.949836670568733, 0.564004406966281,
+      1.32465032686288, 0.949836670568733, 363463325.618328, 5.43287021000477,
+      0.188153104953045, 0.564004406966281, 5.43287021000477, 363463325.618328
+    ),
+    dim = c(4L, 4L)
+  )
+  ref_Z <- structure(
+    c(
+      Inf, 12.5876081889807, -1.32028716414974, 0.188140491858905,
+      12.5876081889807, Inf, -0.948221133852547, 0.563665166175343,
+      -1.32028716414974, -0.948221133852547, 170.409068424375, -5.16753057745717,
+      0.188140491858905, 0.563665166175343, -5.16753057745717, 170.409068424375
+    ),
+    dim = c(4L, 4L)
+  )
+  ref_n_obs <- structure(rep(90, 16), dim = c(4L, 4L))
+
+  idx <- upper.tri(ours, diag = FALSE)
+  expect_lt(max(abs(unclass(ours)[idx] - ref_estimate[idx]), na.rm = TRUE), 1e-8)
+  expect_lt(max(abs(inf$p_value[idx] - ref_p_value[idx]), na.rm = TRUE), 1e-8)
+  expect_lt(max(abs(inf$statistic[idx] - ref_statistic[idx]), na.rm = TRUE), 1e-8)
+  expect_lt(max(abs(inf$Z[idx] - ref_Z[idx]), na.rm = TRUE), 1e-8)
+  expect_equal(attr(ours, "diagnostics", exact = TRUE)$n_complete[idx], ref_n_obs[idx], tolerance = 0)
+})
+
+test_that("bicor returns confidence intervals only when requested", {
+  set.seed(152)
+  X <- matrix(rnorm(70 * 4), nrow = 70, ncol = 4)
+  X[, 2] <- 0.6 * X[, 1] + rnorm(70, sd = 0.5)
+  colnames(X) <- paste0("C", seq_len(ncol(X)))
+
+  fit0 <- bicor(X, ci = FALSE)
+  fit1 <- bicor(X, ci = TRUE)
+
+  expect_null(attr(fit0, "ci", exact = TRUE))
+  expect_null(attr(fit0, "inference", exact = TRUE))
+
+  ci <- attr(fit1, "ci", exact = TRUE)
+  inf <- attr(fit1, "inference", exact = TRUE)
+  expect_true(is.list(ci))
+  expect_true(is.list(inf))
+  expect_identical(ci$ci.method, "fisher_z_bicor")
+  expect_true(is.matrix(ci$lwr.ci))
+  expect_true(is.matrix(ci$upr.ci))
+  expect_true(is.matrix(inf$p_value))
+})
+
+test_that("bicor confidence intervals are ordered and bounded", {
+  set.seed(153)
+  X <- matrix(rnorm(80 * 5), nrow = 80, ncol = 5)
+  X[, 2] <- 0.8 * X[, 1] + rnorm(80, sd = 0.25)
+  colnames(X) <- paste0("D", seq_len(ncol(X)))
+
+  fit <- bicor(X, ci = TRUE)
+  ci <- attr(fit, "ci", exact = TRUE)
+  idx <- upper.tri(fit, diag = FALSE)
+
+  expect_true(all(ci$lwr.ci[idx] <= ci$upr.ci[idx], na.rm = TRUE))
+  expect_true(all(ci$lwr.ci[idx] >= -1, na.rm = TRUE))
+  expect_true(all(ci$upr.ci[idx] <= 1, na.rm = TRUE))
+  expect_true(all(fit[idx] >= ci$lwr.ci[idx] & fit[idx] <= ci$upr.ci[idx], na.rm = TRUE))
+})
+
+test_that("bicor core estimate is unchanged when ci is disabled", {
+  set.seed(154)
+  X <- matrix(rnorm(60 * 4), nrow = 60, ncol = 4)
+  X[, 3] <- -0.5 * X[, 2] + rnorm(60, sd = 0.4)
+
+  fit_base <- bicor(X)
+  fit_ci_false <- bicor(X, ci = FALSE)
+
+  base_mat <- unclass(fit_base)
+  false_mat <- unclass(fit_ci_false)
+  attributes(base_mat) <- attributes(base_mat)[c("dim", "dimnames")]
+  attributes(false_mat) <- attributes(false_mat)[c("dim", "dimnames")]
+  expect_equal(base_mat, false_mat, tolerance = 1e-12)
+})
+
+test_that("bicor summary switches to pairwise inference view when ci is requested", {
+  set.seed(155)
+  X <- matrix(rnorm(75 * 4), nrow = 75, ncol = 4)
+  X[, 2] <- 0.65 * X[, 1] + rnorm(75, sd = 0.4)
+  colnames(X) <- paste0("S", seq_len(ncol(X)))
+
+  fit <- bicor(X, ci = TRUE)
+  sm <- summary(fit)
+  txt <- capture.output(print(sm))
+
+  expect_s3_class(sm, "summary.bicor")
+  expect_s3_class(sm, "data.frame")
+  expect_true(all(c("var1", "var2", "estimate", "n_complete", "lwr", "upr", "statistic", "fisher_z", "p_value") %in% names(sm)))
+  expect_true(isTRUE(attr(sm, "has_ci")))
+  expect_true(isTRUE(attr(sm, "has_p")))
+  expect_true(any(grepl("^Biweight mid-correlation summary$", txt)))
+  expect_true(any(grepl("p_value", txt, fixed = TRUE)))
 })
 
 test_that("NA policy: error vs pairwise", {

@@ -85,6 +85,10 @@ ustat_dcor_matrix_cpp <- function(X) {
     .Call(`_matrixCorr_ustat_dcor_matrix_cpp`, X)
 }
 
+ustat_dcor_matrix_pairwise_cpp <- function(X, return_inference = FALSE) {
+    .Call(`_matrixCorr_ustat_dcor_matrix_pairwise_cpp`, X, return_inference)
+}
+
 kendall_matrix_cpp <- function(mat) {
     .Call(`_matrixCorr_kendall_matrix_cpp`, mat)
 }

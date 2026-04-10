@@ -129,7 +129,8 @@ refinement in C++.
 The argument \code{correct} adds a continuity correction only to zero-count
 cells before threshold estimation and likelihood evaluation. This stabilises
 the estimator for sparse tables and mirrors the conventional
-\code{correct = 0.5} behaviour used in several psychometric implementations.
+\code{correct = 0.5} continuity-correction behaviour used in several
+latent-correlation implementations.
 When \code{correct = 0} and the observed contingency table contains zero
 cells, the fit is non-regular and may be boundary-driven. In those cases the
 returned object stores sparse-fit diagnostics, including whether the fit was

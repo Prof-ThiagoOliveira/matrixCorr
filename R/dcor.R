@@ -3,19 +3,27 @@
 #' @description
 #' Computes pairwise distance correlations for the numeric columns of a matrix
 #' or data frame using a high-performance 'C++' backend. Distance correlation
-#' detects general dependence, including non-linear relationships.
+#' detects general dependence, including non-linear relationships. Optional
+#' p-values are available via the bias-corrected distance-correlation t-test.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns are dropped. Columns must be numeric.
 #' @param check_na Logical (default \code{TRUE}). When \code{TRUE}, inputs must
 #' be free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only if you
 #' have already handled missingness upstream.
+#' @param p_value Logical (default \code{FALSE}). If \code{TRUE}, attach
+#' pairwise p-values, test statistics, and degrees of freedom from the
+#' distance-correlation t-test of independence.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)} entry is the
 #' unbiased distance correlation between the \code{i}-th and \code{j}-th
 #' numeric columns. The object has class \code{dcor} with attributes
 #' \code{method = "distance_correlation"}, \code{description}, and
-#' \code{package = "matrixCorr"}.
+#' \code{package = "matrixCorr"}. When \code{p_value = TRUE}, the object also
+#' carries an \code{inference} attribute with matrices \code{estimate},
+#' \code{statistic}, \code{parameter}, and \code{p_value}, plus
+#' \code{attr(x, "diagnostics")$n_complete}. The main returned matrix remains
+#' the usual non-negative unbiased distance-correlation estimate.
 #'
 #' @details
 #' Let \eqn{x \in \mathbb{R}^n} and \eqn{D^{(x)}} be the pairwise distance matrix
@@ -38,28 +46,49 @@
 #'            {\sqrt{\widehat{\mathrm{dVar}}_u(x)\,\widehat{\mathrm{dVar}}_u(y)}} \in [0,1].}
 #'
 #' \strong{Computation.} All heavy lifting (distance matrices, U-centering,
-#' and unbiased scaling) is implemented in C++ (`ustat_dcor_matrix_cpp`), so
-#' the R wrapper only validates/coerces the input. OpenMP parallelises the
+#' and unbiased scaling) is implemented in C++ (\code{ustat_dcor_matrix_cpp}),
+#' so the R wrapper only validates/coerces the input. OpenMP parallelises the
 #' upper-triangular loops. The implementation includes a Huo-Szekely style
 #' univariate \eqn{O(n \log n)} dispatch for pairwise terms. We also have an exact
 #' unbiased \eqn{O(n^2)} fallback retained for robustness in small-sample or
 #' non-finite-path cases; no external dependencies are used.
+#'
+#' \strong{Inference.} When \code{p_value = TRUE}, the package computes the
+#' bias-corrected distance-correlation t-test of independence of Szekely and
+#' Rizzo (2013). Let \eqn{\widehat{\mathrm{dCor}}^\ast(x,y)} denote the signed
+#' bias-corrected distance correlation used internally by the test (that is,
+#' the same ratio before the package's usual clipping to \eqn{[0,1]}). With
+#' \deqn{M = \frac{n(n-3)}{2},}
+#' the test statistic is
+#' \deqn{
+#' T = \sqrt{M - 1}\;
+#' \frac{\widehat{\mathrm{dCor}}^\ast(x,y)}
+#'      {\sqrt{1 - \{\widehat{\mathrm{dCor}}^\ast(x,y)\}^2}},
+#' }
+#' referenced to a Student \eqn{t}-distribution with \eqn{M - 1} degrees of
+#' freedom. The reported p-value uses the upper-tail probability
+#' \eqn{P(t_{M-1} \ge T)}. This inference payload is attached as metadata; the
+#' main returned matrix is unchanged unless \code{p_value} is explicitly
+#' requested.
 #'
 #' @note Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance
 #' variance yield \code{NA} in their row/column. Typical per-pair cost uses
 #' the \eqn{O(n \log n)} fast path, with \eqn{O(n^2)} fallback when needed.
 #'
 #' @references
-#' Székely, G. J., Rizzo, M. L., & Bakirov, N. K. (2007).
+#' Szekely, G. J., Rizzo, M. L., & Bakirov, N. K. (2007).
 #' Measuring and testing dependence by correlation of distances.
-#' \emph{Annals of Statistics}, 35(6), 2769–2794.
+#' \emph{Annals of Statistics}, 35(6), 2769-2794.
 #'
-#' Székely, G. J., & Rizzo, M. L. (2013).
+#' Szekely, G. J., & Rizzo, M. L. (2013).
 #' The distance correlation t-test of independence.
 #' \emph{Journal of Multivariate Analysis}, 117, 193-213.
 #'
+#' Rizzo, M. L., & Szekely, G. J. (2024). \pkg{energy}: E-statistics
+#' (energy statistics). R package version 1.7-12.
+#'
 #' @examples
-#' ##Independent variables -> dCor ~ 0
+#' ## Independent variables -> dCor ~ 0
 #' set.seed(1)
 #' X <- cbind(a = rnorm(200), b = rnorm(200))
 #' D <- dcor(X)
@@ -87,6 +116,10 @@
 #' D3 <- dcor(X3)
 #' print(D3[1:3, 1:3], digits = 2)
 #'
+#' ## Optional inference
+#' D4 <- dcor(XY, p_value = TRUE)
+#' summary(D4)
+#'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 #'   view_corr_shiny(D)
@@ -95,19 +128,105 @@
 #' @author Thiago de paula Oliveira
 #'
 #' @export
-dcor <- function(data, check_na = TRUE) {
+dcor <- function(data, check_na = TRUE, p_value = FALSE) {
+  check_bool(p_value, arg = "p_value")
   numeric_data <- validate_corr_input(data, check_na = check_na)
   colnames_data <- colnames(numeric_data)
+  diagnostics <- NULL
+  inference_attr <- NULL
 
-  dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
+  if (isTRUE(p_value)) {
+    pairwise <- ustat_dcor_matrix_pairwise_cpp(
+      numeric_data,
+      return_inference = TRUE
+    )
+    dcor_matrix <- pairwise$est
+    diagnostics <- list(n_complete = unclass(pairwise$n_complete))
+    dimnames(diagnostics$n_complete) <- list(colnames_data, colnames_data)
+
+    inference_attr <- list(
+      method = "dcor_t_test",
+      estimate = unclass(pairwise$estimate),
+      statistic = unclass(pairwise$statistic),
+      parameter = unclass(pairwise$parameter),
+      p_value = unclass(pairwise$p_value),
+      alternative = "greater"
+    )
+    dimnames(inference_attr$estimate) <- list(colnames_data, colnames_data)
+    dimnames(inference_attr$statistic) <- list(colnames_data, colnames_data)
+    dimnames(inference_attr$parameter) <- list(colnames_data, colnames_data)
+    dimnames(inference_attr$p_value) <- list(colnames_data, colnames_data)
+  } else {
+    dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
+  }
+
   colnames(dcor_matrix) <- rownames(dcor_matrix) <- colnames_data
 
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     dcor_matrix,
     class_name = "dcor",
     method = "distance_correlation",
-    description = "Pairwise distance correlation matrix (unbiased)"
+    description = "Pairwise distance correlation matrix (unbiased)",
+    diagnostics = diagnostics
   )
+  if (!is.null(inference_attr)) {
+    attr(out, "inference") <- inference_attr
+  }
+  out
+}
+
+.mc_dcor_inference_attr <- function(x) {
+  attr(x, "inference", exact = TRUE)
+}
+
+.mc_dcor_pairwise_summary <- function(object,
+                                      digits = 4,
+                                      p_digits = 4) {
+  check_inherits(object, "dcor")
+  est <- as.matrix(object)
+  rn <- rownames(est); cn <- colnames(est)
+  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
+  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
+
+  inf <- .mc_dcor_inference_attr(object)
+  diag_attr <- attr(object, "diagnostics", exact = TRUE)
+
+  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
+  k <- 0L
+  for (i in seq_len(nrow(est) - 1L)) {
+    for (j in (i + 1L):ncol(est)) {
+      k <- k + 1L
+      rec <- list(
+        var1 = rn[i],
+        var2 = cn[j],
+        estimate = round(est[i, j], digits)
+      )
+      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
+        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
+      }
+      if (is.list(inf)) {
+        rec$statistic <- if (is.matrix(inf$statistic) && is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], digits) else NA_real_
+        rec$df <- if (is.matrix(inf$parameter) && is.finite(inf$parameter[i, j])) round(inf$parameter[i, j], digits) else NA_real_
+        rec$p_value <- if (is.matrix(inf$p_value) && is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
+      }
+      rows[[k]] <- rec
+    }
+  }
+
+  df <- do.call(rbind.data.frame, rows)
+  rownames(df) <- NULL
+  num_cols <- intersect(c("estimate", "statistic", "df", "p_value"), names(df))
+  int_cols <- intersect(c("n_complete"), names(df))
+  for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
+  for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
+
+  out <- structure(df, class = c("summary.dcor", "data.frame"))
+  attr(out, "overview") <- .mc_summary_corr_matrix(object)
+  attr(out, "has_p") <- TRUE
+  attr(out, "digits") <- digits
+  attr(out, "p_digits") <- p_digits
+  attr(out, "inference_method") <- inf$method %||% NA_character_
+  out
 }
 
 #' @rdname dcor
@@ -209,5 +328,32 @@ plot.dcor <-
 summary.dcor <- function(object, n = NULL, topn = NULL,
                          max_vars = NULL, width = NULL,
                          show_ci = NULL, ...) {
-  .mc_summary_corr_matrix(object, topn = topn)
+  check_inherits(object, "dcor")
+  inf <- .mc_dcor_inference_attr(object)
+  if (is.null(inf) || is.null(inf$p_value)) {
+    return(.mc_summary_corr_matrix(object, topn = topn))
+  }
+  .mc_dcor_pairwise_summary(object)
+}
+
+#' @rdname dcor
+#' @method print summary.dcor
+#' @param x An object of class \code{summary.dcor}.
+#' @export
+print.summary.dcor <- function(x, digits = NULL, n = NULL,
+                               topn = NULL, max_vars = NULL,
+                               width = NULL, show_ci = NULL, ...) {
+  .mc_print_pairwise_summary_digest(
+    x,
+    title = "Distance correlation summary",
+    digits = .mc_coalesce(digits, 4),
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    extra_items = c(inference = attr(x, "inference_method", exact = TRUE)),
+    ...
+  )
+  invisible(x)
 }

@@ -325,9 +325,9 @@ struct PolyWorkspace {
   }
 };
 
-static inline double tetra_nll_fixed_psych(double rho,
-                                           double a, double b, double c, double d,
-                                           double rc, double cc) {
+static inline double tetra_nll_fixed_thresholds(double rho,
+                                                double a, double b, double c, double d,
+                                                double rc, double cc) {
   const double p11 = Phi2(rc, cc, rho);
   const double p21 = Phi(rc) - p11;
   const double p12 = Phi(cc) - p11;
@@ -344,7 +344,7 @@ static inline double tetra_nll_fixed_psych(double rho,
     c * std::log(p12) + d * std::log(p22));
 }
 
-static inline void poly_prob_psych(double rho, PolyWorkspace& ws) {
+static inline void poly_prob_from_thresholds(double rho, PolyWorkspace& ws) {
   const int nr = ws.nr;
   const int nc = ws.nc;
   std::fill(ws.prob.begin(), ws.prob.end(), 0.0);
@@ -396,10 +396,10 @@ static inline void poly_prob_psych(double rho, PolyWorkspace& ws) {
   ws.prob[last_row + nc - 1] = 1.0 - ws.rc_phi[nr - 2] - last_row_sum;
 }
 
-static inline double poly_nll_fixed_psych(double rho,
-                                          const double* tab,
-                                          PolyWorkspace& ws) {
-  poly_prob_psych(rho, ws);
+static inline double poly_nll_fixed_thresholds(double rho,
+                                               const double* tab,
+                                               PolyWorkspace& ws) {
+  poly_prob_from_thresholds(rho, ws);
 
   double out = 0.0;
   const int n = ws.nr * ws.nc;
@@ -433,7 +433,7 @@ double matrixCorr_tetrachoric_mle_cpp(Rcpp::NumericMatrix tab, double correct = 
   const double rc = qnorm01(nan_preserve(a + c, 1e-12, 1.0 - 1e-12));
   const double cc = qnorm01(nan_preserve(a + b, 1e-12, 1.0 - 1e-12));
 
-  auto nll = [&](double rho) { return tetra_nll_fixed_psych(rho, a, b, c, d, rc, cc); };
+  auto nll = [&](double rho) { return tetra_nll_fixed_thresholds(rho, a, b, c, d, rc, cc); };
   const double est = optimize(nll, -1.0, 1.0, 1e-8, 250);
   return nan_preserve(est, -1.0, 1.0);
 }
@@ -453,7 +453,7 @@ double matrixCorr_tetrachoric_fixed_cpp(Rcpp::NumericMatrix tab, double rc, doub
     if (d <= 0.0) d += correct;
   }
 
-  auto nll = [&](double rho) { return tetra_nll_fixed_psych(rho, a, b, c, d, rc, cc); };
+  auto nll = [&](double rho) { return tetra_nll_fixed_thresholds(rho, a, b, c, d, rc, cc); };
   const double est = optimize(nll, -1.0, 1.0, 1e-8, 250);
   return nan_preserve(est, -1.0, 1.0);
 }
@@ -501,7 +501,7 @@ double matrixCorr_polychoric_mle_cpp(NumericMatrix tab, double correct = 0.5) {
     }
   }
 
-  auto nll = [&](double rho) { return poly_nll_fixed_psych(rho, tab_vec.data(), ws); };
+  auto nll = [&](double rho) { return poly_nll_fixed_thresholds(rho, tab_vec.data(), ws); };
   const double est = optimize(nll, -1.0, 1.0, 1e-8, 250);
   return nan_preserve(est, -1.0, 1.0);
 }
@@ -541,7 +541,7 @@ double matrixCorr_polychoric_fixed_cpp(NumericMatrix tab, NumericVector rc_in, N
     }
   }
 
-  auto nll = [&](double rho) { return poly_nll_fixed_psych(rho, tab_vec.data(), ws); };
+  auto nll = [&](double rho) { return poly_nll_fixed_thresholds(rho, tab_vec.data(), ws); };
   const double est = optimize(nll, -1.0, 1.0, 1e-8, 250);
   return nan_preserve(est, -1.0, 1.0);
 }
@@ -560,7 +560,7 @@ static inline double tetra_from_counts_fixed(const double* tab,
     if (d <= 0.0) d += correct;
   }
 
-  auto nll = [&](double rho) { return tetra_nll_fixed_psych(rho, a, b, c, d, rc, cc); };
+  auto nll = [&](double rho) { return tetra_nll_fixed_thresholds(rho, a, b, c, d, rc, cc); };
   const double est = optimize(nll, -1.0, 1.0, 1e-8, 250);
   return nan_preserve(est, -1.0, 1.0);
 }
@@ -620,7 +620,7 @@ static inline double poly_from_counts_local(const double* raw, int nr, int nc,
   if (buf.rc.empty() || buf.cc.empty()) return NA_REAL;
 
   buf.ws.reset(buf.rc, buf.cc);
-  auto nll = [&](double rho) { return poly_nll_fixed_psych(rho, buf.tab.data(), buf.ws); };
+  auto nll = [&](double rho) { return poly_nll_fixed_thresholds(rho, buf.tab.data(), buf.ws); };
   const double est = optimize(nll, -1.0, 1.0, 1e-8, 250);
   return nan_preserve(est, -1.0, 1.0);
 }
@@ -637,7 +637,7 @@ static inline double poly_from_counts_fixed(const double* raw, int nr, int nc,
   std::vector<double> cc_vec(cc, cc + nc - 1);
   PolyWorkspace ws;
   ws.reset(rc_vec, cc_vec);
-  auto nll = [&](double rho) { return poly_nll_fixed_psych(rho, tab.data(), ws); };
+  auto nll = [&](double rho) { return poly_nll_fixed_thresholds(rho, tab.data(), ws); };
   const double est = optimize(nll, -1.0, 1.0, 1e-8, 250);
   return nan_preserve(est, -1.0, 1.0);
 }

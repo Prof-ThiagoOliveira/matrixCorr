@@ -328,6 +328,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ustat_dcor_matrix_pairwise_cpp
+Rcpp::List ustat_dcor_matrix_pairwise_cpp(const arma::mat& X, const bool return_inference);
+RcppExport SEXP _matrixCorr_ustat_dcor_matrix_pairwise_cpp(SEXP XSEXP, SEXP return_inferenceSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const bool >::type return_inference(return_inferenceSEXP);
+    rcpp_result_gen = Rcpp::wrap(ustat_dcor_matrix_pairwise_cpp(X, return_inference));
+    return rcpp_result_gen;
+END_RCPP
+}
 // kendall_matrix_cpp
 Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat);
 RcppExport SEXP _matrixCorr_kendall_matrix_cpp(SEXP matSEXP) {
@@ -725,6 +737,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
     {"_matrixCorr_ustat_dcor", (DL_FUNC) &_matrixCorr_ustat_dcor, 2},
     {"_matrixCorr_ustat_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_cpp, 1},
+    {"_matrixCorr_ustat_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_pairwise_cpp, 2},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
     {"_matrixCorr_kendall_tau2_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_cpp, 2},
     {"_matrixCorr_kendall_tau2_from_mat_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_from_mat_cpp, 1},
