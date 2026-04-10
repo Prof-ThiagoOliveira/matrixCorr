@@ -61,8 +61,8 @@ build_L_Dm_Z_cpp <- function(colnames_X, rmet_name, rtime_name, method_levels, t
     .Call(`_matrixCorr_build_L_Dm_Z_cpp`, colnames_X, rmet_name, rtime_name, method_levels, time_levels, has_interaction, Dmat_global, slope_mode, slope_var, method_codes, drop_zero_cols)
 }
 
-ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, ci_mode = 2L, Lr = NULL, auxDr = NULL, Zr = NULL, use_ar1 = FALSE, ar1_rho = 0.0, include_subj_method = TRUE, include_subj_time = TRUE, sb_zero_tol = 1e-10, eval_single_visit = FALSE, time_weights = NULL) {
-    .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, ci_mode, Lr, auxDr, Zr, use_ar1, ar1_rho, include_subj_method, include_subj_time, sb_zero_tol, eval_single_visit, time_weights)
+ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, tol = 1e-6, conf_level = 0.95, ci_mode = 2L, Lr = NULL, auxDr = NULL, Zr = NULL, use_ar1 = FALSE, ar1_rho = 0.0, include_subj_method = TRUE, include_subj_time = TRUE, sb_zero_tol = 1e-10, eval_single_visit = FALSE, time_weights = NULL, metric_mode = 0L) {
+    .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, ci_mode, Lr, auxDr, Zr, use_ar1, ar1_rho, include_subj_method, include_subj_time, sb_zero_tol, eval_single_visit, time_weights, metric_mode)
 }
 
 ccc_cpp <- function(X) {
@@ -87,6 +87,14 @@ ustat_dcor_matrix_cpp <- function(X) {
 
 ustat_dcor_matrix_pairwise_cpp <- function(X, return_inference = FALSE) {
     .Call(`_matrixCorr_ustat_dcor_matrix_pairwise_cpp`, X, return_inference)
+}
+
+icc_matrix_cpp <- function(X, form_code = 0L, average_unit = FALSE, pairwise_complete = FALSE, return_ci = FALSE, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_icc_matrix_cpp`, X, form_code, average_unit, pairwise_complete, return_ci, conf_level, n_threads)
+}
+
+icc_overall_cpp <- function(X, return_ci = FALSE, conf_level = 0.95) {
+    .Call(`_matrixCorr_icc_overall_cpp`, X, return_ci, conf_level)
 }
 
 kendall_matrix_cpp <- function(mat) {

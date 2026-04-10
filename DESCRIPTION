@@ -11,10 +11,11 @@ Description: Compute correlation, association, and agreement measures for
     distance correlation, partial correlation with regularised estimators,
     shrinkage correlation for p >= n settings, robust correlations including
     biweight mid-correlation, percentage-bend, and skipped correlation,
-    latent-variable methods for binary and ordinal data, repeated-measures
-    correlation, and agreement analyses based on Bland-Altman methods and
-    Lin's concordance correlation coefficient, including repeated-measures
-    extensions. Implemented with optimized C++ backends using BLAS/OpenMP and
+    latent-variable methods for binary and ordinal data, intraclass
+    correlation, repeated-measures correlation, and agreement analyses based on
+    Bland-Altman methods and Lin's concordance correlation coefficient,
+    including repeated-measures extensions. Implemented with optimized C++
+    backends using BLAS/OpenMP and
     memory-aware symmetric updates, and returns standard R objects with
     print/summary/plot methods plus optional Shiny viewers for matrix
     inspection. Methods based on Ledoit and Wolf (2004)

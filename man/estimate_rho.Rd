@@ -22,7 +22,8 @@ estimate_rho(
   include_subj_time = TRUE,
   sb_zero_tol = 1e-10,
   eval_single_visit = FALSE,
-  time_weights = NULL
+  time_weights = NULL,
+  metric_mode = 0L
 )
 }
 \description{

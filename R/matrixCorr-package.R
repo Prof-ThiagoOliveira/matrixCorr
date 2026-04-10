@@ -2,7 +2,8 @@
 
 #' matrixCorr
 #'
-#' Correlation and agreement estimators with a consistent S3 interface.
+#' Correlation, agreement, and intraclass correlation estimators with a
+#' consistent S3 interface.
 #'
 #' `print()` methods provide compact previews and `summary()` methods provide
 #' richer but still bounded digests. Truncation affects console display only;

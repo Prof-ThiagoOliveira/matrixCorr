@@ -36,7 +36,16 @@ ccc_lmm_reml_pairwise(
   vc_test_order = c("subj_time", "subj_method"),
   include_subj_method = NULL,
   include_subj_time = NULL,
-  sb_zero_tol = 1e-10
+  sb_zero_tol = 1e-10,
+  metric_mode = 0L,
+  estimate_key = "ccc",
+  se_key = "se_ccc",
+  out_class = "ccc_rm_reml",
+  out_method = "Variance Components REML - pairwise",
+  out_description = "Lin's CCC per method pair from random-effects LMM",
+  summary_title = "Repeated-measures concordance matrix",
+  vc_engine_name = "ccc_rm_reml",
+  vc_se_label = "SE(CCC)"
 )
 }
 \description{

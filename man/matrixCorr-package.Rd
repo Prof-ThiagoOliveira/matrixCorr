@@ -7,7 +7,8 @@
 \alias{RcppExports}
 \title{matrixCorr}
 \description{
-Correlation and agreement estimators with a consistent S3 interface.
+Correlation, agreement, and intraclass correlation estimators with a
+consistent S3 interface.
 }
 \details{
 \code{print()} methods provide compact previews and \code{summary()} methods provide

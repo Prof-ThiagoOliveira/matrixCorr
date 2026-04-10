@@ -40,9 +40,10 @@ Supported measures include Pearson, Spearman, Kendall, distance correlation,
 partial correlation, robust biweight mid-correlation, percentage bend,
 Winsorized, skipped correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial, and
-biserial), plus repeated-measures correlation (`rmcorr()`); agreement tools cover Bland-Altman (two-method and
-repeated-measures) and Lin's concordance correlation coefficient (including
-repeated-measures LMM/REML extensions).
+biserial), plus repeated-measures correlation (`rmcorr()`); agreement tools
+cover Bland-Altman (two-method and repeated-measures), Lin's concordance
+correlation coefficient (including repeated-measures LMM/REML extensions), and
+intraclass correlation for both wide and repeated-measures designs.
 
 ## Features
 
@@ -56,7 +57,8 @@ repeated-measures LMM/REML extensions).
 - Shrinkage for $p >> n$ (`schafer_corr()`)
 - Agreement metrics
     * Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
-    * Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric `ccc_rm_ustat()`)
+    * Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric `ccc_rm_ustat()`),
+    * Intraclass correlation (wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()`)
 - Interactive Shiny viewers for matrix-style outputs with a dedicated repeated-measures correlation viewer (`view_rmcorr_shiny()`)
 
 ## Installation
@@ -231,8 +233,8 @@ plot(fit_mat)
 
 ## Agreement analyses
 
-Here we look at agreement analyses for Bland-Altman and repeated-measures
-concordance workflows.
+Here we look at agreement analyses for Bland-Altman, concordance, and
+intraclass correlation workflows.
 
 ### Two-method Bland-Altman
 
@@ -290,6 +292,34 @@ summary(fit_ccc)
 plot(fit_ccc)
 ```
 
+### Intraclass correlation for wide data
+
+```{r, eval = FALSE}
+sf <- matrix(c(
+  9,  2, 5, 8,
+  6,  1, 3, 2,
+  8,  4, 6, 8,
+  7,  1, 2, 6,
+  10, 5, 6, 9,
+  6,  2, 4, 7
+), ncol = 4, byrow = TRUE)
+colnames(sf) <- paste0("J", 1:4)
+rownames(sf) <- paste0("S", 1:6)
+
+fit_icc_pair <- icc(sf,
+  model = "twoway_random",
+  type = "agreement",
+  unit = "single",
+  scope = "pairwise"
+)
+fit_icc_overall <- icc(sf, scope = "overall", ci = TRUE)
+
+print(fit_icc_pair, digits = 2)
+summary(fit_icc_pair)
+print(fit_icc_overall)
+summary(fit_icc_overall)
+```
+
 Use `ccc_rm_ustat()` when you have repeated measurements on the same subjects
 across methods and want a direct non-parametric repeated-measures CCC. Use
 `ccc_rm_reml()` when you want a model-based estimate from variance components,
@@ -316,6 +346,36 @@ fit_ccc_rm <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
 print(fit_ccc_rm)
 summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
 plot(fit_ccc_rm)
+```
+
+### Repeated-measures intraclass correlation (REML)
+
+```{r, eval = FALSE}
+set.seed(12)
+S <- 24
+Tm <- 4
+id <- factor(rep(seq_len(S), each = 2 * Tm))
+method <- factor(rep(rep(c("A", "B"), each = Tm), times = S))
+time <- factor(rep(rep(seq_len(Tm), times = 2), times = S))
+
+u <- rnorm(S, 0, 0.9)[as.integer(id)]
+um <- rnorm(S * 2, 0, 0.25)
+um <- um[(as.integer(id) - 1L) * 2L + as.integer(method)]
+y <- u + um + (method == "B") * 0.2 + rnorm(length(id), 0, 0.35)
+
+dat_icc <- data.frame(y, id, method, time)
+fit_icc_rm <- icc_rm_reml(
+  dat_icc,
+  response = "y",
+  rind = "id",
+  method = "method",
+  time = "time",
+  type = "consistency"
+)
+
+print(fit_icc_rm)
+summary(fit_icc_rm)
+plot(fit_icc_rm)
 ```
 
 ## Contributing

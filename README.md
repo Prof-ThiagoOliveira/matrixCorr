@@ -1,63 +1,61 @@
+---
+output: github_document
+---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
+
+
 
 # matrixCorr <img src="man/figures/logo.png" align="right" height="160" />
 
 <!-- badges: start -->
-
-[![CRAN
-version](https://www.r-pkg.org/badges/version/matrixCorr)](https://CRAN.R-project.org/package=matrixCorr)
-![CRAN
-downloads](https://cranlogs.r-pkg.org/badges/grand-total/matrixCorr)
+[![CRAN version](https://www.r-pkg.org/badges/version/matrixCorr)](https://CRAN.R-project.org/package=matrixCorr)
+![CRAN downloads](https://cranlogs.r-pkg.org/badges/grand-total/matrixCorr)
 [![R-CMD-check.yaml](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/R-CMD-check.yaml)
 [![test-coverage.yaml](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/Prof-ThiagoOliveira/matrixCorr/actions/workflows/test-coverage.yaml)
 <!-- badges: end -->
 
-`matrixCorr` computes correlation and related association matrices from
-small to high-dimensional data using simple, consistent functions and
-sensible defaults. It includes shrinkage and robust options for noisy or
-**p \>= n** settings, plus convenient print/plot/summary methods.
-Performance-critical paths are implemented in C++ with BLAS/OpenMP and
-memory-aware symmetric updates. The API accepts base matrices and data
-frames and returns standard R objects via a consistent S3 interface.
+`matrixCorr` computes correlation and related association matrices from small to
+high-dimensional data using simple, consistent functions and sensible defaults.
+It includes shrinkage and robust options for noisy or **p >= n** settings, plus
+convenient print/plot/summary methods. Performance-critical paths are
+implemented in C++ with BLAS/OpenMP and memory-aware symmetric updates. The API
+accepts base matrices and data frames and returns standard R objects via a
+consistent S3 interface.
 
-Contributions from other researchers who want to add new correlation
-methods are very welcome. A central goal of `matrixCorr` is to keep
-efficient correlation and agreement estimation in one package with a
-common interface and consistent outputs, so methods can be extended,
-compared, and used without repeated translation across packages.
+Contributions from other researchers who want to add new correlation methods
+are very welcome. A central goal of `matrixCorr` is to keep efficient
+correlation and agreement estimation in one package with a common interface and
+consistent outputs, so methods can be extended, compared, and used without
+repeated translation across packages.
 
-Supported measures include Pearson, Spearman, Kendall, distance
-correlation, partial correlation, robust biweight mid-correlation,
-percentage bend, Winsorized, skipped correlation, and latent
-categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
-and biserial), plus repeated-measures correlation (`rmcorr()`);
-agreement tools cover Bland-Altman (two-method and repeated-measures)
-and Lin’s concordance correlation coefficient (including
-repeated-measures LMM/REML extensions).
+Supported measures include Pearson, Spearman, Kendall, distance correlation,
+partial correlation, robust biweight mid-correlation, percentage bend,
+Winsorized, skipped correlation, and latent
+categorical/ordinal correlations (tetrachoric, polychoric, polyserial, and
+biserial), plus repeated-measures correlation (`rmcorr()`); agreement tools
+cover Bland-Altman (two-method and repeated-measures), Lin's concordance
+correlation coefficient (including repeated-measures LMM/REML extensions), and
+intraclass correlation for both wide and repeated-measures designs.
 
 ## Features
 
 - High-performance C++ backend using `Rcpp`
-- General correlations such as `pearson_corr()`, `spearman_rho()`,
-  `kendall_tau()`
-- Robust correlation metrics (`bicor()`, `pbcor()`, `wincor()`,
-  `skipped_corr()`)
+- General correlations such as `pearson_corr()`, `spearman_rho()`, `kendall_tau()`
+- Robust correlation metrics (`bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`)
 - Distance correlation (`dcor()`)
 - Partial correlation (`pcorr()`)
-- Latent categorical/ordinal correlations (`tetrachoric()`,
-  `polychoric()`, `polyserial()`, `biserial()`)
+- Latent categorical/ordinal correlations (`tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()`)
 - Repeated-measures correlation (`rmcorr()`)
 - Shrinkage for $p >> n$ (`schafer_corr()`)
 - Agreement metrics
-  - Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
-  - Lin’s concordance correlation coefficient (pairwise `ccc()`,
-    repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric
-    `ccc_rm_ustat()`)
-- Interactive Shiny viewers for matrix-style outputs with a dedicated
-  repeated-measures correlation viewer (`view_rmcorr_shiny()`)
+    * Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
+    * Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric `ccc_rm_ustat()`),
+    * Intraclass correlation (wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()`)
+- Interactive Shiny viewers for matrix-style outputs with a dedicated repeated-measures correlation viewer (`view_rmcorr_shiny()`)
 
 ## Installation
+
 
 ``` r
 # Install from CRAN
@@ -72,6 +70,7 @@ remotes::install_github("Prof-ThiagoOliveira/matrixCorr")
 
 ### Correlation matrices (Pearson, Spearman, Kendall)
 
+
 ``` r
 library(matrixCorr)
 
@@ -84,7 +83,10 @@ R_spr  <- spearman_rho(X)
 R_ken  <- kendall_tau(X)
 
 print(R_pear, digits = 2)
-#> Pearson correlation matrix: 
+#> Pearson correlation matrix
+#>   method      : pearson
+#>   dimensions  : 6 x 6
+#> 
 #>       V1    V2    V3    V4    V5    V6
 #> V1  1.00  0.02  0.04 -0.02 -0.07  0.01
 #> V2  0.02  1.00  0.04  0.03 -0.05  0.13
@@ -93,22 +95,32 @@ print(R_pear, digits = 2)
 #> V5 -0.07 -0.05  0.08  0.07  1.00  0.04
 #> V6  0.01  0.13 -0.14  0.03  0.04  1.00
 summary(R_pear)
-#> Correlation summary:
-#>   class      : pearson_corr
-#>   method     : pearson
-#>   dimensions : 6 x 6
-#>   n_variables: 6
-#>   n_pairs    : 15
-#>   symmetric  : yes
-#>   missing    : 0
-#>   min        : -0.1410
-#>   max        : 0.1272
+#> Correlation summary
+#>   method      : pearson
+#>   dimensions  : 6 x 6
+#>   pairs       : 15
+#>   estimate    : -0.1410 to 0.1272
+#>   most_negative: V3-V6 (-0.1410)
+#>   most_positive: V2-V6 (0.1272)
+#> 
+#> Strongest pairs by |estimate|
+#> 
+#>  var1 var2 estimate
+#>  V3   V6   -0.1410 
+#>  V2   V6    0.1272 
+#>  V3   V5    0.0776 
+#>  V4   V5    0.0724 
+#>  V1   V5   -0.0650
 plot(R_spr)   # heatmap
 ```
 
-<img src="man/figures/README-unnamed-chunk-3-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-3-1.png" alt="plot of chunk unnamed-chunk-3" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-3</p>
+</div>
 
 ### Robust correlation (biweight mid-correlation)
+
 
 ``` r
 set.seed(2)
@@ -118,7 +130,10 @@ Y$V1[sample.int(nrow(Y), 8)] <- Y$V1[sample.int(nrow(Y), 8)] + 8
 
 R_bicor <- bicor(Y)
 print(R_bicor, digits = 2)
-#> Biweight mid-correlation matrix (bicor): 
+#> Biweight mid-correlation matrix (bicor)
+#>   method      : biweight_mid_correlation
+#>   dimensions  : 6 x 6
+#> 
 #>       V1    V2    V3    V4    V5    V6
 #> V1  1.00  0.05  0.03 -0.02 -0.07  0.02
 #> V2  0.05  1.00  0.05  0.03 -0.04  0.14
@@ -130,13 +145,17 @@ print(R_bicor, digits = 2)
 
 ### Other robust correlations
 
+
 ``` r
 R_pb   <- pbcor(Y)
 R_win  <- wincor(Y)
 R_skip <- skipped_corr(Y)
 
 print(R_pb, digits = 2)
-#> Percentage bend correlation matrix: 
+#> Percentage bend correlation matrix
+#>   method      : percentage_bend_correlation
+#>   dimensions  : 6 x 6
+#> 
 #>       V1    V2    V3    V4    V5    V6
 #> V1  1.00  0.03  0.02  0.01 -0.05  0.04
 #> V2  0.03  1.00  0.06  0.02 -0.02  0.14
@@ -146,11 +165,12 @@ print(R_pb, digits = 2)
 #> V6  0.04  0.14 -0.16  0.05  0.05  1.00
 ```
 
-`skipped_corr()` is typically slower than `pbcor()` and `wincor()`
-because it performs pairwise bivariate outlier detection before
-computing the final correlation.
+`skipped_corr()` is typically slower than `pbcor()` and `wincor()` because it
+performs pairwise bivariate outlier detection before computing the final
+correlation.
 
 ### High-dimensional shrinkage correlation ($p >> n$)
+
 
 ``` r
 set.seed(3)
@@ -160,34 +180,53 @@ colnames(Xd) <- paste0("G", seq_len(p))
 
 R_shr <- schafer_corr(Xd)
 print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
-#> Schafer-Strimmer shrinkage correlation matrix: 
-#>       G1    G2 G3 G4 G5 G6
-#> G1  1.00 -0.01  0  0  0  0
-#> G2 -0.01  1.00  0  0  0  0
-#> G3  0.00  0.00  1  0  0  0
-#> G4  0.00  0.00  0  1  0  0
-#> G5  0.00  0.00  0  0  1  0
-#> G6  0.00  0.00  0  0  0  1
-#> ... omitted: 194 rows, 194 cols
+#> Schafer-Strimmer shrinkage correlation matrix
+#>   method      : schafer_shrinkage
+#>   dimensions  : 200 x 200
+#> 
+#>         G1    G2    G3 ...  G198  G199  G200
+#> G1    1.00 -0.01 -0.00 ... -0.00  0.00  0.00
+#> G2   -0.01  1.00  0.00 ...  0.01  0.00 -0.00
+#> G3   -0.00  0.00  1.00 ...  0.01  0.00 -0.00
+#> ...    ...   ...   ... ...   ...   ...   ...
+#> G198 -0.00  0.01  0.01 ...  1.00 -0.00 -0.01
+#> G199  0.00  0.00  0.00 ... -0.00  1.00  0.00
+#> G200  0.00 -0.00 -0.00 ... -0.01  0.00  1.00
+#> ... 194 more rows not shown (omitted)
+#> ... 194 more variables not shown (omitted)
+#> Use summary() for a richer digest.
+#> Use as.data.frame()/tidy()/as.matrix() to inspect the full result.
 summary(R_shr)
-#> Correlation summary:
-#>   class      : schafer_corr
-#>   method     : schafer_shrinkage
-#>   dimensions : 200 x 200
-#>   n_variables: 200
-#>   n_pairs    : 19900
-#>   symmetric  : yes
-#>   missing    : 0
-#>   min        : -0.0144
-#>   max        : 0.0130
+#> Correlation summary
+#>   method      : schafer_shrinkage
+#>   dimensions  : 200 x 200
+#>   pairs       : 19,900
+#>   estimate    : -0.0144 to 0.0130
+#>   most_negative: G64-G133 (-0.0144)
+#>   most_positive: G44-G47 (0.0130)
+#> 
+#> Strongest pairs by |estimate|
+#> 
+#>  var1 var2 estimate
+#>  G64  G133 -0.0144 
+#>  G4   G196 -0.0135 
+#>  G44  G47   0.0130 
+#>  G125 G185  0.0129 
+#>  G75  G191  0.0125
 ```
 
 ### Partial correlation matrix
+
 
 ``` r
 R_part <- pcorr(X)
 print(R_part, digits = 2)
 #> Partial correlation (sample covariance)
+#> 
+#> Partial correlation matrix
+#>   method      : sample
+#>   dimensions  : 6 x 6
+#> 
 #>       V1    V2    V3    V4    V5    V6
 #> V1  1.00  0.02  0.05 -0.01 -0.07  0.02
 #> V2  0.02  1.00  0.07  0.04 -0.06  0.14
@@ -196,21 +235,31 @@ print(R_part, digits = 2)
 #> V5 -0.07 -0.06  0.10  0.08  1.00  0.06
 #> V6  0.02  0.14 -0.15  0.02  0.06  1.00
 summary(R_part)
-#> Correlation summary:
-#>   class      : partial_corr
-#>   method     : sample
-#>   jitter     : 0
-#>   dimensions : 6 x 6
-#>   n_variables: 6
-#>   n_pairs    : 15
-#>   symmetric  : yes
-#>   missing    : 0
-#>   min        : -0.1518
-#>   max        : 0.1368
+#> Correlation summary
+#>   method      : sample
+#>   dimensions  : 6 x 6
+#>   pairs       : 15
+#>   n_complete  : 300
+#>   estimate    : -0.1518 to 0.1368
+#>   most_negative: V3-V6 (-0.1518)
+#>   most_positive: V2-V6 (0.1368)
+#>   jitter      : 0
+#> 
+#> Strongest pairs by |estimate|
+#> 
+#>  var1 var2 estimate
+#>  V3   V6   -0.1518 
+#>  V2   V6    0.1368 
+#>  V3   V5    0.0959 
+#>  V4   V5    0.0772 
+#>  V1   V5   -0.0678
 plot(R_part)
 ```
 
-<img src="man/figures/README-unnamed-chunk-7-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-7-1.png" alt="plot of chunk unnamed-chunk-7" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-7</p>
+</div>
 
 `pcorr()` defaults to the sample partial correlation and also supports
 `method = "oas"`, `method = "ridge"`, and `method = "glasso"` for
@@ -218,23 +267,28 @@ regularized estimation.
 
 ### Distance correlation matrix
 
+
 ``` r
 R_dcor <- dcor(X)
 print(R_dcor, digits = 2)
-#> Distance correlation (dCor) matrix: 
-#>    V1   V2   V3 V4 V5   V6
-#> V1  1 0.00 0.00  0  0 0.00
-#> V2  0 1.00 0.00  0  0 0.02
-#> V3  0 0.00 1.00  0  0 0.02
-#> V4  0 0.00 0.00  1  0 0.00
-#> V5  0 0.00 0.00  0  1 0.00
-#> V6  0 0.02 0.02  0  0 1.00
+#> Distance correlation (dCor) matrix
+#>   method      : distance_correlation
+#>   dimensions  : 6 x 6
+#> 
+#>      V1   V2   V3   V4   V5   V6
+#> V1 1.00 0.00 0.00 0.00 0.00 0.00
+#> V2 0.00 1.00 0.00 0.00 0.00 0.02
+#> V3 0.00 0.00 1.00 0.00 0.00 0.02
+#> V4 0.00 0.00 0.00 1.00 0.00 0.00
+#> V5 0.00 0.00 0.00 0.00 1.00 0.00
+#> V6 0.00 0.02 0.02 0.00 0.00 1.00
 ```
 
-`dcor()` uses an unbiased estimator with a fast univariate $O(n \log n)$
-dispatch and an exact $O(n^2)$ fallback for robustness.
+`dcor()` uses an unbiased estimator with a fast univariate
+\(O(n \log n)\) dispatch and an exact \(O(n^2)\) fallback for robustness.
 
 ### Latent categorical and ordinal correlations
+
 
 ``` r
 set.seed(8)
@@ -269,27 +323,40 @@ R_ps  <- polyserial(X_cont, X_ord)
 R_bis <- biserial(X_cont, X_bin[, 1:2])
 
 print(R_tet, digits = 2)
-#> Tetrachoric correlation matrix: 
+#> Tetrachoric correlation matrix
+#>   method      : tetrachoric
+#>   dimensions  : 3 x 3
+#> 
 #>      b1   b2   b3
 #> b1 1.00 0.55 0.39
 #> b2 0.55 1.00 0.33
 #> b3 0.39 0.33 1.00
 summary(R_ps)
-#> Latent correlation summary:
-#>   class      : polyserial_corr
-#>   method     : polyserial
-#>   dimensions : 2 x 2
-#>   n_pairs    : 4
-#>   symmetric  : no
-#>   missing    : 0
-#>   min        : 0.2298
-#>   max        : 0.5523
+#> Latent correlation summary
+#>   method      : polyserial
+#>   dimensions  : 2 x 2
+#>   pairs       : 4
+#>   estimate    : 0.2298 to 0.5523
+#>   most_negative: x2-o1 (0.2298)
+#>   most_positive: x1-o1 (0.5523)
+#> 
+#> Strongest pairs by |estimate|
+#> 
+#>  var1 var2 estimate
+#>  x1   o1   0.5523  
+#>  x2   o2   0.4758  
+#>  x1   o2   0.3743  
+#>  x2   o1   0.2298
 plot(R_pol)
 ```
 
-<img src="man/figures/README-unnamed-chunk-9-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-9-1.png" alt="plot of chunk unnamed-chunk-9" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-9</p>
+</div>
 
 ### Repeated-measures correlation
+
 
 ``` r
 set.seed(2026)
@@ -311,17 +378,19 @@ fit_xy <- rmcorr(dat_rm, response = c("x", "y"), subject = "subject")
 fit_mat <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "subject")
 
 print(fit_xy)
-#> Repeated-measures correlation:
-#>   responses : x vs y
-#>   based.on  : 80
-#>   subjects  : 20
-#>   df        : 59
-#>   r         : 0.9448
-#>   slope     : 0.7991
-#>   p_value   : 2.769e-30
-#>   CI 95.0%   : [0.9094, 0.9667]
+#> Repeated-measures correlation preview:
+#>   method      : rmcorr
+#>   responses   : x vs y
+#>   based_on    : 80
+#>   subjects    : 20
+#>   estimate    : 0.9448
+#>   ci          : [0.9094, 0.9667] (95%)
 print(fit_mat, digits = 2)
-#> Repeated-measures correlation matrix: 
+#> Repeated-measures correlation matrix
+#>   method      : rmcorr
+#>   dimensions  : 3 x 3
+#>   p_values    : yes
+#> 
 #>       x     y     z
 #> x  1.00  0.94 -0.63
 #> y  0.94  1.00 -0.62
@@ -329,13 +398,19 @@ print(fit_mat, digits = 2)
 plot(fit_xy)
 ```
 
-<img src="man/figures/README-unnamed-chunk-10-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-10-1.png" alt="plot of chunk unnamed-chunk-10" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-10</p>
+</div>
 
 ``` r
 plot(fit_mat)
 ```
 
-<img src="man/figures/README-unnamed-chunk-10-2.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-10-2.png" alt="plot of chunk unnamed-chunk-10" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-10</p>
+</div>
 
 ``` r
 
@@ -353,10 +428,11 @@ plot(fit_mat)
 
 ## Agreement analyses
 
-Here we look at agreement analyses for Bland-Altman and
-repeated-measures concordance workflows.
+Here we look at agreement analyses for Bland-Altman, concordance, and
+intraclass correlation workflows.
 
 ### Two-method Bland-Altman
+
 
 ``` r
 set.seed(4)
@@ -365,16 +441,20 @@ y <- x + 0.5 + rnorm(120, 0, 8)
 
 ba_fit <- ba(x, y)
 print(ba_fit)
-#> Bland-Altman (n = 120) - LoA = mean +/- 1.96 * SD, 95% CI
+#> Bland-Altman preview:
+#>   based_on    : 120
+#>   loa_rule    : mean +/- 1.96 * SD
+#>   ci          : 95%
+#>   sd_diff     : 8.032
+#>   width       : 31.484
 #> 
 #>  quantity        estimate lwr     upr    
 #>  Mean difference 0.001    -1.450  1.453  
 #>  Lower LoA       -15.741  -18.255 -13.226
-#>  Upper LoA       15.743   13.229  18.258 
-#> 
-#> SD(differences): 8.032   LoA width: 31.484
+#>  Upper LoA       15.743   13.229  18.258
 summary(ba_fit)
-#> Bland-Altman (two methods), 95% CI
+#> 
+#> Bland-Altman (two methods) (95% CI)
 #> 
 #> Agreement estimates
 #> 
@@ -388,9 +468,13 @@ summary(ba_fit)
 plot(ba_fit)
 ```
 
-<img src="man/figures/README-unnamed-chunk-11-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-11-1.png" alt="plot of chunk unnamed-chunk-11" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-11</p>
+</div>
 
 ### Repeated-measures Bland-Altman (pairwise matrix)
+
 
 ``` r
 set.seed(5)
@@ -416,41 +500,53 @@ ba_rep <- ba_rm(
   include_slope = FALSE, use_ar1 = FALSE
 )
 print(ba_rep)
-#> Bland-Altman (row − column), 95% CI
 #> 
-#>  method1 method2 bias   sd_loa loa_low loa_up width  n  
-#>  A       B        0.875 3.021  -5.045  6.796  11.841 120
-#>  A       C       -2.609 3.156  -8.795  3.577  12.372 120
-#>  B       C       -3.484 3.167  -9.692  2.724  12.416 120
+#> Bland-Altman (row − column) (95% CI)
+#> 
+#>  method1 method2 bias   sd_loa loa_low ... bias_upr lo_lwr  lo_upr up_lwr
+#>  A       B        0.875 3.021  -5.045  ...  1.416    -5.996 -4.094 5.845 
+#>  A       C       -2.609 3.143  -8.769  ... -2.046   -10.275 -7.262 2.045 
+#>  B       C       -3.484 3.167  -9.692  ... -2.918   -10.259 -9.126 2.157 
+#>  up_upr
+#>  7.747 
+#>  5.058 
+#>  3.291 
+#> ... 4 more variables not shown (omitted)
+#> Use as.data.frame()/tidy()/as.matrix() to inspect the full result.
 summary(ba_rep)
-#> Bland-Altman (pairwise), 95% CI
+#> 
+#> Bland-Altman (pairwise) (95% CI)
 #> 
 #> Agreement estimates
 #> 
 #>  method1 method2 n   bias   sd_loa loa_low loa_up width 
 #>  A       B       120  0.875 3.021  -5.045  6.796  11.841
-#>  A       C       120 -2.609 3.156  -8.795  3.577  12.372
+#>  A       C       120 -2.609 3.143  -8.769  3.551  12.320
 #>  B       C       120 -3.484 3.167  -9.692  2.724  12.416
 #> 
 #> Confidence intervals
 #> 
 #>  bias_lwr bias_upr lo_lwr  lo_upr up_lwr up_upr
 #>   0.335    1.416    -5.996 -4.094 5.845  7.747 
-#>  -3.173   -2.044   -10.313 -7.276 2.059  5.095 
+#>  -3.171   -2.046   -10.275 -7.262 2.045  5.058 
 #>  -4.051   -2.918   -10.259 -9.126 2.157  3.291 
 #> 
 #> Model details
 #> 
 #>  sigma2_subject sigma2_resid residual_model
 #>  0               9.124       iid           
-#>  0               9.960       iid           
+#>  0               9.877       iid           
 #>  0              10.032       iid
 plot(ba_rep)
 ```
 
-<img src="man/figures/README-unnamed-chunk-12-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-12-1.png" alt="plot of chunk unnamed-chunk-12" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-12</p>
+</div>
 
-### Lin’s concordance correlation coefficient
+### Lin's concordance correlation coefficient
+
 
 ``` r
 set.seed(6)
@@ -459,27 +555,74 @@ y <- x + 0.4 + rnorm(80, 0, 3)
 
 fit_ccc <- ccc(data.frame(A = x, B = y), ci = TRUE)
 print(fit_ccc)
-#> Concordance pairs (Lin's CCC, 95% CI)
+#> Lin's concordance correlation matrix
+#>   method      : Lin's concordance
+#>   dimensions  : 2 x 2
+#>   ci          : yes
 #> 
-#>  method1 method2 estimate lwr    upr   
-#>  A       B       0.9262   0.8877 0.9519
+#>        A      B
+#> A 1.0000 0.9262
+#> B 0.9262 1.0000
 summary(fit_ccc)
-#> Concordance pairs (Lin's CCC, 95% CI)
+#> Lin's concordance summary
+#>   dimensions  : 2 x 2
+#>   pairs       : 1
+#>   estimate    : 0.9262
+#>   most_negative: A-B (0.9262)
+#>   most_positive: A-B (0.9262)
+#>   ci          : 95%
+#>   ci_method   : delta_method
+#>   ci_width    : 0.06
+#> 
+#> Strongest pairs by |estimate|
 #> 
 #>  method1 method2 estimate lwr  upr 
 #>  A       B       0.9262   0.89 0.95
 plot(fit_ccc)
 ```
 
-<img src="man/figures/README-unnamed-chunk-13-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-13-1.png" alt="plot of chunk unnamed-chunk-13" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-13</p>
+</div>
 
-Use `ccc_rm_ustat()` when you have repeated measurements on the same
-subjects across methods and want a direct non-parametric
-repeated-measures CCC. Use `ccc_rm_reml()` when you want a model-based
-estimate from variance components, especially when subject effects, time
-effects, or within-subject correlation need to be modeled explicitly.
+### Intraclass correlation for wide data
 
-### Repeated-measures Lin’s concordance correlation coefficient (LMM/REML)
+
+``` r
+sf <- matrix(c(
+  9,  2, 5, 8,
+  6,  1, 3, 2,
+  8,  4, 6, 8,
+  7,  1, 2, 6,
+  10, 5, 6, 9,
+  6,  2, 4, 7
+), ncol = 4, byrow = TRUE)
+colnames(sf) <- paste0("J", 1:4)
+rownames(sf) <- paste0("S", 1:6)
+
+fit_icc_pair <- icc(sf,
+  model = "twoway_random",
+  type = "agreement",
+  unit = "single",
+  scope = "pairwise"
+)
+fit_icc_overall <- icc(sf, scope = "overall", ci = TRUE)
+
+print(fit_icc_pair, digits = 2)
+summary(fit_icc_pair)
+print(fit_icc_overall)
+summary(fit_icc_overall)
+```
+
+Use `ccc_rm_ustat()` when you have repeated measurements on the same subjects
+across methods and want a direct non-parametric repeated-measures CCC. Use
+`ccc_rm_reml()` when you want a model-based estimate from variance components,
+especially when subject effects, time effects, or within-subject correlation
+need to be modeled explicitly.
+
+### Repeated-measures Lin's concordance correlation coefficient (LMM/REML)
+
 
 ``` r
 set.seed(6)
@@ -497,11 +640,15 @@ dat_ccc <- data.frame(y, id, method, time)
 fit_ccc_rm <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
                           method = "method", time = "time")
 print(fit_ccc_rm)
-#> Concordance pairs (Lin's CCC)
+#> Repeated-measures concordance matrix
+#>   method      : Variance Components REML - pairwise
+#>   dimensions  : 2 x 2
 #> 
-#>  method1 method2 estimate
-#>  A       B       0.8987
+#>        A      B
+#> A 1.0000 0.8987
+#> B 0.8987 1.0000
 summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
+#> 
 #> Repeated-measures concordance (REML)
 #> 
 #> Concordance estimates
@@ -521,7 +668,41 @@ summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
 plot(fit_ccc_rm)
 ```
 
-<img src="man/figures/README-unnamed-chunk-14-1.png" alt="" width="100%" />
+<div class="figure">
+<img src="man/figures/README-unnamed-chunk-15-1.png" alt="plot of chunk unnamed-chunk-15" width="100%" />
+<p class="caption">plot of chunk unnamed-chunk-15</p>
+</div>
+
+### Repeated-measures intraclass correlation (REML)
+
+
+``` r
+set.seed(12)
+S <- 24
+Tm <- 4
+id <- factor(rep(seq_len(S), each = 2 * Tm))
+method <- factor(rep(rep(c("A", "B"), each = Tm), times = S))
+time <- factor(rep(rep(seq_len(Tm), times = 2), times = S))
+
+u <- rnorm(S, 0, 0.9)[as.integer(id)]
+um <- rnorm(S * 2, 0, 0.25)
+um <- um[(as.integer(id) - 1L) * 2L + as.integer(method)]
+y <- u + um + (method == "B") * 0.2 + rnorm(length(id), 0, 0.35)
+
+dat_icc <- data.frame(y, id, method, time)
+fit_icc_rm <- icc_rm_reml(
+  dat_icc,
+  response = "y",
+  rind = "id",
+  method = "method",
+  time = "time",
+  type = "consistency"
+)
+
+print(fit_icc_rm)
+summary(fit_icc_rm)
+plot(fit_icc_rm)
+```
 
 ## Contributing
 

@@ -10,6 +10,10 @@ This is a new release of `matrixCorr`.
   mid-correlation.
 * Adds optional large-sample p-values and confidence intervals for
   biserial correlation.
+* Adds intraclass correlation support for wide data via `icc()`,
+  including pairwise and overall ANOVA-based coefficients.
+* Adds repeated-measures intraclass correlation via `icc_rm_reml()`
+  using the package's existing REML variance-components backend.
 
 
 

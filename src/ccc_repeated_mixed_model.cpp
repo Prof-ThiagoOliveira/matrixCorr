@@ -340,7 +340,8 @@ Rcpp::List ccc_vc_cpp(
     bool include_subj_time = true,
     double sb_zero_tol = 1e-10,
     bool eval_single_visit = false,
-    Rcpp::Nullable<Rcpp::NumericVector> time_weights = R_NilValue
+    Rcpp::Nullable<Rcpp::NumericVector> time_weights = R_NilValue,
+    int metric_mode = 0
 ) {
 #ifdef _OPENMP
 #ifndef MATRIXCORR_NO_BLAS_GUARD
@@ -1158,36 +1159,107 @@ Rcpp::List ccc_vc_cpp(
   double se_ccc = std::sqrt(std::max(0.0, var_ccc));
   const double alpha = 1.0 - std::min(std::max(conf_level, 0.0), 1.0);
   const double z = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0);
-
-  // raw Wald CI (truncated)
-  double lwr_raw = std::min(1.0, std::max(0.0, ccc - z * se_ccc));
-  double upr_raw = std::min(1.0, std::max(0.0, ccc + z * se_ccc));
-
-  // logit-stabilised CI
   const double eps_c = 1e-12;
-  double c_mid = std::min(1.0 - eps_c, std::max(eps_c, ccc));
-  double phi   = std::log(c_mid / (1.0 - c_mid));
-  double se_phi = (se_ccc > 0.0) ? (se_ccc / std::max(eps_c, c_mid * (1.0 - c_mid))) : 0.0;
-  double lo_phi = phi - z * se_phi;
-  double hi_phi = phi + z * se_phi;
   auto expit = [](double x){ return 1.0 / (1.0 + std::exp(-x)); };
-  double lwr_logit = expit(lo_phi);
-  double upr_logit = expit(hi_phi);
+  auto build_ci = [&](double estimate_in, double se_in) {
+    double raw_l = std::min(1.0, std::max(0.0, estimate_in - z * se_in));
+    double raw_u = std::min(1.0, std::max(0.0, estimate_in + z * se_in));
 
-  // auto rule to choose method
-  int ci_mode_used = ci_mode;
-  // 0=raw, 1=logit, 2=auto
-  if (ci_mode == 2) {
-    bool near_boundary = (ccc > 0.90 || ccc < 0.10);
-    bool clipped_raw   = (lwr_raw <= eps_c || upr_raw >= 1.0 - eps_c);
-    bool tight_near_bd = (se_ccc < 0.5 * std::min(ccc, 1.0 - ccc));
-    if (near_boundary || clipped_raw || tight_near_bd) ci_mode_used = 1; else ci_mode_used = 0;
+    double est_mid = std::min(1.0 - eps_c, std::max(eps_c, estimate_in));
+    double phi = std::log(est_mid / (1.0 - est_mid));
+    double se_phi = (se_in > 0.0) ? (se_in / std::max(eps_c, est_mid * (1.0 - est_mid))) : 0.0;
+    double logit_l = expit(phi - z * se_phi);
+    double logit_u = expit(phi + z * se_phi);
+
+    int mode_used = ci_mode;
+    if (ci_mode == 2) {
+      bool near_boundary = (estimate_in > 0.90 || estimate_in < 0.10);
+      bool clipped_raw   = (raw_l <= eps_c || raw_u >= 1.0 - eps_c);
+      bool tight_near_bd = (se_in < 0.5 * std::min(estimate_in, 1.0 - estimate_in));
+      mode_used = (near_boundary || clipped_raw || tight_near_bd) ? 1 : 0;
+    }
+
+    return Rcpp::List::create(
+      _["lwr"] = (mode_used == 1 ? logit_l : raw_l),
+      _["upr"] = (mode_used == 1 ? logit_u : raw_u),
+      _["lwr_raw"] = raw_l,
+      _["upr_raw"] = raw_u,
+      _["lwr_logit"] = logit_l,
+      _["upr_logit"] = logit_u,
+      _["ci_mode_used"] = mode_used,
+      _["ci_mode_label_used"] = (mode_used == 1 ? "logit" : "raw")
+    );
+  };
+
+  Rcpp::List ccc_ci = build_ci(ccc, se_ccc);
+  double lwr_raw = Rcpp::as<double>(ccc_ci["lwr_raw"]);
+  double upr_raw = Rcpp::as<double>(ccc_ci["upr_raw"]);
+  double lwr_logit = Rcpp::as<double>(ccc_ci["lwr_logit"]);
+  double upr_logit = Rcpp::as<double>(ccc_ci["upr_logit"]);
+  int ci_mode_used = Rcpp::as<int>(ccc_ci["ci_mode_used"]);
+  double lwr = Rcpp::as<double>(ccc_ci["lwr"]);
+  double upr = Rcpp::as<double>(ccc_ci["upr"]);
+
+  double metric = ccc;
+  double se_metric = se_ccc;
+  double metric_lwr = lwr;
+  double metric_upr = upr;
+  double metric_lwr_raw = lwr_raw;
+  double metric_upr_raw = upr_raw;
+  double metric_lwr_logit = lwr_logit;
+  double metric_upr_logit = upr_logit;
+  int metric_ci_mode_used = ci_mode_used;
+  std::string metric_ci_label = Rcpp::as<std::string>(ccc_ci["ci_mode_label_used"]);
+  std::string metric_label = "ccc";
+
+  if (metric_mode == 1 || metric_mode == 2) {
+    const double denom_metric = sa + sab_eff + sag_bar + se_bar + (metric_mode == 2 ? SB : 0.0);
+    const double denom_safe = std::max(denom_metric, 1e-14);
+    metric = sa / denom_safe;
+    metric_label = (metric_mode == 1 ? "icc_consistency" : "icc_agreement");
+
+    const double d_sa_metric =
+      (sab_eff + sag_bar + se_bar + (metric_mode == 2 ? SB : 0.0)) / (denom_safe * denom_safe);
+    const double d_sab_metric = include_subj_method ? (-sa / (denom_safe * denom_safe)) : 0.0;
+    const double d_sag_metric = include_subj_time ? (-kappa_g_bar * sa / (denom_safe * denom_safe)) : 0.0;
+    const double d_se_metric  = -kappa_e_bar * sa / (denom_safe * denom_safe);
+    const double d_SB_metric  = (metric_mode == 2 && !sb_fixed_zero) ? (-sa / (denom_safe * denom_safe)) : 0.0;
+
+    double var_metric = 0.0;
+    if (include_subj_method && include_subj_time) {
+      arma::vec g_metric(3); g_metric[0]=d_sa_metric; g_metric[1]=d_sab_metric; g_metric[2]=d_sag_metric;
+      var_metric += arma::as_scalar(g_metric.t() * Sigma_vc * g_metric);
+    } else if (include_subj_method && !include_subj_time) {
+      arma::vec g_metric(2); g_metric[0]=d_sa_metric; g_metric[1]=d_sab_metric;
+      var_metric += arma::as_scalar(g_metric.t() * Sigma_vc * g_metric);
+    } else if (!include_subj_method && include_subj_time) {
+      arma::vec g_metric(2); g_metric[0]=d_sa_metric; g_metric[1]=d_sag_metric;
+      var_metric += arma::as_scalar(g_metric.t() * Sigma_vc * g_metric);
+    } else {
+      var_metric += d_sa_metric * d_sa_metric * Sigma_vc(0,0);
+    }
+    var_metric += d_se_metric * d_se_metric * var_sehat;
+    var_metric += d_SB_metric * d_SB_metric * varSB;
+    se_metric = std::sqrt(std::max(0.0, var_metric));
+
+    Rcpp::List metric_ci = build_ci(metric, se_metric);
+    metric_lwr = Rcpp::as<double>(metric_ci["lwr"]);
+    metric_upr = Rcpp::as<double>(metric_ci["upr"]);
+    metric_lwr_raw = Rcpp::as<double>(metric_ci["lwr_raw"]);
+    metric_upr_raw = Rcpp::as<double>(metric_ci["upr_raw"]);
+    metric_lwr_logit = Rcpp::as<double>(metric_ci["lwr_logit"]);
+    metric_upr_logit = Rcpp::as<double>(metric_ci["upr_logit"]);
+    metric_ci_mode_used = Rcpp::as<int>(metric_ci["ci_mode_used"]);
+    metric_ci_label = Rcpp::as<std::string>(metric_ci["ci_mode_label_used"]);
+
+    lwr = metric_lwr;
+    upr = metric_upr;
+    lwr_raw = metric_lwr_raw;
+    upr_raw = metric_upr_raw;
+    lwr_logit = metric_lwr_logit;
+    upr_logit = metric_upr_logit;
+    ci_mode_used = metric_ci_mode_used;
   }
-
-  // select CI to report
-  double lwr, upr;
-  if (ci_mode_used == 1) { lwr = lwr_logit; upr = upr_logit; }
-  else { lwr = lwr_raw; upr = upr_raw; }
 
   // -------- REML log-likelihood (uses precomp) --------
   const double two_pi = 2.0 * std::acos(-1.0);
@@ -1424,6 +1496,8 @@ Rcpp::List ccc_vc_cpp(
     _["beta"]                  = beta,
     _["varFix"]                = VarFix,
     _["ccc"]                   = ccc,
+    _["metric"]                = metric,
+    _["metric_label"]          = metric_label,
     _["lwr"]                   = lwr,
     _["upr"]                   = upr,
     _["lwr_raw"]               = lwr_raw,
@@ -1432,8 +1506,9 @@ Rcpp::List ccc_vc_cpp(
     _["upr_logit"]             = upr_logit,
     _["ci_mode_input"]         = ci_mode,       // 0,1,2
     _["ci_mode_used"]          = ci_mode_used,  // 0 or 1
-    _["ci_mode_label_used"]    = (ci_mode_used==1 ? "logit" : "raw"),
+    _["ci_mode_label_used"]    = metric_ci_label,
     _["se_ccc"]                = se_ccc,
+    _["se_metric"]             = se_metric,
     _["conf_level"]            = conf_level,
     _["reml_loglik"]           = reml_loglik,
     _["ar1_rho_lag1"]          = ar1_rho_mom,

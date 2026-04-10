@@ -1306,7 +1306,9 @@ num_or_na_vec <- function(x) {
                         digits = 4, use_message = TRUE,
                         extra_label = NULL,
                         ar = c("none", "ar1"),
-                        ar_rho = NA_real_) {
+                        ar_rho = NA_real_,
+                        engine_name = "ccc_rm_reml",
+                        se_label = "SE(CCC)") {
   ar <- match.arg(ar)
 
   fmt <- function(x) {
@@ -1324,7 +1326,7 @@ num_or_na_vec <- function(x) {
   v <- function(s, x) sprintf("  %-*s : %s", colw, s, fmt(x))
 
   out <- c(
-    sprintf("---- matrixCorr::ccc_rm_reml - variance-components (%s) ----", label),
+    sprintf("---- matrixCorr::%s - variance-components (%s) ----", engine_name, label),
     sprintf("Design: methods nm = %d, times nt = %d", nm, nt)
   )
   if (identical(ar, "ar1")) {
@@ -1348,7 +1350,7 @@ num_or_na_vec <- function(x) {
 
   out <- c(out,
            v("S_B (fixed-effect dispersion)",   ans[["SB"]]),
-           v("SE(CCC)",                         ans[["se_ccc"]]))
+           v(se_label,                          ans[["se_metric"]] %||% ans[["se_ccc"]]))
 
   has_bounds <- is.finite(num_or_na(ans$lwr)) && is.finite(num_or_na(ans$upr))
   if (!is.null(ans$ci_method) || has_bounds) {
@@ -1407,7 +1409,8 @@ run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                     use_ar1, ar1_rho, max_iter, tol, conf_level, ci_mode_int,
                     include_subj_method = TRUE, include_subj_time = TRUE,
                     sb_zero_tol = 1e-10, eval_single_visit = FALSE,
-                    time_weights = NULL) {
+                    time_weights = NULL,
+                    metric_mode = 0L) {
 
   # Guard: you cannot include a random component whose dimension is 0
   include_subj_method <- isTRUE(include_subj_method) && isTRUE(Laux$nm > 0)
@@ -1432,7 +1435,8 @@ run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
     include_subj_time   = include_subj_time,
     sb_zero_tol = as.numeric(sb_zero_tol),
     eval_single_visit = eval_single_visit,
-    time_weights = if (is.null(time_weights)) NULL else as.numeric(time_weights)
+    time_weights = if (is.null(time_weights)) NULL else as.numeric(time_weights),
+    metric_mode = as.integer(metric_mode)
   )
 }
 
@@ -1454,7 +1458,8 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                          ci_mode_int,
                          include_subj_method = TRUE, include_subj_time = TRUE,
                          sb_zero_tol = 1e-10, eval_single_visit = FALSE,
-                         time_weights = NULL) {  # <-- NEW
+                         time_weights = NULL,
+                         metric_mode = 0L) {
   obj <- function(r) {
     fit <- run_cpp(Xr, yr, subject, method_int, time_int, Laux, Z,
                    use_ar1 = TRUE, ar1_rho = r,
@@ -1464,7 +1469,8 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                    include_subj_time   = include_subj_time,
                    sb_zero_tol = sb_zero_tol,
                    eval_single_visit = eval_single_visit,
-                   time_weights = time_weights)
+                   time_weights = time_weights,
+                   metric_mode = metric_mode)
     ll <- suppressWarnings(as.numeric(fit[["reml_loglik"]]))
     if (!is.finite(ll)) return(Inf)
     -ll
@@ -1543,7 +1549,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                             alpha = 0.05, test_order = c("subj_time","subj_method"),
                             sb_zero_tol = 1e-10,
                             eval_single_visit = FALSE,
-                            time_weights = NULL) {
+                            time_weights = NULL,
+                            metric_mode = 0L) {
   ar <- match.arg(ar)
   can_subj_method <- isTRUE(Laux$nm > 0)
   can_subj_time   <- isTRUE(Laux$nt > 0)
@@ -1561,7 +1568,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                        include_subj_time   = inc_subj_time,
                        sb_zero_tol = sb_zero_tol,
                        eval_single_visit = eval_single_visit,
-                       time_weights = time_weights)  # <-- NEW
+                       time_weights = time_weights,
+                       metric_mode = metric_mode)
     er$rho
   }
 
@@ -1576,7 +1584,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       include_subj_time   = inc_subj_time,
                       sb_zero_tol = sb_zero_tol,
                       eval_single_visit = eval_single_visit,
-                      time_weights = time_weights)   # <-- NEW
+                      time_weights = time_weights,
+                      metric_mode = metric_mode)
 
   for (what in test_order) {
     if (what == "subj_time" && inc_subj_time) {
@@ -1589,7 +1598,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       include_subj_method = inc_subj_method, include_subj_time = FALSE,
                       sb_zero_tol = sb_zero_tol,
                       eval_single_visit = eval_single_visit,
-                      time_weights = time_weights)   # <-- NEW
+                      time_weights = time_weights,
+                      metric_mode = metric_mode)
       lrt <- 2 * (as.numeric(fit_full$reml_loglik) - as.numeric(fit0$reml_loglik))
       p   <- p_half_chisq1(max(lrt, 0))
       if (is.finite(p) && p > alpha) {
@@ -1608,7 +1618,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                       include_subj_method = FALSE, include_subj_time = inc_subj_time,
                       sb_zero_tol = sb_zero_tol,
                       eval_single_visit = eval_single_visit,
-                      time_weights = time_weights)   # <-- NEW
+                      time_weights = time_weights,
+                      metric_mode = metric_mode)
       lrt <- 2 * (as.numeric(fit_full$reml_loglik) - as.numeric(fit0$reml_loglik))
       p   <- p_half_chisq1(max(lrt, 0))
       if (is.finite(p) && p > alpha) {
@@ -1641,7 +1652,16 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
                                   vc_test_order = c("subj_time","subj_method"),
                                   include_subj_method = NULL,
                                   include_subj_time = NULL,
-                                  sb_zero_tol = 1e-10) {
+                                  sb_zero_tol = 1e-10,
+                                  metric_mode = 0L,
+                                  estimate_key = "ccc",
+                                  se_key = "se_ccc",
+                                  out_class = "ccc_rm_reml",
+                                  out_method = "Variance Components REML - pairwise",
+                                  out_description = "Lin's CCC per method pair from random-effects LMM",
+                                  summary_title = "Repeated-measures concordance matrix",
+                                  vc_engine_name = "ccc_rm_reml",
+                                  vc_se_label = "SE(CCC)") {
 
   Dmat_type <- match.arg(Dmat_type)
   eval_single_visit <- Dmat_type %in% c("typical-visit","weighted-sq")
@@ -1667,7 +1687,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   vc_extra <- matrix(vector("list", Lm * Lm), Lm, Lm,
                      dimnames = list(method_levels, method_levels))
   vc_SB             <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
-  vc_se_ccc         <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
+  vc_se_metric      <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
 
   ar1_rho_lag1_mat <- matrix(NA_real_,    Lm, Lm, dimnames = list(method_levels, method_levels))
   ar1_pairs_mat    <- matrix(NA_integer_, Lm, Lm, dimnames = list(method_levels, method_levels))
@@ -1806,7 +1826,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
           alpha = vc_alpha, test_order = vc_test_order,
           sb_zero_tol = sb_zero_tol,
           eval_single_visit = eval_single_visit,
-          time_weights = time_weights_kappa
+          time_weights = time_weights_kappa,
+          metric_mode = metric_mode
         )
         ans <- sel$fit
         inc_subj_method_eff <- sel$include_subj_method
@@ -1826,7 +1847,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
             include_subj_time   = inc_subj_time_eff,
             sb_zero_tol = sb_zero_tol,
             eval_single_visit = eval_single_visit,
-            time_weights = time_weights_kappa
+            time_weights = time_weights_kappa,
+            metric_mode = metric_mode
           )
           er$rho
         } else ar_rho
@@ -1842,7 +1864,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
             include_subj_time   = inc_subj_time_eff,
             sb_zero_tol = sb_zero_tol,
             eval_single_visit = eval_single_visit,
-            time_weights = time_weights_kappa
+            time_weights = time_weights_kappa,
+            metric_mode = metric_mode
           ),
           error = function(e) {
             cli::cli_warn(
@@ -1857,7 +1880,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       # ---- record results (common to both branches) ----
       rho_mat[i, j] <- rho_mat[j, i] <- as.numeric(rho_used)
 
-      val <- if (is.null(ans)) NA_real_ else unname(ans$ccc)
+      val <- if (is.null(ans)) NA_real_ else num_or_na(ans[[estimate_key]])
       est_mat[i, j] <- est_mat[j, i] <- val
 
       if (!is.null(ans)) {
@@ -1871,7 +1894,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         vc_extra[j, i] <- list(extra_vec)
 
         vc_SB[i, j]             <- vc_SB[j, i]             <- num_or_na(ans[["SB"]])
-        vc_se_ccc[i, j]         <- vc_se_ccc[j, i]         <- num_or_na(ans[["se_ccc"]])
+        vc_se_metric[i, j]      <- vc_se_metric[j, i]      <- num_or_na(ans[[se_key]])
 
         ar1_rho_lag1_mat[i, j] <- ar1_rho_lag1_mat[j, i] <- num_or_na(ans[["ar1_rho_lag1"]])
         ar1_pairs_mat[i, j]    <- ar1_pairs_mat[j, i]    <- suppressWarnings(as.integer(ans[["ar1_pairs"]]))
@@ -1899,7 +1922,9 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
                       conf_level = conf_level, digits = digits,
                       use_message = use_message,
                       extra_label = extra_label, ar = if (use_ar1_eff) "ar1" else "none",
-                      ar_rho = if (use_ar1_eff) rho_used else NA_real_)
+                      ar_rho = if (use_ar1_eff) rho_used else NA_real_,
+                      engine_name = vc_engine_name,
+                      se_label = vc_se_label)
         }
       }
 
@@ -1907,7 +1932,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         lwr_cpp <- num_or_na(if (!is.null(ans)) ans[["lwr"]] else NA_real_)
         upr_cpp <- num_or_na(if (!is.null(ans)) ans[["upr"]] else NA_real_)
         if (is.na(lwr_cpp) || is.na(upr_cpp)) {
-          se_cpp <- num_or_na(if (!is.null(ans)) ans[["se_ccc"]] else NA_real_)
+          se_cpp <- num_or_na(if (!is.null(ans)) ans[[se_key]] else NA_real_)
           ci2 <- compute_ci_from_se(num_or_na(val), se_cpp, conf_level)
           lwr_cpp <- ci2[1]; upr_cpp <- ci2[2]
         }
@@ -1930,12 +1955,18 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   if (isTRUE(ci)) {
     diag(lwr_mat) <- NA_real_
     diag(upr_mat) <- NA_real_
+    ci_classes <- if (identical(out_class, "ccc_rm_reml")) {
+      c("ccc_rm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc")
+    } else {
+      c(out_class, "icc_ci", "icc")
+    }
     out <- structure(list(est = est_mat, lwr.ci = lwr_mat, upr.ci = upr_mat),
-                     class = c("ccc_rm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc"))
-    attr(out, "method")      <- "Variance Components REML - pairwise"
-    attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
+                     class = ci_classes)
+    attr(out, "method")      <- out_method
+    attr(out, "description") <- out_description
     attr(out, "package")     <- "matrixCorr"
     attr(out, "conf.level")  <- conf_level
+    attr(out, "residual_model") <- if (identical(ar, "ar1")) "ar1" else "iid"
     if (identical(ar, "ar1")) attr(out, "ar_rho") <- rho_mat
 
     attr(out, "sigma2_subject")        <- vc_subject
@@ -1944,7 +1975,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     attr(out, "sigma2_error")          <- vc_error
     attr(out, "sigma2_extra")          <- vc_extra
     attr(out, "SB")                    <- vc_SB
-    attr(out, "se_ccc")                <- vc_se_ccc
+    attr(out, se_key)                  <- vc_se_metric
 
     if (!identical(ar, "ar1")) {
       attr(out, "ar1_rho_lag1") <- ar1_rho_lag1_mat
@@ -1955,10 +1986,16 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
 
     return(out)
   } else {
-    out <- structure(est_mat, class = c("ccc_rm_reml", "matrixCorr_ccc", "ccc", "matrix"))
-    attr(out, "method")      <- "Variance Components REML - pairwise"
-    attr(out, "description") <- "Lin's CCC per method pair from random-effects LMM"
+    est_classes <- if (identical(out_class, "ccc_rm_reml")) {
+      c("ccc_rm_reml", "matrixCorr_ccc", "ccc", "matrix")
+    } else {
+      c(out_class, "icc", "matrix")
+    }
+    out <- structure(est_mat, class = est_classes)
+    attr(out, "method")      <- out_method
+    attr(out, "description") <- out_description
     attr(out, "package")     <- "matrixCorr"
+    attr(out, "residual_model") <- if (identical(ar, "ar1")) "ar1" else "iid"
     if (identical(ar, "ar1")) attr(out, "ar_rho") <- rho_mat
 
     attr(out, "sigma2_subject")        <- vc_subject
@@ -1967,7 +2004,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     attr(out, "sigma2_error")          <- vc_error
     attr(out, "sigma2_extra")          <- vc_extra
     attr(out, "SB")                    <- vc_SB
-    attr(out, "se_ccc")                <- vc_se_ccc
+    attr(out, se_key)                  <- vc_se_metric
 
     if (!identical(ar, "ar1")) {
       attr(out, "ar1_rho_lag1") <- ar1_rho_lag1_mat

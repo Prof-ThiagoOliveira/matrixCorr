@@ -14,7 +14,9 @@
   use_message = TRUE,
   extra_label = NULL,
   ar = c("none", "ar1"),
-  ar_rho = NA_real_
+  ar_rho = NA_real_,
+  engine_name = "ccc_rm_reml",
+  se_label = "SE(CCC)"
 )
 }
 \description{
