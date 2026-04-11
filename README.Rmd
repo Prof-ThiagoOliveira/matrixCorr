@@ -72,9 +72,9 @@ install.packages("matrixCorr")
 remotes::install_github("Prof-ThiagoOliveira/matrixCorr")
 ```
 
-## Example
+## Quick start
 
-### Correlation matrices (Pearson, Spearman, Kendall)
+### Wide-data correlation workflow
 
 ```{r}
 library(matrixCorr)
@@ -83,300 +83,78 @@ set.seed(1)
 X <- as.data.frame(matrix(rnorm(300 * 6), ncol = 6))
 names(X) <- paste0("V", 1:6)
 
-R_pear <- pearson_corr(X)
-R_spr  <- spearman_rho(X)
-R_ken  <- kendall_tau(X)
+R_pear <- pearson_corr(X, ci = TRUE)
+R_bicor <- bicor(X)
 
 print(R_pear, digits = 2)
 summary(R_pear)
-plot(R_spr)   # heatmap
+plot(R_bicor)
 ```
 
-### Robust correlation (biweight mid-correlation)
+The same matrix-style workflow extends to Spearman, Kendall, distance
+correlation, partial correlation, shrinkage correlation, latent correlation,
+and the robust estimators `pbcor()`, `wincor()`, and `skipped_corr()`.
 
-```{r}
-set.seed(2)
-Y <- X
-# inject outliers
-Y$V1[sample.int(nrow(Y), 8)] <- Y$V1[sample.int(nrow(Y), 8)] + 8
-
-R_bicor <- bicor(Y)
-print(R_bicor, digits = 2)
-```
-
-### Other robust correlations
-
-```{r}
-R_pb   <- pbcor(Y)
-R_win  <- wincor(Y)
-R_skip <- skipped_corr(Y)
-
-print(R_pb, digits = 2)
-```
-
-`skipped_corr()` is typically slower than `pbcor()` and `wincor()` because it
-performs pairwise bivariate outlier detection before computing the final
-correlation.
-
-### High-dimensional shrinkage correlation ($p >> n$)
-
-```{r}
-set.seed(3)
-n <- 60; p <- 200
-Xd <- matrix(rnorm(n * p), n, p)
-colnames(Xd) <- paste0("G", seq_len(p))
-
-R_shr <- schafer_corr(Xd)
-print(R_shr, digits = 2, max_rows = 6, max_cols = 6)
-summary(R_shr)
-```
-
-### Partial correlation matrix
-
-```{r}
-R_part <- pcorr(X)
-print(R_part, digits = 2)
-summary(R_part)
-plot(R_part)
-```
-
-`pcorr()` defaults to the sample partial correlation and also supports
-`method = "oas"`, `method = "ridge"`, and `method = "glasso"` for
-regularized estimation.
-
-### Distance correlation matrix
-
-```{r}
-R_dcor <- dcor(X)
-print(R_dcor, digits = 2)
-```
-
-`dcor()` uses an unbiased estimator with a fast univariate
-\(O(n \log n)\) dispatch and an exact \(O(n^2)\) fallback for robustness.
-
-### Latent categorical and ordinal correlations
-
-```{r}
-set.seed(8)
-n <- 800
-Sigma_lat <- matrix(c(
-  1.00, 0.55, 0.35, 0.20,
-  0.55, 1.00, 0.40, 0.25,
-  0.35, 0.40, 1.00, 0.45,
-  0.20, 0.25, 0.45, 1.00
-), 4, 4, byrow = TRUE)
-
-Z <- matrix(rnorm(n * 4), n, 4) %*% chol(Sigma_lat)
-
-X_bin <- data.frame(
-  b1 = Z[, 1] > qnorm(0.70),
-  b2 = Z[, 2] > qnorm(0.55),
-  b3 = Z[, 3] > qnorm(0.50)
-)
-
-X_ord <- data.frame(
-  o1 = ordered(cut(Z[, 2], breaks = c(-Inf, -0.5, 0.4, Inf),
-                   labels = c("low", "mid", "high"))),
-  o2 = ordered(cut(Z[, 3], breaks = c(-Inf, -1, 0, 1, Inf),
-                   labels = c("1", "2", "3", "4")))
-)
-
-X_cont <- data.frame(x1 = Z[, 1], x2 = Z[, 4])
-
-R_tet <- tetrachoric(X_bin)
-R_pol <- polychoric(X_ord)
-R_ps  <- polyserial(X_cont, X_ord)
-R_bis <- biserial(X_cont, X_bin[, 1:2])
-
-print(R_tet, digits = 2)
-summary(R_ps)
-plot(R_pol)
-```
-
-### Repeated-measures correlation
-
-```{r}
-set.seed(2026)
-n_subjects <- 20
-n_rep <- 4
-subject <- rep(seq_len(n_subjects), each = n_rep)
-subj_eff_x <- rnorm(n_subjects, sd = 1.5)
-subj_eff_y <- rnorm(n_subjects, sd = 2.0)
-within_signal <- rnorm(n_subjects * n_rep)
-
-dat_rm <- data.frame(
-  subject = subject,
-  x = subj_eff_x[subject] + within_signal + rnorm(n_subjects * n_rep, sd = 0.2),
-  y = subj_eff_y[subject] + 0.8 * within_signal + rnorm(n_subjects * n_rep, sd = 0.3),
-  z = subj_eff_y[subject] - 0.4 * within_signal + rnorm(n_subjects * n_rep, sd = 0.4)
-)
-
-fit_xy <- rmcorr(dat_rm, response = c("x", "y"), subject = "subject")
-fit_mat <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "subject")
-
-print(fit_xy)
-print(fit_mat, digits = 2)
-plot(fit_xy)
-plot(fit_mat)
-
-# Dedicated Shiny viewer for repeated-measures correlation matrices
-# if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
-#   fit_mat_view <- rmcorr(
-#     dat_rm,
-#     response = c("x", "y", "z"),
-#     subject = "subject",
-#     keep_data = TRUE
-#   )
-#   view_rmcorr_shiny(fit_mat_view)
-# }
-```
-
-## Agreement analyses
-
-Here we look at agreement analyses for Bland-Altman, concordance, and
-intraclass correlation workflows.
-
-### Two-method Bland-Altman
-
-```{r}
-set.seed(4)
-x <- rnorm(120, 100, 10)
-y <- x + 0.5 + rnorm(120, 0, 8)
-
-ba_fit <- ba(x, y)
-print(ba_fit)
-summary(ba_fit)
-plot(ba_fit)
-```
-
-### Repeated-measures Bland-Altman (pairwise matrix)
-
-```{r}
-set.seed(5)
-S <- 20; Tm <- 6
-subj  <- rep(seq_len(S), each = Tm)
-time  <- rep(seq_len(Tm), times = S)
-
-true  <- rnorm(S, 50, 6)[subj] + (time - mean(time)) * 0.4
-mA    <- true + rnorm(length(true), 0, 2)
-mB    <- true + 1.0 + rnorm(length(true), 0, 2.2)
-mC    <- 0.95 * true + rnorm(length(true), 0, 2.5)
-
-dat <- rbind(
-  data.frame(y = mA, subject = subj, method = "A", time = time),
-  data.frame(y = mB, subject = subj, method = "B", time = time),
-  data.frame(y = mC, subject = subj, method = "C", time = time)
-)
-dat$method <- factor(dat$method, levels = c("A","B","C"))
-
-ba_rep <- ba_rm(
-  data = dat, response = "y", subject = "subject",
-  method = "method", time = "time",
-  include_slope = FALSE, use_ar1 = FALSE
-)
-print(ba_rep)
-summary(ba_rep)
-plot(ba_rep)
-```
-
-### Lin's concordance correlation coefficient
+### Agreement and repeated-measures workflow
 
 ```{r}
 set.seed(6)
-x <- rnorm(80, 100, 8)
-y <- x + 0.4 + rnorm(80, 0, 3)
-
-fit_ccc <- ccc(data.frame(A = x, B = y), ci = TRUE)
-print(fit_ccc)
-summary(fit_ccc)
-plot(fit_ccc)
-```
-
-### Intraclass correlation for wide data
-
-```{r, eval = FALSE}
-sf <- matrix(c(
-  9,  2, 5, 8,
-  6,  1, 3, 2,
-  8,  4, 6, 8,
-  7,  1, 2, 6,
-  10, 5, 6, 9,
-  6,  2, 4, 7
-), ncol = 4, byrow = TRUE)
-colnames(sf) <- paste0("J", 1:4)
-rownames(sf) <- paste0("S", 1:6)
-
-fit_icc_pair <- icc(sf,
-  model = "twoway_random",
-  type = "agreement",
-  unit = "single",
-  scope = "pairwise"
-)
-fit_icc_overall <- icc(sf, scope = "overall", ci = TRUE)
-
-print(fit_icc_pair, digits = 2)
-summary(fit_icc_pair)
-print(fit_icc_overall)
-summary(fit_icc_overall)
-```
-
-Use `ccc_rm_ustat()` when you have repeated measurements on the same subjects
-across methods and want a direct non-parametric repeated-measures CCC. Use
-`ccc_rm_reml()` when you want a model-based estimate from variance components,
-especially when subject effects, time effects, or within-subject correlation
-need to be modeled explicitly.
-
-### Repeated-measures Lin's concordance correlation coefficient (LMM/REML)
-
-```{r}
-set.seed(6)
-S <- 30; Tm <- 8
-id     <- factor(rep(seq_len(S), each = 2 * Tm))
-method <- factor(rep(rep(c("A","B"), each = Tm), times = S))
-time   <- rep(rep(seq_len(Tm), times = 2), times = S)
-
-u  <- rnorm(S, 0, 0.8)[as.integer(id)]
-g  <- rnorm(S * Tm, 0, 0.5)
-g  <- g[(as.integer(id) - 1L) * Tm + as.integer(time)]
-y  <- (method == "B") * 0.3 + u + g + rnorm(length(id), 0, 0.7)
-
-dat_ccc <- data.frame(y, id, method, time)
-fit_ccc_rm <- ccc_rm_reml(dat_ccc, response = "y", rind = "id",
-                          method = "method", time = "time")
-print(fit_ccc_rm)
-summary(fit_ccc_rm)  # overall CCC, variance components, SEs/CI
-plot(fit_ccc_rm)
-```
-
-### Repeated-measures intraclass correlation (REML)
-
-```{r, eval = FALSE}
-set.seed(12)
 S <- 24
 Tm <- 4
 id <- factor(rep(seq_len(S), each = 2 * Tm))
 method <- factor(rep(rep(c("A", "B"), each = Tm), times = S))
-time <- factor(rep(rep(seq_len(Tm), times = 2), times = S))
+time <- rep(rep(seq_len(Tm), times = 2), times = S)
 
 u <- rnorm(S, 0, 0.9)[as.integer(id)]
 um <- rnorm(S * 2, 0, 0.25)
 um <- um[(as.integer(id) - 1L) * 2L + as.integer(method)]
 y <- u + um + (method == "B") * 0.2 + rnorm(length(id), 0, 0.35)
 
-dat_icc <- data.frame(y, id, method, time)
-fit_icc_rm <- icc_rm_reml(
-  dat_icc,
+dat_rm <- data.frame(y, id, method, time)
+
+fit_ccc_rm <- ccc_rm_reml(
+  dat_rm,
   response = "y",
   rind = "id",
   method = "method",
-  time = "time",
-  type = "consistency"
+  time = "time"
 )
 
-print(fit_icc_rm)
-summary(fit_icc_rm)
-plot(fit_icc_rm)
+summary(fit_ccc_rm)
 ```
+
+Agreement and reliability methods use the same general inspection pattern, but
+they target different quantities. The package includes Bland-Altman analysis,
+concordance correlation, and intraclass correlation for both wide and
+repeated-measures designs.
+
+## Vignettes
+
+The package documentation is organised as a set of workflow vignettes. The
+README is intentionally brief; the vignettes are the main user guide.
+
+Start here:
+
+- `vignette("v01-matrixCorr-introduction", package = "matrixCorr")`
+  introduces the package structure, common object behaviour, and shared display
+  conventions.
+- `vignette("v02-wide-correlation-workflows", package = "matrixCorr")`
+  covers Pearson, Spearman, Kendall, distance correlation, and the general
+  wide-data matrix workflow.
+- `vignette("v03-robust-and-highdim-correlation", package = "matrixCorr")`
+  covers robust estimators, shrinkage, and high-dimensional settings.
+- `vignette("v04-latent-and-mixed-scale-correlation", package = "matrixCorr")`
+  covers tetrachoric, polychoric, polyserial, and biserial correlation.
+- `vignette("v05-agreement-and-icc-wide", package = "matrixCorr")`
+  covers Bland-Altman analysis, concordance, and intraclass correlation for
+  wide data.
+- `vignette("v06-repeated-measures-workflows", package = "matrixCorr")`
+  covers repeated-measures correlation, repeated agreement, and repeated
+  reliability workflows.
+
+If you want a compact overview of the available estimators, start with the
+introduction vignette and then move to the workflow family that matches your
+data layout and scientific question.
 
 ## Contributing
 
