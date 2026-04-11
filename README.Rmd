@@ -115,7 +115,7 @@ dat_rm <- data.frame(y, id, method, time)
 fit_ccc_rm <- ccc_rm_reml(
   dat_rm,
   response = "y",
-  rind = "id",
+  subject = "id",
   method = "method",
   time = "time"
 )

@@ -401,6 +401,29 @@ test_that("repeated-measures ICC behaves sensibly as variance components change"
   expect_true(fit_high$upr.ci["A", "B"] >= fit_high$est["A", "B"])
 })
 
+test_that("repeated-measures ICC uses the subject argument name", {
+  dat <- sim_icc_rm_long(seed = 11, sig_subject = 1.0, sig_method = 0.2, sig_error = 0.3)
+
+  fit_named <- icc_rm_reml(
+    dat,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time",
+    ci = FALSE
+  )
+  fit_positional <- icc_rm_reml(
+    dat,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    ci = FALSE
+  )
+
+  expect_equal(unname(fit_named["A", "B"]), unname(fit_positional["A", "B"]))
+})
+
 test_that("repeated-measures ICC matches the fitted variance-component denominator", {
   dat <- sim_icc_rm_long(seed = 3, sig_subject = 1.0, sig_method = 0.35, sig_error = 0.4, n_time = 1L)
 

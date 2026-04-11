@@ -813,7 +813,7 @@ print.summary.icc_overall <- function(x,
 #'
 #' @param data A data frame.
 #' @param response Character. Response variable name.
-#' @param rind Character. Subject ID variable name (random intercept).
+#' @param subject Character. Subject ID variable name.
 #' @param method Character or \code{NULL}. Optional column name of method factor
 #'   (added to fixed effects).
 #' @param time Character or \code{NULL}. Optional column name of time factor
@@ -994,7 +994,7 @@ print.summary.icc_overall <- function(x,
 #' fit_icc_rm <- icc_rm_reml(
 #'   dat_rm,
 #'   response = "y",
-#'   rind = "id",
+#'   subject = "id",
 #'   method = "method",
 #'   time = "time",
 #'   type = "consistency"
@@ -1003,7 +1003,7 @@ print.summary.icc_overall <- function(x,
 #' summary(fit_icc_rm)
 #'
 #' @export
-icc_rm_reml <- function(data, response, rind,
+icc_rm_reml <- function(data, response, subject,
                         method = NULL, time = NULL,
                         type = c("consistency", "agreement"),
                         interaction = FALSE,
@@ -1067,7 +1067,7 @@ icc_rm_reml <- function(data, response, rind,
   }
 
   df <- as.data.frame(data)
-  req_cols <- c(response, rind, method, time, slope_var)
+  req_cols <- c(response, subject, method, time, slope_var)
   req_cols <- req_cols[!vapply(req_cols, is.null, logical(1))]
   check_required_cols(df, req_cols, df_arg = "data")
 
@@ -1077,7 +1077,7 @@ icc_rm_reml <- function(data, response, rind,
       message = "must reference a numeric column in {.arg data}."
     )
   }
-  df[[rind]] <- factor(df[[rind]])
+  df[[subject]] <- factor(df[[subject]])
   if (!is.null(method)) df[[method]] <- factor(df[[method]])
   if (!is.null(time)) df[[time]] <- factor(df[[time]])
   all_time_lvls <- if (!is.null(time)) levels(df[[time]]) else character(0)
@@ -1112,7 +1112,7 @@ icc_rm_reml <- function(data, response, rind,
     df = df,
     fml = fml,
     response = response,
-    rind = rind,
+    rind = subject,
     method = method,
     time = time,
     slope = slope,

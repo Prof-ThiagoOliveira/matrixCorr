@@ -30,7 +30,8 @@
 #' @param w Optional vector of case weights.
 #' @param sparse_threshold Optional threshold controlling sparse output.
 #' @param n_threads Integer number of OpenMP threads.
-#' @param rind Character; column identifying subjects for `ccc_rm_reml()`.
+#' @param rind Character; column identifying subjects, forwarded as `subject`
+#'   to `ccc_rm_reml()`.
 #' @param interaction Logical; forwarded to `ccc_rm_reml()`.
 #' @param Dmat Optional distance matrix forwarded to `ccc_rm_reml()`.
 #' @param Dmat_type Character selector controlling how `Dmat` is constructed.
@@ -242,7 +243,7 @@ ccc_lmm_reml <- function(data, response, rind,
   ccc_rm_reml(
     data = data,
     response = response,
-    rind = rind,
+    subject = rind,
     method = method,
     time = time,
     interaction = interaction,

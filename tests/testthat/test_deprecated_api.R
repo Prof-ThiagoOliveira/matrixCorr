@@ -92,8 +92,8 @@ test_that("repeated-measures wrappers warn and preserve outputs", {
   new_u <- ccc_rm_ustat(
     df,
     response = "y",
-    method = "method",
     subject = "subject",
+    method = "method",
     time = "time"
   )
 
@@ -124,7 +124,7 @@ test_that("repeated-measures wrappers warn and preserve outputs", {
   new_reml <- ccc_rm_reml(
     df,
     response = "y",
-    rind = "subject",
+    subject = "subject",
     method = "method",
     time = "time",
     ci = TRUE

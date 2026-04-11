@@ -10,7 +10,7 @@
 icc_rm_reml(
   data,
   response,
-  rind,
+  subject,
   method = NULL,
   time = NULL,
   type = c("consistency", "agreement"),
@@ -81,7 +81,7 @@ icc_rm_reml(
 
 \item{response}{Character. Response variable name.}
 
-\item{rind}{Character. Subject ID variable name (random intercept).}
+\item{subject}{Character. Subject ID variable name.}
 
 \item{method}{Character or \code{NULL}. Optional column name of method factor
 (added to fixed effects).}
@@ -418,7 +418,7 @@ dat_rm <- data.frame(y = y, id = id, method = method, time = time)
 fit_icc_rm <- icc_rm_reml(
   dat_rm,
   response = "y",
-  rind = "id",
+  subject = "id",
   method = "method",
   time = "time",
   type = "consistency"

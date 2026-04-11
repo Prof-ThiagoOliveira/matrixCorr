@@ -30,9 +30,9 @@ This vignette covers:
 - `ccc_rm_reml()`
 - `icc_rm_reml()`
 
-The repeated-measures API is mostly, but not perfectly, harmonised. `rmcorr()`,
-`ba_rm()`, and `ccc_rm_ustat()` use a `subject` argument, while the REML-based
-`ccc_rm_reml()` and `icc_rm_reml()` use `rind` for the same identifier role.
+Repeated-measures functions use a `subject` argument for the subject identifier
+role, including `rmcorr()`, `ba_rm()`, `ccc_rm_ustat()`, `ccc_rm_reml()`, and
+`icc_rm_reml()`.
 
 ## A common long-format dataset
 
@@ -115,15 +115,15 @@ The package provides two repeated-measures CCC routes.
 fit_ccc_ustat <- ccc_rm_ustat(
   dat,
   response = "y",
-  method = "method",
   subject = "id",
+  method = "method",
   time = "time_index"
 )
 
 fit_ccc_reml <- ccc_rm_reml(
   dat,
   response = "y",
-  rind = "id",
+  subject = "id",
   method = "method",
   time = "time_index",
   ci = FALSE
@@ -147,7 +147,7 @@ targets a different reliability quantity.
 fit_icc_cons <- icc_rm_reml(
   dat,
   response = "y",
-  rind = "id",
+  subject = "id",
   method = "method",
   time = "time_index",
   type = "consistency",
@@ -157,7 +157,7 @@ fit_icc_cons <- icc_rm_reml(
 fit_icc_agr <- icc_rm_reml(
   dat,
   response = "y",
-  rind = "id",
+  subject = "id",
   method = "method",
   time = "time_index",
   type = "agreement",

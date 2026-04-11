@@ -7,8 +7,8 @@
 ccc_rm_ustat(
   data,
   response,
-  method,
   subject,
+  method,
   time = NULL,
   Dmat = NULL,
   delta = 1,
@@ -23,12 +23,12 @@ ccc_rm_ustat(
 
 \item{response}{Character. Name of the numeric outcome column.}
 
-\item{method}{Character. Name of the method column (factor with L
-\eqn{\geq} 2 levels).}
-
 \item{subject}{Character. Column identifying subjects. Every subject must
 have measurements from all methods (and times, when supplied); rows with
 incomplete \{subject, time, method\} coverage are dropped per pair.}
+
+\item{method}{Character. Name of the method column (factor with L
+\eqn{\geq} 2 levels).}
 
 \item{time}{Character or NULL. Name of the time/repetition column. If NULL,
 one time point is assumed.}
@@ -152,15 +152,15 @@ df <- expand.grid(subject = 1:10,
 df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
 
 # CCC matrix (no CIs)
-ccc1 <- ccc_rm_ustat(df, response = "y", method = "method",
-                            subject = "subject", time = "time")
+ccc1 <- ccc_rm_ustat(df, response = "y", subject = "subject",
+                            method = "method", time = "time")
 print(ccc1)
 summary(ccc1)
 plot(ccc1)
 
 # With confidence intervals
-ccc2 <- ccc_rm_ustat(df, response = "y", method = "method",
-                            subject = "subject", time = "time", ci = TRUE)
+ccc2 <- ccc_rm_ustat(df, response = "y", subject = "subject",
+                            method = "method", time = "time", ci = TRUE)
 print(ccc2)
 summary(ccc2)
 plot(ccc2)
@@ -174,16 +174,16 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 # Choosing delta based on distance sensitivity
 #------------------------------------------------------------------------
 # Absolute distance (L1 norm) - robust
-ccc_rm_ustat(df, response = "y", method = "method",
-                    subject = "subject", time = "time", delta = 1)
+ccc_rm_ustat(df, response = "y", subject = "subject",
+                    method = "method", time = "time", delta = 1)
 
 # Squared distance (L2 norm) - amplifies large deviations
-ccc_rm_ustat(df, response = "y", method = "method",
-                    subject = "subject", time = "time", delta = 2)
+ccc_rm_ustat(df, response = "y", subject = "subject",
+                    method = "method", time = "time", delta = 2)
 
 # Presence/absence of disagreement (like kappa)
-ccc_rm_ustat(df, response = "y", method = "method",
-                    subject = "subject", time = "time", delta = 0)
+ccc_rm_ustat(df, response = "y", subject = "subject",
+                    method = "method", time = "time", delta = 0)
 
 }
 \references{

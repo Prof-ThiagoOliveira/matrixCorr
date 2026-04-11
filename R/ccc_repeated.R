@@ -132,15 +132,15 @@
 #' df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
 #'
 #' # CCC matrix (no CIs)
-#' ccc1 <- ccc_rm_ustat(df, response = "y", method = "method",
-#'                             subject = "subject", time = "time")
+#' ccc1 <- ccc_rm_ustat(df, response = "y", subject = "subject",
+#'                             method = "method", time = "time")
 #' print(ccc1)
 #' summary(ccc1)
 #' plot(ccc1)
 #'
 #' # With confidence intervals
-#' ccc2 <- ccc_rm_ustat(df, response = "y", method = "method",
-#'                             subject = "subject", time = "time", ci = TRUE)
+#' ccc2 <- ccc_rm_ustat(df, response = "y", subject = "subject",
+#'                             method = "method", time = "time", ci = TRUE)
 #' print(ccc2)
 #' summary(ccc2)
 #' plot(ccc2)
@@ -154,23 +154,23 @@
 #' # Choosing delta based on distance sensitivity
 #' #------------------------------------------------------------------------
 #' # Absolute distance (L1 norm) - robust
-#' ccc_rm_ustat(df, response = "y", method = "method",
-#'                     subject = "subject", time = "time", delta = 1)
+#' ccc_rm_ustat(df, response = "y", subject = "subject",
+#'                     method = "method", time = "time", delta = 1)
 #'
 #' # Squared distance (L2 norm) - amplifies large deviations
-#' ccc_rm_ustat(df, response = "y", method = "method",
-#'                     subject = "subject", time = "time", delta = 2)
+#' ccc_rm_ustat(df, response = "y", subject = "subject",
+#'                     method = "method", time = "time", delta = 2)
 #'
 #' # Presence/absence of disagreement (like kappa)
-#' ccc_rm_ustat(df, response = "y", method = "method",
-#'                     subject = "subject", time = "time", delta = 0)
+#' ccc_rm_ustat(df, response = "y", subject = "subject",
+#'                     method = "method", time = "time", delta = 0)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export
 ccc_rm_ustat <- function(data,
                         response,
-                        method,
                         subject,
+                        method,
                         time = NULL,
                         Dmat = NULL,
                         delta = 1,
@@ -180,7 +180,7 @@ ccc_rm_ustat <- function(data,
                         verbose = FALSE) {
   df <- as.data.frame(data)
 
-  req_cols <- c(response, method, subject)
+  req_cols <- c(response, subject, method)
   if (!is.null(time)) req_cols <- c(req_cols, time)
   check_required_cols(df, req_cols, df_arg = "data")
 
@@ -189,8 +189,8 @@ ccc_rm_ustat <- function(data,
       message = "must reference a numeric column in {.arg data}."
     )
   }
-  df[[method]]  <- droplevels(factor(df[[method]]))
   df[[subject]] <- droplevels(factor(df[[subject]]))
+  df[[method]]  <- droplevels(factor(df[[method]]))
   method_levels <- levels(df[[method]])
   L <- length(method_levels)
 
@@ -349,7 +349,7 @@ ccc_rm_ustat <- function(data,
 #'
 #' @param data A data frame.
 #' @param response Character. Response variable name.
-#' @param rind Character. Subject ID variable name (random intercept).
+#' @param subject Character. Subject ID variable name.
 #' @param method Character or \code{NULL}. Optional column name of method factor
 #'   (added to fixed effects).
 #' @param time Character or \code{NULL}. Optional column name of time factor
@@ -977,7 +977,7 @@ ccc_rm_ustat <- function(data,
 #' dat_ar4 <- data.frame(y = y, id = id, method = method, time = time)
 #'
 #' ccc_rm_reml(dat_ar4,
-#'              response = "y", rind = "id", method = "method", time = "time",
+#'              response = "y", subject = "id", method = "method", time = "time",
 #'              ar = "ar1", ar_rho = 0.6, verbose = TRUE)
 #' }
 #'
@@ -1064,7 +1064,7 @@ ccc_rm_ustat <- function(data,
 #' averaging operates when translating variance components into CCC summaries.
 #'
 #' @export
-ccc_rm_reml <- function(data, response, rind,
+ccc_rm_reml <- function(data, response, subject,
                          method = NULL, time = NULL, interaction = FALSE,
                          max_iter = 100, tol = 1e-6,
                          Dmat = NULL,
@@ -1126,7 +1126,7 @@ ccc_rm_reml <- function(data, response, rind,
 
   df <- as.data.frame(data)
 
-  req_cols <- c(response, rind, method, time, slope_var)
+  req_cols <- c(response, subject, method, time, slope_var)
   req_cols <- req_cols[!vapply(req_cols, is.null, logical(1))]
   check_required_cols(df, req_cols, df_arg = "data")
 
@@ -1136,7 +1136,7 @@ ccc_rm_reml <- function(data, response, rind,
       message = "must reference a numeric column in {.arg data}."
     )
   }
-  df[[rind]] <- factor(df[[rind]])
+  df[[subject]] <- factor(df[[subject]])
   if (!is.null(method))  df[[method]]  <- factor(df[[method]])
   if (!is.null(time)) df[[time]] <- factor(df[[time]])
   all_time_lvls <- if (!is.null(time)) levels(df[[time]]) else character(0)
@@ -1170,7 +1170,7 @@ ccc_rm_reml <- function(data, response, rind,
       df                = df,
       fml               = fml,
       response          = response,
-      rind              = rind,
+      rind              = subject,
       method            = method,
       time              = time,
       slope             = slope,

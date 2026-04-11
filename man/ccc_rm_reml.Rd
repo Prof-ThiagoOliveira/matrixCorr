@@ -7,7 +7,7 @@
 ccc_rm_reml(
   data,
   response,
-  rind,
+  subject,
   method = NULL,
   time = NULL,
   interaction = FALSE,
@@ -42,7 +42,7 @@ ccc_rm_reml(
 
 \item{response}{Character. Response variable name.}
 
-\item{rind}{Character. Subject ID variable name (random intercept).}
+\item{subject}{Character. Subject ID variable name.}
 
 \item{method}{Character or \code{NULL}. Optional column name of method factor
 (added to fixed effects).}
@@ -695,7 +695,7 @@ y <- mu + u + e
 dat_ar4 <- data.frame(y = y, id = id, method = method, time = time)
 
 ccc_rm_reml(dat_ar4,
-             response = "y", rind = "id", method = "method", time = "time",
+             response = "y", subject = "id", method = "method", time = "time",
              ar = "ar1", ar_rho = 0.6, verbose = TRUE)
 }
 

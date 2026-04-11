@@ -18,7 +18,7 @@ test_that("ccc_rm_ustat: basic structure, symmetry, CI container", {
   ccc_theory <- sigA / (sigA + biasB^2 + sigE)
 
   # estimates only
-  c1 <- ccc_rm_ustat(df, response = "y", method = "method", subject = "id")
+  c1 <- ccc_rm_ustat(df, response = "y", subject = "id", method = "method")
   expect_s3_class(c1, "ccc")
   expect_true(is.matrix(c1) && all(rownames(c1) == c("A","B")))
   expect_equal(as.numeric(diag(c1)), c(1,1))
@@ -29,13 +29,42 @@ test_that("ccc_rm_ustat: basic structure, symmetry, CI container", {
   expect_lt(abs(c1["A","B"] - ccc_theory), 0.05)
 
   # with CI container
-  c2 <- ccc_rm_ustat(df, response = "y", method = "method", subject = "id", ci = TRUE, conf_level = 0.95)
+  c2 <- ccc_rm_ustat(df, response = "y", subject = "id", method = "method", ci = TRUE, conf_level = 0.95)
   expect_s3_class(c2, "ccc_ci")
   expect_named(c2, c("est","lwr.ci","upr.ci"))
   expect_equal(dim(c2$est), c(2,2))
   expect_true(is.na(diag(c2$lwr.ci))[1] && is.na(diag(c2$upr.ci))[1])
   est <- c2$est["A","B"]; lwr <- c2$lwr.ci["A","B"]; upr <- c2$upr.ci["A","B"]
   expect_true(lwr <= est && est <= upr)
+})
+
+test_that("ccc_rm_ustat uses the aligned repeated-measures argument order", {
+  set.seed(124)
+  n_subj <- 80L
+  n_time <- 3L
+  id <- factor(rep(seq_len(n_subj), each = 2L * n_time))
+  method <- factor(rep(rep(c("A", "B"), each = n_time), times = n_subj))
+  time <- factor(rep(rep(seq_len(n_time), times = 2L), times = n_subj))
+  u <- rnorm(n_subj, 0, 1)[as.integer(id)]
+  y <- u + 0.2 * (method == "B") + rnorm(length(id), 0, 0.4)
+  df <- data.frame(y, id, method, time)
+
+  fit_named <- ccc_rm_ustat(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time"
+  )
+  fit_positional <- ccc_rm_ustat(
+    df,
+    "y",
+    "id",
+    "method",
+    "time"
+  )
+
+  expect_equal(unname(fit_named["A", "B"]), unname(fit_positional["A", "B"]))
 })
 
 test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VCs", {
@@ -52,7 +81,7 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
   y <- (method == "B") * biasB + u + e
   df <- data.frame(y, id, method)
 
-  cfit <- ccc_rm_reml(df, response = "y", rind = "id",
+  cfit <- ccc_rm_reml(df, response = "y", subject = "id",
                        method = "method", ci = TRUE)
   expect_s3_class(cfit, "ccc_rm_reml")
   expect_named(cfit, c("est","lwr.ci","upr.ci"))
@@ -396,7 +425,7 @@ test_that("ccc_rm_ustat reduces to Lin's CCC when T = 1", {
   # INTERLEAVE A,B per subject (A1,B1,A2,B2,...)
   df$y <- c(rbind(xA, xB))
 
-  c_us <- ccc_rm_ustat(df, response = "y", method = "method", subject = "id")
+  c_us <- ccc_rm_ustat(df, response = "y", subject = "id", method = "method")
   c_us_AB <- unname(c_us["A","B"])
 
   # should match Lin very closely
@@ -420,8 +449,39 @@ test_that("ccc_rm_reml (no time) approximates Lin's CCC when T = 1", {
     y      = c(rbind(xA, xB))
   )
 
-  fit <- ccc_rm_reml(df, response = "y", rind = "id", method = "method")
+  fit <- ccc_rm_reml(df, response = "y", subject = "id", method = "method")
   c_reml <- unname(fit["A","B"])
 
   expect_equal(c_reml, c_lin, tolerance = 1e-2)
+})
+
+test_that("repeated-measures CCC uses the subject argument name", {
+  set.seed(432)
+  n_subj <- 40L
+  n_time <- 3L
+  id <- factor(rep(seq_len(n_subj), each = 2L * n_time))
+  method <- factor(rep(rep(c("A", "B"), each = n_time), times = n_subj))
+  time <- factor(rep(rep(seq_len(n_time), times = 2L), times = n_subj))
+  u <- rnorm(n_subj, 0, 1)[as.integer(id)]
+  y <- u + 0.15 * (method == "B") + rnorm(length(id), 0, 0.3)
+  df <- data.frame(y, id, method, time)
+
+  fit_named <- ccc_rm_reml(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time",
+    ci = FALSE
+  )
+  fit_positional <- ccc_rm_reml(
+    df,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    ci = FALSE
+  )
+
+  expect_equal(unname(fit_named["A", "B"]), unname(fit_positional["A", "B"]))
 })

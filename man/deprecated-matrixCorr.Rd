@@ -165,7 +165,8 @@ precision matrices.}
 \item{ci}{Logical; if \code{TRUE}, request confidence intervals when supported by
 the replacement function.}
 
-\item{rind}{Character; column identifying subjects for \code{ccc_rm_reml()}.}
+\item{rind}{Character; column identifying subjects, forwarded as \code{subject}
+to \code{ccc_rm_reml()}.}
 
 \item{interaction}{Logical; forwarded to \code{ccc_rm_reml()}.}
 
