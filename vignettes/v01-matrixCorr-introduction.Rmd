@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 
 ## Introduction
 
-`matrixCorr` is organised around a simple idea around that correlation, agreement, and
+`matrixCorr` is organised around a simple idea: correlation, agreement, and
 reliability workflows are often used together, so they should not require
 completely different interfaces, object classes, and inspection patterns.
 
@@ -27,6 +27,11 @@ matrix-oriented interface for wide data and a shared long-format workflow for
 repeated-measures designs. The purpose of this vignette is not to describe
 every supported method in detail, but to show how the package is structured,
 what kinds of inputs it expects, and how the returned objects can be inspected.
+
+One practical caveat is that the repeated-measures API is mostly, but not
+perfectly, harmonised. `rmcorr()`, `ba_rm()`, and `ccc_rm_ustat()` use a
+`subject` argument, while the REML-based repeated concordance and ICC routes
+use `rind` for the same subject identifier role.
 
 ## Main workflow families
 
@@ -118,13 +123,13 @@ subject_x <- rnorm(n_subject, sd = 1.2)[subject]
 subject_y <- rnorm(n_subject, sd = 1.0)[subject]
 
 dat_rm <- data.frame(
-  subject = subject,
+  id = subject,
   x = subject_x + signal + rnorm(n_subject * n_rep, sd = 0.2),
   y = subject_y + 0.7 * signal + rnorm(n_subject * n_rep, sd = 0.3),
   z = subject_y - 0.4 * signal + rnorm(n_subject * n_rep, sd = 0.4)
 )
 
-fit_rmcorr <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "subject")
+fit_rmcorr <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "id")
 print(fit_rmcorr, digits = 2)
 summary(fit_rmcorr)
 ```

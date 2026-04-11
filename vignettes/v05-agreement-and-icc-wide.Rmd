@@ -64,8 +64,8 @@ classical ICC table for the full set of methods.
 ```{r}
 wide_methods <- data.frame(
   J1 = ref + rnorm(50, sd = 1.5),
-  J2 = ref + 0.6 + rnorm(50, sd = 1.8),
-  J3 = ref - 0.2 + rnorm(50, sd = 2.0),
+  J2 = ref + 4.0 + rnorm(50, sd = 1.8),
+  J3 = ref - 3.0 + rnorm(50, sd = 2.0),
   J4 = ref + rnorm(50, sd = 1.6)
 )
 
@@ -103,6 +103,47 @@ This is the most important distinction in the ICC interface.
 
 Those are different quantities. The overall ICC cannot, in general, be
 recovered by averaging the pairwise matrix.
+
+## Consistency versus agreement
+
+This simulation also includes systematic method bias, so it is a natural place
+to contrast `type = "consistency"` with `type = "agreement"`.
+
+```{r}
+fit_icc_cons <- icc(
+  wide_methods,
+  model = "twoway_random",
+  type = "consistency",
+  unit = "single",
+  scope = "overall",
+  ci = FALSE
+)
+
+fit_icc_agr <- icc(
+  wide_methods,
+  model = "twoway_random",
+  type = "agreement",
+  unit = "single",
+  scope = "overall",
+  ci = FALSE
+)
+
+data.frame(
+  type = c("consistency", "agreement"),
+  selected_coefficient = c(
+    attr(fit_icc_cons, "selected_coefficient"),
+    attr(fit_icc_agr, "selected_coefficient")
+  ),
+  estimate = c(
+    attr(fit_icc_cons, "selected_row")$estimate,
+    attr(fit_icc_agr, "selected_row")$estimate
+  )
+)
+```
+
+Consistency discounts additive method shifts, whereas agreement penalises them.
+When methods differ mainly by a systematic offset, consistency can therefore
+look substantially better than agreement.
 
 ## Model, type, and unit
 

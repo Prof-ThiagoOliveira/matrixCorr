@@ -110,7 +110,8 @@ For `pbcor()`, `wincor()`, and `skipped_corr()`, the inferential layer is more
 computationally demanding than the estimate-only path because it is built from
 bootstrap resampling. The skipped-correlation route remains the most expensive
 of the three because each bootstrap sample also repeats the pairwise outlier
-screening step.
+screening step. The vignette uses `n_boot = 200` only to keep runtime modest;
+substantive analyses usually need more resamples.
 
 ## Partial correlation
 
@@ -120,15 +121,31 @@ remaining variables.
 
 ```{r}
 set.seed(21)
-X <- as.data.frame(matrix(rnorm(200 * 6), ncol = 6))
-names(X) <- paste0("V", 1:6)
+n <- 300
+x2 <- rnorm(n)
+x1 <- 0.8 * x2 + rnorm(n, sd = 0.4)
+x3 <- 0.8 * x2 + rnorm(n, sd = 0.4)
+x4 <- 0.7 * x3 + rnorm(n, sd = 0.5)
+x5 <- rnorm(n)
+x6 <- rnorm(n)
+X <- data.frame(x1, x2, x3, x4, x5, x6)
 
 fit_pcor_sample <- pcorr(X, method = "sample")
 fit_pcor_oas <- pcorr(X, method = "oas")
+R_raw <- pearson_corr(X)
+
+round(c(
+  raw_x1_x3 = R_raw["x1", "x3"],
+  partial_x1_x3 = fit_pcor_sample$pcor["x1", "x3"]
+), 2)
 
 print(fit_pcor_sample, digits = 2)
 summary(fit_pcor_oas)
 ```
+
+Here `x1` and `x3` are strongly associated in the raw correlation matrix
+because both depend on `x2`. Partial correlation is useful because it can
+separate that indirect association from the remaining direct structure.
 
 The choice of `method` is important:
 
@@ -138,6 +155,10 @@ The choice of `method` is important:
 
 When the classical sample estimator is appropriate, partial correlation also
 supports p-values and Fisher-z confidence intervals.
+
+Unlike the other correlation wrappers, `pcorr()` uses
+`return_p_value = TRUE` rather than `p_value = TRUE`. That is intentional:
+the p-value matrix is an optional returned component of the fitted list object.
 
 ```{r}
 fit_pcor_inf <- pcorr(
@@ -163,18 +184,43 @@ correlation route designed for exactly this setting.
 ```{r}
 set.seed(22)
 n <- 40
-p <- 120
-Xd <- matrix(rnorm(n * p), nrow = n, ncol = p)
+p_block <- 30
+
+make_block <- function(f) {
+  sapply(seq_len(p_block), function(j) 0.8 * f + rnorm(n, sd = 0.8))
+}
+
+f1 <- rnorm(n)
+f2 <- rnorm(n)
+f3 <- rnorm(n)
+
+Xd <- cbind(make_block(f1), make_block(f2), make_block(f3))
+p <- ncol(Xd)
 colnames(Xd) <- paste0("G", seq_len(p))
 
+R_raw <- stats::cor(Xd)
 fit_shr <- shrinkage_corr(Xd)
+block <- rep(1:3, each = p_block)
+within <- outer(block, block, "==") & upper.tri(R_raw)
+between <- outer(block, block, "!=") & upper.tri(R_raw)
+
+round(c(
+  raw_within = mean(abs(R_raw[within])),
+  raw_between = mean(abs(R_raw[between])),
+  shrink_within = mean(abs(fit_shr[within])),
+  shrink_between = mean(abs(fit_shr[between]))
+), 3)
+
 print(fit_shr, digits = 2, max_rows = 6, max_vars = 6)
 summary(fit_shr)
 ```
 
 The shrinkage estimator is not intended to reproduce the raw sample matrix. Its
 purpose is to provide a better-conditioned and more stable estimate in settings
-where the sample matrix is noisy or singular.
+where the sample matrix is noisy or singular. In this block-factor simulation,
+the raw sample matrix retains the main within-block pattern but also carries
+substantial between-block noise; shrinkage pulls that background noise down
+without erasing the dominant structure.
 
 ## Choosing among these methods
 

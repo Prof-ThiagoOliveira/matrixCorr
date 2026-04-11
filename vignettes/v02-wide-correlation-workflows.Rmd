@@ -38,10 +38,12 @@ driven by the structure of the data rather than by habit alone.
 library(matrixCorr)
 
 set.seed(10)
+z <- rnorm(80)
+u <- rnorm(80)
 X <- data.frame(
-  x1 = rnorm(80),
-  x2 = rnorm(80),
-  x3 = rnorm(80),
+  x1 = z + rnorm(80, sd = 0.35),
+  x2 = 0.85 * z + rnorm(80, sd = 0.45),
+  x3 = 0.25 * z + 0.70 * u + rnorm(80, sd = 0.45),
   x4 = rnorm(80)
 )
 ```
@@ -57,6 +59,11 @@ R_dcor <- dcor(X)
 print(R_pear, digits = 2)
 summary(R_spr)
 ```
+
+This toy dataset is intentionally structured so that `x1` and `x2` form a
+clear linear pair, `x3` is only moderately related to that first block, and
+`x4` is close to null. That makes the shared output structure easier to
+interpret than a pure-noise example.
 
 ## Pearson correlation
 

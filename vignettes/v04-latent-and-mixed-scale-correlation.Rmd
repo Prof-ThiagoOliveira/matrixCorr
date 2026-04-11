@@ -82,6 +82,25 @@ These estimators assume a latent-normal threshold model. That assumption should
 be stated whenever the results are reported, because the interpretation is not
 simply "correlation between coded categories."
 
+It is often useful to compare that latent estimate with a naive Pearson
+correlation computed on coded categories.
+
+```{r}
+fit_bin_naive <- pearson_corr(data.frame(lapply(X_bin[, 1:2], as.numeric)))
+fit_ord_naive <- pearson_corr(data.frame(lapply(X_ord, as.numeric)))
+
+round(c(
+  b1_b2_pearson = fit_bin_naive[1, 2],
+  b1_b2_tetrachoric = fit_tet[1, 2],
+  o1_o2_pearson = fit_ord_naive[1, 2],
+  o1_o2_polychoric = fit_pol[1, 2]
+), 2)
+```
+
+Those numbers need not agree. The latent estimators target the association
+between the underlying continuous variables, not the correlation between
+arbitrarily coded categories.
+
 ## Mixed continuous-discrete settings
 
 `polyserial()` is used when one variable is continuous and the other is
