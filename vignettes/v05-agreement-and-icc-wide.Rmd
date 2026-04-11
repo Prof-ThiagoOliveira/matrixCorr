@@ -1,0 +1,130 @@
+---
+title: "5. Agreement and ICC for Wide Data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{5. Agreement and ICC for Wide Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Scope
+
+Agreement and reliability are related to correlation, but they are not the
+same problem. Correlation describes co-movement. Agreement describes similarity
+on the measurement scale itself. Reliability describes the proportion of
+variation attributable to stable differences among subjects rather than to
+measurement error or method disagreement.
+
+This vignette covers the wide-data functions:
+
+- `ccc()`
+- `ba()`
+- `icc()`
+
+## Pairwise concordance and Bland-Altman analysis
+
+Lin's concordance correlation coefficient combines precision and accuracy in a
+single number. Bland-Altman analysis separates that question into estimated
+bias and limits of agreement.
+
+```{r}
+library(matrixCorr)
+
+set.seed(40)
+ref <- rnorm(50, mean = 100, sd = 10)
+m1 <- ref + rnorm(50, sd = 2)
+m2 <- ref + 1.2 + rnorm(50, sd = 3)
+
+fit_ba <- ba(m1, m2)
+fit_ccc <- ccc(data.frame(m1 = m1, m2 = m2), ci = TRUE)
+
+print(fit_ba)
+summary(fit_ccc)
+```
+
+The two summaries are complementary rather than redundant. `ccc()` gives a
+single concordance coefficient, while `ba()` makes the scale of disagreement
+explicit.
+
+## Pairwise ICC
+
+`icc()` extends the wide-data reliability workflow in two directions. It can
+return a pairwise matrix across method pairs, or it can return the overall
+classical ICC table for the full set of methods.
+
+```{r}
+wide_methods <- data.frame(
+  J1 = ref + rnorm(50, sd = 1.5),
+  J2 = ref + 0.6 + rnorm(50, sd = 1.8),
+  J3 = ref - 0.2 + rnorm(50, sd = 2.0),
+  J4 = ref + rnorm(50, sd = 1.6)
+)
+
+fit_icc_pair <- icc(
+  wide_methods,
+  model = "twoway_random",
+  type = "agreement",
+  unit = "single",
+  scope = "pairwise"
+)
+
+fit_icc_overall <- icc(
+  wide_methods,
+  model = "twoway_random",
+  type = "agreement",
+  unit = "single",
+  scope = "overall",
+  ci = TRUE
+)
+
+print(fit_icc_pair, digits = 2)
+summary(fit_icc_pair)
+print(fit_icc_overall)
+```
+
+## Pairwise versus overall ICC
+
+This is the most important distinction in the ICC interface.
+
+`scope = "pairwise"` answers:
+"How reliable is each specific pair of methods?"
+
+`scope = "overall"` answers:
+"How reliable is the full set of methods when analysed jointly?"
+
+Those are different quantities. The overall ICC cannot, in general, be
+recovered by averaging the pairwise matrix.
+
+## Model, type, and unit
+
+The classical ICC family is controlled by three arguments.
+
+- `model` selects the one-way, two-way random, or two-way mixed formulation.
+- `type` selects consistency or agreement.
+- `unit` selects single-measure or average-measure reliability.
+
+For pairwise ICC, average-measure output uses `k = 2` because each estimate is
+based on exactly two methods. For overall ICC, average-measure output uses the
+full number of analysed columns.
+
+## Choosing among CCC, BA, and ICC
+
+In practice these methods answer different questions.
+
+- Use `ccc()` when one concordance coefficient per pair is the main target.
+- Use `ba()` when the size and direction of disagreement should be visible on
+  the original measurement scale.
+- Use `icc()` when the target is reliability under a classical variance
+  components interpretation.
+
+There is overlap in interpretation, but these are not interchangeable
+estimators.

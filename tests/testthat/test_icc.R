@@ -383,8 +383,16 @@ test_that("repeated-measures ICC behaves sensibly as variance components change"
   dat_high <- sim_icc_rm_long(seed = 1, sig_subject = 1.4, sig_method = 0.1, sig_error = 0.15)
   dat_low <- sim_icc_rm_long(seed = 2, sig_subject = 0.6, sig_method = 0.3, sig_error = 1.2)
 
-  fit_high <- icc_rm_reml(dat_high, "y", "id", method = "method", time = "time", ci = TRUE)
-  fit_low <- icc_rm_reml(dat_low, "y", "id", method = "method", time = "time", ci = TRUE)
+  fit_high <- icc_rm_reml(
+    dat_high, "y", "id",
+    method = "method", time = "time",
+    ci = TRUE, ci_mode = "raw"
+  )
+  fit_low <- icc_rm_reml(
+    dat_low, "y", "id",
+    method = "method", time = "time",
+    ci = TRUE, ci_mode = "raw"
+  )
 
   expect_s3_class(fit_high, "icc_rm_reml")
   expect_gt(fit_high$est["A", "B"], 0.7)

@@ -1,0 +1,166 @@
+---
+title: "2. Wide Correlation Workflows"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{2. Wide Correlation Workflows}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Scope
+
+This vignette covers the basic wide-data correlation estimators. These methods
+start from one numeric matrix or data frame, treat columns as variables, and
+return a square matrix indexed by those columns.
+
+The main functions in this group are:
+
+- `pearson_corr()`
+- `spearman_rho()`
+- `kendall_tau()`
+- `dcor()`
+
+They answer related but not identical questions, so method choice should be
+driven by the structure of the data rather than by habit alone.
+
+## A common input pattern
+
+```{r}
+library(matrixCorr)
+
+set.seed(10)
+X <- data.frame(
+  x1 = rnorm(80),
+  x2 = rnorm(80),
+  x3 = rnorm(80),
+  x4 = rnorm(80)
+)
+```
+
+All four estimators accept this same wide input format.
+
+```{r}
+R_pear <- pearson_corr(X)
+R_spr  <- spearman_rho(X)
+R_ken  <- kendall_tau(X)
+R_dcor <- dcor(X)
+
+print(R_pear, digits = 2)
+summary(R_spr)
+```
+
+## Pearson correlation
+
+Pearson correlation targets linear association on the original measurement
+scale. It is the natural first choice when variables are continuous, the
+relationship is approximately linear, and there is no strong concern about
+outlier sensitivity.
+
+```{r}
+plot(R_pear)
+```
+
+If confidence intervals are required, they can be requested directly.
+
+```{r}
+R_pear_ci <- pearson_corr(X, ci = TRUE)
+summary(R_pear_ci)
+```
+
+## Spearman and Kendall
+
+Spearman's rho and Kendall's tau are rank-based estimators. They are useful
+when monotone association is of interest and the analysis should be less
+sensitive to departures from strict linearity. Both functions also support
+optional large-sample confidence intervals through `ci = TRUE`.
+
+```{r}
+set.seed(11)
+x <- sort(rnorm(60))
+y <- x^3 + rnorm(60, sd = 0.5)
+dat_mon <- data.frame(x = x, y = y)
+
+pearson_corr(dat_mon)
+spearman_rho(dat_mon)
+kendall_tau(dat_mon)
+```
+
+In this setting the relationship is monotone but not linear, so a rank-based
+summary is often the clearer first description.
+
+When interval estimation is required, the same matrix-style interface is kept.
+
+```{r}
+fit_spr_ci <- spearman_rho(X, ci = TRUE)
+fit_ken_ci <- kendall_tau(X, ci = TRUE)
+
+summary(fit_spr_ci)
+summary(fit_ken_ci)
+```
+
+## Distance correlation
+
+Distance correlation addresses a broader target. It is designed to detect
+general dependence rather than only linear or monotone structure. The function
+also supports optional hypothesis testing through `p_value = TRUE`.
+
+```{r}
+set.seed(12)
+x <- runif(100, -2, 2)
+y <- x^2 + rnorm(100, sd = 0.2)
+dat_nonlin <- data.frame(x = x, y = y)
+
+pearson_corr(dat_nonlin)
+dcor(dat_nonlin)
+```
+
+This is a typical situation where Pearson correlation can be close to zero even
+though the variables are clearly dependent.
+
+If a formal inferential summary is needed, p-values can be requested directly.
+
+```{r}
+fit_dcor_p <- dcor(dat_nonlin, p_value = TRUE)
+summary(fit_dcor_p)
+```
+
+## Missing values
+
+The default wide-data behaviour is strict validation. Missing values are
+rejected unless the function explicitly supports a relaxed mode through
+`check_na = FALSE`.
+
+```{r}
+X_miss <- X
+X_miss$x2[c(3, 7)] <- NA
+
+try(pearson_corr(X_miss))
+pearson_corr(X_miss, check_na = FALSE)
+```
+
+When `check_na = FALSE`, the package uses pairwise complete observations for
+the affected estimator. That is convenient, but it also means different pairs
+may be based on different effective sample sizes.
+
+## Practical guidance
+
+In ordinary wide-data work, the following sequence is usually defensible.
+
+- Start with `pearson_corr()` when the variables are continuous and linear
+  association is the scientific target.
+- Use `spearman_rho()` or `kendall_tau()` when a monotone summary is preferred.
+- Use `dcor()` when non-linear dependence is plausible and a zero Pearson
+  correlation would be misleading.
+
+The next vignette addresses settings where this basic family is still not
+sufficient because the data are contaminated by outliers or the number of
+variables is large relative to sample size.

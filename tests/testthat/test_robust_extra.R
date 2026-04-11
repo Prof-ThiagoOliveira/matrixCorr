@@ -68,6 +68,94 @@ wincor_manual_R <- function(x, y, tr = 0.2) {
   stats::cor(winval(x), winval(y))
 }
 
+percentile_boot_ci_manual_R <- function(values, conf_level = 0.95) {
+  values <- sort(values[is.finite(values)])
+  n_boot <- length(values)
+  if (!n_boot) {
+    return(c(NA_real_, NA_real_))
+  }
+
+  alpha <- 1 - conf_level
+  ilow <- floor((alpha / 2) * n_boot + 0.5)
+  ihi <- floor((1 - alpha / 2) * n_boot + 0.5)
+  ilow <- min(max(ilow, 1L), n_boot)
+  ihi <- min(max(ihi, 1L), n_boot)
+  c(values[[ilow]], values[[ihi]])
+}
+
+pbcor_manual_inference_R <- function(x,
+                                     y,
+                                     beta = 0.2,
+                                     conf_level = 0.95,
+                                     n_boot = 60L,
+                                     seed = 1L) {
+  est <- pbcor_manual_R(x, y, beta = beta)
+  statistic <- if (abs(est) >= 1) sign(est) * Inf else est * sqrt((length(x) - 2) / (1 - est^2))
+  p_value <- if (is.finite(statistic)) {
+    2 * stats::pt(abs(statistic), df = length(x) - 2, lower.tail = FALSE)
+  } else {
+    0
+  }
+
+  set.seed(seed)
+  boot_vals <- replicate(
+    n_boot,
+    {
+      idx <- sample.int(length(x), size = length(x), replace = TRUE)
+      pbcor_manual_R(x[idx], y[idx], beta = beta)
+    }
+  )
+  ci <- percentile_boot_ci_manual_R(boot_vals, conf_level = conf_level)
+
+  list(
+    estimate = est,
+    statistic = statistic,
+    p_value = p_value,
+    lwr = ci[[1L]],
+    upr = ci[[2L]]
+  )
+}
+
+wincor_manual_inference_R <- function(x,
+                                      y,
+                                      tr = 0.2,
+                                      conf_level = 0.95,
+                                      n_boot = 60L,
+                                      seed = 1L) {
+  est <- wincor_manual_R(x, y, tr = tr)
+  g <- floor(tr * length(x))
+  df <- length(x) - 2 * g - 2
+  if (any(x != y) && df > 0) {
+    statistic <- if (abs(est) >= 1) sign(est) * Inf else est * sqrt((length(x) - 2) / (1 - est^2))
+    p_value <- if (is.finite(statistic)) {
+      2 * stats::pt(abs(statistic), df = df, lower.tail = FALSE)
+    } else {
+      0
+    }
+  } else {
+    statistic <- NA_real_
+    p_value <- NA_real_
+  }
+
+  set.seed(seed)
+  boot_vals <- replicate(
+    n_boot,
+    {
+      idx <- sample.int(length(x), size = length(x), replace = TRUE)
+      wincor_manual_R(x[idx], y[idx], tr = tr)
+    }
+  )
+  ci <- percentile_boot_ci_manual_R(boot_vals, conf_level = conf_level)
+
+  list(
+    estimate = est,
+    statistic = statistic,
+    p_value = p_value,
+    lwr = ci[[1L]],
+    upr = ci[[2L]]
+  )
+}
+
 idealf_iqr_R <- function(x) {
   n <- length(x)
   if (n < 2) return(0)
@@ -298,6 +386,121 @@ test_that("pbcor and wincor pairwise NA mode use overlap only", {
   idx_xz <- is.finite(x) & is.finite(z)
   expect_equal(Rp["x", "y"], pbcor_manual_R(x[idx_xy], y[idx_xy]), tolerance = 1e-12)
   expect_equal(Rw["x", "z"], wincor_manual_R(x[idx_xz], z[idx_xz]), tolerance = 1e-12)
+})
+
+test_that("pbcor inference matches the method-specific reference path", {
+  x <- c(1, 2, 3, 4, 5, 20, 7, 8, 9, 10)
+  y <- c(1.2, 2.1, 2.8, 4.2, 5.1, -18, 6.9, 8.3, 8.8, 10.4)
+  X <- cbind(x = x, y = y)
+  ref <- pbcor_manual_inference_R(x, y, beta = 0.2, conf_level = 0.90, n_boot = 40L, seed = 11L)
+
+  fit <- pbcor(
+    X,
+    beta = 0.2,
+    ci = TRUE,
+    p_value = TRUE,
+    conf_level = 0.90,
+    n_boot = 40L,
+    seed = 11L
+  )
+
+  expect_equal(fit["x", "y"], ref$estimate, tolerance = 1e-12)
+  expect_equal(attr(fit, "inference")$statistic["x", "y"], ref$statistic, tolerance = 1e-12)
+  expect_equal(attr(fit, "inference")$p_value["x", "y"], ref$p_value, tolerance = 1e-12)
+  expect_equal(attr(fit, "ci")$lwr.ci["x", "y"], ref$lwr, tolerance = 1e-12)
+  expect_equal(attr(fit, "ci")$upr.ci["x", "y"], ref$upr, tolerance = 1e-12)
+})
+
+test_that("wincor inference matches the method-specific reference path", {
+  x <- c(1, 2, 3, 4, 5, 20, 7, 8, 9, 10)
+  y <- c(1.2, 2.1, 2.8, 4.2, 5.1, -18, 6.9, 8.3, 8.8, 10.4)
+  X <- cbind(x = x, y = y)
+  ref <- wincor_manual_inference_R(x, y, tr = 0.2, conf_level = 0.90, n_boot = 40L, seed = 11L)
+
+  fit <- wincor(
+    X,
+    tr = 0.2,
+    ci = TRUE,
+    p_value = TRUE,
+    conf_level = 0.90,
+    n_boot = 40L,
+    seed = 11L
+  )
+
+  expect_equal(fit["x", "y"], ref$estimate, tolerance = 1e-12)
+  expect_equal(attr(fit, "inference")$statistic["x", "y"], ref$statistic, tolerance = 1e-12)
+  expect_equal(attr(fit, "inference")$p_value["x", "y"], ref$p_value, tolerance = 1e-12)
+  expect_equal(attr(fit, "ci")$lwr.ci["x", "y"], ref$lwr, tolerance = 1e-12)
+  expect_equal(attr(fit, "ci")$upr.ci["x", "y"], ref$upr, tolerance = 1e-12)
+})
+
+test_that("pbcor and wincor defaults keep the pre-inference estimate path unchanged", {
+  set.seed(144)
+  X <- matrix(rnorm(160), nrow = 40, ncol = 4)
+  colnames(X) <- paste0("V", 1:4)
+
+  fit_pb_old <- pbcor(X, beta = 0.2)
+  fit_pb_new <- pbcor(X, beta = 0.2, ci = FALSE, p_value = FALSE)
+  fit_win_old <- wincor(X, tr = 0.2)
+  fit_win_new <- wincor(X, tr = 0.2, ci = FALSE, p_value = FALSE)
+
+  expect_equal(unclass(fit_pb_old), unclass(fit_pb_new), tolerance = 0)
+  expect_equal(unclass(fit_win_old), unclass(fit_win_new), tolerance = 0)
+  expect_null(attr(fit_pb_new, "ci", exact = TRUE))
+  expect_null(attr(fit_pb_new, "inference", exact = TRUE))
+  expect_null(attr(fit_win_new, "ci", exact = TRUE))
+  expect_null(attr(fit_win_new, "inference", exact = TRUE))
+})
+
+test_that("pbcor and wincor CI and p-value payloads are optional and well-formed", {
+  set.seed(155)
+  X <- matrix(rnorm(180), nrow = 45, ncol = 4)
+  X[, 2] <- 0.7 * X[, 1] + rnorm(45, sd = 0.4)
+  colnames(X) <- paste0("V", 1:4)
+
+  fit_pb_ci <- pbcor(X, ci = TRUE, conf_level = 0.90, n_boot = 30L, seed = 2L)
+  fit_pb_p <- pbcor(X, p_value = TRUE)
+  fit_win_ci <- wincor(X, ci = TRUE, conf_level = 0.90, n_boot = 30L, seed = 2L)
+  fit_win_p <- wincor(X, p_value = TRUE)
+
+  expect_true(is.list(attr(fit_pb_ci, "ci", exact = TRUE)))
+  expect_null(attr(fit_pb_ci, "inference", exact = TRUE))
+  expect_true(all(attr(fit_pb_ci, "ci")$lwr.ci[upper.tri(fit_pb_ci)] <= attr(fit_pb_ci, "ci")$upr.ci[upper.tri(fit_pb_ci)], na.rm = TRUE))
+  expect_true(all(attr(fit_pb_ci, "ci")$lwr.ci[upper.tri(fit_pb_ci)] >= -1, na.rm = TRUE))
+  expect_true(all(attr(fit_pb_ci, "ci")$upr.ci[upper.tri(fit_pb_ci)] <= 1, na.rm = TRUE))
+  expect_true(is.list(attr(fit_pb_p, "inference", exact = TRUE)))
+  expect_null(attr(fit_pb_p, "ci", exact = TRUE))
+
+  expect_true(is.list(attr(fit_win_ci, "ci", exact = TRUE)))
+  expect_null(attr(fit_win_ci, "inference", exact = TRUE))
+  expect_true(all(attr(fit_win_ci, "ci")$lwr.ci[upper.tri(fit_win_ci)] <= attr(fit_win_ci, "ci")$upr.ci[upper.tri(fit_win_ci)], na.rm = TRUE))
+  expect_true(all(attr(fit_win_ci, "ci")$lwr.ci[upper.tri(fit_win_ci)] >= -1, na.rm = TRUE))
+  expect_true(all(attr(fit_win_ci, "ci")$upr.ci[upper.tri(fit_win_ci)] <= 1, na.rm = TRUE))
+  expect_true(is.list(attr(fit_win_p, "inference", exact = TRUE)))
+  expect_null(attr(fit_win_p, "ci", exact = TRUE))
+})
+
+test_that("pbcor and wincor summaries switch to pairwise inference tables when requested", {
+  set.seed(166)
+  X <- matrix(rnorm(150), nrow = 50, ncol = 3)
+  X[, 2] <- 0.6 * X[, 1] + rnorm(50, sd = 0.5)
+  colnames(X) <- c("A", "B", "C")
+
+  pb_fit <- pbcor(X, ci = TRUE, p_value = TRUE, n_boot = 30L, seed = 5L)
+  win_fit <- wincor(X, ci = TRUE, p_value = TRUE, n_boot = 30L, seed = 5L)
+
+  pb_sm <- summary(pb_fit)
+  win_sm <- summary(win_fit)
+
+  expect_s3_class(pb_sm, "summary.pbcor")
+  expect_s3_class(win_sm, "summary.wincor")
+  expect_true(all(c("var1", "var2", "estimate", "lwr", "upr", "statistic", "p_value", "n_complete") %in% names(pb_sm)))
+  expect_true(all(c("var1", "var2", "estimate", "lwr", "upr", "statistic", "p_value", "n_complete") %in% names(win_sm)))
+
+  pb_txt <- capture.output(print(pb_sm))
+  win_txt <- capture.output(print(win_sm))
+  expect_true(any(grepl("Percentage bend correlation summary", pb_txt, fixed = TRUE)))
+  expect_true(any(grepl("Winsorized correlation summary", win_txt, fixed = TRUE)))
 })
 
 test_that("skipped_corr matches fixed known examples", {

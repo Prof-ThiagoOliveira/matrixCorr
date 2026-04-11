@@ -1,0 +1,204 @@
+---
+title: "1. Introduction to matrixCorr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{1. Introduction to matrixCorr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Introduction
+
+`matrixCorr` is organised around a simple idea around that correlation, agreement, and
+reliability workflows are often used together, so they should not require
+completely different interfaces, object classes, and inspection patterns.
+
+The package therefore combines several estimator families behind a common
+matrix-oriented interface for wide data and a shared long-format workflow for
+repeated-measures designs. The purpose of this vignette is not to describe
+every supported method in detail, but to show how the package is structured,
+what kinds of inputs it expects, and how the returned objects can be inspected.
+
+## Main workflow families
+
+At a practical level, the package is centred on five workflow families.
+
+- Wide-data correlation matrices for numeric inputs.
+- Robust and high-dimensional association estimation.
+- Latent and mixed-scale correlation for binary, ordinal, and mixed inputs.
+- Agreement and reliability analysis for wide data.
+- Repeated-measures correlation and repeated-measures agreement.
+
+The same broad inspection pattern is used throughout to fit an estimator, print
+it for a compact view, call `summary()` for a longer digest, and use `plot()`
+when a graphical summary is available.
+
+## Wide matrix workflow
+
+The matrix-style functions accept a numeric matrix or data frame and return a
+square result indexed by the original column names.
+
+```{r}
+library(matrixCorr)
+
+set.seed(1)
+X <- as.data.frame(matrix(rnorm(120), ncol = 4))
+names(X) <- paste0("V", 1:4)
+
+fit_pearson <- pearson_corr(X, ci = TRUE)
+fit_spearman <- spearman_rho(X, ci = TRUE)
+
+print(fit_pearson, digits = 2)
+summary(fit_spearman)
+```
+
+This pattern extends to other wide-data estimators such as `kendall_tau()`,
+`dcor()`, `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`,
+`schafer_corr()`, `pcorr()`, `ccc()`, and `icc()`.
+
+## Agreement and reliability workflow
+
+Agreement methods answer a different question from ordinary correlation.
+Correlation asks whether two variables move together. Agreement asks whether
+two methods give sufficiently similar values on the measurement scale itself.
+
+```{r}
+set.seed(2)
+ref <- rnorm(40, mean = 10, sd = 2)
+alt <- ref + 0.3 + rnorm(40, sd = 0.8)
+
+fit_ba <- ba(ref, alt)
+print(fit_ba)
+
+wide_methods <- data.frame(
+  m1 = ref + rnorm(40, sd = 0.2),
+  m2 = ref + 0.2 + rnorm(40, sd = 0.3),
+  m3 = ref - 0.1 + rnorm(40, sd = 0.4)
+)
+
+fit_ccc <- ccc(wide_methods)
+fit_icc <- icc(wide_methods, scope = "pairwise")
+
+summary(fit_ccc)
+summary(fit_icc)
+```
+
+For ICC, `scope = "pairwise"` and `scope = "overall"` answer different
+questions as well. Pairwise ICC asks how reliable each specific method pair is.
+Overall ICC asks how reliable the full set of columns is when analysed jointly.
+
+```{r}
+fit_icc_overall <- icc(wide_methods, scope = "overall", ci = TRUE)
+print(fit_icc_overall)
+summary(fit_icc_overall)
+```
+
+## Repeated-measures workflow
+
+Repeated-measures functions require long-format data and explicit identifiers
+for subjects and, when relevant, methods and time.
+
+```{r}
+set.seed(3)
+n_subject <- 12
+n_rep <- 3
+
+subject <- rep(seq_len(n_subject), each = n_rep)
+signal <- rnorm(n_subject * n_rep)
+subject_x <- rnorm(n_subject, sd = 1.2)[subject]
+subject_y <- rnorm(n_subject, sd = 1.0)[subject]
+
+dat_rm <- data.frame(
+  subject = subject,
+  x = subject_x + signal + rnorm(n_subject * n_rep, sd = 0.2),
+  y = subject_y + 0.7 * signal + rnorm(n_subject * n_rep, sd = 0.3),
+  z = subject_y - 0.4 * signal + rnorm(n_subject * n_rep, sd = 0.4)
+)
+
+fit_rmcorr <- rmcorr(dat_rm, response = c("x", "y", "z"), subject = "subject")
+print(fit_rmcorr, digits = 2)
+summary(fit_rmcorr)
+```
+
+Agreement and reliability in repeated designs use a different long-format
+interface because they need method and often time identifiers.
+
+```{r}
+set.seed(4)
+n_id <- 10
+n_time <- 3
+
+dat_agree <- expand.grid(
+  id = factor(seq_len(n_id)),
+  time = factor(seq_len(n_time)),
+  method = factor(c("A", "B"))
+)
+
+subj <- rnorm(n_id, sd = 1.0)[dat_agree$id]
+subj_method <- rnorm(n_id * 2, sd = 0.2)
+sm <- subj_method[(as.integer(dat_agree$id) - 1L) * 2L + as.integer(dat_agree$method)]
+
+dat_agree$y <- subj + sm + 0.25 * (dat_agree$method == "B") +
+  rnorm(nrow(dat_agree), sd = 0.35)
+
+fit_icc_rm <- icc_rm_reml(
+  dat_agree,
+  response = "y",
+  rind = "id",
+  method = "method",
+  time = "time",
+  type = "consistency"
+)
+
+summary(fit_icc_rm)
+```
+
+## Shared inspection methods
+
+Most returned objects support at least `print()` and `summary()`. Many also
+support `plot()`. Matrix-style objects are intentionally compact when printed,
+while `summary()` returns a longer digest of the strongest or most relevant
+pairs.
+
+Display defaults can be controlled through ordinary R options. For example:
+
+```{r, eval = FALSE}
+options(
+  matrixCorr.print_max_rows = 20L,
+  matrixCorr.print_topn = 5L,
+  matrixCorr.print_max_vars = 10L,
+  matrixCorr.print_show_ci = "yes",
+  matrixCorr.summary_max_rows = 12L,
+  matrixCorr.summary_topn = 5L,
+  matrixCorr.summary_max_vars = 10L,
+  matrixCorr.summary_show_ci = "yes"
+)
+```
+
+The print options control compact console previews returned by `print()`. The
+summary options control the longer digest returned by `summary()`. Current
+values can be inspected with `getOption("matrixCorr.print_max_rows")` and the
+same pattern for the remaining options.
+
+This shared display layer is part of the package design. The goal is that
+users can move across workflow families without relearning how objects are
+inspected, while still being able to tune how much output is shown by default.
+
+## Where to go next
+
+The remaining vignettes focus on specific workflow families. Specifically
+
+- `vignette("v02-wide-correlation-workflows", package = "matrixCorr")`
+- `vignette("v03-robust-and-highdim-correlation", package = "matrixCorr")`
+- `vignette("v04-latent-and-mixed-scale-correlation", package = "matrixCorr")`
+- `vignette("v05-agreement-and-icc-wide", package = "matrixCorr")`
+- `vignette("v06-repeated-measures-workflows", package = "matrixCorr")`

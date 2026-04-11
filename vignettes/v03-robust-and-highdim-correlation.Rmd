@@ -1,0 +1,190 @@
+---
+title: "3. Robust and High-Dimensional Correlation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{3. Robust and High-Dimensional Correlation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Scope
+
+This vignette covers the estimators used when ordinary wide-data correlation is
+not enough. The package provides two broad extensions:
+
+- robust estimators for outlier-prone data;
+- regularised estimators for partial correlation or `p >= n` settings.
+
+The relevant functions are:
+
+- `bicor()`
+- `pbcor()`
+- `wincor()`
+- `skipped_corr()`
+- `schafer_corr()`
+- `pcorr()`
+
+## Robust correlation
+
+Outliers can distort ordinary correlation severely, especially in moderate
+sample sizes. The robust estimators in `matrixCorr` are designed to limit that
+effect, but they do so in different ways.
+
+```{r}
+library(matrixCorr)
+
+set.seed(20)
+Y <- data.frame(
+  x1 = rnorm(60),
+  x2 = rnorm(60),
+  x3 = rnorm(60),
+  x4 = rnorm(60)
+)
+
+idx <- sample.int(nrow(Y), 5)
+Y$x1[idx] <- Y$x1[idx] + 8
+Y$x2[idx] <- Y$x2[idx] - 6
+
+R_pear <- pearson_corr(Y)
+R_bicor <- bicor(Y)
+R_pb <- pbcor(Y)
+R_win <- wincor(Y)
+R_skip <- skipped_corr(Y)
+
+summary(R_pear)
+summary(R_bicor)
+```
+
+In practical terms:
+
+- `bicor()` is often a good first robust alternative for wide data.
+- `pbcor()` and `wincor()` follow classical robustification routes and are easy
+  to compare against ordinary correlation.
+- `skipped_corr()` is more aggressive because it first removes bivariate
+  outliers pair by pair.
+
+That last property is useful, but it also makes `skipped_corr()` the most
+computationally expensive estimator in this group.
+
+```{r}
+summary(R_skip)
+```
+
+## Inference for robust estimators
+
+Inference is not uniform across the robust estimators, so it is worth stating
+the current scope explicitly.
+
+- `bicor()` supports large-sample confidence intervals.
+- `pbcor()` supports percentile-bootstrap confidence intervals and
+  method-specific p-values.
+- `wincor()` supports percentile-bootstrap confidence intervals and
+  method-specific p-values.
+- `skipped_corr()` supports bootstrap confidence intervals and bootstrap
+  p-values.
+
+```{r}
+fit_bicor_ci <- bicor(Y, ci = TRUE)
+summary(fit_bicor_ci)
+
+fit_pb_inf <- pbcor(Y, ci = TRUE, p_value = TRUE, n_boot = 200, seed = 1)
+summary(fit_pb_inf)
+
+fit_win_inf <- wincor(Y, ci = TRUE, p_value = TRUE, n_boot = 200, seed = 1)
+summary(fit_win_inf)
+
+fit_skip_inf <- skipped_corr(Y, ci = TRUE, p_value = TRUE, n_boot = 200, seed = 1)
+summary(fit_skip_inf)
+```
+
+For `pbcor()`, `wincor()`, and `skipped_corr()`, the inferential layer is more
+computationally demanding than the estimate-only path because it is built from
+bootstrap resampling. The skipped-correlation route remains the most expensive
+of the three because each bootstrap sample also repeats the pairwise outlier
+screening step.
+
+## Partial correlation
+
+Partial correlation addresses a different target. Instead of summarising raw
+association, it estimates conditional association after accounting for the
+remaining variables.
+
+```{r}
+set.seed(21)
+X <- as.data.frame(matrix(rnorm(200 * 6), ncol = 6))
+names(X) <- paste0("V", 1:6)
+
+fit_pcor_sample <- pcorr(X, method = "sample")
+fit_pcor_oas <- pcorr(X, method = "oas")
+
+print(fit_pcor_sample, digits = 2)
+summary(fit_pcor_oas)
+```
+
+The choice of `method` is important:
+
+- `"sample"` is the ordinary full-rank route.
+- `"oas"` and `"ridge"` stabilise estimation in higher-dimensional settings.
+- `"glasso"` is appropriate when a sparse precision structure is the target.
+
+When the classical sample estimator is appropriate, partial correlation also
+supports p-values and Fisher-z confidence intervals.
+
+```{r}
+fit_pcor_inf <- pcorr(
+  X,
+  method = "sample",
+  return_p_value = TRUE,
+  ci = TRUE
+)
+
+summary(fit_pcor_inf)
+```
+
+That inference layer is available only for the ordinary sample estimator in the
+low-dimensional setting. The regularised estimators are primarily estimation
+tools rather than direct inferential procedures in the current interface.
+
+## High-dimensional shrinkage correlation
+
+When the number of variables is large relative to the sample size, direct
+sample correlation can become unstable. `schafer_corr()` provides a shrinkage
+correlation route designed for exactly this setting.
+
+```{r}
+set.seed(22)
+n <- 40
+p <- 120
+Xd <- matrix(rnorm(n * p), nrow = n, ncol = p)
+colnames(Xd) <- paste0("G", seq_len(p))
+
+fit_shr <- schafer_corr(Xd)
+print(fit_shr, digits = 2, max_rows = 6, max_vars = 6)
+summary(fit_shr)
+```
+
+The shrinkage estimator is not intended to reproduce the raw sample matrix. Its
+purpose is to provide a better-conditioned and more stable estimate in settings
+where the sample matrix is noisy or singular.
+
+## Choosing among these methods
+
+The choice is usually governed by the main source of difficulty in the data.
+
+- If the concern is outliers, start with `bicor()` and compare with
+  `pbcor()`, `wincor()`, or `skipped_corr()` as needed.
+- If the concern is conditional dependence, use `pcorr()`.
+- If the concern is `p >= n` or unstable covariance estimation, use
+  `schafer_corr()` or a regularised `pcorr()` method.
+
+These are not interchangeable estimators. They solve different problems, even
+though they share the same matrix-oriented calling style.

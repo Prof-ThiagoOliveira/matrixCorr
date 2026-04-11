@@ -1,0 +1,184 @@
+---
+title: "6. Repeated-Measures Workflows"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{6. Repeated-Measures Workflows}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Scope
+
+Repeated-measures analysis requires a different data layout and, usually, a
+different estimand. The wide-data matrix workflow is not enough because the
+analysis must account for the repeated structure within subject.
+
+This vignette covers:
+
+- `rmcorr()`
+- `ba_rm()`
+- `ccc_rm_ustat()`
+- `ccc_rm_reml()`
+- `icc_rm_reml()`
+
+## A common long-format dataset
+
+```{r}
+library(matrixCorr)
+
+set.seed(50)
+n_id <- 14
+n_time <- 4
+
+dat <- expand.grid(
+  id = factor(seq_len(n_id)),
+  time = factor(seq_len(n_time)),
+  method = factor(c("A", "B"))
+)
+
+dat$time_index <- as.integer(dat$time)
+
+subj <- rnorm(n_id, sd = 1.0)[dat$id]
+subject_method <- rnorm(n_id * 2, sd = 0.25)
+sm <- subject_method[(as.integer(dat$id) - 1L) * 2L + as.integer(dat$method)]
+subject_time <- rnorm(n_id * n_time, sd = 0.30)
+st <- subject_time[(as.integer(dat$id) - 1L) * n_time + as.integer(dat$time)]
+
+dat$y <- subj + sm + st + 0.35 * (dat$method == "B") +
+  rnorm(nrow(dat), sd = 0.35)
+```
+
+## Repeated-measures correlation
+
+`rmcorr()` targets within-subject association, not agreement. It is the right
+function when the question is whether two responses vary together within
+subjects after removing subject-level offsets.
+
+```{r}
+set.seed(51)
+dat_rmcorr <- data.frame(
+  subject = rep(seq_len(n_id), each = n_time),
+  x = rnorm(n_id * n_time),
+  y = rnorm(n_id * n_time),
+  z = rnorm(n_id * n_time)
+)
+
+dat_rmcorr$y <- 0.7 * dat_rmcorr$x +
+  rnorm(n_id, sd = 1)[dat_rmcorr$subject] +
+  rnorm(nrow(dat_rmcorr), sd = 0.3)
+
+fit_rmcorr <- rmcorr(dat_rmcorr, response = c("x", "y", "z"), subject = "subject")
+summary(fit_rmcorr)
+```
+
+## Repeated-measures agreement
+
+Agreement methods require method labels and, for paired repeated analysis, a
+time or replicate key.
+
+`ba_rm()` is the repeated-measures Bland-Altman route. It models subject-time
+matched paired differences and returns bias and limits of agreement.
+
+```{r}
+fit_ba_rm <- ba_rm(
+  dat,
+  response = "y",
+  subject = "id",
+  method = "method",
+  time = "time_index"
+)
+
+summary(fit_ba_rm)
+```
+
+## Repeated CCC
+
+The package provides two repeated-measures CCC routes.
+
+- `ccc_rm_ustat()` is a nonparametric U-statistic approach.
+- `ccc_rm_reml()` uses the REML mixed-model backend.
+
+```{r}
+fit_ccc_ustat <- ccc_rm_ustat(
+  dat,
+  response = "y",
+  method = "method",
+  subject = "id",
+  time = "time_index"
+)
+
+fit_ccc_reml <- ccc_rm_reml(
+  dat,
+  response = "y",
+  rind = "id",
+  method = "method",
+  time = "time_index",
+  ci = FALSE
+)
+
+summary(fit_ccc_ustat)
+summary(fit_ccc_reml)
+```
+
+The two functions are related, but they are not interchangeable. The U-statistic
+route is useful when its design assumptions are appropriate. The REML route is
+the more flexible model-based path when variance components and residual
+structure need to be handled explicitly.
+
+## Repeated ICC
+
+`icc_rm_reml()` uses the same REML and Woodbury backend as repeated CCC, but it
+targets a different reliability quantity.
+
+```{r}
+fit_icc_cons <- icc_rm_reml(
+  dat,
+  response = "y",
+  rind = "id",
+  method = "method",
+  time = "time_index",
+  type = "consistency",
+  ci = TRUE
+)
+
+fit_icc_agr <- icc_rm_reml(
+  dat,
+  response = "y",
+  rind = "id",
+  method = "method",
+  time = "time_index",
+  type = "agreement",
+  ci = FALSE
+)
+
+summary(fit_icc_cons)
+summary(fit_icc_agr)
+```
+
+The most important distinction between repeated CCC and repeated ICC is the
+numerator. Repeated ICC uses only the stable between-subject variance in the
+numerator. Repeated CCC also credits the time-averaged subject-time component.
+As a result, the two summaries can differ materially even when they are fitted
+through the same backend.
+
+## Choosing among repeated-measures methods
+
+The method choice should follow the scientific question.
+
+- Use `rmcorr()` for within-subject association.
+- Use `ba_rm()` for repeated-measures bias and limits of agreement.
+- Use `ccc_rm_ustat()` or `ccc_rm_reml()` for repeated concordance.
+- Use `icc_rm_reml()` for repeated reliability under a variance-components
+  interpretation.
+
+The shared long-format interface is intentional. The statistical targets are
+different, but the package keeps the surrounding workflow stable.

@@ -1,7 +1,7 @@
 Package: matrixCorr
 Type: Package
 Title: Collection of Correlation and Association Estimators
-Version: 0.10.0
+Version: 0.11.0
 Authors@R: person(given = "Thiago de Paula", family = "Oliveira",
     email = "thiago.paula.oliveira@gmail.com", role = c("aut", "cre"),
     comment = c(ORCID = "0000-0002-4555-2584"))
@@ -44,6 +44,8 @@ Suggests:
     shinyWidgets,
     viridisLite,
     testthat (>= 3.0.0)
+VignetteBuilder:
+    knitr
 Enhances:
     plotly
 Roxygen: list(markdown = TRUE)

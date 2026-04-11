@@ -1161,27 +1161,56 @@ Rcpp::List ccc_vc_cpp(
   const double z = R::qnorm(1.0 - 0.5 * alpha, 0.0, 1.0, 1, 0);
   const double eps_c = 1e-12;
   auto expit = [](double x){ return 1.0 / (1.0 + std::exp(-x)); };
+  auto clamp01_ci = [&](double x) {
+    if (!std::isfinite(x)) return NA_REAL;
+    return std::min(1.0, std::max(0.0, x));
+  };
+  auto order_ci = [&](double a, double b) {
+    if (!std::isfinite(a) || !std::isfinite(b)) {
+      return std::make_pair(NA_REAL, NA_REAL);
+    }
+    if (a <= b) return std::make_pair(a, b);
+    return std::make_pair(b, a);
+  };
   auto build_ci = [&](double estimate_in, double se_in) {
-    double raw_l = std::min(1.0, std::max(0.0, estimate_in - z * se_in));
-    double raw_u = std::min(1.0, std::max(0.0, estimate_in + z * se_in));
+    double se_safe = (std::isfinite(se_in) && se_in >= 0.0) ? se_in : 0.0;
+    double raw_l = clamp01_ci(estimate_in - z * se_safe);
+    double raw_u = clamp01_ci(estimate_in + z * se_safe);
+    std::pair<double, double> raw_ord = order_ci(raw_l, raw_u);
+    raw_l = raw_ord.first;
+    raw_u = raw_ord.second;
 
     double est_mid = std::min(1.0 - eps_c, std::max(eps_c, estimate_in));
     double phi = std::log(est_mid / (1.0 - est_mid));
-    double se_phi = (se_in > 0.0) ? (se_in / std::max(eps_c, est_mid * (1.0 - est_mid))) : 0.0;
-    double logit_l = expit(phi - z * se_phi);
-    double logit_u = expit(phi + z * se_phi);
+    double se_phi = (se_safe > 0.0) ? (se_safe / std::max(eps_c, est_mid * (1.0 - est_mid))) : 0.0;
+    double logit_l = clamp01_ci(expit(phi - z * se_phi));
+    double logit_u = clamp01_ci(expit(phi + z * se_phi));
+    std::pair<double, double> logit_ord = order_ci(logit_l, logit_u);
+    logit_l = logit_ord.first;
+    logit_u = logit_ord.second;
 
     int mode_used = ci_mode;
     if (ci_mode == 2) {
       bool near_boundary = (estimate_in > 0.90 || estimate_in < 0.10);
       bool clipped_raw   = (raw_l <= eps_c || raw_u >= 1.0 - eps_c);
-      bool tight_near_bd = (se_in < 0.5 * std::min(estimate_in, 1.0 - estimate_in));
+      bool tight_near_bd = (se_safe < 0.5 * std::min(estimate_in, 1.0 - estimate_in));
       mode_used = (near_boundary || clipped_raw || tight_near_bd) ? 1 : 0;
     }
 
+    double out_l = (mode_used == 1 ? logit_l : raw_l);
+    double out_u = (mode_used == 1 ? logit_u : raw_u);
+    if (!std::isfinite(out_l) || !std::isfinite(out_u)) {
+      mode_used = 0;
+      out_l = raw_l;
+      out_u = raw_u;
+    }
+    std::pair<double, double> out_ord = order_ci(out_l, out_u);
+    out_l = out_ord.first;
+    out_u = out_ord.second;
+
     return Rcpp::List::create(
-      _["lwr"] = (mode_used == 1 ? logit_l : raw_l),
-      _["upr"] = (mode_used == 1 ? logit_u : raw_u),
+      _["lwr"] = out_l,
+      _["upr"] = out_u,
       _["lwr_raw"] = raw_l,
       _["upr_raw"] = raw_u,
       _["lwr_logit"] = logit_l,

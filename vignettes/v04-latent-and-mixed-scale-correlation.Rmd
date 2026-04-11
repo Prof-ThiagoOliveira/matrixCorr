@@ -1,0 +1,122 @@
+---
+title: "4. Latent and Mixed-Scale Correlation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{4. Latent and Mixed-Scale Correlation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Scope
+
+This vignette covers the latent-correlation estimators used when the observed
+data are binary, ordinal, or mixed. These methods do not target the same
+quantity as an ordinary Pearson correlation on coded categories. They are
+designed for settings where the observed variables are treated as thresholded
+versions of latent continuous variables.
+
+The relevant functions are:
+
+- `tetrachoric()`
+- `polychoric()`
+- `polyserial()`
+- `biserial()`
+
+## A small latent-data example
+
+```{r}
+library(matrixCorr)
+
+set.seed(30)
+n <- 500
+Sigma <- matrix(c(
+  1.00, 0.55, 0.35, 0.20,
+  0.55, 1.00, 0.40, 0.30,
+  0.35, 0.40, 1.00, 0.45,
+  0.20, 0.30, 0.45, 1.00
+), 4, 4, byrow = TRUE)
+
+Z <- matrix(rnorm(n * 4), n, 4) %*% chol(Sigma)
+
+X_bin <- data.frame(
+  b1 = Z[, 1] > qnorm(0.70),
+  b2 = Z[, 2] > qnorm(0.55),
+  b3 = Z[, 3] > qnorm(0.50)
+)
+
+X_ord <- data.frame(
+  o1 = ordered(cut(Z[, 2], breaks = c(-Inf, -0.5, 0.4, Inf),
+    labels = c("low", "mid", "high")
+  )),
+  o2 = ordered(cut(Z[, 3], breaks = c(-Inf, -1, 0, 1, Inf),
+    labels = c("1", "2", "3", "4")
+  ))
+)
+
+X_cont <- data.frame(x1 = Z[, 1], x2 = Z[, 4])
+```
+
+## Binary-binary and ordinal-ordinal settings
+
+`tetrachoric()` is used for binary variables. `polychoric()` is used for
+ordered categorical variables.
+
+```{r}
+fit_tet <- tetrachoric(X_bin, ci = TRUE, p_value = TRUE)
+fit_pol <- polychoric(X_ord, ci = TRUE, p_value = TRUE)
+
+print(fit_tet, digits = 2)
+summary(fit_pol)
+```
+
+These estimators assume a latent-normal threshold model. That assumption should
+be stated whenever the results are reported, because the interpretation is not
+simply "correlation between coded categories."
+
+## Mixed continuous-discrete settings
+
+`polyserial()` is used when one variable is continuous and the other is
+ordinal. `biserial()` is used when one variable is continuous and the other is
+binary.
+
+```{r}
+fit_ps <- polyserial(X_cont, X_ord, ci = TRUE, p_value = TRUE)
+fit_bis <- biserial(X_cont, X_bin[, 1:2], ci = TRUE, p_value = TRUE)
+
+summary(fit_ps)
+summary(fit_bis)
+```
+
+## Confidence intervals and p-values
+
+These functions now follow the same user-facing pattern as the rest of the
+package:
+
+- estimates are returned by default;
+- confidence intervals are added only when `ci = TRUE`;
+- p-values are added only when `p_value = TRUE` where supported.
+
+The important point is that inference is tied to the fitted latent model rather
+than to an ordinary Pearson-correlation formula applied to coded categories.
+
+## Practical guidance
+
+These estimators are appropriate when the scientific question is explicitly
+about latent association under a threshold model.
+
+- Use `tetrachoric()` for binary-binary pairs.
+- Use `polychoric()` for ordinal-ordinal pairs.
+- Use `polyserial()` for continuous-ordinal pairs.
+- Use `biserial()` for continuous-binary pairs.
+
+If the variables are nominal rather than ordered, these latent-correlation
+functions are not the right tools.

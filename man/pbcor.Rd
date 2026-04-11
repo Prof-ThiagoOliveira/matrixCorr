@@ -5,13 +5,19 @@
 \alias{print.pbcor}
 \alias{plot.pbcor}
 \alias{summary.pbcor}
+\alias{print.summary.pbcor}
 \title{Percentage bend correlation}
 \usage{
 pbcor(
   data,
   beta = 0.2,
   na_method = c("error", "pairwise"),
-  n_threads = getOption("matrixCorr.threads", 1L)
+  n_threads = getOption("matrixCorr.threads", 1L),
+  ci = FALSE,
+  p_value = FALSE,
+  conf_level = 0.95,
+  n_boot = 500L,
+  seed = NULL
 )
 
 \method{print}{pbcor}(
@@ -42,6 +48,19 @@ pbcor(
   topn = NULL,
   max_vars = NULL,
   width = NULL,
+  ci_digits = 3,
+  p_digits = 4,
+  show_ci = NULL,
+  ...
+)
+
+\method{print}{summary.pbcor}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
   show_ci = NULL,
   ...
 )
@@ -62,7 +81,24 @@ complete rows for the column pair.}
 other robust correlation wrappers. It is currently validated but not used
 by the exact percentage-bend implementation.}
 
-\item{x}{An object of class \code{pbcor}.}
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach percentile
+bootstrap confidence intervals for each pairwise estimate.}
+
+\item{p_value}{Logical (default \code{FALSE}). If \code{TRUE}, attach the
+method-specific large-sample test statistic and two-sided p-value for each
+pairwise estimate.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default
+\code{0.95}.}
+
+\item{n_boot}{Integer \eqn{\geq 1}. Number of bootstrap resamples used when
+\code{ci = TRUE}. Default \code{500}.}
+
+\item{seed}{Optional positive integer used to seed the bootstrap resampling
+when \code{ci = TRUE}. If \code{NULL}, the current random-number stream is
+used.}
+
+\item{x}{An object of class \code{summary.pbcor}.}
 
 \item{digits}{Integer; number of digits to print.}
 
@@ -89,11 +125,24 @@ from console width.}
 on the heatmap tiles.}
 
 \item{object}{An object of class \code{pbcor}.}
+
+\item{ci_digits}{Integer; digits used for confidence limits in pairwise
+summaries.}
+
+\item{p_digits}{Integer; digits used for p-values in pairwise summaries.}
 }
 \value{
 A symmetric correlation matrix with class \code{pbcor} and
 attributes \code{method = "percentage_bend_correlation"},
-\code{description}, and \code{package = "matrixCorr"}.
+\code{description}, and \code{package = "matrixCorr"}. When
+\code{ci = TRUE}, the returned object also carries a \code{ci} attribute
+with elements \code{est}, \code{lwr.ci}, \code{upr.ci},
+\code{conf.level}, and \code{ci.method}, plus
+\code{attr(x, "conf.level")}. When \code{p_value = TRUE}, it also carries
+an \code{inference} attribute with elements \code{estimate},
+\code{statistic}, \code{parameter}, \code{p_value}, \code{n_obs}, and
+\code{alternative}. When either inferential option is requested, the
+object also carries \code{diagnostics$n_complete}.
 }
 \description{
 Computes all pairwise percentage bend correlations for the numeric columns of
@@ -103,41 +152,75 @@ interval \eqn{[-1, 1]}, yielding a Pearson-like measure that is robust to
 outliers and heavy tails.
 }
 \details{
-For a column \eqn{x = (x_i)_{i=1}^n}, let \eqn{m = \mathrm{med}(x)} and let
-\eqn{\omega_\beta(x)} be the \eqn{\lfloor (1-\beta)n \rfloor}-th order
-statistic of \eqn{|x_i - m|}. The constant \code{beta} determines the cutoff
-\eqn{\omega_\beta(x)} used to standardise deviations from the median. As
-\code{beta} increases, the selected cutoff becomes smaller, so a larger
-fraction of observations is truncated to the bounds \eqn{-1} and \eqn{1}.
-This makes the correlation more resistant to marginal outliers. The one-step
-percentage-bend location is
+Let \eqn{X \in \mathbb{R}^{n \times p}} be a numeric matrix with rows as
+observations and columns as variables. For a column
+\eqn{x = (x_i)_{i=1}^n}, let \eqn{m_x = \mathrm{med}(x)} and define
+\eqn{\omega_\beta(x)} as the \eqn{\lfloor (1-\beta)n \rfloor}-th order
+statistic of \eqn{|x_i - m_x|}. Larger values of \code{beta} reduce
+\eqn{\omega_\beta(x)}, so more observations are bent to the bounds
+\eqn{-1} and \eqn{1}.
+
+The one-step percentage-bend location is
 \deqn{
 \hat\theta_{pb}(x) =
 \frac{\sum_{i: |\psi_i| \le 1} x_i + \omega_\beta(x)(i_2 - i_1)}
      {n - i_1 - i_2},
 \qquad
-\psi_i = \frac{x_i - m}{\omega_\beta(x)},
+\psi_i = \frac{x_i - m_x}{\omega_\beta(x)},
 }
-where \eqn{i_1 = \sum \mathbf{1}(\psi_i < -1)} and
-\eqn{i_2 = \sum \mathbf{1}(\psi_i > 1)}.
-
-The bent scores are
+where \eqn{i_1 = \sum_{i=1}^n \mathbf{1}(\psi_i < -1)} and
+\eqn{i_2 = \sum_{i=1}^n \mathbf{1}(\psi_i > 1)}. The bent scores are
 \deqn{
-a_i = \max\{-1, \min(1, (x_i - \hat\theta_{pb}(x))/\omega_\beta(x))\},
+a_i = \max\!\left\{-1,\; \min\!\left(1,\frac{x_i - \hat\theta_{pb}(x)}
+{\omega_\beta(x)}\right)\right\},
 }
-and likewise \eqn{b_i} for a second variable \eqn{y}. The percentage bend
-correlation is
+and likewise \eqn{b_i} for a second column \eqn{y}. The percentage bend
+correlation for the pair \eqn{(x,y)} is
 \deqn{
 r_{pb}(x,y) =
-\frac{\sum_i a_i b_i}
-     {\sqrt{\sum_i a_i^2}\sqrt{\sum_i b_i^2}}.
+\frac{\sum_{i=1}^n a_i b_i}
+     {\sqrt{\sum_{i=1}^n a_i^2}\sqrt{\sum_{i=1}^n b_i^2}}.
 }
 
-When \code{na_method = "error"}, bent scores are computed once per column and
-the matrix is formed from their cross-products. When
-\code{na_method = "pairwise"}, each pair is recomputed on its complete-case
-overlap, which can break positive semidefiniteness as with pairwise Pearson
-correlation.
+In the complete-data path, the bent score vectors are computed once per
+column and collected into a matrix \eqn{A = [a_{\cdot 1}, \ldots, a_{\cdot p}]},
+after which the correlation matrix is formed from their cross-products:
+\deqn{
+R_{pb} = D_A^{-1/2} A^\top A D_A^{-1/2},
+\qquad
+D_A = \mathrm{diag}(a_{\cdot 1}^\top a_{\cdot 1}, \ldots,
+a_{\cdot p}^\top a_{\cdot p}).
+}
+If a column yields an undefined bent-score denominator, the corresponding row
+and column are returned as \code{NA}. With \code{na_method = "pairwise"},
+each pair is recomputed on its complete-case overlap. As with pairwise
+Pearson correlation, this pairwise path can break positive semidefiniteness.
+
+When \code{p_value = TRUE}, the method-specific test statistic for a pairwise
+estimate \eqn{r_{pb}} based on \eqn{n_{ij}} complete observations is
+\deqn{
+T_{ij} = r_{pb,ij}\sqrt{\frac{n_{ij} - 2}{1 - r_{pb,ij}^2}},
+}
+and the reported p-value is the two-sided Student-\eqn{t} tail probability
+with \eqn{n_{ij}-2} degrees of freedom. When \code{ci = TRUE}, the interval
+is a percentile bootstrap interval based on \eqn{n_{\mathrm{boot}}}
+resamples drawn from the pairwise complete cases. If
+\eqn{\tilde r_{pb,(1)} \le \cdots \le \tilde r_{pb,(B)}} denotes the sorted
+bootstrap sample of finite estimates with \eqn{B} retained resamples, the
+reported limits are
+\deqn{
+\tilde r_{pb,(\ell)} \quad \text{and} \quad \tilde r_{pb,(u)},
+}
+where \eqn{\ell = \lfloor (\alpha/2) B + 0.5 \rfloor} and
+\eqn{u = \lfloor (1-\alpha/2) B + 0.5 \rfloor} for
+\eqn{\alpha = 1 - \mathrm{conf\_level}}. Resamples that yield undefined
+estimates are discarded before the percentile limits are formed.
+
+\strong{Computational complexity.} In the complete-data path, forming the
+bent scores requires sorting within each column and the cross-product step
+costs \eqn{O(n p^2)} with \eqn{O(p^2)} output storage. When
+\code{ci = TRUE}, the bootstrap cost is incurred separately for each column
+pair.
 }
 \examples{
 set.seed(10)
