@@ -36,13 +36,14 @@ drop_schafer_attrs <- function(x) {
   m
 }
 
-test_that("schafer_corr returns shrinkage matrix with metadata", {
+test_that("shrinkage_corr returns shrinkage matrix with metadata", {
   set.seed(123)
   X <- matrix(rnorm(80), nrow = 20, ncol = 4)
   colnames(X) <- paste0("V", seq_len(4))
 
-  R <- schafer_corr(X)
+  R <- shrinkage_corr(X)
 
+  expect_s3_class(R, "shrinkage_corr")
   expect_s3_class(R, "schafer_corr")
   expect_equal(dim(R), c(4, 4))
   expect_true(all(diag(R) == 1))
@@ -61,9 +62,10 @@ test_that("base-R reference agrees within tolerance and attributes are sane", {
   X <- matrix(rnorm(n * p), n, p)
   colnames(X) <- paste0("V", seq_len(p))
 
-  R_pkg <- schafer_corr(X)
+  R_pkg <- shrinkage_corr(X)
   R_base <- schafer_shrink_base(X)
 
+  expect_s3_class(R_pkg, "shrinkage_corr")
   expect_s3_class(R_pkg, "schafer_corr")
   expect_true(is.matrix(R_pkg))
   expect_true(isSymmetric(R_pkg))
@@ -86,7 +88,7 @@ test_that("deterministic small example matches the base reference tightly", {
   )
   colnames(X) <- c("A", "B", "C")
 
-  R_pkg <- schafer_corr(X)
+  R_pkg <- shrinkage_corr(X)
   R_base <- schafer_shrink_base(X)
 
   expect_equal(unname(drop_schafer_attrs(R_pkg)),
@@ -94,10 +96,10 @@ test_that("deterministic small example matches the base reference tightly", {
                tolerance = 1e-10)
 })
 
-test_that("schafer_corr flags zero-variance columns as NA", {
+test_that("shrinkage_corr flags zero-variance columns as NA", {
   X <- cbind(const = rep(2, 6), var = rnorm(6))
 
-  R <- schafer_corr(X)
+  R <- shrinkage_corr(X)
 
   expect_true(all(is.na(R["const", ])))
   expect_true(all(is.na(R[, "const"])))
@@ -112,7 +114,7 @@ test_that("data.frame path ignores non-numeric columns and preserves names", {
     grp = rep(letters[1:4], length.out = n),
     flag = rep(c(TRUE, FALSE), length.out = n)
   )
-  out <- schafer_corr(df)
+  out <- shrinkage_corr(df)
 
   expect_equal(dim(out), c(2, 2))
   expect_setequal(colnames(out), c("a", "b"))
@@ -127,7 +129,7 @@ test_that("independent columns are shrunk closer to identity than raw correlatio
   X <- matrix(rnorm(n * p), n, p)
 
   R_raw <- stats::cor(X)
-  R_shr <- schafer_corr(X)
+  R_shr <- shrinkage_corr(X)
   I <- diag(p)
 
   err_raw <- sqrt(sum((R_raw - I)^2))
@@ -157,7 +159,7 @@ test_that("p >> n returns a valid symmetric PSD correlation matrix", {
   p <- 120
   X <- matrix(rnorm(n * p), n, p)
 
-  R_shr <- schafer_corr(X)
+  R_shr <- shrinkage_corr(X)
 
   expect_equal(dim(R_shr), c(p, p))
   expect_true(isSymmetric(R_shr))
@@ -171,7 +173,7 @@ test_that("print and plot methods cover optional arguments", {
   set.seed(456)
   X <- matrix(rnorm(60), nrow = 15, ncol = 4)
   colnames(X) <- paste0("G", seq_len(4))
-  R <- schafer_corr(X)
+  R <- shrinkage_corr(X)
 
   out <- capture.output(print(R, digits = 3, max_rows = 2, max_cols = 3))
   expect_true(any(grepl("omitted", out)))
@@ -183,4 +185,16 @@ test_that("print and plot methods cover optional arguments", {
     p2 <- plot(R, cluster = FALSE, triangle = "upper", palette = "viridis")
     expect_s3_class(p2, "ggplot")
   }
+})
+
+test_that("schafer_corr remains a compatibility alias", {
+  set.seed(55)
+  X <- matrix(rnorm(50), nrow = 10, ncol = 5)
+
+  new_fit <- shrinkage_corr(X)
+  old_fit <- schafer_corr(X)
+
+  expect_identical(unclass(new_fit), unclass(old_fit))
+  expect_s3_class(old_fit, "shrinkage_corr")
+  expect_s3_class(old_fit, "schafer_corr")
 })

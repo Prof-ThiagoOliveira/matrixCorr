@@ -30,7 +30,7 @@ The relevant functions are:
 - `pbcor()`
 - `wincor()`
 - `skipped_corr()`
-- `schafer_corr()`
+- `shrinkage_corr()`
 - `pcorr()`
 
 ## Robust correlation
@@ -157,7 +157,7 @@ tools rather than direct inferential procedures in the current interface.
 ## High-dimensional shrinkage correlation
 
 When the number of variables is large relative to the sample size, direct
-sample correlation can become unstable. `schafer_corr()` provides a shrinkage
+sample correlation can become unstable. `shrinkage_corr()` provides a shrinkage
 correlation route designed for exactly this setting.
 
 ```{r}
@@ -167,7 +167,7 @@ p <- 120
 Xd <- matrix(rnorm(n * p), nrow = n, ncol = p)
 colnames(Xd) <- paste0("G", seq_len(p))
 
-fit_shr <- schafer_corr(Xd)
+fit_shr <- shrinkage_corr(Xd)
 print(fit_shr, digits = 2, max_rows = 6, max_vars = 6)
 summary(fit_shr)
 ```
@@ -184,7 +184,7 @@ The choice is usually governed by the main source of difficulty in the data.
   `pbcor()`, `wincor()`, or `skipped_corr()` as needed.
 - If the concern is conditional dependence, use `pcorr()`.
 - If the concern is `p >= n` or unstable covariance estimation, use
-  `schafer_corr()` or a regularised `pcorr()` method.
+  `shrinkage_corr()` or a regularised `pcorr()` method.
 
 These are not interchangeable estimators. They solve different problems, even
 though they share the same matrix-oriented calling style.

@@ -49,7 +49,7 @@ repeated-measures designs.
 - Latent categorical/ordinal correlations (`tetrachoric()`,
   `polychoric()`, `polyserial()`, `biserial()`)
 - Repeated-measures correlation (`rmcorr()`)
-- Shrinkage for $p >> n$ (`schafer_corr()`)
+- Shrinkage for $p >> n$ (`shrinkage_corr()`)
 - Agreement metrics
   - Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
   - Lin’s concordance correlation coefficient (pairwise `ccc()`,

@@ -63,7 +63,7 @@ summary(fit_spearman)
 
 This pattern extends to other wide-data estimators such as `kendall_tau()`,
 `dcor()`, `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`,
-`schafer_corr()`, `pcorr()`, `ccc()`, and `icc()`.
+`shrinkage_corr()`, `pcorr()`, `ccc()`, and `icc()`.
 
 ## Agreement and reliability workflow
 

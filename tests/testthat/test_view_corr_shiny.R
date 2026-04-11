@@ -7,7 +7,7 @@ test_that("viewer helpers coerce package outputs", {
   partial <- pcorr(mtcars, method = "ridge", lambda = 1e-2)
   kendall <- kendall_tau(mtcars)
   biweight <- bicor(mtcars)
-  schafer <- schafer_corr(mtcars)
+  shrinkage <- shrinkage_corr(mtcars)
 
   res <- matrixCorr:::`.mc_prepare_corr_inputs`(list(
     Pearson = pearson,
@@ -16,7 +16,7 @@ test_that("viewer helpers coerce package outputs", {
     Partial = partial,
     Kendall = kendall,
     Biweight = biweight,
-    Schafer = schafer
+    Shrinkage = shrinkage
   ))
 
   expect_true(all(vapply(res, function(x) is.matrix(x$matrix), logical(1))))
@@ -25,7 +25,7 @@ test_that("viewer helpers coerce package outputs", {
   expect_equal(colnames(res$Partial$matrix), colnames(partial$pcor))
   expect_equal(res$Kendall$class, paste(class(kendall), collapse = ", "))
   expect_equal(res$Biweight$class, paste(class(biweight), collapse = ", "))
-  expect_equal(res$Schafer$class, paste(class(schafer), collapse = ", "))
+  expect_equal(res$Shrinkage$class, paste(class(shrinkage), collapse = ", "))
 })
 
 test_that("heatmap helper returns ggplot when plotly missing", {

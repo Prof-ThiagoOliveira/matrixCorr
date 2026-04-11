@@ -25,7 +25,7 @@ filtering, clustering, and hover inspection. The viewer accepts any
 matrixCorr correlation result (for example the outputs from
 \code{\link[=pearson_corr]{pearson_corr()}}, \code{\link[=spearman_rho]{spearman_rho()}}, \code{\link[=kendall_tau]{kendall_tau()}}, \code{\link[=bicor]{bicor()}},
 \code{\link[=pbcor]{pbcor()}}, \code{\link[=wincor]{wincor()}}, \code{\link[=skipped_corr]{skipped_corr()}}, \code{\link[=pcorr]{pcorr()}}, \code{\link[=dcor]{dcor()}}, or
-\code{\link[=schafer_corr]{schafer_corr()}}), a plain
+\code{\link[=shrinkage_corr]{shrinkage_corr()}}), a plain
 matrix, or a named list of such objects. When a list is supplied the gadget
 offers a picker to switch between results.
 }

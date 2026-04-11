@@ -148,8 +148,8 @@ test_that("plot methods honour show_value for numeric overlays", {
 
   p1 <- plot(pearson_corr(X, ci = TRUE), show_value = FALSE)
   p2 <- plot(pbcor(X), show_value = FALSE)
-  p3 <- plot(schafer_corr(X), show_value = FALSE)
-  p4 <- plot(schafer_corr(X), show_value = TRUE)
+  p3 <- plot(shrinkage_corr(X), show_value = FALSE)
+  p4 <- plot(shrinkage_corr(X), show_value = TRUE)
 
   expect_false(any(geom_names(p1) == "GeomText"))
   expect_false(any(geom_names(p2) == "GeomText"))
