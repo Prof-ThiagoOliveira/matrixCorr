@@ -175,6 +175,32 @@ wincor <- function(data,
                        upper = 0.5,
                        closed_lower = TRUE,
                        closed_upper = FALSE)
+  if (isFALSE(ci) && isFALSE(p_value)) {
+    n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
+    numeric_data <- if (na_method == "error") {
+      validate_corr_input(data)
+    } else {
+      validate_corr_input(data, check_na = FALSE)
+    }
+    colnames_data <- colnames(numeric_data)
+    res <- if (na_method == "error") {
+      wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
+    } else {
+      wincor_matrix_pairwise_cpp(numeric_data, tr = tr, min_n = 5L, n_threads = n_threads)
+    }
+
+    return(.mc_structure_corr_matrix(
+      res,
+      class_name = "wincor",
+      method = "winsorized_correlation",
+      description = paste0(
+        "Winsorized correlation; tr = ", tr,
+        "; NA mode = ", na_method, "."
+      ),
+      dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
+    ))
+  }
+
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
@@ -190,14 +216,15 @@ wincor <- function(data,
     validate_corr_input(data, check_na = FALSE)
   }
   colnames_data <- colnames(numeric_data)
+  dn <- .mc_square_dimnames(colnames_data)
 
   res <- if (na_method == "error") {
     wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
   } else {
     wincor_matrix_pairwise_cpp(numeric_data, tr = tr, min_n = 5L, n_threads = n_threads)
   }
+  res <- .mc_set_matrix_dimnames(res, colnames_data)
 
-  colnames(res) <- rownames(res) <- colnames_data
   payload <- NULL
   if (isTRUE(ci) || isTRUE(p_value)) {
     payload <- .mc_wincor_pairwise_payload(
@@ -212,7 +239,7 @@ wincor <- function(data,
     )
   }
 
-  out <- .mc_structure_corr_matrix(
+  .mc_structure_corr_matrix(
     res,
     class_name = "wincor",
     method = "winsorized_correlation",
@@ -220,17 +247,20 @@ wincor <- function(data,
       "Winsorized correlation; tr = ", tr,
       "; NA mode = ", na_method, "."
     ),
-    diagnostics = if (is.null(payload)) NULL else payload$diagnostics
+    diagnostics = if (is.null(payload)) NULL else payload$diagnostics,
+    extra_attrs = c(
+      if (!is.null(payload$ci)) {
+        list(
+          ci = payload$ci,
+          conf.level = conf_level,
+          n_boot = n_boot
+        )
+      },
+      if (!is.null(payload$inference)) {
+        list(inference = payload$inference)
+      }
+    )
   )
-  if (!is.null(payload$ci)) {
-    attr(out, "ci") <- payload$ci
-    attr(out, "conf.level") <- conf_level
-    attr(out, "n_boot") <- n_boot
-  }
-  if (!is.null(payload$inference)) {
-    attr(out, "inference") <- payload$inference
-  }
-  out
 }
 
 .mc_winsorize_vec <- function(z, tr = 0.2) {

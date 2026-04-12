@@ -162,6 +162,20 @@ test_that("constant difference yields zero SD and zero-width LoA/CI", {
   expect_equal(as.numeric(ba$CI.lines["upper.limit.ci.upper"]), -2, tolerance = 1e-12)
 })
 
+test_that("ba honors n_threads without changing estimates", {
+  set.seed(44)
+  x <- rnorm(80, 100, 10)
+  y <- x + rnorm(80, 0, 8)
+
+  fit1 <- ba(x, y, n_threads = 1L)
+  fit2 <- ba(x, y, n_threads = 2L)
+
+  expect_equal(unclass(fit1), unclass(fit2), tolerance = 1e-12)
+  expect_equal(fit1$groups, fit2$groups, tolerance = 1e-12)
+  expect_equal(fit1$lines, fit2$lines, tolerance = 1e-12)
+  expect_equal(fit1$CI.lines, fit2$CI.lines, tolerance = 1e-12)
+})
+
 test_that("errors on invalid inputs", {
   expect_error(ba(1:3, 1:2), "same length")
   expect_error(ba(letters[1:3], 1:3), "numeric", ignore.case = TRUE)

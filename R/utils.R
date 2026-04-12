@@ -51,7 +51,7 @@ abort_bad_arg <- function(arg,
 #' @keywords internal
 check_bool <- function(x,
                        arg = as.character(substitute(x))) {
-  if (!rlang::is_bool(x)) {
+  if (!is.logical(x) || length(x) != 1L || is.na(x)) {
     abort_bad_arg(arg,
       message = "must be a single TRUE or FALSE."
     )
@@ -245,7 +245,13 @@ check_scalar_nonneg <- function(x,
 #' @keywords internal
 check_scalar_int_pos <- function(x,
                                  arg = as.character(substitute(x))) {
-  if (!rlang::is_scalar_integerish(x) || is.na(x) || x <= 0) {
+  ok <- length(x) == 1L &&
+    is.numeric(x) &&
+    !is.na(x) &&
+    is.finite(x) &&
+    x > 0 &&
+    abs(x - round(x)) <= sqrt(.Machine$double.eps)
+  if (!ok) {
     abort_bad_arg(arg,
       message = "must be a positive integer."
     )
@@ -326,6 +332,12 @@ check_inherits <- function(x,
 match_arg <- function(arg,
                       values,
                       arg_name = as.character(substitute(arg))) {
+  if (is.character(arg) &&
+      length(arg) == 1L &&
+      !is.na(arg) &&
+      identical(match(arg, values, nomatch = 0L) > 0L, TRUE)) {
+    return(arg)
+  }
   rlang::arg_match(arg = arg, values = values, multiple = FALSE, error_arg = arg_name)
 }
 
@@ -334,8 +346,14 @@ match_arg <- function(arg,
 #' @noRd
 validate_na_method <- function(na_method,
                                arg = as.character(substitute(na_method))) {
-  if (rlang::is_bool(na_method)) {
+  if (is.logical(na_method) && length(na_method) == 1L && !is.na(na_method)) {
     return(if (isTRUE(na_method)) "error" else "pairwise")
+  }
+  if (is.character(na_method) &&
+      length(na_method) == 1L &&
+      !is.na(na_method) &&
+      (identical(na_method, "error") || identical(na_method, "pairwise"))) {
+    return(na_method)
   }
   match_arg(
     na_method,
@@ -353,6 +371,12 @@ resolve_na_args <- function(na_method = "error",
                             arg_na_method = "na_method",
                             arg_check_na = "check_na",
                             warn = TRUE) {
+  if (is.null(check_na) && isTRUE(na_method_missing)) {
+    return(list(
+      na_method = "error",
+      check_na = TRUE
+    ))
+  }
   if (!is.null(check_na)) {
     check_bool(check_na, arg = arg_check_na)
     if (!isTRUE(na_method_missing)) {
@@ -399,6 +423,42 @@ resolve_na_args <- function(na_method = "error",
     na_method = resolved,
     check_na = identical(resolved, "error")
   )
+}
+
+#' Set OpenMP threads only when a change is required
+#' @keywords internal
+#' @noRd
+.mc_enter_omp_threads <- function(n_threads) {
+  current <- as.integer(get_omp_threads())
+  target <- as.integer(n_threads)
+  if (identical(current, target)) {
+    return(NULL)
+  }
+  set_omp_threads(target)
+  current
+}
+
+#' Restore OpenMP thread count after `.mc_enter_omp_threads()`
+#' @keywords internal
+#' @noRd
+.mc_exit_omp_threads <- function(prev_threads) {
+  if (!is.null(prev_threads)) {
+    set_omp_threads(as.integer(prev_threads))
+  }
+  invisible(NULL)
+}
+
+#' Prepare OpenMP thread state for a wrapper call
+#' @keywords internal
+#' @noRd
+.mc_prepare_omp_threads <- function(n_threads,
+                                    n_threads_missing = FALSE,
+                                    arg = "n_threads") {
+  if (isTRUE(n_threads_missing) &&
+      identical(getOption("matrixCorr.threads", 1L), 1L)) {
+    return(NULL)
+  }
+  .mc_enter_omp_threads(check_scalar_int_pos(n_threads, arg = arg))
 }
 
 #' Extract deprecated compatibility aliases from dots

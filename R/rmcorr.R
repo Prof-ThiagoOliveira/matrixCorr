@@ -183,6 +183,88 @@ rmcorr <- function(data = NULL, response, subject,
     }
   }
 
+  if (...length() == 0L &&
+      missing(na_method) &&
+      isFALSE(keep_data) &&
+      isFALSE(verbose)) {
+    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+    n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
+
+    resolved <- .mc_rmcorr_resolve_inputs(data = data, response = response, subject = subject)
+    response_mat <- resolved$response
+    subject_vec <- resolved$subject
+    response_names <- colnames(response_mat)
+
+    if (ncol(response_mat) < 2L) {
+      abort_bad_arg(
+        "response",
+        message = "must supply at least two numeric response columns."
+      )
+    }
+    if (nrow(response_mat) != length(subject_vec)) {
+      abort_bad_arg(
+        "response",
+        message = "and {.arg subject} must have the same number of observations."
+      )
+    }
+
+    .mc_check_latent_missing(
+      c(as.list(as.data.frame(response_mat)), list(subject = subject_vec)),
+      check_na = TRUE,
+      arg = "response"
+    )
+
+    subj_info <- .mc_rmcorr_encode_subject(subject_vec, arg = "subject")
+
+    if (ncol(response_mat) == 2L) {
+      stats <- rmcorr_pair_cpp(
+        x = response_mat[, 1L],
+        y = response_mat[, 2L],
+        subject = subj_info$code,
+        conf_level = conf_level
+      )
+      return(.mc_rmcorr_build_pair_object(
+        stats = stats,
+        response_mat = response_mat,
+        subject = subject_vec,
+        response_names = response_names,
+        subject_name = resolved$subject_name,
+        na_method = "error",
+        conf_level = conf_level,
+        keep_data = FALSE
+      ))
+    }
+
+    out <- rmcorr_matrix_cpp(
+      x = response_mat,
+      y = response_mat,
+      subject = subj_info$code,
+      symmetric = TRUE,
+      conf_level = conf_level,
+      n_threads = n_threads
+    )
+
+    est <- out$estimate
+    dimnames(est) <- list(response_names, response_names)
+    diagnostics <- list(
+      slope = .mc_rmcorr_set_dimnames(out$slope, response_names),
+      p_value = .mc_rmcorr_set_dimnames(out$p_value, response_names),
+      df = .mc_rmcorr_set_dimnames(out$df, response_names),
+      n_complete = .mc_rmcorr_set_dimnames(out$n_complete, response_names),
+      n_subjects = .mc_rmcorr_set_dimnames(out$n_subjects, response_names),
+      conf_low = .mc_rmcorr_set_dimnames(out$conf_low, response_names),
+      conf_high = .mc_rmcorr_set_dimnames(out$conf_high, response_names),
+      conf_level = conf_level
+    )
+    return(.mc_structure_corr_matrix(
+      est,
+      class_name = "rmcorr_matrix",
+      method = "rmcorr",
+      description = "Repeated-measures correlation matrix",
+      diagnostics = diagnostics
+    ))
+  }
+
   legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
   na_cfg <- resolve_na_args(
     na_method = na_method,

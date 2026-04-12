@@ -305,10 +305,9 @@ skipped_corr <- function(data,
     skipped_n = unclass(res$skipped_n),
     skipped_prop = unclass(res$skipped_prop)
   )
-  res_cor <- res$cor
-  colnames(res_cor) <- rownames(res_cor) <- colnames_data
+  res_cor <- .mc_set_matrix_dimnames(res$cor, colnames_data)
   for (nm in names(diag_payload)) {
-    dimnames(diag_payload[[nm]]) <- list(colnames_data, colnames_data)
+    diag_payload[[nm]] <- .mc_set_matrix_dimnames(diag_payload[[nm]], colnames_data)
   }
 
   infer_payload <- NULL
@@ -326,25 +325,26 @@ skipped_corr <- function(data,
     if (isTRUE(ci)) {
       lwr <- unclass(res$lwr)
       upr <- unclass(res$upr)
-      dimnames(lwr) <- dimnames(upr) <- list(colnames_data, colnames_data)
+      lwr <- .mc_set_matrix_dimnames(lwr, colnames_data)
+      upr <- .mc_set_matrix_dimnames(upr, colnames_data)
       infer_payload$lwr <- lwr
       infer_payload$upr <- upr
     }
     if (isTRUE(p_value)) {
       p_mat <- unclass(res$p_value)
-      dimnames(p_mat) <- list(colnames_data, colnames_data)
+      p_mat <- .mc_set_matrix_dimnames(p_mat, colnames_data)
       infer_payload$p_value <- p_mat
       if (identical(p_adjust, "hochberg")) {
         padj <- unclass(res$p_value_adjusted)
         reject <- unclass(res$reject) > 0.5
-        dimnames(padj) <- list(colnames_data, colnames_data)
-        dimnames(reject) <- list(colnames_data, colnames_data)
+        padj <- .mc_set_matrix_dimnames(padj, colnames_data)
+        reject <- .mc_set_matrix_dimnames(reject, colnames_data)
         infer_payload$p_value_adjusted <- padj
         infer_payload$reject <- reject
         infer_payload$p_adjust <- "hochberg"
       } else if (identical(p_adjust, "ecp")) {
         reject <- unclass(res$reject) > 0.5
-        dimnames(reject) <- list(colnames_data, colnames_data)
+        reject <- .mc_set_matrix_dimnames(reject, colnames_data)
         infer_payload$reject <- reject
         infer_payload$critical_p_value <- unname(res$critical_p_value)
         infer_payload$p_adjust <- "ecp"
@@ -354,21 +354,9 @@ skipped_corr <- function(data,
     }
   }
 
-  out <- .mc_structure_corr_matrix(
-    res_cor,
-    class_name = "skipped_corr",
-    method = "skipped_correlation",
-    description = paste0(
-      "Skipped correlation; base = ", method,
-      "; rule = ", outlier_rule,
-      "; standardise = ", stand,
-      "; NA mode = ", na_method, "."
-    ),
-    diagnostics = diag_payload
-  )
-  if (isTRUE(return_masks)) attr(out, "skipped_masks") <- mask_payload
+  ci_attr <- NULL
+  inference_attr <- NULL
   if (!is.null(infer_payload)) {
-    ci_attr <- NULL
     if (isTRUE(ci)) {
       ci_attr <- list(
         est = unclass(res_cor),
@@ -376,7 +364,6 @@ skipped_corr <- function(data,
         upr.ci = infer_payload$upr,
         conf.level = infer_payload$conf_level
       )
-      attr(out, "ci") <- ci_attr
     }
 
     inference_attr <- list(
@@ -402,9 +389,25 @@ skipped_corr <- function(data,
       }
     }
     if (identical(p_adjust, "ecp")) inference_attr$n_mc <- n_mc
-    attr(out, "inference") <- inference_attr
   }
-  out
+
+  .mc_structure_corr_matrix(
+    res_cor,
+    class_name = "skipped_corr",
+    method = "skipped_correlation",
+    description = paste0(
+      "Skipped correlation; base = ", method,
+      "; rule = ", outlier_rule,
+      "; standardise = ", stand,
+      "; NA mode = ", na_method, "."
+    ),
+    diagnostics = diag_payload,
+    extra_attrs = c(
+      if (isTRUE(return_masks)) list(skipped_masks = mask_payload),
+      if (!is.null(ci_attr)) list(ci = ci_attr),
+      if (!is.null(inference_attr)) list(inference = inference_attr)
+    )
+  )
 }
 
 .mc_skipcor_ci_attr <- function(x) {

@@ -107,17 +107,23 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
                 n_threads = getOption("matrixCorr.threads", 1L),
                 verbose = FALSE) {
   check_bool(ci, arg = "ci")
-  check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
-  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
+  if (isTRUE(ci)) {
+    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  }
   check_bool(verbose, arg = "verbose")
 
   numeric_data <- validate_corr_input(data)
-  mat <- as.matrix(numeric_data)
+  mat <- numeric_data
   colnames_data <- colnames(numeric_data)
+  dn <- .mc_square_dimnames(colnames_data)
 
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
-  set_omp_threads(n_threads)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
 
   if (verbose) cat("Using", openmp_threads(), "OpenMP threads\n")
 
@@ -132,43 +138,35 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
     diag(ccc_lin$est)    <- 1
     diag(ccc_lin$lwr.ci) <- 1
     diag(ccc_lin$upr.ci) <- 1
-    ccc_lin$est    <- `dimnames<-`(ccc_lin$est,
-                                   list(colnames_data, colnames_data))
-    ccc_lin$lwr.ci <- `dimnames<-`(ccc_lin$lwr.ci,
-                                   list(colnames_data, colnames_data))
-    ccc_lin$upr.ci <- `dimnames<-`(ccc_lin$upr.ci,
-                                   list(colnames_data, colnames_data))
+    ccc_lin$est <- .mc_set_matrix_dimnames(ccc_lin$est, colnames_data)
+    ccc_lin$lwr.ci <- .mc_set_matrix_dimnames(ccc_lin$lwr.ci, colnames_data)
+    ccc_lin$upr.ci <- .mc_set_matrix_dimnames(ccc_lin$upr.ci, colnames_data)
 
-    ccc_lin <- structure(ccc_lin, class = c("ccc", "ccc_ci"))   # list with CIs
-    attr(ccc_lin, "method") <- "Lin's concordance"
-    attr(ccc_lin, "description") <-
-      "Pairwise Lin's concordance with confidence intervals"
-    attr(ccc_lin, "package") <- "matrixCorr"
-    attr(ccc_lin, "conf.level") <- conf_level
-    attr(ccc_lin, "diagnostics") <- list(
-      n_complete = matrix(
-        as.integer(nrow(mat)),
-        nrow = ncol(mat),
-        ncol = ncol(mat),
-        dimnames = list(colnames_data, colnames_data)
+    ccc_lin <- structure(
+      ccc_lin,
+      class = c("ccc", "ccc_ci"),
+      method = "Lin's concordance",
+      description = "Pairwise Lin's concordance with confidence intervals",
+      package = "matrixCorr",
+      conf.level = conf_level,
+      diagnostics = list(
+        n_complete = matrix(
+          as.integer(nrow(mat)),
+          nrow = ncol(mat),
+          ncol = ncol(mat),
+          dimnames = dn
+        )
       )
     )
   } else {
     est <- ccc_cpp(mat)
-    ccc_lin <- `dimnames<-`(est, list(colnames_data, colnames_data))
-
-    ccc_lin <- structure(ccc_lin, class = c("ccc", "matrix"))   # matrix printing still available
-    attr(ccc_lin, "method") <- "Lin's concordance"
-    attr(ccc_lin, "description") <- "Pairwise Lin's concordance correlation matrix"
-    attr(ccc_lin, "package") <- "matrixCorr"
-    attr(ccc_lin, "conf.level")  <- conf_level
-    attr(ccc_lin, "diagnostics") <- list(
-      n_complete = matrix(
-        as.integer(nrow(mat)),
-        nrow = ncol(mat),
-        ncol = ncol(mat),
-        dimnames = list(colnames_data, colnames_data)
-      )
+    ccc_lin <- .mc_structure_corr_matrix(
+      est,
+      class_name = "ccc",
+      method = "Lin's concordance",
+      description = "Pairwise Lin's concordance correlation matrix",
+      dimnames = dn,
+      classes = c("ccc", "matrix")
     )
   }
 

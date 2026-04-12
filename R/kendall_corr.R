@@ -22,11 +22,11 @@
 #' matrix/data-frame mode.
 #' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
 #' \code{0.95}.
-#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
-#'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param ci_method Confidence-interval engine used when \code{ci = TRUE}.
 #' Supported Kendall methods are \code{"fieller"} (default),
 #' \code{"brown_benedetti"}, and \code{"if_el"}.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #'
 #' @return
 #' \itemize{
@@ -164,21 +164,47 @@ kendall_tau <- function(data,
                         na_method = c("error", "pairwise"),
                         ci = FALSE,
                         conf_level = 0.95,
-                        n_threads = getOption("matrixCorr.threads", 1L),
                         ci_method = c("fieller", "if_el", "brown_benedetti"),
+                        n_threads = getOption("matrixCorr.threads", 1L),
                         ...) {
-  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
-  na_cfg <- resolve_na_args(
-    na_method = na_method,
-    check_na = legacy_args$check_na %||% NULL,
-    na_method_missing = missing(na_method)
-  )
-  check_bool(ci, arg = "ci")
+  if (is.null(y) && ...length() == 0L && missing(na_method) && isFALSE(ci)) {
+    numeric_data <- validate_corr_input(data, check_na = TRUE)
+    colnames_data <- colnames(numeric_data)
+    prev_threads <- .mc_prepare_omp_threads(
+      n_threads,
+      n_threads_missing = missing(n_threads)
+    )
+    if (!is.null(prev_threads)) {
+      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+    }
+    return(.mc_structure_corr_matrix(
+      kendall_matrix_cpp(numeric_data),
+      class_name = "kendall_matrix",
+      method = "kendall",
+      description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
+      dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
+    ))
+  }
+
+  if (...length() == 0L && missing(na_method)) {
+    na_cfg <- list(na_method = "error", check_na = TRUE)
+  } else {
+    legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+    na_cfg <- resolve_na_args(
+      na_method = na_method,
+      check_na = legacy_args$check_na %||% NULL,
+      na_method_missing = missing(na_method)
+    )
+  }
+  if (!isFALSE(ci)) {
+    check_bool(ci, arg = "ci")
+  } else if (!is.logical(ci) || length(ci) != 1L || is.na(ci)) {
+    check_bool(ci, arg = "ci")
+  }
   ci_method <- match.arg(ci_method)
   if (isTRUE(ci)) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   }
-  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
   if (!is.null(y)) {
     if (isTRUE(ci)) {
@@ -205,12 +231,17 @@ kendall_tau <- function(data,
 
   numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
   colnames_data <- colnames(numeric_data)
+  dn <- .mc_square_dimnames(colnames_data)
   diagnostics <- NULL
   ci_attr <- NULL
 
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
-  set_omp_threads(n_threads)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
 
   if (isTRUE(na_cfg$check_na) && !isTRUE(ci)) {
     result <- kendall_matrix_cpp(numeric_data)
@@ -222,36 +253,35 @@ kendall_tau <- function(data,
       ci_method = ci_method
     )
     result <- pairwise$est
-    diagnostics <- list(n_complete = pairwise$n_complete)
-    dimnames(diagnostics$n_complete) <- list(colnames_data, colnames_data)
+    diagnostics <- list(
+      n_complete = .mc_set_matrix_dimnames(pairwise$n_complete, colnames_data)
+    )
     if (isTRUE(ci)) {
       ci_attr <- list(
-        est = unclass(result),
-        lwr.ci = unclass(pairwise$lwr),
-        upr.ci = unclass(pairwise$upr),
+        est = .mc_set_matrix_dimnames(unclass(result), colnames_data),
+        lwr.ci = .mc_set_matrix_dimnames(unclass(pairwise$lwr), colnames_data),
+        upr.ci = .mc_set_matrix_dimnames(unclass(pairwise$upr), colnames_data),
         conf.level = pairwise$conf_level,
         ci.method = pairwise$ci_method
       )
-      dimnames(ci_attr$est) <- list(colnames_data, colnames_data)
-      dimnames(ci_attr$lwr.ci) <- list(colnames_data, colnames_data)
-      dimnames(ci_attr$upr.ci) <- list(colnames_data, colnames_data)
     }
   }
 
-  colnames(result) <- rownames(result) <- colnames_data
-  out <- .mc_structure_corr_matrix(
+  .mc_structure_corr_matrix(
     result,
     class_name = "kendall_matrix",
     method = "kendall",
     description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
-    diagnostics = diagnostics
+    diagnostics = diagnostics,
+    dimnames = dn,
+    extra_attrs = if (!is.null(ci_attr)) {
+      list(
+        ci = ci_attr,
+        conf.level = conf_level,
+        ci.method = ci_method
+      )
+    }
   )
-  if (!is.null(ci_attr)) {
-    attr(out, "ci") <- ci_attr
-    attr(out, "conf.level") <- conf_level
-    attr(out, "ci.method") <- ci_method
-  }
-  out
 }
 
 .mc_kendall_ci_attr <- function(x) {

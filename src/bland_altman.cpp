@@ -1,12 +1,14 @@
 // Thiago de Paula Oliveira
 #include <RcppArmadillo.h>
 #include <cmath>
+#include <algorithm>
 using namespace Rcpp;
 
 // [[Rcpp::plugins(openmp)]]
 // [[Rcpp::depends(RcppArmadillo)]]
 
 #include "matrixCorr_detail.h"
+#include "matrixCorr_omp.h"
 using matrixCorr_detail::moments::sample_var;
 
 inline double mean_ba(const std::vector<double>& x) {
@@ -22,7 +24,8 @@ List bland_altman_cpp(NumericVector group1,
                       NumericVector group2,
                       double loa_multiplier = 1.96,
                       int    mode       = 1,
-                      double conf_level = 0.95) {
+                      double conf_level = 0.95,
+                      int n_threads = 1) {
   if (group1.size() != group2.size())
     stop("Error in bland.altman.stats: groups differ in length.");
   if (loa_multiplier <= 0.0)
@@ -31,6 +34,7 @@ List bland_altman_cpp(NumericVector group1,
     stop("Error in bland.altman.stats: mode must be either 1 or 2.");
   if (!(conf_level > 0.0 && conf_level < 1.0))
     stop("conf_level must be in (0,1).");
+  omp_set_num_threads(std::max(1, n_threads));
 
   const int n_all = group1.size();
 

@@ -91,8 +91,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // bland_altman_cpp
-List bland_altman_cpp(NumericVector group1, NumericVector group2, double loa_multiplier, int mode, double conf_level);
-RcppExport SEXP _matrixCorr_bland_altman_cpp(SEXP group1SEXP, SEXP group2SEXP, SEXP loa_multiplierSEXP, SEXP modeSEXP, SEXP conf_levelSEXP) {
+List bland_altman_cpp(NumericVector group1, NumericVector group2, double loa_multiplier, int mode, double conf_level, int n_threads);
+RcppExport SEXP _matrixCorr_bland_altman_cpp(SEXP group1SEXP, SEXP group2SEXP, SEXP loa_multiplierSEXP, SEXP modeSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -101,7 +101,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type loa_multiplier(loa_multiplierSEXP);
     Rcpp::traits::input_parameter< int >::type mode(modeSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
-    rcpp_result_gen = Rcpp::wrap(bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level));
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -141,8 +142,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // bland_altman_repeated_em_ext_cpp
-Rcpp::List bland_altman_repeated_em_ext_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, bool include_slope, bool use_ar1, double ar1_rho, int max_iter, double tol, double conf_level, double loa_multiplier_arg, bool use_cov_su_se);
-RcppExport SEXP _matrixCorr_bland_altman_repeated_em_ext_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP include_slopeSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP loa_multiplier_argSEXP, SEXP use_cov_su_seSEXP) {
+Rcpp::List bland_altman_repeated_em_ext_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, bool include_slope, bool use_ar1, double ar1_rho, int max_iter, double tol, double conf_level, double loa_multiplier_arg, bool use_cov_su_se, int n_threads);
+RcppExport SEXP _matrixCorr_bland_altman_repeated_em_ext_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP include_slopeSEXP, SEXP use_ar1SEXP, SEXP ar1_rhoSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP conf_levelSEXP, SEXP loa_multiplier_argSEXP, SEXP use_cov_su_seSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -158,7 +159,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< double >::type loa_multiplier_arg(loa_multiplier_argSEXP);
     Rcpp::traits::input_parameter< bool >::type use_cov_su_se(use_cov_su_seSEXP);
-    rcpp_result_gen = Rcpp::wrap(bland_altman_repeated_em_ext_cpp(y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, loa_multiplier_arg, use_cov_su_se));
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bland_altman_repeated_em_ext_cpp(y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, loa_multiplier_arg, use_cov_su_se, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -791,11 +793,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_bicor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_pairwise_cpp, 6},
     {"_matrixCorr_bicor_matrix_weighted_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_cpp, 6},
     {"_matrixCorr_bicor_matrix_weighted_pairwise_cpp", (DL_FUNC) &_matrixCorr_bicor_matrix_weighted_pairwise_cpp, 7},
-    {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 5},
+    {"_matrixCorr_bland_altman_cpp", (DL_FUNC) &_matrixCorr_bland_altman_cpp, 6},
     {"_matrixCorr_ba_openmp_threads", (DL_FUNC) &_matrixCorr_ba_openmp_threads, 0},
     {"_matrixCorr_ba_rm_slope_scale_cpp", (DL_FUNC) &_matrixCorr_ba_rm_slope_scale_cpp, 1},
     {"_matrixCorr_ba_rm_complete_pairs_cpp", (DL_FUNC) &_matrixCorr_ba_rm_complete_pairs_cpp, 4},
-    {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 12},
+    {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 13},
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 11},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},
     {"_matrixCorr_get_omp_threads", (DL_FUNC) &_matrixCorr_get_omp_threads, 0},

@@ -1,0 +1,50 @@
+Package: matrixCorr
+Type: Package
+Title: Collection of Correlation and Association Estimators
+Version: 0.11.0
+Authors@R: c(
+    person(
+        given = "Thiago de Paula",
+        family = "Oliveira",
+        email = "thiago.paula.oliveira@gmail.com",
+        role = c("aut", "cre"),
+        comment = c(ORCID = "0000-0002-4555-2584")
+    )
+    )
+Author: Thiago de Paula Oliveira [aut, cre] (<https://orcid.org/0000-0002-4555-2584>)
+Maintainer: Thiago de Paula Oliveira <thiago.paula.oliveira@gmail.com>
+Description: Compute correlation, association, agreement, and reliability
+    measures for small to high-dimensional datasets through a consistent
+    matrix-oriented interface. Supports classical correlations (Pearson,
+    Spearman, Kendall), distance correlation, partial correlation with
+    regularised estimators, shrinkage correlation for p >= n settings, robust
+    correlations including biweight mid-correlation, percentage-bend, and
+    skipped correlation, latent-variable methods for binary and ordinal data,
+    pairwise and overall intraclass correlation for wide data,
+    repeated-measures correlation, and agreement analyses based on
+    Bland-Altman methods, Lin's concordance correlation coefficient, and
+    repeated-measures intraclass correlation. Implemented with optimized C++
+    backends using BLAS/OpenMP and memory-aware symmetric updates, and returns
+    standard R objects with print/summary/plot methods plus optional Shiny
+    viewers for matrix inspection. Methods based on Ledoit and Wolf (2004)
+    <doi:10.1016/S0047-259X(03)00096-4>; high-dimensional shrinkage covariance
+    estimation <doi:10.2202/1544-6115.1175>; Lin (1989)
+    <doi:10.2307/2532051>; Wilcox (1994) <doi:10.1007/BF02294395>; Wilcox
+    (2004)
+    <doi:10.1080/0266476032000148821>.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LinkingTo: Rcpp, RcppArmadillo
+Imports: Rcpp (>= 1.1.0), ggplot2 (>= 3.5.2), Matrix (>= 1.7.2), cli,
+        rlang
+Suggests: knitr, rmarkdown, MASS, mnormt, shiny, shinyWidgets,
+        viridisLite, testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Enhances: plotly
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+URL: https://github.com/Prof-ThiagoOliveira/matrixCorr
+BugReports: https://github.com/Prof-ThiagoOliveira/matrixCorr/issues
+Config/testthat/edition: 3
+Built: R 4.5.3; x86_64-w64-mingw32; 2026-04-12 16:05:54 UTC; windows
+Archs: x64

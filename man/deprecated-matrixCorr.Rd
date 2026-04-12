@@ -17,6 +17,7 @@ bland_altman(
   two = 1.96,
   mode = 1L,
   conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
   verbose = FALSE
 )
 
@@ -28,6 +29,7 @@ bland_altman_repeated(
   time,
   two = 1.96,
   conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
   include_slope = FALSE,
   use_ar1 = FALSE,
   ar1_rho = NA_real_,
@@ -116,6 +118,8 @@ define the limits of agreement.}
 
 \item{conf_level}{Confidence level.}
 
+\item{n_threads}{Integer number of OpenMP threads.}
+
 \item{verbose}{Logical; print brief progress or diagnostic output.}
 
 \item{data}{A \code{data.frame}, matrix, or repeated-measures dataset accepted by
@@ -153,8 +157,6 @@ when supported.}
 \item{w}{Optional vector of case weights.}
 
 \item{sparse_threshold}{Optional threshold controlling sparse output.}
-
-\item{n_threads}{Integer number of OpenMP threads.}
 
 \item{...}{Additional arguments forwarded to the replacement function when
 supported.}

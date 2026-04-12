@@ -14,6 +14,7 @@ ba(
   loa_multiplier = 1.96,
   mode = 1L,
   conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
   verbose = FALSE
 )
 
@@ -67,6 +68,9 @@ intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.}
 \item{mode}{Integer; 1 uses \code{group1 - group2}, 2 uses \code{group2 - group1}.}
 
 \item{conf_level}{Confidence level for CIs (default 0.95).}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
 
 \item{verbose}{Logical; if TRUE, prints how many OpenMP threads are used.}
 

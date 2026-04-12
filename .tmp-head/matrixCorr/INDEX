@@ -1,0 +1,47 @@
+ba                      Bland-Altman statistics with confidence
+                        intervals
+ba_rm                   Bland-Altman for repeated measurements
+bicor                   Biweight mid-correlation (bicor)
+biserial                Biserial Correlation Between Continuous and
+                        Binary Variables
+ccc                     Pairwise Lin's concordance correlation
+                        coefficient
+ccc_rm_reml             Concordance Correlation via REML (Linear
+                        Mixed-Effects Model)
+ccc_rm_ustat            Repeated-Measures Lin's Concordance Correlation
+                        Coefficient (CCC)
+dcor                    Pairwise Distance Correlation (dCor)
+deprecated-matrixCorr   Deprecated Compatibility Wrappers
+icc                     Intraclass Correlation for Wide Data
+icc_rm_reml             Repeated-Measures Intraclass Correlation via
+                        REML
+kendall_tau             Pairwise (or Two-Vector) Kendall's Tau Rank
+                        Correlation
+pbcor                   Percentage bend correlation
+pcorr                   Partial correlation matrix (sample / ridge /
+                        OAS / graphical lasso)
+pearson_corr            Pairwise Pearson correlation
+polychoric              Pairwise Polychoric Correlation
+polyserial              Polyserial Correlation Between Continuous and
+                        Ordinal Variables
+print.ccc_ci            S3 print for legacy class 'ccc_ci'
+print.matrixCorr_ccc    Print method for matrixCorr CCC objects
+print.matrixCorr_ccc_ci
+                        Print method for matrixCorr CCC objects with
+                        CIs
+print.rmcorr            Methods for Pairwise rmcorr Objects
+print.rmcorr_matrix     Methods for rmcorr Matrix Objects
+print.summary.latent_corr
+                        Summary Method for Latent Correlation Matrices
+print.summary.matrixCorr
+                        Summary Method for Correlation Matrices
+rmcorr                  Repeated-Measures Correlation (rmcorr)
+shrinkage_corr          Shrinkage Correlation
+skipped_corr            Pairwise skipped correlation
+spearman_rho            Pairwise Spearman's rank correlation
+summary.ccc_rm_reml     Summary Method for 'ccc_rm_reml' Objects
+tetrachoric             Pairwise Tetrachoric Correlation
+view_corr_shiny         Interactive Shiny viewer for matrixCorr objects
+view_rmcorr_shiny       Interactive Shiny Viewer for Repeated-Measures
+                        Correlation
+wincor                  Pairwise Winsorized correlation

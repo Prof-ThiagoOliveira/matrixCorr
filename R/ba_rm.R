@@ -41,6 +41,8 @@
 #'   interface this default is fixed and does not depend on `conf_level`.
 #' @param conf_level Confidence level for Wald confidence intervals for the
 #'   reported bias and both LoA endpoints. Must lie in `(0, 1)`. Default `0.95`.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param include_slope Logical. If `TRUE`, the model includes the paired mean as
 #'   a fixed effect and estimates a proportional-bias slope. The reported BA
 #'   centre remains the fitted mean difference at the centred reference paired
@@ -488,7 +490,9 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 ba_rm <- function(data = NULL, response, subject, method, time,
-                                  conf_level = 0.95, verbose = FALSE,
+                                  conf_level = 0.95,
+                                  n_threads = getOption("matrixCorr.threads", 1L),
+                                  verbose = FALSE,
                                   loa_multiplier = 1.96,
                                   include_slope = FALSE,
                                   use_ar1 = FALSE, ar1_rho = NA_real_,
@@ -609,6 +613,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       message = "`conf_level` must be in (0,1)."
     )
   }
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(include_slope, arg = "include_slope")
   check_bool(use_ar1, arg = "use_ar1")
   check_bool(verbose, arg = "verbose")
@@ -620,6 +625,10 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     ar1_rho <- NA_real_
   }
 
+  if (isTRUE(verbose)) {
+    cat("Using", n_threads, "OpenMP threads\n")
+  }
+
   # ---- two-method path -------------------------------------------------------
   if (length(mlev) == 2L) {
     idx <- m %in% mlev & is.finite(y) & !is.na(s) & !is.na(t)
@@ -628,7 +637,8 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       subject  = s[idx],
       method12 = as.integer(m[idx] == mlev[2L]) + 1L,
       time     = t[idx],
-      loa_multiplier = loa_multiplier, conf_level = conf_level, include_slope = include_slope,
+      loa_multiplier = loa_multiplier, conf_level = conf_level, n_threads = n_threads,
+      include_slope = include_slope,
       use_ar1 = use_ar1, ar1_rho = ar1_rho, max_iter = max_iter, tol = tol
     )
     attr(res1, "conf.level") <- conf_level
@@ -727,6 +737,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     pair_label <- paste(lev_j, lev_k, sep = "-")
     fit_info <- .fit_ba_rm_pair_model(
       response = y[sel], subject = s[sel], method12 = m12, time = t[sel],
+      n_threads = n_threads,
       include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
       max_iter = max_iter, tol = tol, conf_level = conf_level,
       loa_multiplier = loa_multiplier, pair_label = pair_label
@@ -840,6 +851,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
 
 .fit_ba_rm_pair_model <- function(response, subject, method12, time,
+                                  n_threads,
                                   include_slope, use_ar1, ar1_rho,
                                   max_iter, tol, conf_level, loa_multiplier,
                                   pair_label = NULL) {
@@ -849,7 +861,8 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       include_slope = include_slope,
       use_ar1 = use_ar1_fit, ar1_rho = ar1_rho_fit,
       max_iter = max_iter, tol = tol, conf_level = conf_level,
-      loa_multiplier_arg = loa_multiplier
+      loa_multiplier_arg = loa_multiplier,
+      n_threads = n_threads
     )
   }
 
@@ -900,7 +913,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 #' two-method helper
 #' @keywords internal
 .ba_rep_two_methods <- function(response, subject, method12, time,
-                                loa_multiplier, conf_level, include_slope,
+                                loa_multiplier, conf_level, n_threads, include_slope,
                                 use_ar1, ar1_rho, max_iter, tol) {
   n_pairs <- .count_ba_rm_complete_pairs(response, subject, method12, time)
   if (n_pairs < 2L) {
@@ -912,6 +925,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
   fit_info <- .fit_ba_rm_pair_model(
     response = response, subject = subject, method12 = method12, time = time,
+    n_threads = n_threads,
     include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
     max_iter = max_iter, tol = tol, conf_level = conf_level,
     loa_multiplier = loa_multiplier

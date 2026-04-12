@@ -116,6 +116,36 @@ test_that("Two-method BA recovers bias and sd_loa under i.i.d. residuals", {
   expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm)))
 })
 
+test_that("ba_rm honors n_threads without changing estimates", {
+  dat2 <- sim_two_method_known(S = 20L, Tm = 8L, mu = 0.8, sig_s = 1.1, sig_e = 1.3, seed = 77L)
+  fit2_1 <- ba_rm(
+    data = dat2,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = FALSE, use_ar1 = FALSE, n_threads = 1L
+  )
+  fit2_2 <- ba_rm(
+    data = dat2,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = FALSE, use_ar1 = FALSE, n_threads = 2L
+  )
+
+  expect_equal(unclass(fit2_1), unclass(fit2_2), tolerance = 1e-12)
+
+  datm <- sim_multi_method(S = 12L, Tm = 6L, seed = 78L)
+  fitm_1 <- ba_rm(
+    data = datm,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = FALSE, use_ar1 = FALSE, n_threads = 1L
+  )
+  fitm_2 <- ba_rm(
+    data = datm,
+    response = "y", subject = "subject", method = "method", time = "time",
+    include_slope = FALSE, use_ar1 = FALSE, n_threads = 2L
+  )
+
+  expect_equal(unclass(fitm_1), unclass(fitm_2), tolerance = 1e-12)
+})
+
 test_that("Two-method BA with AR(1) honours supplied rho and recovers truth", {
   skip_on_cran()
 

@@ -872,52 +872,6 @@ namespace {
 
 constexpr double kLatentMaxcor = 0.9999;
 
-struct GenericOptimData {
-  std::function<double(const std::vector<double>&)> fn;
-};
-
-double generic_nmmin_fn(int n, double* par, void* ex) {
-  GenericOptimData* data = static_cast<GenericOptimData*>(ex);
-  std::vector<double> theta(par, par + n);
-  return data->fn(theta);
-}
-
-bool latent_nmmin_optimize(const std::vector<double>& start,
-                           const std::function<double(const std::vector<double>&)>& fn,
-                           std::vector<double>& opt_par,
-                           double& fmin,
-                           int maxit = 1000) {
-  const int npar = static_cast<int>(start.size());
-  if (npar < 1) return false;
-
-  std::vector<double> par = start;
-  opt_par = start;
-  fmin = std::numeric_limits<double>::infinity();
-  int fail = 0;
-  int fncount = 0;
-  GenericOptimData data{fn};
-
-  nmmin(
-    npar,
-    par.data(),
-    opt_par.data(),
-    &fmin,
-    generic_nmmin_fn,
-    &fail,
-    R_NegInf,
-    std::sqrt(std::numeric_limits<double>::epsilon()),
-    &data,
-    1.0,
-    0.5,
-    2.0,
-    0,
-    &fncount,
-    maxit
-  );
-
-  return fail == 0 && std::isfinite(fmin);
-}
-
 inline double rho_from_theta(double theta) {
   return kLatentMaxcor * std::tanh(theta);
 }
@@ -925,31 +879,6 @@ inline double rho_from_theta(double theta) {
 inline double drho_dtheta(double theta) {
   const double th = std::tanh(theta);
   return kLatentMaxcor * (1.0 - th * th);
-}
-
-void ordered_cuts_from_theta(const std::vector<double>& theta,
-                             int offset,
-                             int n_cuts,
-                             std::vector<double>& cuts) {
-  cuts.assign(static_cast<std::size_t>(std::max(n_cuts, 0)), 0.0);
-  if (n_cuts <= 0) return;
-  cuts[0] = theta[static_cast<std::size_t>(offset)];
-  for (int j = 1; j < n_cuts; ++j) {
-    cuts[static_cast<std::size_t>(j)] =
-      cuts[static_cast<std::size_t>(j - 1)] + std::exp(theta[static_cast<std::size_t>(offset + j)]);
-  }
-}
-
-void ordered_theta_from_cuts(const std::vector<double>& cuts,
-                             std::vector<double>& theta,
-                             int offset) {
-  const int n_cuts = static_cast<int>(cuts.size());
-  if (n_cuts <= 0) return;
-  theta[static_cast<std::size_t>(offset)] = cuts[0];
-  for (int j = 1; j < n_cuts; ++j) {
-    const double gap = std::max(cuts[static_cast<std::size_t>(j)] - cuts[static_cast<std::size_t>(j - 1)], 1e-8);
-    theta[static_cast<std::size_t>(offset + j)] = std::log(gap);
-  }
 }
 
 double latent_safe_step(const std::vector<double>& theta,
@@ -1087,15 +1016,6 @@ List latent_wald_result(double estimate,
     _["inference.method"] = inference_method,
     _["nll"] = nll
   );
-}
-
-double tetra_nll_full_theta(const std::vector<double>& theta,
-                            double a, double b, double c, double d) {
-  if (theta.size() != 3) return R_PosInf;
-  const double rho = rho_from_theta(theta[0]);
-  const double rc = theta[1];
-  const double cc = theta[2];
-  return tetra_nll_fixed_thresholds(rho, a, b, c, d, rc, cc);
 }
 
 List tetrachoric_inference_impl(const NumericMatrix& tab,

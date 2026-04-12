@@ -359,12 +359,12 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   # set dimnames (cheap; attributes only)
   dn <- list(colnames(numeric_data), colnames(numeric_data))
   if (!is.null(res$pcor)) {
-    dimnames(res$pcor) <- dn
-    if (!is.null(res$p_value))   dimnames(res$p_value)   <- dn
-    if (!is.null(res$cov))       dimnames(res$cov)       <- dn
-    if (!is.null(res$precision)) dimnames(res$precision) <- dn
+    res$pcor <- structure(res$pcor, dimnames = dn)
+    if (!is.null(res$p_value))   res$p_value <- structure(res$p_value, dimnames = dn)
+    if (!is.null(res$cov))       res$cov <- structure(res$cov, dimnames = dn)
+    if (!is.null(res$precision)) res$precision <- structure(res$precision, dimnames = dn)
   } else {
-    pcor <- res[[1]]; dimnames(pcor) <- dn; res <- list(pcor = pcor)
+    res <- list(pcor = structure(res[[1L]], dimnames = dn))
   }
 
   diagnostics <- list(
@@ -402,13 +402,15 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   res$diagnostics <- diagnostics
   if (!is.null(ci_attr)) {
     res$ci <- ci_attr
-    attr(res, "ci") <- ci_attr
-    attr(res, "conf.level") <- conf_level
-    attr(res, "ci.method") <- ci_attr$ci.method
   }
-  res <- structure(res, class = c("partial_corr", "list"))
-  attr(res, "method") <- method
-  res
+  structure(
+    res,
+    class = c("partial_corr", "list"),
+    method = method,
+    ci = ci_attr,
+    conf.level = if (!is.null(ci_attr)) conf_level else NULL,
+    ci.method = if (!is.null(ci_attr)) ci_attr$ci.method else NULL
+  )
 }
 
 

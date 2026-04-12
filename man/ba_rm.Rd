@@ -15,6 +15,7 @@ ba_rm(
   method,
   time,
   conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
   verbose = FALSE,
   loa_multiplier = 1.96,
   include_slope = FALSE,
@@ -103,6 +104,9 @@ integer before pairing and before AR(1) contiguity checks.}
 
 \item{conf_level}{Confidence level for Wald confidence intervals for the
 reported bias and both LoA endpoints. Must lie in \verb{(0, 1)}. Default \code{0.95}.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
 
 \item{verbose}{Logical. If \code{TRUE}, print progress for the pairwise
 \eqn{\ge 3}-method path. It has no material effect in the exactly-two-method

@@ -110,6 +110,7 @@ bland_altman <- function(group1,
                          two = 1.96,
                          mode = 1L,
                          conf_level = 0.95,
+                         n_threads = getOption("matrixCorr.threads", 1L),
                          verbose = FALSE) {
   .mc_deprecate(
     old = "bland_altman",
@@ -123,6 +124,7 @@ bland_altman <- function(group1,
     loa_multiplier = two,
     mode = mode,
     conf_level = conf_level,
+    n_threads = n_threads,
     verbose = verbose
   )
 }
@@ -131,6 +133,7 @@ bland_altman <- function(group1,
 #' @export
 bland_altman_repeated <- function(data = NULL, response, subject, method, time,
                                   two = 1.96, conf_level = 0.95,
+                                  n_threads = getOption("matrixCorr.threads", 1L),
                                   include_slope = FALSE,
                                   use_ar1 = FALSE, ar1_rho = NA_real_,
                                   max_iter = 200L, tol = 1e-6,
@@ -149,6 +152,7 @@ bland_altman_repeated <- function(data = NULL, response, subject, method, time,
     time = time,
     loa_multiplier = two,
     conf_level = conf_level,
+    n_threads = n_threads,
     include_slope = include_slope,
     use_ar1 = use_ar1,
     ar1_rho = ar1_rho,

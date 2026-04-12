@@ -39,6 +39,8 @@
 #'   intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.
 #' @param mode Integer; 1 uses \code{group1 - group2}, 2 uses \code{group2 - group1}.
 #' @param conf_level Confidence level for CIs (default 0.95).
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param verbose Logical; if TRUE, prints how many OpenMP threads are used.
 #'
 #' @return An object of class \code{"ba"} (list) with elements:
@@ -80,6 +82,7 @@ ba <- function(group1,
                loa_multiplier = 1.96,
                mode = 1L,
                conf_level = 0.95,
+               n_threads = getOption("matrixCorr.threads", 1L),
                verbose = FALSE) {
   # -- validate ---------------------------------------------------------------
   if (!is.numeric(group1) || !is.numeric(group2)) {
@@ -105,6 +108,7 @@ ba <- function(group1,
       message = "`conf_level` must be in (0, 1)."
     )
   }
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(verbose, arg = "verbose")
 
   called.with <- length(group1)
@@ -116,10 +120,10 @@ ba <- function(group1,
       n_pairs = n_pairs
     )
   }
-  if (isTRUE(verbose)) cat("Using", ba_openmp_threads(), "OpenMP threads\n")
+  if (isTRUE(verbose)) cat("Using", n_threads, "OpenMP threads\n")
 
   # -- compute in C++ ---------------------------------------------------------
-  ba_out <- bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level)
+  ba_out <- bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level, n_threads)
   ba_out <- structure(
     list(
       means = as.numeric(ba_out$means),

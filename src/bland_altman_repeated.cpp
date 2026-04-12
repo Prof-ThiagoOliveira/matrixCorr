@@ -11,6 +11,7 @@
 
 // bring helpers
 #include "matrixCorr_detail.h"
+#include "matrixCorr_omp.h"
 
 using namespace Rcpp;
 using namespace arma;
@@ -1228,9 +1229,11 @@ Rcpp::List bland_altman_repeated_em_ext_cpp(
     double tol = 1e-6,
     double conf_level = 0.95,
     double loa_multiplier_arg = NA_REAL,
-    bool use_cov_su_se = true
+    bool use_cov_su_se = true,
+    int n_threads = 1
 ) {
   (void) use_cov_su_se;
+  omp_set_num_threads(std::max(1, n_threads));
 
   if (y.size() == 0) stop("Empty input.");
   if (use_ar1 && Rcpp::NumericVector::is_na(ar1_rho) == false && std::fabs(ar1_rho) >= 0.999)

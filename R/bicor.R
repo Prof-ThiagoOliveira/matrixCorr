@@ -203,6 +203,38 @@ bicor <- function(
     w                = NULL,
     sparse_threshold = NULL
 ) {
+  if (missing(na_method) &&
+      isFALSE(ci) &&
+      missing(n_threads) &&
+      identical(c_const, 9) &&
+      identical(max_p_outliers, 1) &&
+      missing(pearson_fallback) &&
+      isFALSE(mad_consistent) &&
+      is.null(w) &&
+      is.null(sparse_threshold)) {
+    numeric_data <- validate_corr_input(data)
+    colnames_data <- colnames(numeric_data)
+    res <- bicor_matrix_cpp(
+      numeric_data,
+      c_const = 9,
+      maxPOutliers = 1,
+      pearson_fallback = 1L,
+      n_threads = getOption("matrixCorr.threads", 1L)
+    )
+    if (!is.null(colnames_data)) {
+      dimnames(res) <- .mc_square_dimnames(colnames_data)
+    }
+    return(.mc_structure_corr_matrix(
+      res,
+      class_name = "bicor",
+      method = "biweight_mid_correlation",
+      description = paste0(
+        "Median/MAD-based biweight mid-correlation (bicor); max_p_outliers = 1",
+        ", MAD = raw; fallback = hybrid; NA mode = error."
+      )
+    ))
+  }
+
   pf <- match.arg(pearson_fallback)
   pf_int <- switch(pf, "none" = 0L, "hybrid" = 1L, "all" = 2L)
   na_method <- match.arg(na_method)
@@ -249,6 +281,7 @@ bicor <- function(
 
   # --- MAD consistency via effective c
   c_eff <- if (isTRUE(mad_consistent)) c_const * 1.4826 else c_const
+  dn <- .mc_square_dimnames(colnames_data)
 
   # --- choose backend
   if (is.null(w) && na_method == "error") {
@@ -286,9 +319,9 @@ bicor <- function(
       n_threads        = n_threads
     )
   }
+  res <- .mc_set_matrix_dimnames(res, colnames_data)
 
   # --- names & metadata
-  colnames(res) <- rownames(res) <- colnames_data
   desc <- paste0(
     "Median/MAD-based biweight mid-correlation (bicor); max_p_outliers = ", max_p_outliers,
     ", MAD = ", if (mad_consistent) "normal-consistent (1.4826 * raw)" else "raw",
@@ -299,39 +332,38 @@ bicor <- function(
   inference_attr <- NULL
   if (isTRUE(ci)) {
     n_complete <- .mc_bicor_n_complete(numeric_data)
-    dimnames(n_complete) <- list(colnames_data, colnames_data)
-    diagnostics <- list(n_complete = n_complete)
+    diagnostics <- list(n_complete = .mc_set_matrix_dimnames(n_complete, colnames_data))
     inference_attr <- .mc_bicor_large_sample_inference(
       est = res,
-      n_complete = n_complete
+      n_complete = diagnostics$n_complete
     )
     ci_attr <- .mc_bicor_fisher_ci(
       est = res,
-      n_complete = n_complete,
+      n_complete = diagnostics$n_complete,
       conf_level = conf_level
     )
-    dimnames(ci_attr$est) <- list(colnames_data, colnames_data)
-    dimnames(ci_attr$lwr.ci) <- list(colnames_data, colnames_data)
-    dimnames(ci_attr$upr.ci) <- list(colnames_data, colnames_data)
   }
 
   # --- default: dense matrix with S3 class (original behaviour)
   if (is.null(sparse_threshold)) {
-    out <- .mc_structure_corr_matrix(
+    return(.mc_structure_corr_matrix(
       res,
       class_name = "bicor",
       method = "biweight_mid_correlation",
       description = desc,
-      diagnostics = diagnostics
-    )
-    if (!is.null(ci_attr)) {
-      attr(out, "ci") <- ci_attr
-      attr(out, "conf.level") <- conf_level
-    }
-    if (!is.null(inference_attr)) {
-      attr(out, "inference") <- inference_attr
-    }
-    return(out)
+      diagnostics = diagnostics,
+      extra_attrs = c(
+        if (!is.null(ci_attr)) {
+          list(
+            ci = ci_attr,
+            conf.level = conf_level
+          )
+        },
+        if (!is.null(inference_attr)) {
+          list(inference = inference_attr)
+        }
+      )
+    ))
   }
 
   # --- optional sparse thresholding (S4 Matrix, no S3 class mutation)
@@ -353,9 +385,9 @@ bicor <- function(
     res_dense,
     class_name = "bicor",
     method = "biweight_mid_correlation",
-    description = paste0(desc, " Sparse threshold = ", sparse_threshold, ".")
+    description = paste0(desc, " Sparse threshold = ", sparse_threshold, "."),
+    extra_attrs = list(sparse_info = sparse_info)
   )
-  attr(res_dense, "sparse_info") <- sparse_info
   res_dense
 }
 

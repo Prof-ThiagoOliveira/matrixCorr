@@ -509,14 +509,15 @@ pbcor <- function(data,
     validate_corr_input(data, check_na = FALSE)
   }
   colnames_data <- colnames(numeric_data)
+  dn <- .mc_square_dimnames(colnames_data)
 
   res <- if (na_method == "error") {
-    pbcor_matrix_cpp(as.matrix(numeric_data), beta = beta, n_threads = n_threads)
+    pbcor_matrix_cpp(numeric_data, beta = beta, n_threads = n_threads)
   } else {
-    pbcor_matrix_pairwise_cpp(as.matrix(numeric_data), beta = beta, min_n = 5L, n_threads = n_threads)
+    pbcor_matrix_pairwise_cpp(numeric_data, beta = beta, min_n = 5L, n_threads = n_threads)
   }
+  res <- .mc_set_matrix_dimnames(res, colnames_data)
 
-  colnames(res) <- rownames(res) <- colnames_data
   payload <- NULL
   if (isTRUE(ci) || isTRUE(p_value)) {
     payload <- .mc_pbcor_pairwise_payload(
@@ -531,7 +532,7 @@ pbcor <- function(data,
     )
   }
 
-  out <- .mc_structure_corr_matrix(
+  .mc_structure_corr_matrix(
     res,
     class_name = "pbcor",
     method = "percentage_bend_correlation",
@@ -539,17 +540,20 @@ pbcor <- function(data,
       "Percentage bend correlation; beta = ", beta,
       "; NA mode = ", na_method, "."
     ),
-    diagnostics = if (is.null(payload)) NULL else payload$diagnostics
+    diagnostics = if (is.null(payload)) NULL else payload$diagnostics,
+    extra_attrs = c(
+      if (!is.null(payload$ci)) {
+        list(
+          ci = payload$ci,
+          conf.level = conf_level,
+          n_boot = n_boot
+        )
+      },
+      if (!is.null(payload$inference)) {
+        list(inference = payload$inference)
+      }
+    )
   )
-  if (!is.null(payload$ci)) {
-    attr(out, "ci") <- payload$ci
-    attr(out, "conf.level") <- conf_level
-    attr(out, "n_boot") <- n_boot
-  }
-  if (!is.null(payload$inference)) {
-    attr(out, "inference") <- payload$inference
-  }
-  out
 }
 
 #' @rdname pbcor

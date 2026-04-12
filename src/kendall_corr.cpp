@@ -107,7 +107,6 @@ double bisect_root(Func&& g, double lo, double hi,
   double left = lo;
   double right = hi;
   double f_left = f_lo;
-  double f_right = f_hi;
 
   for (int iter = 0; iter < max_iter; ++iter) {
     const double mid = 0.5 * (left + right);
@@ -121,7 +120,6 @@ double bisect_root(Func&& g, double lo, double hi,
       f_left = f_mid;
     } else {
       right = mid;
-      f_right = f_mid;
     }
   }
 

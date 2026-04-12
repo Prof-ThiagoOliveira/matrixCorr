@@ -77,27 +77,30 @@
 #' @export
 shrinkage_corr <- function(data,
                            n_threads = getOption("matrixCorr.threads", 1L)) {
-  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   numeric_data <- validate_corr_input(data)
   colnames_data <- colnames(numeric_data)
 
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
-  set_omp_threads(n_threads)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
 
   # call the C++ backend
   result <- sss_cor_cpp(numeric_data)
+  if (!is.null(colnames_data)) {
+    dimnames(result) <- .mc_square_dimnames(colnames_data)
+  }
 
-  # dimnames and metadata
-  colnames(result) <- rownames(result) <- colnames_data
-  out <- .mc_structure_corr_matrix(
+  .mc_structure_corr_matrix(
     result,
     class_name = "shrinkage_corr",
     method = "schafer_shrinkage",
-    description = "Schafer-Strimmer shrinkage correlation matrix"
+    description = "Schafer-Strimmer shrinkage correlation matrix",
+    classes = c("shrinkage_corr", "schafer_corr", "matrix")
   )
-  class(out) <- c("shrinkage_corr", "schafer_corr", "matrix")
-  out
 }
 
 #' Compatibility alias for \code{shrinkage_corr()}.

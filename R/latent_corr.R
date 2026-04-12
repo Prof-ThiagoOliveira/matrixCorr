@@ -145,41 +145,60 @@
   mat
 }
 
+.mc_square_dimnames <- function(names) {
+  list(names, names)
+}
+
+.mc_set_matrix_dimnames <- function(x, row_names = NULL, col_names = row_names) {
+  if (is.null(row_names) && is.null(col_names)) {
+    return(x)
+  }
+  dimnames(x) <- list(row_names, col_names)
+  x
+}
+
 .mc_attach_scalar_latent <- function(x, method, description,
                                      diagnostics = NULL, thresholds = NULL) {
-  out <- structure(
-    as.numeric(x),
-    method = method,
-    description = description,
-    package = "matrixCorr",
-    diagnostics = diagnostics,
-    thresholds = thresholds
-  )
-  attr(out, "estimate") <- as.numeric(x)
+  extra_attrs <- list(estimate = as.numeric(x))
   if (is.list(diagnostics) && length(diagnostics$n_complete) == 1L) {
-    attr(out, "n_obs") <- as.integer(diagnostics$n_complete)
+    extra_attrs$n_obs <- as.integer(diagnostics$n_complete)
   }
-  out
+  do.call(
+    structure,
+    c(
+      list(
+        .Data = as.numeric(x),
+        method = method,
+        description = description,
+        package = "matrixCorr",
+        diagnostics = diagnostics,
+        thresholds = thresholds
+      ),
+      extra_attrs
+    )
+  )
 }
 
 .mc_attach_latent_inference <- function(x, payload, conf_level = NULL) {
+  attrs <- attributes(x)
   if (is.list(payload$inference)) {
-    attr(x, "inference") <- payload$inference
+    attrs$inference <- payload$inference
     if (length(payload$inference$estimate) == 1L) {
-      attr(x, "estimate") <- as.numeric(payload$inference$estimate)
+      attrs$estimate <- as.numeric(payload$inference$estimate)
     }
     if (length(payload$inference$n_obs) == 1L) {
-      attr(x, "n_obs") <- as.integer(payload$inference$n_obs)
+      attrs$n_obs <- as.integer(payload$inference$n_obs)
     }
   }
   if (is.list(payload$ci)) {
-    attr(x, "ci") <- payload$ci
-    attr(x, "estimate") <- as.numeric(payload$ci$est)
-    attr(x, "lwr") <- as.numeric(payload$ci$lwr.ci)
-    attr(x, "upr") <- as.numeric(payload$ci$upr.ci)
-    attr(x, "conf.level") <- conf_level %||% payload$ci$conf.level
-    attr(x, "conf_level") <- conf_level %||% payload$ci$conf.level
+    attrs$ci <- payload$ci
+    attrs$estimate <- as.numeric(payload$ci$est)
+    attrs$lwr <- as.numeric(payload$ci$lwr.ci)
+    attrs$upr <- as.numeric(payload$ci$upr.ci)
+    attrs$conf.level <- conf_level %||% payload$ci$conf.level
+    attrs$conf_level <- conf_level %||% payload$ci$conf.level
   }
+  attributes(x) <- attrs
   x
 }
 
@@ -1015,15 +1034,28 @@
 
 .mc_structure_corr_matrix <- function(mat, class_name, method, description,
                                       diagnostics = NULL, thresholds = NULL,
-                                      correct = NULL) {
-  mat <- structure(mat, class = c(class_name, "matrix"))
-  attr(mat, "method") <- method
-  attr(mat, "description") <- description
-  attr(mat, "package") <- "matrixCorr"
-  attr(mat, "diagnostics") <- diagnostics
-  attr(mat, "thresholds") <- thresholds
-  attr(mat, "correct") <- correct
-  mat
+                                      correct = NULL, dimnames = NULL,
+                                      extra_attrs = NULL,
+                                      classes = c(class_name, "matrix")) {
+  if (!is.null(dimnames)) {
+    dimnames(mat) <- dimnames
+  }
+  do.call(
+    structure,
+    c(
+      list(
+        .Data = mat,
+        class = classes,
+        method = method,
+        description = description,
+        package = "matrixCorr",
+        diagnostics = diagnostics,
+        thresholds = thresholds,
+        correct = correct
+      ),
+      extra_attrs
+    )
+  )
 }
 
 #' @title Pairwise Tetrachoric Correlation
@@ -1178,6 +1210,110 @@ tetrachoric <- function(data,
                         conf_level = 0.95,
                         correct = 0.5,
                         ...) {
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+    check_scalar_nonneg(correct, arg = "correct")
+
+    if (is.null(y) && inherits(data, "table")) {
+      tab <- as.matrix(data)
+      est <- .mc_tetrachoric_table_estimate(tab, correct = correct)
+      thresholds <- .mc_tetra_table_thresholds(tab, correct = correct)
+      diagnostics <- .mc_latent_pair_metadata(
+        est = est,
+        tab = tab,
+        n_complete = sum(tab),
+        correct = correct,
+        thresholds = thresholds
+      )
+      return(.mc_attach_scalar_latent(
+        est,
+        method = "tetrachoric",
+        description = "Pairwise tetrachoric correlation",
+        diagnostics = diagnostics,
+        thresholds = thresholds
+      ))
+    }
+
+    if (!is.null(y)) {
+      check_same_length(data, y, arg_x = "data", arg_y = "y")
+      .mc_check_latent_missing(list(data = data, y = y), check_na = TRUE, arg = "data")
+
+      enc_x <- .mc_encode_ordinal_vector(data, binary = TRUE)
+      enc_y <- .mc_encode_ordinal_vector(y, binary = TRUE)
+      if (is.null(enc_x) || is.null(enc_y)) {
+        abort_bad_arg(
+          "data",
+          message = "and {.arg y} must both be binary (two-level) variables."
+        )
+      }
+
+      pair <- .mc_pair_complete(enc_x$code, enc_y$code, TRUE)
+      est <- .mc_pair_tetrachoric(pair$x, pair$y, correct, TRUE)
+      x01 <- as.integer(pair$x) - min(as.integer(pair$x), na.rm = TRUE)
+      y01 <- as.integer(pair$y) - min(as.integer(pair$y), na.rm = TRUE)
+      tab <- .mc_fast_binary_table01(x01, y01)
+      thresholds <- list(data = .mc_binary_tau(x01), y = .mc_binary_tau(y01))
+      diagnostics <- .mc_latent_pair_metadata(
+        est = est,
+        tab = tab,
+        n_complete = length(pair$x),
+        correct = correct,
+        thresholds = thresholds
+      )
+      return(.mc_attach_scalar_latent(
+        est,
+        method = "tetrachoric",
+        description = "Pairwise tetrachoric correlation",
+        diagnostics = diagnostics,
+        thresholds = thresholds
+      ))
+    }
+
+    enc <- .mc_extract_discrete_columns(data, kind = "binary", arg = "data", min_cols = 2L)
+    .mc_check_latent_missing(lapply(enc, `[[`, "code"), check_na = TRUE, arg = "data")
+
+    x_mat <- .mc_encode_list_to_matrix(enc)
+    tau <- vapply(enc, function(z) {
+      code <- as.integer(z$code)
+      .mc_binary_tau(code - min(code, na.rm = TRUE))
+    }, numeric(1))
+    out <- matrixCorr_tetrachoric_matrix_cpp(
+      x = x_mat,
+      tau = tau,
+      correct = correct,
+      pairwise_complete = FALSE
+    )
+    dimnames(out) <- list(names(enc), names(enc))
+
+    p <- length(enc)
+    diag_info <- .mc_matrix_diagnostics_template(p, dimnames(out))
+    diag(diag_info$zero_cells) <- 0L
+    diag(diag_info$n_complete) <- colSums(!is.na(x_mat))
+    diag(diag_info$corrected) <- FALSE
+    diag(diag_info$boundary) <- FALSE
+    diag(diag_info$near_boundary) <- FALSE
+    diag(diag_info$converged) <- is.finite(diag(out))
+    for (j in seq_len(p - 1L)) {
+      for (k in (j + 1L):p) {
+        pair <- .mc_pair_complete(enc[[j]]$code, enc[[k]]$code, TRUE)
+        x01 <- as.integer(pair$x) - min(as.integer(pair$x), na.rm = TRUE)
+        y01 <- as.integer(pair$y) - min(as.integer(pair$y), na.rm = TRUE)
+        tab <- .mc_fast_binary_table01(x01, y01)
+        diag_info <- .mc_fill_pair_diag(diag_info, j, k, out[j, k], tab, length(pair$x), correct)
+      }
+    }
+    thresholds <- as.list(tau)
+    names(thresholds) <- names(enc)
+    return(.mc_structure_corr_matrix(
+      out,
+      class_name = "tetrachoric_corr",
+      method = "tetrachoric",
+      description = "Pairwise tetrachoric correlation matrix",
+      diagnostics = diag_info,
+      thresholds = thresholds,
+      correct = correct
+    ))
+  }
+
   legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
   na_cfg <- resolve_na_args(
     na_method = na_method,
@@ -1649,6 +1785,122 @@ polychoric <- function(data,
                        conf_level = 0.95,
                        correct = 0.5,
                        ...) {
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+    check_scalar_nonneg(correct, arg = "correct")
+
+    if (is.null(y) && inherits(data, "table")) {
+      tab <- as.matrix(data)
+      est <- .mc_polychoric_table_estimate(tab, correct = correct)
+      thresholds <- .mc_poly_table_thresholds(tab, correct = correct)
+      diagnostics <- .mc_latent_pair_metadata(
+        est = est,
+        tab = tab,
+        n_complete = sum(tab),
+        correct = correct,
+        thresholds = thresholds
+      )
+      return(.mc_attach_scalar_latent(
+        est,
+        method = "polychoric",
+        description = "Pairwise polychoric correlation",
+        diagnostics = diagnostics,
+        thresholds = thresholds
+      ))
+    }
+
+    if (!is.null(y)) {
+      check_same_length(data, y, arg_x = "data", arg_y = "y")
+      .mc_check_latent_missing(list(data = data, y = y), check_na = TRUE, arg = "data")
+
+      enc_x <- .mc_encode_ordinal_vector(data, binary = FALSE)
+      enc_y <- .mc_encode_ordinal_vector(y, binary = FALSE)
+      if (is.null(enc_x) || is.null(enc_y)) {
+        abort_bad_arg("data", message = "and {.arg y} must both be ordinal variables.")
+      }
+      n_x <- length(enc_x$levels)
+      n_y <- length(enc_y$levels)
+      global <- identical(n_x, n_y)
+      pair <- .mc_pair_complete(enc_x$code, enc_y$code, TRUE)
+      est <- .mc_pair_polychoric(
+        pair$x, pair$y,
+        n_x = n_x,
+        n_y = n_y,
+        correct = correct,
+        check_na = TRUE,
+        tau_x = if (global) .mc_global_cutpoints(pair$x, n_x) else NULL,
+        tau_y = if (global) .mc_global_cutpoints(pair$y, n_y) else NULL,
+        global = global
+      )
+      tab <- .mc_fast_ordinal_table(pair$x, pair$y, n_x = n_x, n_y = n_y)
+      thresholds <- list(
+        data = .mc_global_cutpoints(pair$x, n_x),
+        y = .mc_global_cutpoints(pair$y, n_y)
+      )
+      diagnostics <- .mc_latent_pair_metadata(
+        est = est,
+        tab = tab,
+        n_complete = length(pair$x),
+        correct = correct,
+        thresholds = thresholds
+      )
+      return(.mc_attach_scalar_latent(
+        est,
+        method = "polychoric",
+        description = "Pairwise polychoric correlation",
+        diagnostics = diagnostics,
+        thresholds = thresholds
+      ))
+    }
+
+    enc <- .mc_extract_discrete_columns(data, kind = "ordinal", arg = "data", min_cols = 2L)
+    .mc_check_latent_missing(lapply(enc, `[[`, "code"), check_na = TRUE, arg = "data")
+
+    p <- length(enc)
+    n_levels <- vapply(enc, function(z) length(z$levels), integer(1))
+    global_all <- length(unique(n_levels)) == 1L
+    tau_mat <- if (global_all) .mc_tau_matrix(enc) else matrix(NA_real_, nrow = 0L, ncol = 0L)
+    x_mat <- .mc_encode_list_to_matrix(enc)
+    out <- matrixCorr_polychoric_matrix_cpp(
+      x = x_mat,
+      n_levels = n_levels,
+      tau_mat = tau_mat,
+      global_all = global_all,
+      correct = correct,
+      pairwise_complete = FALSE
+    )
+    dimnames(out) <- list(names(enc), names(enc))
+
+    diag_info <- .mc_matrix_diagnostics_template(p, dimnames(out))
+    diag(diag_info$zero_cells) <- 0L
+    diag(diag_info$n_complete) <- vapply(enc, function(z) sum(!is.na(z$code)), integer(1))
+    diag(diag_info$corrected) <- FALSE
+    diag(diag_info$boundary) <- FALSE
+    diag(diag_info$near_boundary) <- FALSE
+    diag(diag_info$converged) <- is.finite(diag(out))
+    for (j in seq_len(p - 1L)) {
+      for (k in (j + 1L):p) {
+        pair <- .mc_pair_complete(enc[[j]]$code, enc[[k]]$code, TRUE)
+        tab <- .mc_fast_ordinal_table(
+          pair$x, pair$y,
+          n_x = length(enc[[j]]$levels),
+          n_y = length(enc[[k]]$levels)
+        )
+        diag_info <- .mc_fill_pair_diag(diag_info, j, k, out[j, k], tab, length(pair$x), correct)
+      }
+    }
+    thresholds <- lapply(enc, function(z) .mc_global_cutpoints(z$code, length(z$levels)))
+    names(thresholds) <- names(enc)
+    return(.mc_structure_corr_matrix(
+      out,
+      class_name = "polychoric_corr",
+      method = "polychoric",
+      description = "Pairwise polychoric correlation matrix",
+      diagnostics = diag_info,
+      thresholds = thresholds,
+      correct = correct
+    ))
+  }
+
   legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
   na_cfg <- resolve_na_args(
     na_method = na_method,
@@ -2118,6 +2370,45 @@ polyserial <- function(data,
                        p_value = FALSE,
                        conf_level = 0.95,
                        ...) {
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+    scalar <- is.null(dim(data)) && is.atomic(data) && !is.factor(data) &&
+      is.null(dim(y)) && is.atomic(y)
+
+    x_mat <- .mc_extract_continuous_matrix(data, arg = "data", min_cols = 1L)
+    y_enc <- .mc_extract_discrete_columns(y, kind = "ordinal", arg = "y", min_cols = 1L)
+    if (nrow(x_mat) != length(y_enc[[1L]]$code)) {
+      abort_bad_arg("data", message = "and {.arg y} must have the same number of observations.")
+    }
+    .mc_check_latent_missing(
+      c(as.list(as.data.frame(x_mat)), lapply(y_enc, `[[`, "code")),
+      check_na = TRUE,
+      arg = "data"
+    )
+
+    if (scalar) {
+      return(.mc_pair_polyserial(x_mat[, 1L], y_enc[[1L]]$code, TRUE))
+    }
+
+    out <- matrix(
+      NA_real_,
+      nrow = ncol(x_mat),
+      ncol = length(y_enc),
+      dimnames = list(colnames(x_mat), names(y_enc))
+    )
+    for (j in seq_len(ncol(x_mat))) {
+      xj <- x_mat[, j]
+      for (k in seq_along(y_enc)) {
+        out[j, k] <- .mc_pair_polyserial(xj, y_enc[[k]]$code, TRUE)
+      }
+    }
+    return(.mc_structure_corr_matrix(
+      out,
+      class_name = "polyserial_corr",
+      method = "polyserial",
+      description = "Polyserial correlation matrix (continuous x ordinal)"
+    ))
+  }
+
   legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
   na_cfg <- resolve_na_args(
     na_method = na_method,
@@ -2484,6 +2775,45 @@ biserial <- function(data,
                      p_value = FALSE,
                      conf_level = 0.95,
                      ...) {
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+    scalar <- is.null(dim(data)) && is.atomic(data) && !is.factor(data) &&
+      is.null(dim(y)) && is.atomic(y)
+
+    x_mat <- .mc_extract_continuous_matrix(data, arg = "data", min_cols = 1L)
+    y_enc <- .mc_extract_discrete_columns(y, kind = "binary", arg = "y", min_cols = 1L)
+    if (nrow(x_mat) != length(y_enc[[1L]]$code)) {
+      abort_bad_arg("data", message = "and {.arg y} must have the same number of observations.")
+    }
+    .mc_check_latent_missing(
+      c(as.list(as.data.frame(x_mat)), lapply(y_enc, `[[`, "code")),
+      check_na = TRUE,
+      arg = "data"
+    )
+
+    out <- matrix(
+      NA_real_,
+      nrow = ncol(x_mat),
+      ncol = length(y_enc),
+      dimnames = list(colnames(x_mat), names(y_enc))
+    )
+    for (j in seq_len(ncol(x_mat))) {
+      xj <- x_mat[, j]
+      for (k in seq_along(y_enc)) {
+        out[j, k] <- .mc_pair_biserial(xj, y_enc[[k]]$code, TRUE)
+      }
+    }
+    out <- .mc_scalar_or_matrix(out, scalar = scalar)
+    if (scalar) {
+      return(out)
+    }
+    return(.mc_structure_corr_matrix(
+      out,
+      class_name = "biserial_corr",
+      method = "biserial",
+      description = "Biserial correlation matrix (continuous x binary)"
+    ))
+  }
+
   legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
   na_cfg <- resolve_na_args(
     na_method = na_method,

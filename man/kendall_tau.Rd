@@ -14,8 +14,8 @@ kendall_tau(
   na_method = c("error", "pairwise"),
   ci = FALSE,
   conf_level = 0.95,
-  n_threads = getOption("matrixCorr.threads", 1L),
   ci_method = c("fieller", "if_el", "brown_benedetti"),
+  n_threads = getOption("matrixCorr.threads", 1L),
   ...
 )
 
@@ -87,12 +87,12 @@ matrix/data-frame mode.}
 \item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
 \code{0.95}.}
 
-\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
-\code{getOption("matrixCorr.threads", 1L)}.}
-
 \item{ci_method}{Confidence-interval engine used when \code{ci = TRUE}.
 Supported Kendall methods are \code{"fieller"} (default),
 \code{"brown_benedetti"}, and \code{"if_el"}.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}

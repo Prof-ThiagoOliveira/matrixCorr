@@ -11,6 +11,7 @@
   time,
   loa_multiplier,
   conf_level,
+  n_threads,
   include_slope,
   use_ar1,
   ar1_rho,
