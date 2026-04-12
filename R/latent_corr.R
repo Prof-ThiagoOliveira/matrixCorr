@@ -132,7 +132,7 @@
     abort_bad_arg(
       arg,
       message = "contains missing, NaN, or infinite values.",
-      .hint = "Set `check_na = FALSE` to use pairwise complete cases."
+      .hint = "Use `na_method = \"pairwise\"` to use pairwise complete cases."
     )
   }
   invisible(NULL)
@@ -147,7 +147,7 @@
 
 .mc_attach_scalar_latent <- function(x, method, description,
                                      diagnostics = NULL, thresholds = NULL) {
-  structure(
+  out <- structure(
     as.numeric(x),
     method = method,
     description = description,
@@ -155,15 +155,30 @@
     diagnostics = diagnostics,
     thresholds = thresholds
   )
+  attr(out, "estimate") <- as.numeric(x)
+  if (is.list(diagnostics) && length(diagnostics$n_complete) == 1L) {
+    attr(out, "n_obs") <- as.integer(diagnostics$n_complete)
+  }
+  out
 }
 
 .mc_attach_latent_inference <- function(x, payload, conf_level = NULL) {
   if (is.list(payload$inference)) {
     attr(x, "inference") <- payload$inference
+    if (length(payload$inference$estimate) == 1L) {
+      attr(x, "estimate") <- as.numeric(payload$inference$estimate)
+    }
+    if (length(payload$inference$n_obs) == 1L) {
+      attr(x, "n_obs") <- as.integer(payload$inference$n_obs)
+    }
   }
   if (is.list(payload$ci)) {
     attr(x, "ci") <- payload$ci
+    attr(x, "estimate") <- as.numeric(payload$ci$est)
+    attr(x, "lwr") <- as.numeric(payload$ci$lwr.ci)
+    attr(x, "upr") <- as.numeric(payload$ci$upr.ci)
     attr(x, "conf.level") <- conf_level %||% payload$ci$conf.level
+    attr(x, "conf_level") <- conf_level %||% payload$ci$conf.level
   }
   x
 }
@@ -560,10 +575,18 @@
     digits = 4,
     topn = .mc_coalesce(topn, .mc_display_option("summary_topn", 5L))
   )
-  class(out) <- if (identical(header, "Latent correlation summary")) {
-    c("summary_latent_corr", "summary_corr_matrix")
+  out <- .mc_finalize_summary_list(
+    out,
+    class_name = if (identical(header, "Latent correlation summary")) {
+      "summary.latent_corr"
+    } else {
+      "summary.matrixCorr"
+    }
+  )
+  if (identical(class(out)[1L], "summary.matrixCorr")) {
+    class(out) <- c("summary.matrixCorr", "summary.corr_matrix")
   } else {
-    "summary_corr_matrix"
+    class(out) <- c("summary.latent_corr", "summary.matrixCorr", "summary.corr_matrix")
   }
   out
 }
@@ -1015,8 +1038,9 @@
 #' single tetrachoric correlation estimate.
 #' @param correct Non-negative continuity correction added to zero-count cells.
 #' Default is \code{0.5}.
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, missing values
-#' are rejected. If \code{FALSE}, pairwise complete cases are used.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing values. \code{"pairwise"} uses pairwise
+#'   complete cases.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' model-based large-sample Wald confidence intervals derived from the observed
 #' information matrix of the latent-variable likelihood.
@@ -1146,11 +1170,21 @@
 #'
 #' @author Thiago de Paula Oliveira
 #' @export
-tetrachoric <- function(data, y = NULL, correct = 0.5, check_na = TRUE,
+tetrachoric <- function(data,
+                        y = NULL,
+                        na_method = c("error", "pairwise"),
                         ci = FALSE,
                         p_value = FALSE,
-                        conf_level = 0.95) {
-  check_bool(check_na)
+                        conf_level = 0.95,
+                        correct = 0.5,
+                        ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
+  check_na <- na_cfg$check_na
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
   check_scalar_nonneg(correct, arg = "correct")
@@ -1469,8 +1503,9 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #' a single polychoric correlation estimate.
 #' @param correct Non-negative continuity correction added to zero-count cells.
 #' Default is \code{0.5}.
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, missing values
-#' are rejected. If \code{FALSE}, pairwise complete cases are used.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing values. \code{"pairwise"} uses pairwise
+#'   complete cases.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' model-based large-sample Wald confidence intervals derived from the observed
 #' information matrix of the latent-variable likelihood.
@@ -1606,11 +1641,21 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #' round(stats::cor(Z), 2)
 #' @author Thiago de Paula Oliveira
 #' @export
-polychoric <- function(data, y = NULL, correct = 0.5, check_na = TRUE,
+polychoric <- function(data,
+                       y = NULL,
+                       na_method = c("error", "pairwise"),
                        ci = FALSE,
                        p_value = FALSE,
-                       conf_level = 0.95) {
-  check_bool(check_na)
+                       conf_level = 0.95,
+                       correct = 0.5,
+                       ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
+  check_na <- na_cfg$check_na
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
   check_scalar_nonneg(correct, arg = "correct")
@@ -1942,16 +1987,17 @@ print.summary.polychoric_corr <- function(x, digits = NULL, n = NULL,
 #' and ordinal variables in \code{y}. Both pairwise vector mode and rectangular
 #' matrix/data-frame mode are supported.
 #'
-#' @usage polyserial(data, y, check_na = TRUE, ci = FALSE, p_value = FALSE,
-#'   conf_level = 0.95)
+#' @usage polyserial(data, y, na_method = c("error", "pairwise"), ci = FALSE, p_value = FALSE,
+#'   conf_level = 0.95, ...)
 #'
 #' @param data A numeric vector, matrix, or data frame containing continuous
 #' variables.
 #' @param y An ordinal vector, matrix, or data frame containing ordinal
 #' variables. Supported columns are factors, ordered factors, logical values,
 #' or integer-like numerics.
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, missing values
-#' are rejected. If \code{FALSE}, pairwise complete cases are used.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing values. \code{"pairwise"} uses pairwise
+#'   complete cases.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' model-based large-sample Wald confidence intervals derived from the observed
 #' information matrix of the latent-variable likelihood.
@@ -2031,6 +2077,8 @@ print.summary.polychoric_corr <- function(x, digits = NULL, n = NULL,
 #' @references
 #' Olsson, U., Drasgow, F., & Dorans, N. J. (1982). The polyserial
 #' correlation coefficient. \emph{Psychometrika}, 47(3), 337-347.
+#' @param ... Deprecated compatibility aliases. The legacy \code{check_na}
+#'   argument is still accepted temporarily.
 #'
 #' @examplesIf requireNamespace("mnormt", quietly = TRUE)
 #' set.seed(125)
@@ -2063,11 +2111,20 @@ print.summary.polychoric_corr <- function(x, digits = NULL, n = NULL,
 #' plot(ps)
 #' @author Thiago de Paula Oliveira
 #' @export
-polyserial <- function(data, y, check_na = TRUE,
+polyserial <- function(data,
+                       y,
+                       na_method = c("error", "pairwise"),
                        ci = FALSE,
                        p_value = FALSE,
-                       conf_level = 0.95) {
-  check_bool(check_na)
+                       conf_level = 0.95,
+                       ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
+  check_na <- na_cfg$check_na
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
   if (isTRUE(ci)) {
@@ -2301,15 +2358,16 @@ print.summary.polyserial_corr <- function(x, digits = NULL, n = NULL,
 #' and binary variables in \code{y}. Both pairwise vector mode and rectangular
 #' matrix/data-frame mode are supported.
 #'
-#' @usage biserial(data, y, check_na = TRUE, ci = FALSE, p_value = FALSE,
-#'   conf_level = 0.95)
+#' @usage biserial(data, y, na_method = c("error", "pairwise"), ci = FALSE, p_value = FALSE,
+#'   conf_level = 0.95, ...)
 #'
 #' @param data A numeric vector, matrix, or data frame containing continuous
 #' variables.
 #' @param y A binary vector, matrix, or data frame. In data-frame mode, only
 #' two-level columns are retained.
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, missing values
-#' are rejected. If \code{FALSE}, pairwise complete cases are used.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing values. \code{"pairwise"} uses pairwise
+#'   complete cases.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' approximate large-sample confidence intervals derived from a Fisher
 #' \eqn{z}-transformation of the biserial estimate.
@@ -2393,6 +2451,8 @@ print.summary.polyserial_corr <- function(x, digits = NULL, n = NULL,
 #'
 #' Fisher, R. A. (1921). On the probable error of a coefficient of
 #' correlation deduced from a small sample. \emph{Metron}, 1, 3-32.
+#' @param ... Deprecated compatibility aliases. The legacy \code{check_na}
+#'   argument is still accepted temporarily.
 #'
 #' @examplesIf requireNamespace("mnormt", quietly = TRUE)
 #' set.seed(126)
@@ -2417,11 +2477,20 @@ print.summary.polyserial_corr <- function(x, digits = NULL, n = NULL,
 #' plot(bs)
 #' @author Thiago de Paula Oliveira
 #' @export
-biserial <- function(data, y, check_na = TRUE,
+biserial <- function(data,
+                     y,
+                     na_method = c("error", "pairwise"),
                      ci = FALSE,
                      p_value = FALSE,
-                     conf_level = 0.95) {
-  check_bool(check_na)
+                     conf_level = 0.95,
+                     ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
+  check_na <- na_cfg$check_na
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
   if (isTRUE(ci)) {
@@ -2776,7 +2845,7 @@ plot.biserial_corr <- function(x, title = "Biserial correlation heatmap",
   for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
   for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
-  out <- structure(df, class = c(summary_class, "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = summary_class)
   attr(out, "overview") <- .mc_summary_corr_matrix(object, header = "Latent correlation summary")
   attr(out, "has_ci") <- include_ci
   attr(out, "has_p") <- include_p
@@ -2866,7 +2935,7 @@ plot.biserial_corr <- function(x, title = "Biserial correlation heatmap",
   for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
   for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
-  out <- structure(df, class = c("summary.biserial_corr", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.biserial_corr")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_ci") <- include_ci
   attr(out, "has_p") <- include_p
@@ -2941,7 +3010,7 @@ print.summary.biserial_corr <- function(x, digits = NULL, n = NULL,
 #' Prints compact summary statistics returned by matrix-style
 #' \code{summary()} methods in \pkg{matrixCorr}.
 #'
-#' @param x An object of class \code{summary_corr_matrix}.
+#' @param x An object of class \code{summary.matrixCorr}.
 #' @param digits Integer; number of decimal places to print.
 #' @param n Optional row threshold for compact preview output.
 #' @param topn Optional number of leading/trailing rows to show when truncated.
@@ -2952,16 +3021,16 @@ print.summary.biserial_corr <- function(x, digits = NULL, n = NULL,
 #' @param ... Unused.
 #'
 #' @return Invisibly returns \code{x}.
-#' @method print summary_corr_matrix
+#' @method print summary.matrixCorr
 #' @export
-print.summary_corr_matrix <- function(x,
-                                      digits = 4,
-                                      n = NULL,
-                                      topn = NULL,
-                                      max_vars = NULL,
-                                      width = NULL,
-                                      show_ci = NULL,
-                                      ...) {
+print.summary.matrixCorr <- function(x,
+                                     digits = 4,
+                                     n = NULL,
+                                     topn = NULL,
+                                     max_vars = NULL,
+                                     width = NULL,
+                                     show_ci = NULL,
+                                     ...) {
   cfg <- .mc_resolve_display_args(
     context = "summary",
     n = n,
@@ -3022,6 +3091,30 @@ print.summary_corr_matrix <- function(x,
   invisible(x)
 }
 
+#' @method print summary.corr_matrix
+#' @export
+print.summary.corr_matrix <- function(x,
+                                      digits = 4,
+                                      n = NULL,
+                                      topn = NULL,
+                                      max_vars = NULL,
+                                      width = NULL,
+                                      show_ci = NULL,
+                                      ...) {
+  print.summary.matrixCorr(
+    x,
+    digits = digits,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    ...
+  )
+}
+
+print.summary_corr_matrix <- print.summary.corr_matrix
+
 #' @title Summary Method for Latent Correlation Matrices
 #'
 #' @description
@@ -3029,13 +3122,15 @@ print.summary_corr_matrix <- function(x,
 #' \code{summary.tetrachoric_corr()}, \code{summary.polychoric_corr()},
 #' \code{summary.polyserial_corr()}, and \code{summary.biserial_corr()}.
 #'
-#' @param x An object of class \code{summary_latent_corr}.
+#' @param x An object of class \code{summary.latent_corr}.
 #' @param digits Integer; number of decimal places to print.
 #' @param ... Unused.
 #'
 #' @return Invisibly returns \code{x}.
-#' @method print summary_latent_corr
+#' @method print summary.latent_corr
 #' @export
-print.summary_latent_corr <- function(x, digits = 4, ...) {
-  print.summary_corr_matrix(x, digits = digits, ...)
+print.summary.latent_corr <- function(x, digits = 4, ...) {
+  print.summary.matrixCorr(x, digits = digits, ...)
 }
+
+print.summary_latent_corr <- print.summary.latent_corr

@@ -112,7 +112,7 @@ test_that("Two-method BA recovers bias and sd_loa under i.i.d. residuals", {
   # Summary object sanity
   sm <- summary(fit)
   expect_s3_class(sm, "summary.ba_repeated")
-  expect_true(all(c("bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm)))
+  expect_true(all(c("bias","sd_loa","loa_low","loa_up","width","n_obs") %in% names(sm)))
   expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm)))
 })
 
@@ -530,9 +530,8 @@ test_that("Column mapping works both with data= and with vectors", {
   )
   expect_true(inherits(fit2, "ba_repeated_matrix"))
 
-  # Stored data_long/mapping present for plotting
-  expect_true(!is.null(fit1$data_long) && !is.null(fit1$mapping))
-  expect_true(!is.null(fit2$data_long) && !is.null(fit2$mapping))
+  expect_false(any(c("data_long", "mapping") %in% names(fit1)))
+  expect_false(any(c("data_long", "mapping") %in% names(fit2)))
 })
 
 test_that("summary/print produce expected classes and do not error", {
@@ -547,7 +546,7 @@ test_that("summary/print produce expected classes and do not error", {
 
   sm_mat <- summary(fit_mat)
   expect_s3_class(sm_mat, "summary.ba_repeated_matrix")
-  expect_true(all(c("method1","method2","bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm_mat)))
+  expect_true(all(c("item1","item2","bias","sd_loa","loa_low","loa_up","width","n_obs") %in% names(sm_mat)))
   expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm_mat)))
   out_mat <- capture.output(print(sm_mat))
   expect_true(any(grepl("^Agreement estimates$", out_mat)))
@@ -562,7 +561,7 @@ test_that("summary/print produce expected classes and do not error", {
   )
   sm2 <- summary(fit2)
   expect_s3_class(sm2, "summary.ba_repeated")
-  expect_true(all(c("bias","sd_loa","loa_low","loa_up","width","n") %in% names(sm2)))
+  expect_true(all(c("bias","sd_loa","loa_low","loa_up","width","n_obs") %in% names(sm2)))
   expect_false(any(c("ar1_rho", "ar1_estimated") %in% names(sm2)))
   out2 <- capture.output(print(sm2))
   expect_true(any(grepl("^Agreement estimates$", out2)))

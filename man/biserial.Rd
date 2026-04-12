@@ -8,8 +8,8 @@
 \alias{print.summary.biserial_corr}
 \title{Biserial Correlation Between Continuous and Binary Variables}
 \usage{
-biserial(data, y, check_na = TRUE, ci = FALSE, p_value = FALSE,
-  conf_level = 0.95)
+biserial(data, y, na_method = c("error", "pairwise"), ci = FALSE, p_value = FALSE,
+  conf_level = 0.95, ...)
 
 \method{print}{biserial_corr}(
   x,
@@ -64,8 +64,9 @@ variables.}
 \item{y}{A binary vector, matrix, or data frame. In data-frame mode, only
 two-level columns are retained.}
 
-\item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, missing values
-are rejected. If \code{FALSE}, pairwise complete cases are used.}
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing values. \code{"pairwise"} uses pairwise
+complete cases.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach
 approximate large-sample confidence intervals derived from a Fisher
@@ -77,6 +78,8 @@ for each biserial estimate.}
 
 \item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
 \code{0.95}.}
+
+\item{...}{Additional arguments passed to \code{print()}.}
 
 \item{x}{An object of class \code{summary.biserial_corr}.}
 
@@ -92,8 +95,6 @@ from console width.}
 \item{width}{Optional display width; defaults to \code{getOption("width")}.}
 
 \item{show_ci}{One of \code{"yes"} or \code{"no"}.}
-
-\item{...}{Additional arguments passed to \code{print()}.}
 
 \item{title}{Plot title. Default is \code{"Biserial correlation heatmap"}.}
 

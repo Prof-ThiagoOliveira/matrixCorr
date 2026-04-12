@@ -11,16 +11,16 @@
 \usage{
 bicor(
   data,
+  na_method = c("error", "pairwise"),
+  ci = FALSE,
+  conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
   c_const = 9,
   max_p_outliers = 1,
   pearson_fallback = c("hybrid", "none", "all"),
-  na_method = c("error", "pairwise"),
   mad_consistent = FALSE,
   w = NULL,
-  sparse_threshold = NULL,
-  ci = FALSE,
-  conf_level = 0.95,
-  n_threads = getOption("matrixCorr.threads", 1L)
+  sparse_threshold = NULL
 )
 
 diag.bicor(x, ...)
@@ -81,6 +81,21 @@ diag.bicor(x, ...)
 Factors, logicals and common time classes are dropped in the data-frame
 path. Missing values are not allowed unless \code{na_method = "pairwise"}.}
 
+\item{na_method}{One of \code{"error"} (default, fastest) or \code{"pairwise"}.
+With \code{"pairwise"}, each \eqn{(j,k)} correlation is computed on the
+intersection of non-missing rows for the pair.}
+
+\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach approximate
+Fisher-z confidence intervals for the off-diagonal biweight
+mid-correlations. This confidence interval is provided as an additional
+large-sample approximation.}
+
+\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
+\code{0.95}.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
+
 \item{c_const}{Positive numeric. Tukey biweight tuning constant applied to the
 \emph{raw} MAD; default \code{9} (Langfelder & Horvath’s convention).}
 
@@ -98,10 +113,6 @@ degenerate after weighting.
 \item \code{"all"}: force ordinary Pearson for all columns.
 }}
 
-\item{na_method}{One of \code{"error"} (default, fastest) or \code{"pairwise"}.
-With \code{"pairwise"}, each \eqn{(j,k)} correlation is computed on the
-intersection of non-missing rows for the pair.}
-
 \item{mad_consistent}{Logical; if \code{TRUE}, use the normal-consistent MAD
 (\code{MAD_raw * 1.4826}) in the bicor weights. Default \code{FALSE} to
 match Langfelder & Horvath (2012).}
@@ -113,17 +124,6 @@ and Tukey weights are multiplied by \code{w} before normalisation.}
 \item{sparse_threshold}{Optional numeric \eqn{\geq 0}. If supplied, sets
 entries with \code{|r| < sparse_threshold} to 0 and returns a sparse
 \code{"ddiMatrix"} (requires \pkg{Matrix}).}
-
-\item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach approximate
-Fisher-z confidence intervals for the off-diagonal biweight
-mid-correlations. This confidence interval is provided as an additional
-large-sample approximation.}
-
-\item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
-\code{0.95}.}
-
-\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
-\code{getOption("matrixCorr.threads", 1L)}.}
 
 \item{x}{An object of class \code{summary.bicor}.}
 

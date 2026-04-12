@@ -8,7 +8,13 @@
 \alias{print.summary.dcor}
 \title{Pairwise Distance Correlation (dCor)}
 \usage{
-dcor(data, check_na = TRUE, p_value = FALSE)
+dcor(
+  data,
+  na_method = c("error", "pairwise"),
+  p_value = FALSE,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  ...
+)
 
 \method{print}{dcor}(
   x,
@@ -56,13 +62,20 @@ dcor(data, check_na = TRUE, p_value = FALSE)
 \item{data}{A numeric matrix or a data frame with at least two numeric
 columns. All non-numeric columns are dropped. Columns must be numeric.}
 
-\item{check_na}{Logical (default \code{TRUE}). When \code{TRUE}, inputs must
-be free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only if you
-have already handled missingness upstream.}
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing, \code{NaN}, and infinite values.
+\code{"pairwise"} recomputes each association on its own pairwise
+complete-case overlap.}
 
 \item{p_value}{Logical (default \code{FALSE}). If \code{TRUE}, attach
 pairwise p-values, test statistics, and degrees of freedom from the
 distance-correlation t-test of independence.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
+
+\item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
+\code{ggplot2} layers.}
 
 \item{x}{An object of class \code{summary.dcor}.}
 
@@ -78,9 +91,6 @@ from console width.}
 \item{width}{Optional display width; defaults to \code{getOption("width")}.}
 
 \item{show_ci}{One of \code{"yes"} or \code{"no"}.}
-
-\item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
-\code{ggplot2} layers.}
 
 \item{title}{Plot title. Default is \code{"Distance correlation heatmap"}.}
 

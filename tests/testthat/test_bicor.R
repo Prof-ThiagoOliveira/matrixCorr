@@ -314,7 +314,7 @@ test_that("bicor summary switches to pairwise inference view when ci is requeste
 
   expect_s3_class(sm, "summary.bicor")
   expect_s3_class(sm, "data.frame")
-  expect_true(all(c("var1", "var2", "estimate", "n_complete", "lwr", "upr", "statistic", "fisher_z", "p_value") %in% names(sm)))
+  expect_true(all(c("item1", "item2", "estimate", "n_complete", "lwr", "upr", "statistic", "fisher_z", "p_value") %in% names(sm)))
   expect_true(isTRUE(attr(sm, "has_ci")))
   expect_true(isTRUE(attr(sm, "has_p")))
   expect_true(any(grepl("^Biweight mid-correlation summary$", txt)))

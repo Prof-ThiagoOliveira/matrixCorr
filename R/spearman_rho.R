@@ -9,14 +9,17 @@
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Each column must have
 #' at least two non-missing values.
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, the input is
-#' required to be free of \code{NA}/\code{NaN}/\code{Inf}. Set to
-#' \code{FALSE} only when the caller already handled missingness.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"pairwise"} recomputes each correlation on its own pairwise
+#'   complete-case overlap.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' jackknife Euclidean-likelihood confidence intervals for the off-diagonal
 #' Spearman correlations.
 #' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
 #' \code{0.95}.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)}-th element is
 #' the Spearman correlation between the \code{i}-th and \code{j}-th
@@ -77,8 +80,8 @@
 #' Columns with zero rank variance (all values equal) are returned as \code{NA}
 #' along their row/column; the corresponding diagonal entry is also \code{NA}.
 #'
-#' When \code{check_na = FALSE}, each \eqn{(i,j)} estimate is recomputed on the
-#' pairwise complete-case overlap of columns \eqn{i} and \eqn{j}. When
+#' When \code{na_method = "pairwise"}, each \eqn{(i,j)} estimate is recomputed
+#' on the pairwise complete-case overlap of columns \eqn{i} and \eqn{j}. When
 #' \code{ci = TRUE}, confidence intervals are computed in 'C++' using the
 #' jackknife Euclidean-likelihood method of de Carvalho and Marques (2012).
 #' For a pairwise estimate \eqn{U = \hat\rho_S}, delete-one jackknife
@@ -100,8 +103,8 @@
 #' per-pair delete-one recomputation work and are intended for inference rather
 #' than raw-matrix throughput.
 #'
-#' @note Missing values are not allowed when \code{check_na = TRUE}. Columns
-#' with fewer than two observations are excluded.
+#' @note Missing values are rejected when \code{na_method = "error"}. Columns
+#' with fewer than two usable observations are excluded.
 #'
 #' @references
 #' Spearman, C. (1904). The proof and measurement of association between
@@ -154,18 +157,34 @@
 #' @seealso \code{\link{print.spearman_rho}}, \code{\link{plot.spearman_rho}}
 #' @author Thiago de Paula Oliveira
 #' @export
-spearman_rho <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
+spearman_rho <- function(data,
+                         na_method = c("error", "pairwise"),
+                         ci = FALSE,
+                         conf_level = 0.95,
+                         n_threads = getOption("matrixCorr.threads", 1L),
+                         ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
   check_bool(ci, arg = "ci")
   if (isTRUE(ci)) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   }
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
-  numeric_data <- validate_corr_input(data, check_na = check_na)
+  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
   colnames_data <- colnames(numeric_data)
   diagnostics <- NULL
   ci_attr <- NULL
 
-  if (isTRUE(check_na) && !isTRUE(ci)) {
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
+
+  if (isTRUE(na_cfg$check_na) && !isTRUE(ci)) {
     result <- spearman_matrix_cpp(numeric_data)
   } else {
     pairwise <- spearman_matrix_pairwise_cpp(
@@ -256,7 +275,7 @@ spearman_rho <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
   if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
   if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
 
-  out <- structure(df, class = c("summary.spearman_rho", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.spearman_rho")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_ci") <- include_ci
   attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level

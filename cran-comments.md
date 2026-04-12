@@ -16,6 +16,9 @@ This is a new release of `matrixCorr`.
   including pairwise and overall ANOVA-based coefficients.
 * Adds repeated-measures intraclass correlation via `icc_rm_reml()`
   using the package's existing REML variance-components backend.
+* Fixes a bug in `n_threads` handling so the public thread-count controls
+  now take effect consistently across the threaded main correlation,
+  agreement, and ICC functions.
 * Adds a vignette set covering the main package workflows, including
   wide-data correlation, robust and high-dimensional methods, latent
   correlation, agreement and intraclass correlation, and

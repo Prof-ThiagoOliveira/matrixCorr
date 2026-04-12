@@ -8,12 +8,15 @@
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns are dropped. Columns must be numeric.
-#' @param check_na Logical (default \code{TRUE}). When \code{TRUE}, inputs must
-#' be free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only if you
-#' have already handled missingness upstream.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"pairwise"} recomputes each association on its own pairwise
+#'   complete-case overlap.
 #' @param p_value Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' pairwise p-values, test statistics, and degrees of freedom from the
 #' distance-correlation t-test of independence.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)} entry is the
 #' unbiased distance correlation between the \code{i}-th and \code{j}-th
@@ -128,34 +131,51 @@
 #' @author Thiago de paula Oliveira
 #'
 #' @export
-dcor <- function(data, check_na = TRUE, p_value = FALSE) {
+dcor <- function(data,
+                 na_method = c("error", "pairwise"),
+                 p_value = FALSE,
+                 n_threads = getOption("matrixCorr.threads", 1L),
+                 ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
   check_bool(p_value, arg = "p_value")
-  numeric_data <- validate_corr_input(data, check_na = check_na)
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
+  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
   colnames_data <- colnames(numeric_data)
   diagnostics <- NULL
   inference_attr <- NULL
 
-  if (isTRUE(p_value)) {
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
+
+  if (isTRUE(p_value) || !isTRUE(na_cfg$check_na)) {
     pairwise <- ustat_dcor_matrix_pairwise_cpp(
       numeric_data,
-      return_inference = TRUE
+      return_inference = p_value
     )
     dcor_matrix <- pairwise$est
     diagnostics <- list(n_complete = unclass(pairwise$n_complete))
     dimnames(diagnostics$n_complete) <- list(colnames_data, colnames_data)
 
-    inference_attr <- list(
-      method = "dcor_t_test",
-      estimate = unclass(pairwise$estimate),
-      statistic = unclass(pairwise$statistic),
-      parameter = unclass(pairwise$parameter),
-      p_value = unclass(pairwise$p_value),
-      alternative = "greater"
-    )
-    dimnames(inference_attr$estimate) <- list(colnames_data, colnames_data)
-    dimnames(inference_attr$statistic) <- list(colnames_data, colnames_data)
-    dimnames(inference_attr$parameter) <- list(colnames_data, colnames_data)
-    dimnames(inference_attr$p_value) <- list(colnames_data, colnames_data)
+    if (isTRUE(p_value)) {
+      inference_attr <- list(
+        method = "dcor_t_test",
+        estimate = unclass(pairwise$estimate),
+        statistic = unclass(pairwise$statistic),
+        parameter = unclass(pairwise$parameter),
+        p_value = unclass(pairwise$p_value),
+        alternative = "greater"
+      )
+      dimnames(inference_attr$estimate) <- list(colnames_data, colnames_data)
+      dimnames(inference_attr$statistic) <- list(colnames_data, colnames_data)
+      dimnames(inference_attr$parameter) <- list(colnames_data, colnames_data)
+      dimnames(inference_attr$p_value) <- list(colnames_data, colnames_data)
+    }
   } else {
     dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
   }
@@ -220,7 +240,7 @@ dcor <- function(data, check_na = TRUE, p_value = FALSE) {
   for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
   for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
-  out <- structure(df, class = c("summary.dcor", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.dcor")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_p") <- TRUE
   attr(out, "digits") <- digits

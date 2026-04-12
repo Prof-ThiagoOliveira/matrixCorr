@@ -8,11 +8,12 @@ rmcorr(
   data = NULL,
   response,
   subject,
+  na_method = c("error", "pairwise"),
   conf_level = 0.95,
-  check_na = TRUE,
   n_threads = getOption("matrixCorr.threads", 1L),
   keep_data = FALSE,
-  verbose = FALSE
+  verbose = FALSE,
+  ...
 )
 }
 \arguments{
@@ -32,26 +33,30 @@ more responses are supplied, a symmetric matrix of class
 \item{subject}{Subject identifier (factor/character/integer/numeric) or a
 single character string naming the subject column in \code{data}.}
 
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing values in the selected response columns or
+\code{subject}. \code{"pairwise"} uses pairwise complete cases and drops
+subjects with fewer than two complete pairs for the specific contrast.}
+
 \item{conf_level}{Confidence level used for Wald confidence intervals on the
 repeated-measures correlation (default \code{0.95}).}
-
-\item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, missing values
-in the selected response columns or \code{subject} are rejected. If
-\code{FALSE}, each pairwise repeated-measures correlation uses pairwise
-complete cases and drops subjects with fewer than two complete pairs for
-that specific contrast.}
 
 \item{n_threads}{Integer \eqn{\ge 1}. Number of OpenMP threads used by the
 C++ backend in matrix mode. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
 
-\item{keep_data}{Logical (default \code{FALSE}). If \code{TRUE}, matrix-mode
-outputs retain a compact copy of the numeric response matrix plus encoded
-subject identifiers so that \code{view_rmcorr_shiny()} can rebuild pairwise
-scatterplots from the returned object alone.}
+\item{keep_data}{Logical (default \code{FALSE}). If \code{TRUE}, returned
+objects retain a compact copy of the numeric response matrix plus encoded
+subject identifiers. For pairwise fits this enables \code{plot()} to
+reconstruct subject-level fitted lines lazily; for matrix outputs it also
+allows \code{view_rmcorr_shiny()} to rebuild pairwise scatterplots from the
+returned object alone.}
 
 \item{verbose}{Logical; if \code{TRUE}, prints a short note about the thread
 count used in matrix mode.}
+
+\item{...}{Deprecated compatibility aliases. The legacy \code{check_na}
+argument is still accepted here temporarily.}
 }
 \value{
 Either a \code{"rmcorr"} object (exactly two responses) or a
@@ -59,17 +64,21 @@ Either a \code{"rmcorr"} object (exactly two responses) or a
 
 \strong{If \code{"rmcorr"} (exactly two responses)}, outputs include:
 \itemize{
-\item \code{r}; repeated-measures correlation estimate.
+\item \code{estimate}; repeated-measures correlation estimate.
 \item \code{p_value}; two-sided p-value for the common within-subject slope.
-\item \code{conf_int}; confidence interval for \code{r}.
+\item \code{lwr}, \code{upr}; confidence interval limits for
+\code{estimate}.
 \item \code{slope}; common within-subject slope.
 \item \code{df}; residual degrees of freedom \eqn{N - S - 1}.
-\item \code{based.on}; number of complete observations retained after
+\item \code{n_obs}; number of complete observations retained after
 dropping subjects with fewer than two repeated pairs.
 \item \code{n_subjects}; number of contributing subjects.
 \item \code{responses}; names of the fitted response variables.
-\item \code{intercepts}; subject-specific fitted intercepts for the common slope.
-\item \code{data_long}; filtered long data used for fitting and plotting.
+\item compatibility aliases \code{r}, \code{conf_int}, and \code{based.on}
+are reconstructed on access without duplicate storage.
+\item when \code{keep_data = TRUE}, compact source data are retained so
+\code{plot()} can lazily reconstruct \code{data_long},
+\code{intercepts}, and fitted lines; these are otherwise not stored.
 }
 
 \strong{If \code{"rmcorr_matrix"} (\eqn{\ge}3 responses)}, outputs are:
@@ -147,7 +156,7 @@ dat <- data.frame(
   z = subj_eff_y[subject] - 0.4 * within_signal + rnorm(n_subjects * n_rep, sd = 0.4)
 )
 
-fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject")
+fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject", keep_data = TRUE)
 print(fit_xy)
 summary(fit_xy)
 plot(fit_xy)

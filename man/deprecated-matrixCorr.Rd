@@ -48,7 +48,7 @@ biweight_mid_corr(
   n_threads = getOption("matrixCorr.threads", 1L)
 )
 
-distance_corr(data, check_na = TRUE)
+distance_corr(data, na_method = c("error", "pairwise"), ...)
 
 partial_correlation(
   data,
@@ -145,7 +145,8 @@ proportion of outliers on each side.}
 
 \item{pearson_fallback}{Character fallback policy used by \code{bicor()}.}
 
-\item{na_method}{Missing-data policy used by \code{bicor()}.}
+\item{na_method}{Missing-data policy forwarded to the replacement function
+when supported.}
 
 \item{mad_consistent}{Logical; if \code{TRUE}, uses the consistency-corrected MAD.}
 
@@ -155,7 +156,8 @@ proportion of outliers on each side.}
 
 \item{n_threads}{Integer number of OpenMP threads.}
 
-\item{check_na}{Logical validation flag used by \code{dcor()}.}
+\item{...}{Additional arguments forwarded to the replacement function when
+supported.}
 
 \item{lambda}{Numeric regularisation strength used by \code{pcorr()}.}
 

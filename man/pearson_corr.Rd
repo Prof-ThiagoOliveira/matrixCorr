@@ -8,7 +8,14 @@
 \alias{print.summary.pearson_corr}
 \title{Pairwise Pearson correlation}
 \usage{
-pearson_corr(data, check_na = TRUE, ci = FALSE, conf_level = 0.95)
+pearson_corr(
+  data,
+  na_method = c("error", "pairwise"),
+  ci = FALSE,
+  conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  ...
+)
 
 \method{print}{pearson_corr}(
   x,
@@ -61,9 +68,10 @@ pearson_corr(data, check_na = TRUE, ci = FALSE, conf_level = 0.95)
 columns. All non-numeric columns will be excluded. Each column must have
 at least two non-missing values.}
 
-\item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, inputs must be
-free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only when the
-caller already handled missingness.}
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing, \code{NaN}, and infinite values.
+\code{"pairwise"} recomputes each correlation on its own pairwise
+complete-case overlap.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach pairwise
 Fisher-\eqn{z} confidence intervals for the off-diagonal Pearson
@@ -71,6 +79,12 @@ correlations.}
 
 \item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
 \code{0.95}.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
+
+\item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
+\code{ggplot2} layers.}
 
 \item{x}{An object of class \code{summary.pearson_corr}.}
 
@@ -89,9 +103,6 @@ from console width.}
 pairwise summary.}
 
 \item{show_ci}{One of \code{"yes"} or \code{"no"}.}
-
-\item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
-\code{ggplot2} layers.}
 
 \item{title}{Plot title. Default is \code{"Pearson correlation heatmap"}.}
 
@@ -159,10 +170,10 @@ which is then symmetrised to remove round-off asymmetry. Tiny negative values
 on the covariance diagonal due to floating-point rounding are truncated to
 zero before taking square roots.
 
-If a variable has zero variance (\eqn{s_i = 0}), the
-corresponding row and column of \eqn{R} are set to \code{NA}. When
-\code{check_na = FALSE}, each \eqn{(i,j)} correlation is recomputed on the
-pairwise complete-case overlap of columns \eqn{i} and \eqn{j}.
+If a variable has zero variance (\eqn{s_i = 0}), the corresponding row and
+column of \eqn{R} are set to \code{NA}. When
+\code{na_method = "pairwise"}, each \eqn{(i,j)} correlation is recomputed on
+the pairwise complete-case overlap of columns \eqn{i} and \eqn{j}.
 
 When \code{ci = TRUE}, Fisher-\eqn{z} confidence intervals are computed from
 the observed pairwise Pearson correlation \eqn{r_{ij}} and the pairwise
@@ -183,8 +194,8 @@ Confidence intervals are reported only when \eqn{n_{ij} > 3}.
 with \eqn{O(p^2)} memory.
 }
 \note{
-Missing values are not allowed when \code{check_na = TRUE}. Columns
-with fewer than two observations are excluded.
+Missing values are rejected when \code{na_method = "error"}. Columns
+with fewer than two usable observations are excluded.
 }
 \examples{
 ## MVN with AR(1) correlation

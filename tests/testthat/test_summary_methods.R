@@ -17,12 +17,13 @@ test_that("matrix-style correlation summaries use the standard compact format", 
 
   for (obj in objs) {
     sm <- summary(obj)
-    expect_s3_class(sm, "summary_corr_matrix")
+    expect_s3_class(sm, "summary.matrixCorr")
+    expect_s3_class(sm, "summary.corr_matrix")
     expect_identical(sm$n_rows, nrow(obj))
     expect_identical(sm$n_cols, ncol(obj))
     expect_true(isTRUE(sm$symmetric))
 
-    txt <- capture.output(print(sm))
+    txt <- capture.output(matrixCorr:::print.summary.matrixCorr(sm))
     expect_true(any(grepl("^Correlation summary$", txt)))
     expect_true(any(grepl("pairs", txt, fixed = TRUE)))
     expect_true(any(grepl("estimate", txt, fixed = TRUE)))
@@ -38,15 +39,16 @@ test_that("partial correlation summary follows the same matrix-style contract", 
   pc <- pcorr(X, method = "ridge", lambda = 1e-2)
   sm <- summary(pc)
 
-  expect_s3_class(sm, "summary_partial_corr")
-  expect_s3_class(sm, "summary_corr_matrix")
+  expect_s3_class(sm, "summary.partial_corr")
+  expect_s3_class(sm, "summary.matrixCorr")
+  expect_s3_class(sm, "summary.corr_matrix")
   expect_identical(sm$class, "partial_corr")
   expect_identical(sm$method, "ridge")
   expect_equal(sm$lambda, 1e-2)
   expect_identical(sm$n_rows, 4L)
   expect_identical(sm$n_cols, 4L)
 
-  txt <- capture.output(print(sm))
+  txt <- capture.output(matrixCorr:::print.summary.partial_corr(sm))
   expect_true(any(grepl("^Correlation summary$", txt)))
   expect_true(any(grepl("lambda", txt, fixed = TRUE)))
 })
@@ -65,8 +67,9 @@ test_that("latent summaries retain the latent header", {
   ps <- polyserial(X, Y)
   sm <- summary(ps)
 
-  expect_s3_class(sm, "summary_latent_corr")
-  expect_s3_class(sm, "summary_corr_matrix")
-  txt <- capture.output(print(sm))
+  expect_s3_class(sm, "summary.latent_corr")
+  expect_s3_class(sm, "summary.matrixCorr")
+  expect_s3_class(sm, "summary.corr_matrix")
+  txt <- capture.output(matrixCorr:::print.summary.latent_corr(sm))
   expect_true(any(grepl("^Latent correlation summary$", txt)))
 })

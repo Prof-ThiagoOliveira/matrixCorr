@@ -3,7 +3,7 @@
 \name{print.rmcorr}
 \alias{print.rmcorr}
 \alias{summary.rmcorr}
-\alias{print.summary_rmcorr}
+\alias{print.summary.rmcorr}
 \alias{plot.rmcorr}
 \title{Methods for Pairwise rmcorr Objects}
 \usage{
@@ -28,7 +28,7 @@
   ...
 )
 
-\method{print}{summary_rmcorr}(
+\method{print}{summary.rmcorr}(
   x,
   digits = 4,
   n = NULL,
@@ -50,7 +50,7 @@
 )
 }
 \arguments{
-\item{x}{An object of class \code{"rmcorr"} or \code{"summary_rmcorr"}.}
+\item{x}{An object of class \code{"rmcorr"} or \code{"summary.rmcorr"}.}
 
 \item{digits}{Number of significant digits to print.}
 
@@ -87,5 +87,5 @@ argument currently has no effect.}
 \description{
 Print, summarize, and plot methods for pairwise
 repeated-measures correlation objects of class \code{"rmcorr"} and
-\code{"summary_rmcorr"}.
+\code{"summary.rmcorr"}.
 }

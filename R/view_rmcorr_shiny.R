@@ -523,7 +523,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
         "P-value" = format(signif(fit$p_value, digits = 4)),
         "Degrees of freedom" = format(signif(fit$df, digits = 4)),
         "Subjects" = as.character(fit$n_subjects),
-        "Based on" = as.character(fit$based.on)
+        "Observations" = as.character(fit$n_obs)
       ))
     })
   }
@@ -631,6 +631,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
     subject = subject,
     response_names = c(x_var, y_var),
     subject_name = source_data$subject_name %||% "subject",
+    na_method = "pairwise",
     conf_level = source_data$conf_level %||% info$conf_level %||% 0.95
   )
 }

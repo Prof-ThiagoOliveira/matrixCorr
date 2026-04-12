@@ -64,15 +64,15 @@
 #' For `scope = "overall"`, the point estimates are computed jointly from the
 #' full wide matrix using the classical ANOVA decomposition over all columns.
 #' Here the average-measure coefficients use `k = ncol(data)` after any row
-#' filtering required by `check_na`.
+#' filtering required by `na_method`.
 #'
 #' Missing-data handling depends on `scope`:
 #'
-#' - with `check_na = TRUE`, missing values are rejected before estimation;
-#' - with `check_na = FALSE` and `scope = "pairwise"`, each pair uses its own
-#'   complete-case overlap;
-#' - with `check_na = FALSE` and `scope = "overall"`, rows are restricted to
-#'   complete cases across all columns because the overall ANOVA requires a
+#' - with `na_method = "error"`, missing values are rejected before estimation;
+#' - with `na_method = "pairwise"` and `scope = "pairwise"`, each pair uses its
+#'   own complete-case overlap;
+#' - with `na_method = "pairwise"` and `scope = "overall"`, rows are restricted
+#'   to complete cases across all columns because the overall ANOVA requires a
 #'   common wide matrix.
 #'
 #' When `ci = TRUE`, confidence intervals are obtained from the classical
@@ -104,10 +104,11 @@
 #' @param ci Logical; if `TRUE`, return confidence intervals.
 #' @param conf_level Confidence level for the interval output. Ignored when
 #'   `ci = FALSE`.
-#' @param check_na Logical. If `TRUE`, missing values are rejected before
-#'   estimation. If `FALSE`, `scope = "pairwise"` uses pair-specific complete
-#'   cases, while `scope = "overall"` uses complete rows across all analysed
-#'   columns.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values before
+#'   estimation. \code{"pairwise"} uses pair-specific complete cases for
+#'   \code{scope = "pairwise"} and complete rows across all analysed columns
+#'   for \code{scope = "overall"}.
 #' @param n_threads Integer number of OpenMP threads.
 #' @param verbose Logical; if `TRUE`, report how many threads are requested.
 #'
@@ -162,18 +163,24 @@ icc <- function(data,
                 type = c("consistency", "agreement"),
                 unit = c("single", "average"),
                 scope = c("pairwise", "overall"),
+                na_method = c("error", "pairwise"),
                 ci = FALSE,
                 conf_level = 0.95,
-                check_na = TRUE,
                 n_threads = getOption("matrixCorr.threads", 1L),
-                verbose = FALSE) {
+                verbose = FALSE,
+                ...) {
   model <- match.arg(model)
   type <- match.arg(type)
   unit <- match.arg(unit)
   scope <- match.arg(scope)
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
 
   check_bool(ci, arg = "ci")
-  check_bool(check_na, arg = "check_na")
   check_bool(verbose, arg = "verbose")
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   if (isTRUE(ci)) {
@@ -187,7 +194,7 @@ icc <- function(data,
     )
   }
 
-  numeric_data <- validate_corr_input(data, check_na = check_na)
+  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
   mat <- as.matrix(numeric_data)
   colnames_data <- colnames(numeric_data)
 
@@ -198,7 +205,7 @@ icc <- function(data,
   selected_coefficient <- .mc_icc_selected_coefficient(model, type, unit)
 
   if (identical(scope, "overall")) {
-    if (check_na) {
+    if (na_cfg$check_na) {
       overall_data <- validate_corr_input(data, check_na = TRUE)
     } else {
       overall_data <- validate_corr_input(data, check_na = FALSE)
@@ -248,7 +255,7 @@ icc <- function(data,
       n_complete = nrow(mat),
       n_subjects = fit$n_subjects,
       n_raters = fit$n_raters,
-      dropped_rows = if (check_na) 0L else nrow(validate_corr_input(data, check_na = FALSE)) - nrow(mat)
+      dropped_rows = if (na_cfg$check_na) 0L else nrow(validate_corr_input(data, check_na = FALSE)) - nrow(mat)
     )
     return(out)
   }
@@ -257,7 +264,7 @@ icc <- function(data,
     mat,
     form_code = form_code,
     average_unit = average_unit,
-    pairwise_complete = !check_na,
+    pairwise_complete = !na_cfg$check_na,
     return_ci = ci,
     conf_level = conf_level,
     n_threads = n_threads
@@ -440,13 +447,25 @@ summary.icc <- function(object,
 
   df <- do.call(rbind.data.frame, rows)
   rownames(df) <- NULL
+  diag_attr <- attr(object, "diagnostics", exact = TRUE)
+  if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
+    vals <- integer(nrow(df))
+    kk <- 0L
+    for (i in seq_len(nrow(est) - 1L)) {
+      for (j in (i + 1L):ncol(est)) {
+        kk <- kk + 1L
+        vals[kk] <- as.integer(diag_attr$n_complete[i, j])
+      }
+    }
+    df$n_complete <- vals
+  }
   df$estimate <- as.numeric(df$estimate)
   if (include_ci) {
     df$lwr <- as.numeric(df$lwr)
     df$upr <- as.numeric(df$upr)
   }
 
-  df <- structure(df, class = c("summary.icc", "data.frame"))
+  df <- .mc_finalize_summary_df(df, class_name = "summary.icc")
   attr(df, "overview") <- .mc_summary_corr_matrix(est, topn = topn)
   attr(df, "conf.level") <- if (is.finite(conf_level)) conf_level else NA_real_
   attr(df, "has_ci") <- isTRUE(include_ci)
@@ -580,7 +599,7 @@ summary.icc_overall <- function(object,
     anova$p_value <- round(as.numeric(anova$p_value), digits)
   }
 
-  out <- structure(coeff, class = c("summary.icc_overall", "data.frame"))
+  out <- structure(coeff, class = c("summary.icc_overall", "summary.matrixCorr", "data.frame"))
   attr(out, "anova") <- anova
   attr(out, "mean_squares") <- object$mean_squares
   attr(out, "conf.level") <- attr(object, "conf.level", exact = TRUE)
@@ -867,6 +886,8 @@ print.summary.icc_overall <- function(x,
 #' @param ci Logical. If \code{TRUE}, return a CI container for the repeated ICC.
 #' @param conf_level Numeric in \eqn{(0,1)}. Confidence level when
 #'   \code{ci = TRUE} (default \code{0.95}).
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads to use for
+#'   computation. Defaults to \code{getOption("matrixCorr.threads", 1L)}.
 #' @param ci_mode Character scalar; one of \code{c("auto","raw","logit")}.
 #'   Controls how confidence intervals are computed when \code{ci = TRUE}.
 #'   If \code{"raw"}, a Wald CI is formed on the ICC scale and truncated to
@@ -1006,15 +1027,16 @@ print.summary.icc_overall <- function(x,
 icc_rm_reml <- function(data, response, subject,
                         method = NULL, time = NULL,
                         type = c("consistency", "agreement"),
+                        ci = FALSE, conf_level = 0.95,
+                        n_threads = getOption("matrixCorr.threads", 1L),
+                        ci_mode = c("auto","raw","logit"),
+                        verbose = FALSE, digits = 4, use_message = TRUE,
                         interaction = FALSE,
                         max_iter = 100, tol = 1e-6,
                         Dmat = NULL,
                         Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
                         Dmat_weights = NULL,
                         Dmat_rescale = TRUE,
-                        ci = FALSE, conf_level = 0.95,
-                        ci_mode = c("auto","raw","logit"),
-                        verbose = FALSE, digits = 4, use_message = TRUE,
                         ar = c("none", "ar1"),
                         ar_rho = NA_real_,
                         slope = c("none", "subject", "method", "custom"),
@@ -1041,6 +1063,7 @@ icc_rm_reml <- function(data, response, subject,
   check_scalar_nonneg(tol, arg = "tol", strict = TRUE)
   check_bool(ci, arg = "ci")
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(verbose, arg = "verbose")
   check_bool(use_message, arg = "use_message")
   check_bool(Dmat_rescale, arg = "Dmat_rescale")
@@ -1107,6 +1130,10 @@ icc_rm_reml <- function(data, response, subject,
   }
 
   metric_mode <- if (identical(type, "agreement")) 2L else 1L
+
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
 
   out <- ccc_lmm_reml_pairwise(
     df = df,
@@ -1278,6 +1305,8 @@ summary.icc_rm_reml <- function(object,
   }
 
   out <- base_summary
+  out$n_subjects <- as.integer(extract_pairs_num(attr(object, "n_subjects")))
+  out$n_obs <- as.integer(extract_pairs_num(attr(object, "n_obs")))
   out$sigma2_subject <- round(extract_pairs_num(attr(object, "sigma2_subject")), digits)
   out$sigma2_subject_method <- round(extract_pairs_num(attr(object, "sigma2_subject_method")), digits)
   out$sigma2_subject_time <- round(extract_pairs_num(attr(object, "sigma2_subject_time")), digits)
@@ -1333,7 +1362,11 @@ summary.icc_rm_reml <- function(object,
   attr(out, "has_ci") <- attr(base_summary, "has_ci")
   attr(out, "digits") <- digits
   attr(out, "ci_digits") <- ci_digits
-  structure(out, class = c("summary.icc_rm_reml", "data.frame"))
+  .mc_finalize_summary_df(
+    out,
+    class_name = "summary.icc_rm_reml",
+    repeated = TRUE
+  )
 }
 
 #' @rdname icc_rm_reml
@@ -1361,7 +1394,7 @@ print.summary.icc_rm_reml <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "ICC estimates",
-        cols = c("method1", "method2", "estimate", "lwr", "upr", "se_icc", "residual_model")
+        cols = c("item1", "item2", "estimate", "lwr", "upr", "n_subjects", "n_obs", "se_icc", "residual_model")
       ),
       list(
         title = "Variance components",

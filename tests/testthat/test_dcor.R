@@ -152,6 +152,42 @@ test_that("requesting inference does not change the dcor estimate matrix", {
   expect_equal(est_only_mat, with_test_mat, tolerance = 1e-12)
 })
 
+test_that("dcor stores inference payload only when requested", {
+  X <- cbind(
+    a = c(1, 2, 3, 4, 5, 6),
+    b = c(2, 1, 4, 3, 6, 5),
+    c = c(1, 4, 2, 5, 3, 6)
+  )
+
+  fit <- dcor(X)
+  fit_p <- dcor(X, p_value = TRUE)
+
+  expect_null(attr(fit, "inference", exact = TRUE))
+  expect_null(attr(fit, "diagnostics", exact = TRUE))
+
+  inf <- attr(fit_p, "inference", exact = TRUE)
+  expect_type(inf, "list")
+  expect_identical(names(inf), c("method", "estimate", "statistic", "parameter", "p_value", "alternative"))
+  expect_true(is.matrix(inf$estimate))
+  expect_true(is.matrix(inf$statistic))
+  expect_true(is.matrix(inf$parameter))
+  expect_true(is.matrix(inf$p_value))
+})
+
+test_that("dcor honors n_threads without changing estimates", {
+  set.seed(246)
+  X <- matrix(rnorm(240), nrow = 40, ncol = 6)
+  colnames(X) <- paste0("D", seq_len(ncol(X)))
+
+  fit1 <- dcor(X, n_threads = 1L)
+  fit2 <- dcor(X, n_threads = 2L)
+  fit1_p <- dcor(X, p_value = TRUE, n_threads = 1L)
+  fit2_p <- dcor(X, p_value = TRUE, n_threads = 2L)
+
+  expect_equal(unclass(fit1), unclass(fit2), tolerance = 1e-12)
+  expect_equal(attr(fit1_p, "inference", exact = TRUE), attr(fit2_p, "inference", exact = TRUE), tolerance = 1e-12)
+})
+
 test_that("dcor summary switches to pairwise inference view when requested", {
   set.seed(11)
   X <- matrix(rnorm(120), nrow = 30, ncol = 4)
@@ -162,7 +198,7 @@ test_that("dcor summary switches to pairwise inference view when requested", {
 
   expect_s3_class(sm, "summary.dcor")
   expect_s3_class(sm, "data.frame")
-  expect_true(all(c("var1", "var2", "estimate", "n_complete", "statistic", "df", "p_value") %in% names(sm)))
+  expect_true(all(c("item1", "item2", "estimate", "n_complete", "statistic", "df", "p_value") %in% names(sm)))
 
   txt <- capture.output(print(sm))
   expect_true(any(grepl("^Distance correlation summary$", txt)))

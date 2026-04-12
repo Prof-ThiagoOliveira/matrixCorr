@@ -51,6 +51,8 @@
 #' Non-numeric columns will be ignored.
 #' @param ci Logical; if TRUE, return lower and upper confidence bounds
 #' @param conf_level Confidence level for CI, default = 0.95
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param verbose Logical; if TRUE, prints how many threads are used
 #'
 #' @return A symmetric numeric matrix with class \code{"ccc"} and attributes:
@@ -101,14 +103,21 @@
 #' Bland J, Altman D (1986). Statistical methods for assessing agreement
 #' between two methods of clinical measurement. The Lancet 327: 307-310.
 #' @export
-ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
+ccc <- function(data, ci = FALSE, conf_level = 0.95,
+                n_threads = getOption("matrixCorr.threads", 1L),
+                verbose = FALSE) {
   check_bool(ci, arg = "ci")
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(verbose, arg = "verbose")
 
   numeric_data <- validate_corr_input(data)
   mat <- as.matrix(numeric_data)
   colnames_data <- colnames(numeric_data)
+
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
 
   if (verbose) cat("Using", openmp_threads(), "OpenMP threads\n")
 
@@ -136,6 +145,14 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
       "Pairwise Lin's concordance with confidence intervals"
     attr(ccc_lin, "package") <- "matrixCorr"
     attr(ccc_lin, "conf.level") <- conf_level
+    attr(ccc_lin, "diagnostics") <- list(
+      n_complete = matrix(
+        as.integer(nrow(mat)),
+        nrow = ncol(mat),
+        ncol = ncol(mat),
+        dimnames = list(colnames_data, colnames_data)
+      )
+    )
   } else {
     est <- ccc_cpp(mat)
     ccc_lin <- `dimnames<-`(est, list(colnames_data, colnames_data))
@@ -145,6 +162,14 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95, verbose = FALSE) {
     attr(ccc_lin, "description") <- "Pairwise Lin's concordance correlation matrix"
     attr(ccc_lin, "package") <- "matrixCorr"
     attr(ccc_lin, "conf.level")  <- conf_level
+    attr(ccc_lin, "diagnostics") <- list(
+      n_complete = matrix(
+        as.integer(nrow(mat)),
+        nrow = ncol(mat),
+        ncol = ncol(mat),
+        dimnames = list(colnames_data, colnames_data)
+      )
+    )
   }
 
   ccc_lin
@@ -223,8 +248,8 @@ print.ccc <- function(x,
 #' @param show_ci One of \code{"yes"} or \code{"no"}.
 #' @param ... Ignored.
 #' @return For \code{summary.ccc}, a data frame with columns
-#'   \code{method1}, \code{method2}, \code{estimate} and (optionally)
-#'   \code{lwr}, \code{upr}.
+#'   \code{item1}, \code{item2}, \code{estimate}, and (optionally)
+#'   \code{lwr}, \code{upr}, plus \code{n_complete} when available.
 #' @export
 summary.ccc <- function(object,
                         digits = 4,
@@ -269,6 +294,7 @@ summary.ccc <- function(object,
   # decide whether to include CI columns
   has_any_ci <- any(is.finite(lwr) | is.finite(upr))
   include_ci <- identical(show_ci, "yes") && has_any_ci
+  diag_attr <- attr(object, "diagnostics", exact = TRUE)
 
   # 1x1 case
   if (nrow(est) == 1L && ncol(est) == 1L) {
@@ -279,6 +305,9 @@ summary.ccc <- function(object,
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
+    if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
+      df$n_complete <- as.integer(diag_attr$n_complete[1, 1])
+    }
     if (include_ci) {
       df$lwr <- if (is.na(lwr[1,1])) NA_real_ else round(lwr[1,1], ci_digits)
       df$upr <- if (is.na(upr[1,1])) NA_real_ else round(upr[1,1], ci_digits)
@@ -294,6 +323,9 @@ summary.ccc <- function(object,
           method2  = cn[j],
           estimate = round(est[i, j], digits)
         )
+        if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
+          rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
+        }
         if (include_ci) {
           rec$lwr <- if (is.na(lwr[i, j])) NA_real_ else round(lwr[i, j], ci_digits)
           rec$upr <- if (is.na(upr[i, j])) NA_real_ else round(upr[i, j], ci_digits)
@@ -309,7 +341,7 @@ summary.ccc <- function(object,
   }
 
   # carry attrs for printing
-  df <- structure(df, class = c("summary.ccc", "data.frame"))
+  df <- .mc_finalize_summary_df(df, class_name = "summary.ccc")
   attr(df, "overview") <- .mc_summary_corr_matrix(est, topn = topn)
   attr(df, "conf.level") <- if (is.finite(conf_level)) conf_level else NA_real_
   attr(df, "has_ci")     <- isTRUE(include_ci)

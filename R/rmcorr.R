@@ -23,20 +23,23 @@
 #'   single character string naming the subject column in \code{data}.
 #' @param conf_level Confidence level used for Wald confidence intervals on the
 #'   repeated-measures correlation (default \code{0.95}).
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, missing values
-#'   in the selected response columns or \code{subject} are rejected. If
-#'   \code{FALSE}, each pairwise repeated-measures correlation uses pairwise
-#'   complete cases and drops subjects with fewer than two complete pairs for
-#'   that specific contrast.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing values in the selected response columns or
+#'   \code{subject}. \code{"pairwise"} uses pairwise complete cases and drops
+#'   subjects with fewer than two complete pairs for the specific contrast.
 #' @param n_threads Integer \eqn{\ge 1}. Number of OpenMP threads used by the
 #'   C++ backend in matrix mode. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
-#' @param keep_data Logical (default \code{FALSE}). If \code{TRUE}, matrix-mode
-#'   outputs retain a compact copy of the numeric response matrix plus encoded
-#'   subject identifiers so that \code{view_rmcorr_shiny()} can rebuild pairwise
-#'   scatterplots from the returned object alone.
+#' @param keep_data Logical (default \code{FALSE}). If \code{TRUE}, returned
+#'   objects retain a compact copy of the numeric response matrix plus encoded
+#'   subject identifiers. For pairwise fits this enables \code{plot()} to
+#'   reconstruct subject-level fitted lines lazily; for matrix outputs it also
+#'   allows \code{view_rmcorr_shiny()} to rebuild pairwise scatterplots from the
+#'   returned object alone.
 #' @param verbose Logical; if \code{TRUE}, prints a short note about the thread
 #'   count used in matrix mode.
+#' @param ... Deprecated compatibility aliases. The legacy \code{check_na}
+#'   argument is still accepted here temporarily.
 #'
 #' @return
 #' Either a \code{"rmcorr"} object (exactly two responses) or a
@@ -44,17 +47,21 @@
 #'
 #' \strong{If \code{"rmcorr"} (exactly two responses)}, outputs include:
 #' \itemize{
-#'   \item \code{r}; repeated-measures correlation estimate.
+#'   \item \code{estimate}; repeated-measures correlation estimate.
 #'   \item \code{p_value}; two-sided p-value for the common within-subject slope.
-#'   \item \code{conf_int}; confidence interval for \code{r}.
+#'   \item \code{lwr}, \code{upr}; confidence interval limits for
+#'         \code{estimate}.
 #'   \item \code{slope}; common within-subject slope.
 #'   \item \code{df}; residual degrees of freedom \eqn{N - S - 1}.
-#'   \item \code{based.on}; number of complete observations retained after
+#'   \item \code{n_obs}; number of complete observations retained after
 #'         dropping subjects with fewer than two repeated pairs.
 #'   \item \code{n_subjects}; number of contributing subjects.
 #'   \item \code{responses}; names of the fitted response variables.
-#'   \item \code{intercepts}; subject-specific fitted intercepts for the common slope.
-#'   \item \code{data_long}; filtered long data used for fitting and plotting.
+#'   \item compatibility aliases \code{r}, \code{conf_int}, and \code{based.on}
+#'         are reconstructed on access without duplicate storage.
+#'   \item when \code{keep_data = TRUE}, compact source data are retained so
+#'         \code{plot()} can lazily reconstruct \code{data_long},
+#'         \code{intercepts}, and fitted lines; these are otherwise not stored.
 #' }
 #'
 #' \strong{If \code{"rmcorr_matrix"} (\eqn{\ge}3 responses)}, outputs are:
@@ -129,7 +136,7 @@
 #'   z = subj_eff_y[subject] - 0.4 * within_signal + rnorm(n_subjects * n_rep, sd = 0.4)
 #' )
 #'
-#' fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject")
+#' fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject", keep_data = TRUE)
 #' print(fit_xy)
 #' summary(fit_xy)
 #' plot(fit_xy)
@@ -151,10 +158,11 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 rmcorr <- function(data = NULL, response, subject,
-                   conf_level = 0.95, check_na = TRUE,
+                   na_method = c("error", "pairwise"), conf_level = 0.95,
                    n_threads = getOption("matrixCorr.threads", 1L),
                    keep_data = FALSE,
-                   verbose = FALSE) {
+                   verbose = FALSE,
+                   ...) {
   # legacy positional signature support: rmcorr(response, subject, ...)
   if (!missing(data) && missing(subject)) {
     data_nrow <- tryCatch(NROW(data), error = function(...) NA_integer_)
@@ -175,8 +183,14 @@ rmcorr <- function(data = NULL, response, subject,
     }
   }
 
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
+
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
-  check_bool(check_na, arg = "check_na")
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(keep_data, arg = "keep_data")
   check_bool(verbose, arg = "verbose")
@@ -200,7 +214,7 @@ rmcorr <- function(data = NULL, response, subject,
     )
   }
 
-  if (check_na) {
+  if (na_cfg$check_na) {
     .mc_check_latent_missing(
       c(as.list(as.data.frame(response_mat)), list(subject = subject_vec)),
       check_na = TRUE,
@@ -223,8 +237,9 @@ rmcorr <- function(data = NULL, response, subject,
       subject = subject_vec,
       response_names = response_names,
       subject_name = resolved$subject_name,
+      na_method = na_cfg$na_method,
       conf_level = conf_level,
-      call = match.call()
+      keep_data = keep_data
     ))
   }
 
@@ -360,59 +375,45 @@ rmcorr <- function(data = NULL, response, subject,
 
 .mc_rmcorr_build_pair_object <- function(stats, response_mat, subject,
                                          response_names, subject_name,
-                                         conf_level, call = NULL) {
+                                         na_method,
+                                         conf_level, keep_data = FALSE) {
   dat <- .mc_rmcorr_pair_data(response_mat, subject)
   slope <- as.numeric(stats$slope)
   valid <- isTRUE(stats$valid) && is.finite(stats$estimate)
 
-  intercepts <- numeric()
-  fitted <- data.frame()
-  if (valid && nrow(dat) > 0L) {
-    intercepts <- tapply(
-      dat$.response2 - slope * dat$.response1,
-      dat$.subject,
-      mean
-    )
-    fitted <- do.call(
-      rbind,
-      lapply(names(intercepts), function(s) {
-        idx <- dat$.subject == s
-        x_min <- min(dat$.response1[idx])
-        x_max <- max(dat$.response1[idx])
-        b0 <- as.numeric(intercepts[[s]])
-        data.frame(
-          .subject = s,
-          x = c(x_min, x_max),
-          y = c(b0 + slope * x_min, b0 + slope * x_max),
-          check.names = FALSE
-        )
-      })
-    )
-  }
-
-  structure(
+  subj_counts <- if (nrow(dat)) as.integer(table(dat$.subject)) else integer()
+  out <- structure(
     list(
-      r = as.numeric(stats$estimate),
+      estimate = as.numeric(stats$estimate),
       p_value = as.numeric(stats$p_value),
-      conf_int = c(lower = as.numeric(stats$conf_low), upper = as.numeric(stats$conf_high)),
+      lwr = as.numeric(stats$conf_low),
+      upr = as.numeric(stats$conf_high),
       conf_level = conf_level,
       slope = slope,
       df = as.numeric(stats$df),
-      based.on = as.integer(stats$n_complete),
+      n_obs = as.integer(stats$n_complete),
       n_subjects = as.integer(stats$n_subjects),
+      na_method = na_method,
       responses = response_names,
       subject_name = subject_name,
-      intercepts = intercepts,
-      fitted = fitted,
-      data_long = dat,
-      valid = valid,
-      call = call
+      obs_per_subject_min = if (length(subj_counts)) min(subj_counts) else NA_integer_,
+      obs_per_subject_max = if (length(subj_counts)) max(subj_counts) else NA_integer_,
+      valid = valid
     ),
     class = "rmcorr",
     method = "rmcorr",
     description = "Repeated-measures correlation",
     package = "matrixCorr"
   )
+  if (isTRUE(keep_data)) {
+    attr(out, "source_data") <- .mc_rmcorr_compact_source_data(
+      response_mat = response_mat,
+      subject = subject,
+      subject_name = subject_name,
+      conf_level = conf_level
+    )
+  }
+  out
 }
 
 .mc_rmcorr_set_dimnames <- function(x, nm) {
@@ -447,11 +448,105 @@ rmcorr <- function(data = NULL, response, subject,
   )
 }
 
+.mc_rmcorr_pair_plot_payload <- function(x) {
+  source_data <- attr(x, "source_data", exact = TRUE)
+  if (!is.list(source_data) || is.null(source_data$response) || is.null(source_data$subject_code)) {
+    return(NULL)
+  }
+
+  subject <- factor(
+    source_data$subject_code,
+    levels = seq_along(source_data$subject_levels),
+    labels = source_data$subject_levels
+  )
+  dat <- .mc_rmcorr_pair_data(source_data$response, subject)
+  if (!nrow(dat)) {
+    return(list(data_long = dat, intercepts = numeric(), fitted = dat[0, c(".subject"), drop = FALSE]))
+  }
+
+  slope <- as.numeric(x$estimate) * 0 + as.numeric(x$slope)
+  intercepts <- tapply(
+    dat$.response2 - slope * dat$.response1,
+    dat$.subject,
+    mean
+  )
+  fitted <- do.call(
+    rbind,
+    lapply(names(intercepts), function(s) {
+      idx <- dat$.subject == s
+      x_min <- min(dat$.response1[idx])
+      x_max <- max(dat$.response1[idx])
+      b0 <- as.numeric(intercepts[[s]])
+      data.frame(
+        .subject = s,
+        x = c(x_min, x_max),
+        y = c(b0 + slope * x_min, b0 + slope * x_max),
+        check.names = FALSE
+      )
+    })
+  )
+  list(data_long = dat, intercepts = intercepts, fitted = fitted)
+}
+
+.mc_rmcorr_component_names <- function(x) {
+  out <- c(
+    "estimate", "p_value", "lwr", "upr", "conf_level", "slope", "df",
+    "n_obs", "n_subjects", "na_method", "responses", "subject_name",
+    "obs_per_subject_min", "obs_per_subject_max", "valid"
+  )
+  out <- c(out, "r", "conf_int", "based.on")
+  if (!is.null(attr(x, "source_data", exact = TRUE))) {
+    out <- c(out, "source_data", "data_long", "intercepts", "fitted")
+  }
+  unique(out)
+}
+
+#' @export
+names.rmcorr <- function(x) {
+  .mc_rmcorr_component_names(x)
+}
+
+#' @export
+`$.rmcorr` <- function(x, name) {
+  core <- unclass(x)
+  switch(name,
+    r = core$estimate,
+    conf_int = c(lower = core$lwr, upper = core$upr),
+    based.on = core$n_obs,
+    source_data = attr(x, "source_data", exact = TRUE),
+    data_long = {
+      payload <- .mc_rmcorr_pair_plot_payload(x)
+      if (is.null(payload)) NULL else payload$data_long
+    },
+    intercepts = {
+      payload <- .mc_rmcorr_pair_plot_payload(x)
+      if (is.null(payload)) NULL else payload$intercepts
+    },
+    fitted = {
+      payload <- .mc_rmcorr_pair_plot_payload(x)
+      if (is.null(payload)) NULL else payload$fitted
+    },
+    core[[name]]
+  )
+}
+
+#' @export
+`[[.rmcorr` <- function(x, i, ...) {
+  if (is.numeric(i)) {
+    nms <- names(x)
+    if (length(i) != 1L || is.na(i) || i < 1L || i > length(nms)) {
+      abort_bad_arg("i", message = "must be a valid component index.")
+    }
+    i <- nms[[i]]
+  }
+  `$.rmcorr`(x, i)
+}
+
 #' @title Methods for Pairwise rmcorr Objects
 #' @description Print, summarize, and plot methods for pairwise
 #'   repeated-measures correlation objects of class \code{"rmcorr"} and
-#'   \code{"summary_rmcorr"}.
-#' @param x An object of class \code{"rmcorr"} or \code{"summary_rmcorr"}.
+#'   \code{"summary.rmcorr"}.
+#' @param x An object of class \code{"rmcorr"} or \code{"summary.rmcorr"}.
 #' @param object An object of class \code{"rmcorr"}.
 #' @param digits Number of significant digits to print.
 #' @param n Optional row threshold for compact preview output.
@@ -486,14 +581,14 @@ print.rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
   digest <- c(
     method = attr(x, "method"),
     responses = sprintf("%s vs %s", x$responses[[1L]], x$responses[[2L]]),
-    based_on = x$based.on,
-    subjects = x$n_subjects,
-    estimate = format(signif(x$r, digits = digits)),
+    n_obs = x$n_obs,
+    n_subjects = x$n_subjects,
+    estimate = format(signif(x$estimate, digits = digits)),
     if (identical(show_ci, "yes")) {
       c(ci = sprintf(
         "[%s, %s] (%g%%)",
-        format(signif(x$conf_int[[1L]], digits = digits)),
-        format(signif(x$conf_int[[2L]], digits = digits)),
+        format(signif(x$lwr, digits = digits)),
+        format(signif(x$upr, digits = digits)),
         100 * x$conf_level
       ))
     }
@@ -509,39 +604,34 @@ summary.rmcorr <- function(object, n = NULL, topn = NULL,
                            max_vars = NULL, width = NULL,
                            show_ci = NULL, ...) {
   check_inherits(object, "rmcorr")
-  subj_counts <- if (is.data.frame(object$data_long) && nrow(object$data_long)) {
-    as.integer(table(object$data_long$.subject))
-  } else {
-    integer()
-  }
   out <- list(
     class = "rmcorr",
     method = attr(object, "method"),
     description = attr(object, "description"),
     responses = object$responses,
-    based.on = object$based.on,
+    n_obs = object$n_obs,
     n_subjects = object$n_subjects,
     df = object$df,
-    estimate = object$r,
+    estimate = object$estimate,
     slope = object$slope,
     p_value = object$p_value,
-    conf_int = object$conf_int,
+    lwr = object$lwr,
+    upr = object$upr,
     conf_level = object$conf_level,
-    obs_per_subject_min = if (length(subj_counts)) min(subj_counts) else NA_integer_,
-    obs_per_subject_max = if (length(subj_counts)) max(subj_counts) else NA_integer_,
-    n_intercepts = length(object$intercepts),
+    obs_per_subject_min = object$obs_per_subject_min %||% NA_integer_,
+    obs_per_subject_max = object$obs_per_subject_max %||% NA_integer_,
+    n_intercepts = object$n_subjects %||% NA_integer_,
     ci_method = "fisher_z",
-    ci_width = if (all(is.finite(object$conf_int))) diff(range(object$conf_int)) else NA_real_,
+    ci_width = if (all(is.finite(c(object$lwr, object$upr)))) object$upr - object$lwr else NA_real_,
     valid = isTRUE(object$valid)
   )
-  class(out) <- "summary_rmcorr"
-  out
+  .mc_finalize_summary_list(out, class_name = "summary.rmcorr")
 }
 
 #' @rdname rmcorr_methods
-#' @method print summary_rmcorr
+#' @method print summary.rmcorr
 #' @export
-print.summary_rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
+print.summary.rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
                                  max_vars = NULL, width = NULL,
                                  show_ci = NULL, ...) {
   show_ci <- .mc_validate_yes_no(
@@ -552,8 +642,8 @@ print.summary_rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
   digest <- c(
     method = x$method,
     responses = sprintf("%s vs %s", x$responses[[1L]], x$responses[[2L]]),
-    based_on = x$based.on,
-    subjects = x$n_subjects,
+    n_obs = x$n_obs,
+    n_subjects = x$n_subjects,
     obs_per_subject = .mc_format_scalar_or_range(
       x$obs_per_subject_min,
       x$obs_per_subject_max,
@@ -568,8 +658,8 @@ print.summary_rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
       c(
         interval = sprintf(
           "[%s, %s]",
-          format(signif(x$conf_int[[1L]], digits = digits)),
-          format(signif(x$conf_int[[2L]], digits = digits))
+          format(signif(x$lwr, digits = digits)),
+          format(signif(x$upr, digits = digits))
         ),
         ci_level = sprintf("%g%%", 100 * x$conf_level),
         ci_method = x$ci_method,
@@ -603,7 +693,16 @@ plot.rmcorr <- function(x,
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     cli::cli_abort("Package {.pkg ggplot2} is required for plotting.")
   }
-  if (!nrow(x$data_long) || !isTRUE(x$valid)) {
+  payload <- .mc_rmcorr_pair_plot_payload(x)
+  if (is.null(payload)) {
+    cli::cli_abort(
+      c(
+        "The repeated-measures correlation fit does not retain plotting data.",
+        "i" = "Refit with {.code keep_data = TRUE} to enable {.fn plot} for pairwise repeated-measures correlations."
+      )
+    )
+  }
+  if (!nrow(payload$data_long) || !isTRUE(x$valid)) {
     cli::cli_abort("The repeated-measures correlation fit is not valid for plotting.")
   }
 
@@ -613,7 +712,7 @@ plot.rmcorr <- function(x,
   )
 
   p <- ggplot2::ggplot(
-    x$data_long,
+    payload$data_long,
     ggplot2::aes(
       x = .data$.response1,
       y = .data$.response2,
@@ -622,7 +721,7 @@ plot.rmcorr <- function(x,
   ) +
     ggplot2::geom_point(alpha = point_alpha) +
     ggplot2::geom_line(
-      data = x$fitted,
+      data = payload$fitted,
       ggplot2::aes(x = .data$x, y = .data$y, colour = .data$.subject, group = .data$.subject),
       linewidth = line_width,
       inherit.aes = FALSE
@@ -645,9 +744,9 @@ plot.rmcorr <- function(x,
 #' @title Methods for rmcorr Matrix Objects
 #' @description Print, summarize, and plot methods for repeated-measures
 #'   correlation matrix objects of class \code{"rmcorr_matrix"} and
-#'   \code{"summary_rmcorr_matrix"}.
+#'   \code{"summary.rmcorr_matrix"}.
 #' @param x An object of class \code{"rmcorr_matrix"} or
-#'   \code{"summary_rmcorr_matrix"}.
+#'   \code{"summary.rmcorr_matrix"}.
 #' @param object An object of class \code{"rmcorr_matrix"}.
 #' @param digits Number of significant digits to print.
 #' @param n Optional row threshold for compact preview output.
@@ -776,14 +875,13 @@ summary.rmcorr_matrix <- function(object, n = NULL, topn = NULL,
   }
   out$conf_level <- diag_attr$conf_level %||% NA_real_
   out$top_results <- .mc_summary_top_pairs(object, digits = 4, topn = .mc_coalesce(topn, .mc_display_option("summary_topn", 5L)))
-  class(out) <- "summary_rmcorr_matrix"
-  out
+  .mc_finalize_summary_list(out, class_name = "summary.rmcorr_matrix")
 }
 
 #' @rdname rmcorr_matrix_methods
-#' @method print summary_rmcorr_matrix
+#' @method print summary.rmcorr_matrix
 #' @export
-print.summary_rmcorr_matrix <- function(x, digits = 4, n = NULL,
+print.summary.rmcorr_matrix <- function(x, digits = 4, n = NULL,
                                         topn = NULL, max_vars = NULL,
                                         width = NULL, show_ci = NULL, ...) {
   cfg <- .mc_resolve_display_args(
@@ -809,7 +907,7 @@ print.summary_rmcorr_matrix <- function(x, digits = 4, n = NULL,
     digest <- c(digest, df = .mc_format_scalar_or_range(x$df_min, x$df_max, digits = digits))
   }
   if (is.finite(x$n_subjects_min) && is.finite(x$n_subjects_max)) {
-    digest <- c(digest, subjects = .mc_format_scalar_or_range(x$n_subjects_min, x$n_subjects_max, digits = digits))
+    digest <- c(digest, n_subjects = .mc_format_scalar_or_range(x$n_subjects_min, x$n_subjects_max, digits = digits))
   }
   if (is.finite(x$p_value_min) && is.finite(x$p_value_max)) {
     digest <- c(digest, p_value = .mc_format_scalar_or_range(x$p_value_min, x$p_value_max, digits = digits))
@@ -831,3 +929,6 @@ print.summary_rmcorr_matrix <- function(x, digits = 4, n = NULL,
   }
   invisible(x)
 }
+
+print.summary_rmcorr <- print.summary.rmcorr
+print.summary_rmcorr_matrix <- print.summary.rmcorr_matrix

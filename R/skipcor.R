@@ -212,14 +212,14 @@
 skipped_corr <- function(data,
                     method = c("pearson", "spearman"),
                     na_method = c("error", "pairwise"),
-                    stand = TRUE,
-                    outlier_rule = c("idealf", "mad"),
-                    cutoff = sqrt(stats::qchisq(0.975, df = 2)),
-                    n_threads = getOption("matrixCorr.threads", 1L),
-                    return_masks = FALSE,
                     ci = FALSE,
                     p_value = FALSE,
                     conf_level = 0.95,
+                    n_threads = getOption("matrixCorr.threads", 1L),
+                    return_masks = FALSE,
+                    stand = TRUE,
+                    outlier_rule = c("idealf", "mad"),
+                    cutoff = sqrt(stats::qchisq(0.975, df = 2)),
                     n_boot = 2000L,
                     p_adjust = c("none", "hochberg", "ecp"),
                     fwe_level = 0.05,
@@ -732,7 +732,7 @@ plot.skipped_corr <- function(x,
   for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
   base <- .mc_summary_corr_matrix(object)
-  out <- structure(df, class = c("summary.skipped_corr", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.skipped_corr")
   attr(out, "overview") <- base
   attr(out, "has_ci") <- include_ci
   attr(out, "has_p") <- include_p

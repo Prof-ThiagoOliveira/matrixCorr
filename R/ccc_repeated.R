@@ -172,12 +172,12 @@ ccc_rm_ustat <- function(data,
                         subject,
                         method,
                         time = NULL,
-                        Dmat = NULL,
-                        delta = 1,
                         ci = FALSE,
                         conf_level = 0.95,
                         n_threads = getOption("matrixCorr.threads", 1L),
-                        verbose = FALSE) {
+                        verbose = FALSE,
+                        Dmat = NULL,
+                        delta = 1) {
   df <- as.data.frame(data)
 
   req_cols <- c(response, subject, method)
@@ -400,6 +400,8 @@ ccc_rm_ustat <- function(data,
 #'   by a large-sample delta method for CCC (see \strong{CIs} note below).
 #' @param conf_level Numeric in \eqn{(0,1)}. Confidence level when
 #'   \code{ci = TRUE} (default \code{0.95}).
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads to use for
+#'   computation. Defaults to \code{getOption("matrixCorr.threads", 1L)}.
 #' @param ci_mode Character scalar; one of \code{c("auto","raw","logit")}.
 #'   Controls how confidence intervals are computed when \code{ci = TRUE}.
 #'   If \code{"raw"}, a Wald CI is formed on the CCC scale and truncated to
@@ -1065,15 +1067,17 @@ ccc_rm_ustat <- function(data,
 #'
 #' @export
 ccc_rm_reml <- function(data, response, subject,
-                         method = NULL, time = NULL, interaction = FALSE,
+                         method = NULL, time = NULL,
+                         ci = FALSE, conf_level = 0.95,
+                         n_threads = getOption("matrixCorr.threads", 1L),
+                         ci_mode = c("auto","raw","logit"),
+                         verbose = FALSE, digits = 4, use_message = TRUE,
+                         interaction = FALSE,
                          max_iter = 100, tol = 1e-6,
                          Dmat = NULL,
                          Dmat_type = c("time-avg","typical-visit","weighted-avg","weighted-sq"),
                          Dmat_weights = NULL,
                          Dmat_rescale = TRUE,
-                         ci = FALSE, conf_level = 0.95,
-                         ci_mode = c("auto","raw","logit"),
-                         verbose = FALSE, digits = 4, use_message = TRUE,
                          ar = c("none", "ar1"),
                          ar_rho = NA_real_,
                          slope = c("none", "subject", "method", "custom"),
@@ -1100,6 +1104,7 @@ ccc_rm_reml <- function(data, response, subject,
   check_scalar_nonneg(tol, arg = "tol", strict = TRUE)
   check_bool(ci, arg = "ci")
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(verbose, arg = "verbose")
   check_bool(use_message, arg = "use_message")
   check_bool(Dmat_rescale, arg = "Dmat_rescale")
@@ -1165,6 +1170,10 @@ ccc_rm_reml <- function(data, response, subject,
   }
 
   # Only pairwise path remains
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
+
   return(
     ccc_lmm_reml_pairwise(
       df                = df,
@@ -1679,6 +1688,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   }
 
   rho_mat <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
+  n_obs_mat <- matrix(NA_integer_, Lm, Lm, dimnames = list(method_levels, method_levels))
+  n_subjects_mat <- matrix(NA_integer_, Lm, Lm, dimnames = list(method_levels, method_levels))
 
   vc_subject        <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
   vc_subject_method <- matrix(NA_real_, Lm, Lm, dimnames = list(method_levels, method_levels))
@@ -1704,6 +1715,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       met_fac   <- droplevels(df[[method]][idx])        # exactly 2 levels
       time_fac  <- if (!is.null(time)) droplevels(df[[time]][idx]) else NULL
       df_sub    <- df[idx, , drop = FALSE]              # moved up
+      n_obs_mat[i, j] <- n_obs_mat[j, i] <- as.integer(length(y_sub))
+      n_subjects_mat[i, j] <- n_subjects_mat[j, i] <- as.integer(length(unique(subj_int)))
 
       Xp <- model.matrix(fml, data = df_sub)
 
@@ -1976,6 +1989,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     attr(out, "sigma2_extra")          <- vc_extra
     attr(out, "SB")                    <- vc_SB
     attr(out, se_key)                  <- vc_se_metric
+    attr(out, "n_obs")                 <- n_obs_mat
+    attr(out, "n_subjects")            <- n_subjects_mat
 
     if (!identical(ar, "ar1")) {
       attr(out, "ar1_rho_lag1") <- ar1_rho_lag1_mat
@@ -2005,6 +2020,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     attr(out, "sigma2_extra")          <- vc_extra
     attr(out, "SB")                    <- vc_SB
     attr(out, se_key)                  <- vc_se_metric
+    attr(out, "n_obs")                 <- n_obs_mat
+    attr(out, "n_subjects")            <- n_subjects_mat
 
     if (!identical(ar, "ar1")) {
       attr(out, "ar1_rho_lag1") <- ar1_rho_lag1_mat
@@ -2187,9 +2204,12 @@ print.ccc_ci <- function(x, ...) {
 #' @param ... Additional arguments (ignored).
 #'
 #' @return A data frame of class `"summary.ccc_rm_reml"` with columns:
-#'   \code{method1}, \code{method2}, \code{estimate}, and optionally \code{lwr}, \code{upr},
-#'   as well as variance component estimates: \code{sigma2_subject}, \code{sigma2_subject_method},
-#'   \code{sigma2_subject_time}, \code{sigma2_error}, \code{sigma2_extra}, \code{SB}, \code{se_ccc}.
+#'   \code{item1}, \code{item2}, \code{estimate}, and optionally \code{lwr},
+#'   \code{upr}, plus canonical repeated-measures counts \code{n_subjects} and
+#'   \code{n_obs}. Method-specific columns retain the scientific variance
+#'   component outputs: \code{sigma2_subject}, \code{sigma2_subject_method},
+#'   \code{sigma2_subject_time}, \code{sigma2_error}, \code{sigma2_extra},
+#'   \code{SB}, and \code{se_ccc}.
 #'
 #' @export
 #' @method summary ccc_rm_reml
@@ -2321,6 +2341,8 @@ summary.ccc_rm_reml <- function(object,
 
   # Assemble output
   out <- base_summary
+  out$n_subjects <- as.integer(extract_pairs_num(attr(object, "n_subjects")))
+  out$n_obs <- as.integer(extract_pairs_num(attr(object, "n_obs")))
 
   # Attach numeric VC columns (rounded)
   for (nm in vc_names_num) {
@@ -2427,7 +2449,11 @@ summary.ccc_rm_reml <- function(object,
   attr(out, "has_ci")     <- attr(base_summary, "has_ci")
   attr(out, "digits")     <- digits
   attr(out, "ci_digits")  <- ci_digits
-  structure(out, class = c("summary.ccc_rm_reml", "data.frame"))
+  .mc_finalize_summary_df(
+    out,
+    class_name = "summary.ccc_rm_reml",
+    repeated = TRUE
+  )
 }
 
 .print_ccc_rm_reml_summary_blocks <- function(x, ...) {
@@ -2436,7 +2462,7 @@ summary.ccc_rm_reml <- function(object,
   sections <- list(
     list(
       title = "Concordance estimates",
-      cols = c("method1", "method2", "estimate", "lwr", "upr", "SB", "se_ccc")
+      cols = c("item1", "item2", "estimate", "lwr", "upr", "n_subjects", "n_obs", "SB", "se_ccc")
     ),
     list(
       title = "Variance components",
@@ -2484,7 +2510,7 @@ print.summary.ccc_rm_reml <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "Concordance estimates",
-        cols = c("method1", "method2", "estimate", "lwr", "upr", "SB", "se_ccc")
+        cols = c("item1", "item2", "estimate", "lwr", "upr", "n_subjects", "n_obs", "SB", "se_ccc")
       ),
       list(
         title = "Variance components",

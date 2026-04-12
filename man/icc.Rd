@@ -16,11 +16,12 @@ icc(
   type = c("consistency", "agreement"),
   unit = c("single", "average"),
   scope = c("pairwise", "overall"),
+  na_method = c("error", "pairwise"),
   ci = FALSE,
   conf_level = 0.95,
-  check_na = TRUE,
   n_threads = getOption("matrixCorr.threads", 1L),
-  verbose = FALSE
+  verbose = FALSE,
+  ...
 )
 
 \method{print}{icc}(
@@ -119,19 +120,22 @@ columns. Choose \code{"pairwise"} when the question is about specific column
 pairs; choose \code{"overall"} when the question is about the full set of
 columns analysed jointly.}
 
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing, \code{NaN}, and infinite values before
+estimation. \code{"pairwise"} uses pair-specific complete cases for
+\code{scope = "pairwise"} and complete rows across all analysed columns
+for \code{scope = "overall"}.}
+
 \item{ci}{Logical; if \code{TRUE}, return confidence intervals.}
 
 \item{conf_level}{Confidence level for the interval output. Ignored when
 \code{ci = FALSE}.}
 
-\item{check_na}{Logical. If \code{TRUE}, missing values are rejected before
-estimation. If \code{FALSE}, \code{scope = "pairwise"} uses pair-specific complete
-cases, while \code{scope = "overall"} uses complete rows across all analysed
-columns.}
-
 \item{n_threads}{Integer number of OpenMP threads.}
 
 \item{verbose}{Logical; if \code{TRUE}, report how many threads are requested.}
+
+\item{...}{Passed to the underlying print helper.}
 
 \item{x}{An intraclass-correlation object returned by \code{icc()}, or a summary
 object returned by \code{summary()} for that fit.}
@@ -150,8 +154,6 @@ this from console width.}
 \item{width}{Optional display width; defaults to \code{getOption("width")}.}
 
 \item{show_ci}{One of \code{"yes"} or \code{"no"}.}
-
-\item{...}{Passed to the underlying print helper.}
 
 \item{object}{An intraclass-correlation object returned by \code{icc()}.}
 }
@@ -241,15 +243,15 @@ based on exactly two columns.
 For \code{scope = "overall"}, the point estimates are computed jointly from the
 full wide matrix using the classical ANOVA decomposition over all columns.
 Here the average-measure coefficients use \code{k = ncol(data)} after any row
-filtering required by \code{check_na}.
+filtering required by \code{na_method}.
 
 Missing-data handling depends on \code{scope}:
 \itemize{
-\item with \code{check_na = TRUE}, missing values are rejected before estimation;
-\item with \code{check_na = FALSE} and \code{scope = "pairwise"}, each pair uses its own
-complete-case overlap;
-\item with \code{check_na = FALSE} and \code{scope = "overall"}, rows are restricted to
-complete cases across all columns because the overall ANOVA requires a
+\item with \code{na_method = "error"}, missing values are rejected before estimation;
+\item with \code{na_method = "pairwise"} and \code{scope = "pairwise"}, each pair uses its
+own complete-case overlap;
+\item with \code{na_method = "pairwise"} and \code{scope = "overall"}, rows are restricted
+to complete cases across all columns because the overall ANOVA requires a
 common wide matrix.
 }
 

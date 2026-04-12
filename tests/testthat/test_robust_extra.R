@@ -335,6 +335,18 @@ test_that("pbcor matches the manual percentage bend matrix on wider input", {
   )
 })
 
+test_that("pbcor honors n_threads without changing estimates", {
+  set.seed(1006)
+  X <- matrix(rnorm(120 * 5), nrow = 120, ncol = 5)
+  X[, 2] <- 0.7 * X[, 1] + rnorm(120, sd = 0.4)
+  colnames(X) <- paste0("V", seq_len(ncol(X)))
+
+  fit1 <- pbcor(X, n_threads = 1L)
+  fit2 <- pbcor(X, n_threads = 2L)
+
+  expect_equal(unname(plain_matrix_R(fit1)), unname(plain_matrix_R(fit2)), tolerance = 1e-12)
+})
+
 test_that("pbcor compiled backend matches the manual matrix on wider input", {
   set.seed(1005)
   X <- matrix(rnorm(120 * 6), nrow = 120, ncol = 6)
@@ -494,8 +506,8 @@ test_that("pbcor and wincor summaries switch to pairwise inference tables when r
 
   expect_s3_class(pb_sm, "summary.pbcor")
   expect_s3_class(win_sm, "summary.wincor")
-  expect_true(all(c("var1", "var2", "estimate", "lwr", "upr", "statistic", "p_value", "n_complete") %in% names(pb_sm)))
-  expect_true(all(c("var1", "var2", "estimate", "lwr", "upr", "statistic", "p_value", "n_complete") %in% names(win_sm)))
+  expect_true(all(c("item1", "item2", "estimate", "lwr", "upr", "statistic", "p_value", "n_complete") %in% names(pb_sm)))
+  expect_true(all(c("item1", "item2", "estimate", "lwr", "upr", "statistic", "p_value", "n_complete") %in% names(win_sm)))
 
   pb_txt <- capture.output(print(pb_sm))
   win_txt <- capture.output(print(win_sm))
@@ -818,7 +830,8 @@ test_that("new robust correlation classes support print and plot methods", {
     p <- plot(obj, value_text_size = 2)
     expect_s3_class(p, "ggplot")
     sm <- summary(obj)
-    expect_s3_class(sm, "summary_corr_matrix")
+    expect_s3_class(sm, "summary.matrixCorr")
+    expect_s3_class(sm, "summary.corr_matrix")
   }
 })
 

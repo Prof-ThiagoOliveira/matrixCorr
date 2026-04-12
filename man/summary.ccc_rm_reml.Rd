@@ -54,9 +54,12 @@ suppresses it.}
 }
 \value{
 A data frame of class \code{"summary.ccc_rm_reml"} with columns:
-\code{method1}, \code{method2}, \code{estimate}, and optionally \code{lwr}, \code{upr},
-as well as variance component estimates: \code{sigma2_subject}, \code{sigma2_subject_method},
-\code{sigma2_subject_time}, \code{sigma2_error}, \code{sigma2_extra}, \code{SB}, \code{se_ccc}.
+\code{item1}, \code{item2}, \code{estimate}, and optionally \code{lwr},
+\code{upr}, plus canonical repeated-measures counts \code{n_subjects} and
+\code{n_obs}. Method-specific columns retain the scientific variance
+component outputs: \code{sigma2_subject}, \code{sigma2_subject_method},
+\code{sigma2_subject_time}, \code{sigma2_error}, \code{sigma2_extra},
+\code{SB}, and \code{se_ccc}.
 }
 \description{
 Produces a detailed summary of a \code{"ccc_rm_reml"} object, including

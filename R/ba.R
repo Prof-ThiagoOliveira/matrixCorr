@@ -45,7 +45,8 @@
 #' \itemize{
 #'   \item \code{means}, \code{diffs}: numeric vectors
 #'   \item \code{groups}: data.frame used after NA removal
-#'   \item \code{based.on}: integer, number of pairs used
+#'   \item \code{n_obs}: integer, number of complete pairs used.
+#'   \item \code{based.on}: compatibility alias for \code{n_obs}.
 #'   \item \code{lower.limit}, \code{mean.diffs}, \code{upper.limit}
 #'   \item \code{lines}: named numeric vector (lower, mean, upper)
 #'   \item \code{CI.lines}: named numeric vector for CIs of those lines
@@ -119,14 +120,108 @@ ba <- function(group1,
 
   # -- compute in C++ ---------------------------------------------------------
   ba_out <- bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level)
-
-  ba_out <- structure(ba_out, class = "ba")
-  attr(ba_out, "method")      <- "Bland-Altman"
+  ba_out <- structure(
+    list(
+      means = as.numeric(ba_out$means),
+      diffs = as.numeric(ba_out$diffs),
+      n_obs = as.integer(ba_out$based.on),
+      lower.limit = as.numeric(ba_out$lower.limit),
+      mean.diffs = as.numeric(ba_out$mean.diffs),
+      upper.limit = as.numeric(ba_out$upper.limit),
+      loa_multiplier = as.numeric(ba_out$loa_multiplier),
+      critical.diff = as.numeric(ba_out$critical.diff),
+      ci = .mc_ba_normalize_ci_lines(ba_out$CI.lines),
+      mode = mode
+    ),
+    class = "ba"
+  )
+  attr(ba_out, "method") <- "Bland-Altman"
   attr(ba_out, "description") <- "Mean difference and limits of agreement with CIs"
-  attr(ba_out, "package")     <- "matrixCorr"
-  attr(ba_out, "conf.level")  <- conf_level
+  attr(ba_out, "package") <- "matrixCorr"
+  attr(ba_out, "conf.level") <- conf_level
   attr(ba_out, "called.with") <- length(group1)
   ba_out
+}
+
+.mc_ba_normalize_ci_lines <- function(x) {
+  out <- as.numeric(x)
+  nms <- names(x)
+  if (is.null(nms) && length(out) == 6L) {
+    nms <- c(
+      "lower.limit.ci.lower",
+      "lower.limit.ci.upper",
+      "mean.diff.ci.lower",
+      "mean.diff.ci.upper",
+      "upper.limit.ci.lower",
+      "upper.limit.ci.upper"
+    )
+  }
+  stats::setNames(out, nms)
+}
+
+.mc_ba_groups <- function(x) {
+  means <- as.numeric(unclass(x)$means)
+  diffs <- as.numeric(unclass(x)$diffs)
+  mode <- as.integer(unclass(x)$mode %||% 1L)
+  if (identical(mode, 2L)) {
+    group1 <- means - diffs / 2
+    group2 <- means + diffs / 2
+  } else {
+    group1 <- means + diffs / 2
+    group2 <- means - diffs / 2
+  }
+  data.frame(group1 = group1, group2 = group2, check.names = FALSE)
+}
+
+.mc_ba_lines <- function(x) {
+  c(
+    lower.limit = as.numeric(unclass(x)$lower.limit),
+    mean.diffs = as.numeric(unclass(x)$mean.diffs),
+    upper.limit = as.numeric(unclass(x)$upper.limit)
+  )
+}
+
+.mc_ba_ci_lines <- function(x) {
+  ci <- .mc_ba_normalize_ci_lines(unclass(x)$ci %||% numeric())
+  if (length(ci)) {
+    return(ci)
+  }
+  numeric()
+}
+
+#' @export
+names.ba <- function(x) {
+  unique(c(
+    names(unclass(x)),
+    "based.on",
+    "groups",
+    "lines",
+    "CI.lines"
+  ))
+}
+
+#' @export
+`$.ba` <- function(x, name) {
+  core <- unclass(x)
+  switch(name,
+    based.on = core$n_obs,
+    groups = .mc_ba_groups(x),
+    lines = .mc_ba_lines(x),
+    CI.lines = .mc_ba_ci_lines(x),
+    core[[name]]
+  )
+}
+
+#' @export
+`[[.ba` <- function(x, i, ...) {
+  if (is.numeric(i)) {
+    nms <- names(x)
+    if (length(i) != 1L || is.na(i) || i < 1L || i > length(nms)) {
+      abort_bad_arg("i", message = "must be a valid component index.")
+    }
+    i <- nms[[i]]
+  }
+  `$.ba`(x, i)
 }
 
 #' @rdname ba
@@ -224,7 +319,7 @@ summary.ba <- function(object,
   cil <- function(nm) as.numeric(object$CI.lines[[nm]])
 
   out <- data.frame(
-    n              = as.integer(object$based.on),
+    n_obs          = as.integer(object$based.on),
     bias           = round(as.numeric(object$mean.diffs), digits),
     sd_loa         = round(as.numeric(object$critical.diff) / as.numeric(object$loa_multiplier), digits),
     loa_low        = round(as.numeric(object$lower.limit), digits),
@@ -240,7 +335,7 @@ summary.ba <- function(object,
     check.names = FALSE
   )
 
-  out <- structure(out, class = c("summary.ba", "data.frame"))
+  out <- .mc_finalize_summary_df(out, class_name = "summary.ba")
   attr(out, "conf.level") <- suppressWarnings(as.numeric(attr(object, "conf.level")))
   attr(out, "digits") <- digits
   attr(out, "ci_digits") <- ci_digits
@@ -262,7 +357,7 @@ print.summary.ba <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("n", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
+        cols = c("n_obs", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
       ),
       list(
         title = "Confidence intervals",

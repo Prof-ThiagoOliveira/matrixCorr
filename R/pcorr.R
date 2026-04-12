@@ -306,9 +306,9 @@
 #'
 #' @export
 pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
-                                lambda = 1e-3, return_cov_precision = FALSE,
-                                return_p_value = FALSE, ci = FALSE,
-                                conf_level = 0.95) {
+                                ci = FALSE, conf_level = 0.95,
+                                return_cov_precision = FALSE,
+                                return_p_value = FALSE, lambda = 1e-3) {
   method <- match.arg(method)
   lambda <- check_scalar_numeric(lambda, arg = "lambda", lower = 0, closed_lower = TRUE)
   lambda <- as.numeric(lambda)
@@ -400,29 +400,12 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   res$rho    <- if (identical(method, "oas"))   res$rho %||% NA_real_ else NA_real_
   res$jitter <- res$jitter %||% NA_real_
   res$diagnostics <- diagnostics
-  if (!is.null(res$p_value)) {
-    res$inference <- list(
-      method = "partial_t_test",
-      p_value = res$p_value
-    )
-  }
   if (!is.null(ci_attr)) {
     res$ci <- ci_attr
-  }
-  attr(res$pcor, "diagnostics") <- diagnostics
-  if (!is.null(res$inference)) {
-    attr(res$pcor, "inference") <- res$inference
-    attr(res, "inference") <- res$inference
-  }
-  if (!is.null(ci_attr)) {
-    attr(res$pcor, "ci") <- ci_attr
-    attr(res$pcor, "conf.level") <- conf_level
-    attr(res$pcor, "ci.method") <- ci_attr$ci.method
     attr(res, "ci") <- ci_attr
     attr(res, "conf.level") <- conf_level
     attr(res, "ci.method") <- ci_attr$ci.method
   }
-  attr(res, "diagnostics") <- diagnostics
   res <- structure(res, class = c("partial_corr", "list"))
   attr(res, "method") <- method
   res
@@ -438,6 +421,9 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
 }
 
 .mc_partial_corr_ci_attr <- function(x) {
+  if (inherits(x, "partial_corr") && !is.null(x$ci)) {
+    return(x$ci)
+  }
   attr(x, "ci", exact = TRUE)
 }
 
@@ -458,8 +444,8 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
   if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
 
-  ci <- attr(object, "ci", exact = TRUE)
-  diag_attr <- attr(object, "diagnostics", exact = TRUE)
+  ci <- object$ci %||% attr(object, "ci", exact = TRUE)
+  diag_attr <- object$diagnostics %||% attr(object, "diagnostics", exact = TRUE)
   p_value <- object$p_value %||% NULL
   include_ci <- identical(show_ci, "yes") && !is.null(ci)
 
@@ -503,7 +489,7 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   if ("p_value" %in% names(df)) df$p_value <- as.numeric(df$p_value)
   if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
 
-  out <- structure(df, class = c("summary_partial_corr", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.partial_corr")
   attr(out, "overview") <- .mc_summary_corr_matrix(object$pcor)
   attr(out, "has_ci") <- include_ci
   attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
@@ -671,7 +657,7 @@ print.partial_corr <- function(
 #' @param object An object of class \code{partial_corr}.
 #' @param ... Unused.
 #'
-#' @return A compact summary object of class \code{summary_partial_corr}.
+#' @return A compact summary object of class \code{summary.partial_corr}.
 #' @export
 summary.partial_corr <- function(object, n = NULL, topn = NULL,
                                  max_vars = NULL, width = NULL,
@@ -695,14 +681,14 @@ summary.partial_corr <- function(object, n = NULL, topn = NULL,
   out$rho <- object$rho %||% NA_real_
   out$jitter <- object$jitter %||% NA_real_
   out$header <- "Correlation summary"
-  class(out) <- c("summary_partial_corr", "summary_corr_matrix")
+  class(out) <- c("summary.partial_corr", "summary.matrixCorr", "summary.corr_matrix")
   out
 }
 
 #' @rdname pcorr
-#' @method print summary_partial_corr
+#' @method print summary.partial_corr
 #' @export
-print.summary_partial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
+print.summary.partial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
                                        max_vars = NULL, width = NULL,
                                        show_ci = NULL, ...) {
   if (inherits(x, "data.frame")) {
@@ -720,7 +706,7 @@ print.summary_partial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
     )
     return(invisible(x))
   }
-  print.summary_corr_matrix(
+  print.summary.matrixCorr(
     x,
     digits = digits,
     n = n,
@@ -731,6 +717,8 @@ print.summary_partial_corr <- function(x, digits = 4, n = NULL, topn = NULL,
     ...
   )
 }
+
+print.summary_partial_corr <- print.summary.partial_corr
 
 
 #' @rdname pcorr

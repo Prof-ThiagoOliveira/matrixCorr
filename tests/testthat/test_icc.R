@@ -215,6 +215,35 @@ test_that("classical ICC confidence intervals align with the standard reference 
   expect_equal(fit$upr.ci["A", "B"], ref$ICC2_upr, tolerance = 1e-6)
 })
 
+test_that("pairwise ICC stores CI payload only when requested", {
+  set.seed(205)
+  X <- data.frame(
+    A = rnorm(30),
+    B = rnorm(30),
+    C = rnorm(30)
+  )
+
+  fit <- icc(X,
+    model = "twoway_random",
+    type = "agreement",
+    unit = "single",
+    ci = FALSE
+  )
+  fit_ci <- icc(X,
+    model = "twoway_random",
+    type = "agreement",
+    unit = "single",
+    ci = TRUE
+  )
+
+  expect_false(is.list(fit))
+  expect_s3_class(fit_ci, "icc_ci")
+  expect_identical(names(fit_ci), c("est", "lwr.ci", "upr.ci"))
+  expect_false("n_complete" %in% names(fit_ci))
+  expect_true(is.matrix(attr(fit, "diagnostics")$n_complete))
+  expect_true(is.matrix(attr(fit_ci, "diagnostics")$n_complete))
+})
+
 test_that("classical ICC argument combinations and matrix behaviour are consistent", {
   set.seed(303)
   n <- 40L
@@ -244,7 +273,7 @@ test_that("classical ICC argument combinations and matrix behaviour are consiste
   fit_ci <- icc(X[, 1:2], model = "twoway_random", type = "agreement", unit = "single", ci = TRUE)
   sm <- summary(fit_ci)
   expect_s3_class(sm, "summary.icc")
-  expect_true(all(c("method1", "method2", "estimate", "lwr", "upr") %in% names(sm)))
+  expect_true(all(c("item1", "item2", "estimate", "lwr", "upr") %in% names(sm)))
 
   txt_fit <- capture.output(print(fit_ci))
   txt_sm <- capture.output(print(sm))
@@ -259,9 +288,9 @@ test_that("classical ICC respects pairwise-complete handling", {
     C = c(0.9, 2.0, 2.8, 4.1, 5.2, 6.1)
   )
 
-  expect_error(icc(X, check_na = TRUE), "Missing")
+  expect_error(icc(X, na_method = "error"), "Missing")
 
-  fit <- icc(X, check_na = FALSE)
+  fit <- icc(X, na_method = "pairwise")
   diag_n <- attr(fit, "diagnostics")$n_complete
   expect_equal(diag_n["A", "B"], 4L)
   expect_true(is.finite(fit["A", "B"]))
@@ -349,11 +378,11 @@ test_that("overall ICC drops incomplete rows when requested", {
   )
 
   expect_error(
-    icc(X, scope = "overall", check_na = TRUE),
+    icc(X, scope = "overall", na_method = "error"),
     "Missing"
   )
 
-  fit <- icc(X, scope = "overall", check_na = FALSE)
+  fit <- icc(X, scope = "overall", na_method = "pairwise")
   expect_identical(attr(fit, "diagnostics")$n_complete, 4L)
   expect_identical(attr(fit, "diagnostics")$dropped_rows, 2L)
 })
@@ -424,6 +453,31 @@ test_that("repeated-measures ICC uses the subject argument name", {
   expect_equal(unname(fit_named["A", "B"]), unname(fit_positional["A", "B"]))
 })
 
+test_that("repeated-measures ICC honors n_threads without changing estimates", {
+  dat <- sim_icc_rm_long(seed = 12, sig_subject = 1.0, sig_method = 0.2, sig_error = 0.3)
+
+  fit1 <- icc_rm_reml(
+    dat,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time",
+    n_threads = 1L,
+    ci = FALSE
+  )
+  fit2 <- icc_rm_reml(
+    dat,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time",
+    n_threads = 2L,
+    ci = FALSE
+  )
+
+  expect_equal(unname(fit1["A", "B"]), unname(fit2["A", "B"]), tolerance = 1e-12)
+})
+
 test_that("repeated-measures ICC matches the fitted variance-component denominator", {
   dat <- sim_icc_rm_long(seed = 3, sig_subject = 1.0, sig_method = 0.35, sig_error = 0.4, n_time = 1L)
 
@@ -492,7 +546,7 @@ test_that("repeated-measures ICC summaries expose the native REML payload", {
 
   expect_s3_class(sm, "summary.icc_rm_reml")
   expect_true(all(c(
-    "method1", "method2", "estimate", "lwr", "upr", "se_icc",
+    "item1", "item2", "estimate", "lwr", "upr", "n_subjects", "n_obs", "se_icc",
     "sigma2_subject", "sigma2_subject_method", "sigma2_subject_time",
     "sigma2_error", "SB", "residual_model"
   ) %in% names(sm)))

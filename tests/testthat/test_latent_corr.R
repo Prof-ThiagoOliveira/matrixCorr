@@ -248,7 +248,7 @@ test_that("polyserial matches the previous R optim reference path", {
   x[c(5, 19)] <- NA_real_
   y[c(11, 19)] <- NA
   expect_equal(
-    polyserial(x, y, check_na = FALSE),
+    polyserial(x, y, na_method = "pairwise"),
     polyserial_reference_old(x, y, check_na = FALSE),
     tolerance = 1e-12
   )
@@ -461,13 +461,14 @@ test_that("latent inference summaries switch to the pairwise view only when requ
   summary_titles <- c("Tetrachoric correlation summary", "Polychoric correlation summary", "Polyserial correlation summary")
 
   for (fit in fits0) {
-    expect_s3_class(summary(fit), "summary_latent_corr")
+    expect_s3_class(summary(fit), "summary.latent_corr")
+    expect_s3_class(summary(fit), "summary.matrixCorr")
   }
 
   for (i in seq_along(fits1)) {
     sm <- summary(fits1[[i]])
     expect_s3_class(sm, summary_classes[[i]])
-    expect_true(all(c("var1", "var2", "estimate", "lwr", "upr", "statistic", "df", "p_value", "n_complete") %in% names(sm)))
+    expect_true(all(c("item1", "item2", "estimate", "lwr", "upr", "statistic", "df", "p_value", "n_complete") %in% names(sm)))
     out <- capture.output(print(sm, digits = 3))
     expect_true(any(grepl(summary_titles[[i]], out, fixed = TRUE)))
   }
@@ -638,9 +639,10 @@ test_that("biserial summary switches to pairwise inference view when requested",
   sm0 <- summary(fit0)
   sm1 <- summary(fit1)
 
-  expect_s3_class(sm0, "summary_latent_corr")
+  expect_s3_class(sm0, "summary.latent_corr")
+  expect_s3_class(sm0, "summary.matrixCorr")
   expect_s3_class(sm1, "summary.biserial_corr")
-  expect_true(all(c("var1", "var2", "estimate", "lwr", "upr", "statistic", "df", "p_value", "n_complete") %in% names(sm1)))
+  expect_true(all(c("item1", "item2", "estimate", "lwr", "upr", "statistic", "df", "p_value", "n_complete") %in% names(sm1)))
 
   out <- capture.output(print(sm1, digits = 3))
   expect_true(any(grepl("Biserial correlation summary", out, fixed = TRUE)))
@@ -649,12 +651,12 @@ test_that("biserial summary switches to pairwise inference view when requested",
 test_that("latent correlation methods support pairwise complete cases", {
   x_bin <- c(FALSE, TRUE, NA, FALSE, TRUE, FALSE)
   y_bin <- c(TRUE, FALSE, TRUE, NA, FALSE, TRUE)
-  expect_false(is.na(tetrachoric(x_bin, y_bin, check_na = FALSE)))
+  expect_false(is.na(tetrachoric(x_bin, y_bin, na_method = "pairwise")))
 
   x_cont <- c(0.1, -0.4, NA, 0.7, 1.2, -0.5)
   y_ord <- ordered(c(1, 2, 3, NA, 2, 1))
-  expect_false(is.na(polyserial(x_cont, y_ord, check_na = FALSE)))
-  expect_false(is.na(biserial(x_cont, x_bin, check_na = FALSE)))
+  expect_false(is.na(polyserial(x_cont, y_ord, na_method = "pairwise")))
+  expect_false(is.na(biserial(x_cont, x_bin, na_method = "pairwise")))
 })
 
 test_that("latent correlation print, plot, and summary methods work", {
@@ -678,7 +680,8 @@ test_that("latent correlation print, plot, and summary methods work", {
   expect_equal(scale$limits, c(-1, 1))
 
   sm <- summary(tc)
-  expect_s3_class(sm, "summary_latent_corr")
+  expect_s3_class(sm, "summary.latent_corr")
+  expect_s3_class(sm, "summary.matrixCorr")
   sum_out <- capture.output(print(sm, digits = 3))
   expect_true(any(grepl("Latent correlation summary", sum_out)))
   expect_true(any(grepl("thresholds", sum_out)))
@@ -698,7 +701,8 @@ test_that("latent summaries keep all pairs for square but non-symmetric outputs"
 
   sm <- summary(bs)
 
-  expect_s3_class(sm, "summary_latent_corr")
+  expect_s3_class(sm, "summary.latent_corr")
+  expect_s3_class(sm, "summary.matrixCorr")
   expect_identical(sm$n_pairs, 4L)
   expect_s3_class(sm$top_results, "data.frame")
   expect_identical(nrow(sm$top_results), 4L)
@@ -791,8 +795,8 @@ test_that("sparse zero-cell latent fits expose diagnostics and thresholds", {
     )
   }
   sparse_df <- expand_table_pairs(sparse_2x2)
-  pc_mat <- polychoric(sparse_df, check_na = TRUE)
-  pc_mat0 <- polychoric(sparse_df, correct = 0, check_na = TRUE)
+  pc_mat <- polychoric(sparse_df, na_method = "error")
+  pc_mat0 <- polychoric(sparse_df, correct = 0, na_method = "error")
   diag_pc <- attr(pc_mat, "diagnostics")
   diag_pc0 <- attr(pc_mat0, "diagnostics")
   expect_true(is.list(diag_pc))

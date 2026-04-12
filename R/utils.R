@@ -329,6 +329,102 @@ match_arg <- function(arg,
   rlang::arg_match(arg = arg, values = values, multiple = FALSE, error_arg = arg_name)
 }
 
+#' Validate the package-wide missing-data method selector
+#' @keywords internal
+#' @noRd
+validate_na_method <- function(na_method,
+                               arg = as.character(substitute(na_method))) {
+  if (rlang::is_bool(na_method)) {
+    return(if (isTRUE(na_method)) "error" else "pairwise")
+  }
+  match_arg(
+    na_method,
+    values = c("error", "pairwise"),
+    arg_name = arg
+  )
+}
+
+#' Resolve canonical/deprecated missing-data arguments
+#' @keywords internal
+#' @noRd
+resolve_na_args <- function(na_method = "error",
+                            check_na = NULL,
+                            na_method_missing = FALSE,
+                            arg_na_method = "na_method",
+                            arg_check_na = "check_na",
+                            warn = TRUE) {
+  if (!is.null(check_na)) {
+    check_bool(check_na, arg = arg_check_na)
+    if (!isTRUE(na_method_missing)) {
+      abort_bad_arg(
+        arg_na_method,
+        message = "and {.arg check_na} cannot both be supplied.",
+        .hint = "Use only {.arg na_method}; {.arg check_na} is deprecated."
+      )
+    }
+    if (isTRUE(warn)) {
+      replacement <- if (isTRUE(check_na)) "error" else "pairwise"
+      cli::cli_warn(
+        c(
+          "{.arg check_na} is deprecated.",
+          "i" = "Use {.arg na_method} = {.val {replacement}} instead."
+        ),
+        replacement = replacement,
+        class = c("matrixCorr_warning", "matrixCorr_deprecated_warning")
+      )
+    }
+    resolved <- if (isTRUE(check_na)) "error" else "pairwise"
+    return(list(
+      na_method = resolved,
+      check_na = identical(resolved, "error")
+    ))
+  }
+
+  if (!isTRUE(na_method_missing) && rlang::is_bool(na_method)) {
+    if (isTRUE(warn)) {
+      replacement <- if (isTRUE(na_method)) "error" else "pairwise"
+      cli::cli_warn(
+        c(
+          "Logical {.arg na_method} is deprecated compatibility input.",
+          "i" = "Use {.arg na_method} = {.val {replacement}} instead."
+        ),
+        replacement = replacement,
+        class = c("matrixCorr_warning", "matrixCorr_deprecated_warning")
+      )
+    }
+  }
+
+  resolved <- validate_na_method(na_method, arg = arg_na_method)
+  list(
+    na_method = resolved,
+    check_na = identical(resolved, "error")
+  )
+}
+
+#' Extract deprecated compatibility aliases from dots
+#' @keywords internal
+#' @noRd
+.mc_extract_legacy_aliases <- function(dots,
+                                       allowed = character(),
+                                       dots_arg = "...") {
+  dots <- if (is.null(dots)) list() else dots
+  nms <- names(dots)
+  if (length(dots) && (is.null(nms) || anyNA(nms) || any(!nzchar(nms)))) {
+    abort_bad_arg(
+      dots_arg,
+      message = "does not allow unnamed extra arguments."
+    )
+  }
+  unknown <- setdiff(nms, allowed)
+  if (length(unknown)) {
+    abort_bad_arg(
+      dots_arg,
+      message = "contains unsupported argument(s): {paste(unknown, collapse = ', ')}."
+    )
+  }
+  dots
+}
+
 #' Inform only when verbose
 #' @keywords internal
 inform_if_verbose <- function(...,

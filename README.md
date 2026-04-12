@@ -114,12 +114,12 @@ summary(R_pear)
 #> 
 #> Strongest pairs by |estimate|
 #> 
-#>  var1 var2 estimate n_complete lwr    upr   
-#>  V3   V6   -0.1410  300        -0.250 -0.028
-#>  V2   V6    0.1272  300         0.014  0.237
-#>  V3   V5    0.0776  300        -0.036  0.189
-#>  V4   V5    0.0724  300        -0.041  0.184
-#>  V1   V5   -0.0650  300        -0.177  0.049
+#>  item1 item2 estimate n_complete lwr    upr   
+#>  V3    V6    -0.1410  300        -0.250 -0.028
+#>  V2    V6     0.1272  300         0.014  0.237
+#>  V3    V5     0.0776  300        -0.036  0.189
+#>  V4    V5     0.0724  300        -0.041  0.184
+#>  V1    V5    -0.0650  300        -0.177  0.049
 #> ... 10 more rows not shown (omitted)
 #> Use as.data.frame()/tidy()/as.matrix() to inspect the full result.
 plot(R_bicor)
@@ -163,8 +163,8 @@ summary(fit_ccc_rm)
 #> 
 #> Concordance estimates
 #> 
-#>  method1 method2 estimate SB     se_ccc
-#>  A       B       0.8996   0.0554 0.0184
+#>  item1 item2 estimate n_subjects n_obs SB     se_ccc
+#>  A     B     0.8996   24         96    0.0554 0.0184
 #> 
 #> Variance components
 #> 

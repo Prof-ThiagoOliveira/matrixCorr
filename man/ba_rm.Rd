@@ -14,14 +14,14 @@ ba_rm(
   subject,
   method,
   time,
-  loa_multiplier = 1.96,
   conf_level = 0.95,
+  verbose = FALSE,
+  loa_multiplier = 1.96,
   include_slope = FALSE,
   use_ar1 = FALSE,
   ar1_rho = NA_real_,
   max_iter = 200L,
-  tol = 1e-06,
-  verbose = FALSE
+  tol = 1e-06
 )
 
 \method{print}{ba_repeated}(
@@ -101,12 +101,16 @@ distinct method levels are required.}
 character string naming the time column in \code{data}. Values are coerced to
 integer before pairing and before AR(1) contiguity checks.}
 
+\item{conf_level}{Confidence level for Wald confidence intervals for the
+reported bias and both LoA endpoints. Must lie in \verb{(0, 1)}. Default \code{0.95}.}
+
+\item{verbose}{Logical. If \code{TRUE}, print progress for the pairwise
+\eqn{\ge 3}-method path. It has no material effect in the exactly-two-method
+path.}
+
 \item{loa_multiplier}{Positive scalar giving the SD multiplier used to form
 the limits of agreement. Default is \code{1.96}. In the exported \code{ba_rm()}
 interface this default is fixed and does not depend on \code{conf_level}.}
-
-\item{conf_level}{Confidence level for Wald confidence intervals for the
-reported bias and both LoA endpoints. Must lie in \verb{(0, 1)}. Default \code{0.95}.}
 
 \item{include_slope}{Logical. If \code{TRUE}, the model includes the paired mean as
 a fixed effect and estimates a proportional-bias slope. The reported BA
@@ -124,10 +128,6 @@ separately for each analysed pair.}
 \item{max_iter}{Maximum number of EM/GLS iterations used by the backend.}
 
 \item{tol}{Convergence tolerance for the backend EM/GLS iterations.}
-
-\item{verbose}{Logical. If \code{TRUE}, print progress for the pairwise
-\eqn{\ge 3}-method path. It has no material effect in the exactly-two-method
-path.}
 
 \item{x}{A \code{"ba_repeated_matrix"} object.}
 
@@ -191,11 +191,12 @@ centred at the estimated bias and expanded symmetrically to cover all
 elements used to compute the range (bands, CIs, and points if shown).
 Default \code{TRUE}.}
 
-\item{show_points}{Logical. If \code{TRUE}, per-pair points are drawn when present
-in the fitted object (two-method path) or when they can be reconstructed
-from \code{x$data_long} and \code{x$mapping} (pairwise path). If \code{FALSE} or if point
-data are unavailable, only the bands (and optional CI indicators) are drawn.
-Default \code{TRUE}.}
+\item{show_points}{Logical. If \code{TRUE}, per-pair points are drawn for the
+exactly-two-method path from the stored \code{means} and \code{diffs} vectors.
+Pairwise matrix plots draw points only when optional reconstruction fields
+are present; the minimal canonical \code{ba_rm()} return object does not retain
+those payloads. If \code{FALSE} or if point data are unavailable, only the bands
+(and optional CI indicators) are drawn. Default \code{TRUE}.}
 
 \item{show_value}{Logical; included for a consistent plotting interface.
 Repeated-measures Bland-Altman plots do not overlay numeric cell values,
@@ -225,7 +226,8 @@ Either a \code{"ba_repeated"} object (exactly two methods) or a
 \eqn{(y_1 + y_2)/2} used for plotting helpers.
 \item \code{diffs}: numeric vector of paired differences
 \eqn{y_2 - y_1} used for plotting helpers.
-\item \code{based.on}: integer number of complete subject-time pairs used.
+\item \code{n_obs}: integer number of complete subject-time pairs used.
+\item \code{based.on}: compatibility alias for \code{n_obs}.
 \item \code{mean.diffs}: scalar model-based BA centre. When
 \code{include_slope = FALSE}, this is the fitted intercept of the paired-
 difference model. When \code{include_slope = TRUE}, this is the fitted mean
@@ -258,11 +260,6 @@ residual structure actually used.
 \item \code{ar1_estimated}: logical indicating whether \code{ar1_rho} was
 estimated internally (\code{TRUE}) or supplied by the user (\code{FALSE}) when the
 final residual model is AR(1); otherwise \code{NA}.
-\item \code{data_long}: stored long-format data frame used downstream for
-plotting and reconstruction. It uses canonical internal column names
-\code{.response}, \code{.subject}, \code{.method}, and \code{.time}.
-\item \code{mapping}: named list identifying those stored canonical column
-names for \code{response}, \code{subject}, \code{method}, and \code{time}.
 }
 
 The confidence level is stored as \code{attr(x, "conf.level")}.
@@ -321,11 +318,6 @@ model is \code{"ar1"}; otherwise \code{NA} for that entry. Present only when
 indicating whether the pair-specific \code{ar1_rho_pair} was estimated internally
 (\code{TRUE}) or supplied by the user (\code{FALSE}) for entries whose final residual
 model is \code{"ar1"}; otherwise \code{NA}. Present only when \code{use_ar1 = TRUE}.
-\item \code{data_long}: stored long-format data frame used downstream for
-plotting and reconstruction. It uses canonical internal column names
-\code{.response}, \code{.subject}, \code{.method}, and \code{.time}.
-\item \code{mapping}: named list identifying those stored canonical column
-names for \code{response}, \code{subject}, \code{method}, and \code{time}.
 }
 }
 \description{

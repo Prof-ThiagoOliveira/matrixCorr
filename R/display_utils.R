@@ -387,12 +387,12 @@ NULL
     return(NULL)
   }
   row <- df[which_idx, , drop = FALSE]
-  if (!all(c("var1", "var2", "estimate") %in% names(row))) {
+  if (!all(c("item1", "item2", "estimate") %in% names(row))) {
     return(NULL)
   }
   sprintf(
     "%s (%s)",
-    .mc_pair_label(row$var1[[1L]], row$var2[[1L]]),
+    .mc_pair_label(row$item1[[1L]], row$item2[[1L]]),
     formatC(row$estimate[[1L]], format = "f", digits = digits)
   )
 }
@@ -450,8 +450,9 @@ NULL
   out <- df[utils::head(ord, topn), , drop = FALSE]
   keep <- intersect(
     c(
-      "var1", "var2", "method1", "method2", "estimate", "n_complete",
-      "n", "subjects", "df", "skipped_n", "skipped_prop",
+      "item1", "item2", "estimate", "lwr", "upr", "statistic", "df",
+      "p_value", "n_complete", "n_subjects", "n_obs",
+      "p_value_adjusted", "reject", "skipped_n", "skipped_prop",
       "lwr", "upr", "p_value", "p_value_adjusted", "reject"
     ),
     names(out)
@@ -462,6 +463,66 @@ NULL
   out <- out[, keep, drop = FALSE]
   rownames(out) <- NULL
   out
+}
+
+.mc_standardize_summary_pairs <- function(df) {
+  if (!is.data.frame(df)) return(df)
+  nms <- names(df)
+  if ("var1" %in% nms) nms[nms == "var1"] <- "item1"
+  if ("var2" %in% nms) nms[nms == "var2"] <- "item2"
+  if ("method1" %in% nms) nms[nms == "method1"] <- "item1"
+  if ("method2" %in% nms) nms[nms == "method2"] <- "item2"
+  names(df) <- nms
+  df
+}
+
+.mc_standardize_summary_counts <- function(df,
+                                           repeated = FALSE,
+                                           rename_n = FALSE) {
+  if (!is.data.frame(df)) return(df)
+  if ("based.on" %in% names(df) && !"n_obs" %in% names(df)) {
+    names(df)[names(df) == "based.on"] <- "n_obs"
+  }
+  if (isTRUE(rename_n) && "n" %in% names(df) && !"n_obs" %in% names(df)) {
+    names(df)[names(df) == "n"] <- "n_obs"
+  }
+  if (isTRUE(repeated) && "n_complete" %in% names(df) && !"n_obs" %in% names(df)) {
+    names(df)[names(df) == "n_complete"] <- "n_obs"
+  }
+  df
+}
+
+.mc_reorder_summary_columns <- function(df,
+                                        repeated = FALSE) {
+  if (!is.data.frame(df)) return(df)
+  core <- c("item1", "item2", "estimate", "lwr", "upr", "statistic", "df", "p_value")
+  counts <- if (isTRUE(repeated)) c("n_subjects", "n_obs") else "n_complete"
+  keep <- c(core, counts)
+  ordered <- c(intersect(keep, names(df)), setdiff(names(df), keep))
+  df[, ordered, drop = FALSE]
+}
+
+.mc_finalize_summary_df <- function(df,
+                                    class_name,
+                                    repeated = FALSE,
+                                    rename_n = FALSE) {
+  extra_attrs <- attributes(df)
+  extra_attrs[c("names", "row.names", "class")] <- NULL
+  df <- .mc_standardize_summary_pairs(df)
+  df <- .mc_standardize_summary_counts(df, repeated = repeated, rename_n = rename_n)
+  df <- .mc_reorder_summary_columns(df, repeated = repeated)
+  attributes(df) <- c(
+    attributes(df),
+    extra_attrs,
+    list(class = c(class_name, "summary.matrixCorr", "data.frame"))
+  )
+  df
+}
+
+.mc_finalize_summary_list <- function(x,
+                                      class_name) {
+  class(x) <- c(class_name, "summary.matrixCorr")
+  x
 }
 
 .mc_print_ranked_pairs_preview <- function(df,
@@ -591,7 +652,7 @@ NULL
   digits <- .mc_coalesce(attr(x, "digits"), digits)
   overview <- attr(x, "overview", exact = TRUE)
 
-  digest <- if (inherits(overview, "summary_corr_matrix")) {
+  digest <- if (inherits(overview, "summary.matrixCorr")) {
     .mc_corr_summary_digest_items(overview, digits = digits, show_ci = cfg$show_ci)
   } else {
     setNames(character(), character())
@@ -617,7 +678,13 @@ NULL
 
   .mc_print_named_digest(digest, header = title)
   .mc_print_ranked_pairs_preview(
-    as.data.frame(x, stringsAsFactors = FALSE),
+    .mc_reorder_summary_columns(
+      .mc_standardize_summary_counts(
+        .mc_standardize_summary_pairs(as.data.frame(x, stringsAsFactors = FALSE)),
+        repeated = any(c("n_subjects", "n_obs") %in% names(x))
+      ),
+      repeated = any(c("n_subjects", "n_obs") %in% names(x))
+    ),
     header = "Strongest pairs by |estimate|",
     topn = cfg$topn,
     max_vars = cfg$max_vars,
@@ -633,8 +700,8 @@ NULL
   show_overview <- attr(x, "show_overview", exact = TRUE)
   if (isTRUE(show_overview) || is.null(show_overview)) {
     if (!is.null(overview)) {
-      class(overview) <- "summary_corr_matrix"
-      print.summary_corr_matrix(overview, ...)
+      class(overview) <- unique(c(class(overview), "summary.matrixCorr"))
+      print.summary.matrixCorr(overview, ...)
     }
   }
   invisible(NULL)
@@ -791,8 +858,8 @@ NULL
   }
   idx <- which(selector, arr.ind = TRUE)
   out <- data.frame(
-    var1 = rn[idx[, 1L]],
-    var2 = cn[idx[, 2L]],
+    item1 = rn[idx[, 1L]],
+    item2 = cn[idx[, 2L]],
     estimate = as.numeric(m[idx]),
     stringsAsFactors = FALSE,
     check.names = FALSE

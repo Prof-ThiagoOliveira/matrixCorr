@@ -57,3 +57,34 @@ test_that("CCC with CI returns correctly structured result", {
   expect_equal(dim(result$est), dim(result$upr.ci))
 })
 
+test_that("ccc public API honors n_threads without changing estimates", {
+  set.seed(44)
+  X <- matrix(rnorm(160), ncol = 4)
+  colnames(X) <- paste0("V", 1:4)
+
+  fit1 <- ccc(X, n_threads = 1L)
+  fit2 <- ccc(X, n_threads = 2L)
+  fit1_ci <- ccc(X, ci = TRUE, n_threads = 1L)
+  fit2_ci <- ccc(X, ci = TRUE, n_threads = 2L)
+
+  expect_equal(unname(fit1), unname(fit2), tolerance = 1e-12)
+  expect_equal(unname(fit1_ci$est), unname(fit2_ci$est), tolerance = 1e-12)
+})
+
+test_that("ccc keeps only canonical CI components when intervals are requested", {
+  set.seed(45)
+  X <- matrix(rnorm(120), ncol = 3)
+  colnames(X) <- c("A", "B", "C")
+
+  fit <- ccc(X)
+  fit_ci <- ccc(X, ci = TRUE)
+
+  expect_false(is.list(fit))
+  expect_s3_class(fit, "ccc")
+  expect_s3_class(fit_ci, "ccc_ci")
+  expect_identical(names(fit_ci), c("est", "lwr.ci", "upr.ci"))
+  expect_false(any(c("estimate", "lwr", "upr") %in% names(fit_ci)))
+  expect_true(is.matrix(attr(fit, "diagnostics")$n_complete))
+  expect_true(is.matrix(attr(fit_ci, "diagnostics")$n_complete))
+})
+

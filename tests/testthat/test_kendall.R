@@ -283,6 +283,20 @@ test_that("kendall_tau numerics match stats::cor(Kendall)", {
   )
 })
 
+test_that("kendall_tau honors n_threads without changing estimates", {
+  set.seed(987)
+  X <- matrix(rnorm(240), nrow = 40, ncol = 6)
+  colnames(X) <- paste0("K", seq_len(ncol(X)))
+
+  fit1 <- kendall_tau(X, n_threads = 1L)
+  fit2 <- kendall_tau(X, n_threads = 2L)
+  fit1_ci <- kendall_tau(X, ci = TRUE, n_threads = 1L)
+  fit2_ci <- kendall_tau(X, ci = TRUE, n_threads = 2L)
+
+  expect_equal(unclass(fit1), unclass(fit2), tolerance = 1e-12)
+  expect_equal(attr(fit1_ci, "ci", exact = TRUE), attr(fit2_ci, "ci", exact = TRUE), tolerance = 1e-12)
+})
+
 test_that("kendall_tau two-vector mode returns a scalar matching base::cor", {
   set.seed(456)
   x <- rnorm(300)
@@ -352,7 +366,8 @@ test_that("kendall_tau default CI behaviour remains estimate-only", {
   kt <- kendall_tau(X)
   sm <- summary(kt)
 
-  expect_s3_class(sm, "summary_corr_matrix")
+  expect_s3_class(sm, "summary.matrixCorr")
+  expect_s3_class(sm, "summary.corr_matrix")
   expect_null(attr(kt, "ci", exact = TRUE))
   expect_null(attr(kt, "conf.level", exact = TRUE))
   expect_null(attr(kt, "ci.method", exact = TRUE))
@@ -426,7 +441,7 @@ test_that("kendall_tau Fieller CI handles ties and pairwise-complete sample size
     z = c(4, 4, 3, 3, 2, NA, 1, 1)
   )
 
-  kt <- kendall_tau(X, check_na = FALSE, ci = TRUE)
+  kt <- kendall_tau(X, na_method = "pairwise", ci = TRUE)
   diag_attr <- attr(kt, "diagnostics", exact = TRUE)
   ci <- attr(kt, "ci", exact = TRUE)
   ref_xy <- manual_kendall_fieller_ci_R(X[, "x"], X[, "y"], conf_level = 0.95)
@@ -560,7 +575,7 @@ test_that("kendall_tau CI-aware print, summary, and plot follow the CI contract"
 
   expect_s3_class(sm, "summary.kendall_matrix")
   expect_equal(nrow(sm), choose(ncol(X), 2))
-  expect_true(all(c("var1", "var2", "estimate", "n_complete", "lwr", "upr") %in% names(sm)))
+  expect_true(all(c("item1", "item2", "estimate", "n_complete", "lwr", "upr") %in% names(sm)))
   expect_match(paste(txt_print, collapse = "\n"), "Kendall correlation matrix")
   expect_false(any(grepl("Kendall correlation summary", txt_print, fixed = TRUE)))
   expect_match(paste(txt_summary, collapse = "\n"), "Kendall correlation summary")

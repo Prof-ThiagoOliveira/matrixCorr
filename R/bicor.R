@@ -192,16 +192,16 @@
 #' @export
 bicor <- function(
     data,
+    na_method        = c("error", "pairwise"),
+    ci               = FALSE,
+    conf_level       = 0.95,
+    n_threads        = getOption("matrixCorr.threads", 1L),
     c_const          = 9,
     max_p_outliers   = 1,
     pearson_fallback = c("hybrid", "none", "all"),
-    na_method        = c("error", "pairwise"),
     mad_consistent   = FALSE,
     w                = NULL,
-    sparse_threshold = NULL,
-    ci               = FALSE,
-    conf_level       = 0.95,
-    n_threads        = getOption("matrixCorr.threads", 1L)
+    sparse_threshold = NULL
 ) {
   pf <- match.arg(pearson_fallback)
   pf_int <- switch(pf, "none" = 0L, "hybrid" = 1L, "all" = 2L)
@@ -514,7 +514,7 @@ bicor <- function(
   for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
   for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
-  out <- structure(df, class = c("summary.bicor", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.bicor")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_ci") <- include_ci
   attr(out, "has_p") <- include_p

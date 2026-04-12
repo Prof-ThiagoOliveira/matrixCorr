@@ -24,7 +24,8 @@ test_that("summary output remains bounded and preserves full underlying data", {
   sm <- summary(obj, topn = 6)
   txt <- capture.output(print(sm, n = 10, topn = 3, max_vars = 6))
 
-  expect_s3_class(sm, "summary_corr_matrix")
+  expect_s3_class(sm, "summary.matrixCorr")
+  expect_s3_class(sm, "summary.corr_matrix")
   expect_equal(nrow(sm$top_results), 6L)
   expect_true(any(grepl("^Correlation summary$", txt)))
   expect_true(any(grepl("^Strongest pairs by \\|estimate\\|$", txt)))

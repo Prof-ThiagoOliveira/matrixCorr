@@ -11,9 +11,9 @@
 \alias{summary.schafer_corr}
 \title{Shrinkage Correlation}
 \usage{
-shrinkage_corr(data)
+shrinkage_corr(data, n_threads = getOption("matrixCorr.threads", 1L))
 
-schafer_corr(data)
+schafer_corr(data, n_threads = getOption("matrixCorr.threads", 1L))
 
 \method{print}{shrinkage_corr}(
   x,
@@ -89,6 +89,9 @@ schafer_corr(data)
 \item{data}{A numeric matrix or a data frame with at least two numeric
 columns. All non-numeric columns will be excluded. Columns must be numeric
 and contain no \code{NA}s.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
 
 \item{x}{An object of class \code{shrinkage_corr} or
 \code{schafer_corr}.}

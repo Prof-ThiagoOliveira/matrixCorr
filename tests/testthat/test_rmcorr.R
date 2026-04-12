@@ -90,23 +90,42 @@ test_that("rmcorr pair interface matches manual within-subject formulas", {
 
   expect_s3_class(fit, "rmcorr")
   expect_equal(fit$r, ref$r, tolerance = 1e-10)
+  expect_equal(fit$estimate, ref$r, tolerance = 1e-10)
   expect_equal(fit$slope, ref$slope, tolerance = 1e-10)
   expect_equal(fit$p_value, ref$p_value, tolerance = 1e-10)
   expect_equal(fit$conf_int, ref$conf_int, tolerance = 1e-10)
+  expect_equal(c(fit$lwr, fit$upr), unname(ref$conf_int), tolerance = 1e-10)
   expect_equal(fit$df, ref$df)
   expect_equal(fit$based.on, ref$n_complete)
+  expect_equal(fit$n_obs, ref$n_complete)
   expect_equal(fit$n_subjects, ref$n_subjects)
   expect_equal(fit$r, fit_positional$r, tolerance = 1e-10)
   expect_equal(fit$slope, fit_positional$slope, tolerance = 1e-10)
 
   sm <- summary(fit)
-  expect_s3_class(sm, "summary_rmcorr")
+  expect_s3_class(sm, "summary.rmcorr")
+  expect_s3_class(sm, "summary.matrixCorr")
   expect_true(any(grepl("Repeated-measures correlation", capture.output(print(fit)))))
-  sum_out <- capture.output(print(sm))
-  expect_true(any(grepl("Repeated-measures correlation summary", sum_out)))
+  sum_out <- capture.output(matrixCorr:::print.summary.rmcorr(sm))
+  expect_true(any(grepl("^Repeated-measures correlation summary:", sum_out)))
   expect_true(any(grepl("obs_per_subject", sum_out, fixed = TRUE)))
   expect_true(any(grepl("ci_method", sum_out, fixed = TRUE)))
-  expect_s3_class(plot(fit), "ggplot")
+  expect_named(sm, c(
+    "class", "method", "description", "responses", "n_obs", "n_subjects", "df",
+    "estimate", "slope", "p_value", "lwr", "upr", "conf_level",
+    "obs_per_subject_min", "obs_per_subject_max", "n_intercepts",
+    "ci_method", "ci_width", "valid"
+  ))
+  expect_equal(fit$r, fit$estimate, tolerance = 1e-12)
+  expect_equal(fit$conf_int, c(lower = fit$lwr, upper = fit$upr), tolerance = 1e-12)
+  expect_equal(fit$based.on, fit$n_obs)
+  expect_false(any(c("r", "conf_int", "based.on", "data_long", "intercepts", "fitted") %in% names(unclass(fit))))
+  expect_null(attr(fit, "source_data", exact = TRUE))
+  expect_error(plot(fit), "keep_data = TRUE", fixed = TRUE)
+
+  fit_keep <- rmcorr(dat, response = c("x", "y"), subject = "subject", keep_data = TRUE)
+  expect_s3_class(plot(fit_keep), "ggplot")
+  expect_true(is.list(attr(fit_keep, "source_data", exact = TRUE)))
 })
 
 test_that("rmcorr matrix output is symmetric and agrees with pair fits", {
@@ -130,7 +149,8 @@ test_that("rmcorr matrix output is symmetric and agrees with pair fits", {
   expect_equal(unname(diag_attr$n_subjects["x", "z"]), fit_xz$n_subjects)
 
   sm <- summary(fit_mat)
-  expect_s3_class(sm, "summary_rmcorr_matrix")
+  expect_s3_class(sm, "summary.rmcorr_matrix")
+  expect_s3_class(sm, "summary.matrixCorr")
   expect_true(any(grepl("Repeated-measures correlation matrix", capture.output(print(fit_mat)))))
   expect_s3_class(plot(fit_mat), "ggplot")
   expect_null(attr(fit_mat, "source_data", exact = TRUE))
@@ -157,6 +177,16 @@ test_that("rmcorr matrix stores compact source data only when requested", {
   expect_equal(source_data$conf_level, 0.95)
 })
 
+test_that("rmcorr pair keeps compact source data only when requested", {
+  dat <- sim_rmcorr_long(seed = 79L)
+  fit_base <- rmcorr(dat, response = c("x", "y"), subject = "subject")
+  fit_keep <- rmcorr(dat, response = c("x", "y"), subject = "subject", keep_data = TRUE)
+
+  expect_null(attr(fit_base, "source_data", exact = TRUE))
+  expect_true(is.list(attr(fit_keep, "source_data", exact = TRUE)))
+  expect_lt(as.numeric(object.size(fit_base)), as.numeric(object.size(fit_keep)))
+})
+
 test_that("rmcorr check_na = FALSE uses pairwise complete cases", {
   dat <- data.frame(
     subject = c(1, 1, 2, 2, 2, 3, 3),
@@ -166,17 +196,24 @@ test_that("rmcorr check_na = FALSE uses pairwise complete cases", {
   )
 
   expect_error(
-    rmcorr(dat, response = c("x", "y"), subject = "subject", check_na = TRUE),
+    rmcorr(dat, response = c("x", "y"), subject = "subject", na_method = "error"),
     "missing, NaN, or infinite values"
   )
 
   ref_xy <- manual_rmcorr(dat$x, dat$y, dat$subject)
   ref_xz <- manual_rmcorr(dat$x, dat$z, dat$subject)
 
-  fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject", check_na = FALSE)
-  fit_mat <- rmcorr(dat, response = c("x", "y", "z"), subject = "subject", check_na = FALSE)
+  expect_warning(
+    fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject", check_na = FALSE),
+    "deprecated"
+  )
+  expect_warning(
+    fit_mat <- rmcorr(dat, response = c("x", "y", "z"), subject = "subject", check_na = FALSE),
+    "deprecated"
+  )
 
   expect_equal(fit_xy$based.on, ref_xy$n_complete)
+  expect_equal(fit_xy$n_obs, ref_xy$n_complete)
   expect_equal(fit_xy$n_subjects, ref_xy$n_subjects)
   expect_equal(fit_xy$r, ref_xy$r, tolerance = 1e-10)
 
@@ -184,6 +221,24 @@ test_that("rmcorr check_na = FALSE uses pairwise complete cases", {
   expect_equal(unname(diag_attr$n_complete["x", "y"]), ref_xy$n_complete)
   expect_equal(unname(diag_attr$n_complete["x", "z"]), ref_xz$n_complete)
   expect_equal(unname(fit_mat["x", "z"]), ref_xz$r, tolerance = 1e-10)
+})
+
+test_that("rmcorr canonical na_method matches legacy check_na behavior", {
+  dat <- data.frame(
+    subject = c(1, 1, 2, 2, 2, 3, 3),
+    x = c(1, 2, 3, 4, 5, 1, 2),
+    y = c(2, 4, NA, 8, 10, 2, 4)
+  )
+
+  fit_new <- rmcorr(dat, response = c("x", "y"), subject = "subject", na_method = "pairwise")
+  expect_warning(
+    fit_old <- rmcorr(dat, response = c("x", "y"), subject = "subject", check_na = FALSE),
+    "deprecated"
+  )
+
+  expect_equal(fit_new$estimate, fit_old$estimate, tolerance = 1e-12)
+  expect_equal(fit_new$n_obs, fit_old$n_obs)
+  expect_equal(fit_new$n_subjects, fit_old$n_subjects)
 })
 
 test_that("rmcorr validates subject structure", {

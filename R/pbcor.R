@@ -309,7 +309,7 @@
   for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
   for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
-  out <- structure(df, class = c("summary.pbcor", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.pbcor")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_ci") <- include_ci
   attr(out, "has_p") <- include_p
@@ -339,9 +339,9 @@
 #' @param na_method One of \code{"error"} (default) or \code{"pairwise"}.
 #'   With \code{"pairwise"}, each correlation is computed on the overlapping
 #'   complete rows for the column pair.
-#' @param n_threads Integer \eqn{\geq 1}. Kept for API consistency with the
-#'   other robust correlation wrappers. It is currently validated but not used
-#'   by the exact percentage-bend implementation.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads used for the
+#'   point-estimate matrix computation. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach percentile
 #'   bootstrap confidence intervals for each pairwise estimate.
 #' @param p_value Logical (default \code{FALSE}). If \code{TRUE}, attach the
@@ -479,12 +479,12 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 pbcor <- function(data,
-                  beta = 0.2,
                   na_method = c("error", "pairwise"),
-                  n_threads = getOption("matrixCorr.threads", 1L),
                   ci = FALSE,
                   p_value = FALSE,
                   conf_level = 0.95,
+                  n_threads = getOption("matrixCorr.threads", 1L),
+                  beta = 0.2,
                   n_boot = 500L,
                   seed = NULL) {
   na_method <- match.arg(na_method)
@@ -511,9 +511,9 @@ pbcor <- function(data,
   colnames_data <- colnames(numeric_data)
 
   res <- if (na_method == "error") {
-    .mc_pbcor_matrix_exact(numeric_data, beta = beta)
+    pbcor_matrix_cpp(as.matrix(numeric_data), beta = beta, n_threads = n_threads)
   } else {
-    .mc_pbcor_matrix_pairwise_exact(numeric_data, beta = beta, min_n = 5L)
+    pbcor_matrix_pairwise_cpp(as.matrix(numeric_data), beta = beta, min_n = 5L, n_threads = n_threads)
   }
 
   colnames(res) <- rownames(res) <- colnames_data

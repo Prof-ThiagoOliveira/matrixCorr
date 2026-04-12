@@ -120,7 +120,8 @@ An object of class \code{"ba"} (list) with elements:
 \itemize{
 \item \code{means}, \code{diffs}: numeric vectors
 \item \code{groups}: data.frame used after NA removal
-\item \code{based.on}: integer, number of pairs used
+\item \code{n_obs}: integer, number of complete pairs used.
+\item \code{based.on}: compatibility alias for \code{n_obs}.
 \item \code{lower.limit}, \code{mean.diffs}, \code{upper.limit}
 \item \code{lines}: named numeric vector (lower, mean, upper)
 \item \code{CI.lines}: named numeric vector for CIs of those lines

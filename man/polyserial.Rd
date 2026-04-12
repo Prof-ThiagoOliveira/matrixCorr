@@ -8,8 +8,8 @@
 \alias{print.summary.polyserial_corr}
 \title{Polyserial Correlation Between Continuous and Ordinal Variables}
 \usage{
-polyserial(data, y, check_na = TRUE, ci = FALSE, p_value = FALSE,
-  conf_level = 0.95)
+polyserial(data, y, na_method = c("error", "pairwise"), ci = FALSE, p_value = FALSE,
+  conf_level = 0.95, ...)
 
 \method{print}{polyserial_corr}(
   x,
@@ -64,8 +64,9 @@ variables.}
 variables. Supported columns are factors, ordered factors, logical values,
 or integer-like numerics.}
 
-\item{check_na}{Logical (default \code{TRUE}). If \code{TRUE}, missing values
-are rejected. If \code{FALSE}, pairwise complete cases are used.}
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing values. \code{"pairwise"} uses pairwise
+complete cases.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach
 model-based large-sample Wald confidence intervals derived from the observed
@@ -77,6 +78,8 @@ estimated latent correlation.}
 
 \item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is
 \code{0.95}.}
+
+\item{...}{Additional arguments passed to \code{print()}.}
 
 \item{x}{An object of class \code{summary.polyserial_corr}.}
 
@@ -92,8 +95,6 @@ from console width.}
 \item{width}{Optional display width; defaults to \code{getOption("width")}.}
 
 \item{show_ci}{One of \code{"yes"} or \code{"no"}.}
-
-\item{...}{Additional arguments passed to \code{print()}.}
 
 \item{title}{Plot title. Default is \code{"Polyserial correlation heatmap"}.}
 

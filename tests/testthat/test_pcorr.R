@@ -218,6 +218,9 @@ test_that("pcorr Fisher-z CI matches manual partial-correlation calculation", {
   expect_identical(unique(as.integer(fit$diagnostics$n_complete)), as.integer(ref$n_complete))
   expect_identical(unique(as.integer(fit$diagnostics$n_conditioning[upper.tri(fit$diagnostics$n_conditioning)])), as.integer(ref$n_conditioning))
   expect_true(is.matrix(fit$p_value))
+  expect_false("inference" %in% names(unclass(fit)))
+  expect_null(attr(fit$pcor, "ci", exact = TRUE))
+  expect_null(attr(fit$pcor, "diagnostics", exact = TRUE))
 })
 
 test_that("pcorr custom conf_level changes CI width", {
@@ -247,7 +250,8 @@ test_that("pcorr CI integrates with the existing summary contract", {
   sm <- summary(fit)
   txt <- capture.output(print(sm, show_ci = "yes"))
 
-  expect_s3_class(sm, "summary_partial_corr")
+  expect_s3_class(sm, "summary.partial_corr")
+  expect_s3_class(sm, "summary.matrixCorr")
   expect_s3_class(sm, "data.frame")
   expect_true(isTRUE(attr(sm, "has_ci")))
   expect_true(all(c("estimate", "lwr", "upr") %in% names(sm)))

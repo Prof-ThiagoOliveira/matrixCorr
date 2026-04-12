@@ -2,9 +2,17 @@ Package: matrixCorr
 Type: Package
 Title: Collection of Correlation and Association Estimators
 Version: 0.11.0
-Authors@R: person(given = "Thiago de Paula", family = "Oliveira",
-    email = "thiago.paula.oliveira@gmail.com", role = c("aut", "cre"),
-    comment = c(ORCID = "0000-0002-4555-2584"))
+Authors@R: c(
+    person(
+        given = "Thiago de Paula",
+        family = "Oliveira",
+        email = "thiago.paula.oliveira@gmail.com",
+        role = c("aut", "cre"),
+        comment = c(ORCID = "0000-0002-4555-2584")
+    )
+    )
+Author: Thiago de Paula Oliveira [aut, cre] (<https://orcid.org/0000-0002-4555-2584>)
+Maintainer: Thiago de Paula Oliveira <thiago.paula.oliveira@gmail.com>
 Description: Compute correlation, association, agreement, and reliability
     measures for small to high-dimensional datasets through a consistent
     matrix-oriented interface. Supports classical correlations (Pearson,

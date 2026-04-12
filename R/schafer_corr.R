@@ -9,6 +9,8 @@
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Columns must be numeric
 #' and contain no \code{NA}s.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #'
 #' @return A symmetric numeric matrix of class \code{shrinkage_corr} (with
 #' compatibility class \code{schafer_corr}) where entry \code{(i, j)} is the
@@ -73,9 +75,15 @@
 #'   \code{\link{plot.shrinkage_corr}}, \code{\link{pearson_corr}}
 #' @author Thiago de Paula Oliveira
 #' @export
-shrinkage_corr <- function(data) {
+shrinkage_corr <- function(data,
+                           n_threads = getOption("matrixCorr.threads", 1L)) {
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   numeric_data <- validate_corr_input(data)
   colnames_data <- colnames(numeric_data)
+
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
 
   # call the C++ backend
   result <- sss_cor_cpp(numeric_data)
@@ -96,8 +104,9 @@ shrinkage_corr <- function(data) {
 #'
 #' @rdname shrinkage_corr
 #' @export
-schafer_corr <- function(data) {
-  shrinkage_corr(data)
+schafer_corr <- function(data,
+                         n_threads = getOption("matrixCorr.threads", 1L)) {
+  shrinkage_corr(data, n_threads = n_threads)
 }
 
 #' @rdname shrinkage_corr

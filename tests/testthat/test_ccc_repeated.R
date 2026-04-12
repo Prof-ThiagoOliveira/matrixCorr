@@ -109,7 +109,7 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
   # summary data frame columns present
   sm <- summary(cfit, show_ci = "yes", digits = 4)
   expect_s3_class(sm, "summary.ccc_rm_reml")
-  expect_true(all(c("method1","method2","estimate","lwr","upr",
+  expect_true(all(c("item1","item2","estimate","lwr","upr","n_subjects","n_obs",
                     "sigma2_subject","sigma2_subject_method","sigma2_subject_time",
                     "sigma2_error","SB","se_ccc") %in% names(sm)))
   out <- capture.output(print(sm))
@@ -484,4 +484,30 @@ test_that("repeated-measures CCC uses the subject argument name", {
   )
 
   expect_equal(unname(fit_named["A", "B"]), unname(fit_positional["A", "B"]))
+})
+
+test_that("repeated-measures CCC honors n_threads without changing estimates", {
+  set.seed(433)
+  df <- sim_ccc_rm_dat(seed = 9, rho = 0.2, n_subj = 50L, n_time = 4L)
+
+  fit1 <- ccc_rm_reml(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time",
+    n_threads = 1L,
+    ci = FALSE
+  )
+  fit2 <- ccc_rm_reml(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time",
+    n_threads = 2L,
+    ci = FALSE
+  )
+
+  expect_equal(unname(fit1["A", "B"]), unname(fit2["A", "B"]), tolerance = 1e-12)
 })

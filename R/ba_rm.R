@@ -68,7 +68,8 @@
 #'   \eqn{(y_1 + y_2)/2} used for plotting helpers.
 #'   \item \code{diffs}: numeric vector of paired differences
 #'   \eqn{y_2 - y_1} used for plotting helpers.
-#'   \item \code{based.on}: integer number of complete subject-time pairs used.
+#'   \item \code{n_obs}: integer number of complete subject-time pairs used.
+#'   \item \code{based.on}: compatibility alias for \code{n_obs}.
 #'   \item \code{mean.diffs}: scalar model-based BA centre. When
 #'   `include_slope = FALSE`, this is the fitted intercept of the paired-
 #'   difference model. When `include_slope = TRUE`, this is the fitted mean
@@ -101,11 +102,6 @@
 #'   \item \code{ar1_estimated}: logical indicating whether `ar1_rho` was
 #'   estimated internally (`TRUE`) or supplied by the user (`FALSE`) when the
 #'   final residual model is AR(1); otherwise `NA`.
-#'   \item \code{data_long}: stored long-format data frame used downstream for
-#'   plotting and reconstruction. It uses canonical internal column names
-#'   `.response`, `.subject`, `.method`, and `.time`.
-#'   \item \code{mapping}: named list identifying those stored canonical column
-#'   names for `response`, `subject`, `method`, and `time`.
 #' }
 #'
 #' The confidence level is stored as `attr(x, "conf.level")`.
@@ -164,11 +160,6 @@
 #'   indicating whether the pair-specific `ar1_rho_pair` was estimated internally
 #'   (`TRUE`) or supplied by the user (`FALSE`) for entries whose final residual
 #'   model is `"ar1"`; otherwise `NA`. Present only when `use_ar1 = TRUE`.
-#'   \item \code{data_long}: stored long-format data frame used downstream for
-#'   plotting and reconstruction. It uses canonical internal column names
-#'   `.response`, `.subject`, `.method`, and `.time`.
-#'   \item \code{mapping}: named list identifying those stored canonical column
-#'   names for `response`, `subject`, `method`, and `time`.
 #' }
 #'
 #' @details
@@ -497,11 +488,11 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 ba_rm <- function(data = NULL, response, subject, method, time,
-                                  loa_multiplier = 1.96, conf_level = 0.95,
+                                  conf_level = 0.95, verbose = FALSE,
+                                  loa_multiplier = 1.96,
                                   include_slope = FALSE,
                                   use_ar1 = FALSE, ar1_rho = NA_real_,
-                                  max_iter = 200L, tol = 1e-6,
-  verbose = FALSE) {
+                                  max_iter = 200L, tol = 1e-6) {
 
   # legacy positional signature support: ba_rm(response, subject, method, time, ...)
   if (!missing(data) && !inherits(data, "data.frame") && missing(time)) {
@@ -640,9 +631,6 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       loa_multiplier = loa_multiplier, conf_level = conf_level, include_slope = include_slope,
       use_ar1 = use_ar1, ar1_rho = ar1_rho, max_iter = max_iter, tol = tol
     )
-    # attach mapping/data_long for downstream plotting
-    res1$data_long <- data_long
-    res1$mapping   <- mapping
     attr(res1, "conf.level") <- conf_level
     return(res1)
   }
@@ -807,9 +795,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     sigma2_subject = vc_subject,
     sigma2_resid   = vc_resid,
     ar1_rho_pair   = if (use_ar1) ar1_rho_mat else NULL,
-    ar1_estimated  = if (use_ar1) ar1_estimated else NULL,
-    data_long      = data_long,
-    mapping        = mapping
+    ar1_estimated  = if (use_ar1) ar1_estimated else NULL
   )
   ba_repeated <- structure(ba_repeated, class = c("ba_repeated_matrix","list"))
   attr(ba_repeated, "conf.level") <- conf_level
@@ -954,6 +940,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   ba_repeated <- list(
     means         = means,
     diffs         = diffs,
+    n_obs         = n_pairs,
     based.on      = n_pairs,
     lower.limit   = loa_lower,
     mean.diffs    = md,
@@ -1160,7 +1147,7 @@ summary.ba_repeated <- function(object,
     loa_low   = round(num_or_na_ba(object$lower.limit), digits),
     loa_up    = round(num_or_na_ba(object$upper.limit), digits),
     width     = round(num_or_na_ba(object$upper.limit - object$lower.limit), digits),
-    n         = n,
+    n_obs     = n,
     stringsAsFactors = FALSE, check.names = FALSE
   )
 
@@ -1189,7 +1176,11 @@ summary.ba_repeated <- function(object,
     ba_repeated$ar1_estimated <- object$ar1_estimated
   }
 
-  ba_repeated <- structure(ba_repeated, class = c("summary.ba_repeated","data.frame"))
+  ba_repeated <- .mc_finalize_summary_df(
+    ba_repeated,
+    class_name = "summary.ba_repeated",
+    repeated = TRUE
+  )
   attr(ba_repeated, "conf.level") <- cl
   ba_repeated
 }
@@ -1221,7 +1212,7 @@ summary.ba_repeated_matrix <- function(object,
       loa_low = round(object$loa_lower[i, j], digits),
       loa_up  = round(object$loa_upper[i, j], digits),
       width   = round(object$width[i, j], digits),
-      n       = suppressWarnings(as.integer(object$n[i, j])),
+      n_obs   = suppressWarnings(as.integer(object$n[i, j])),
       sigma2_subject = round(object$sigma2_subject[i, j], digits),
       sigma2_resid   = round(object$sigma2_resid[i, j],   digits)
     )
@@ -1249,8 +1240,11 @@ summary.ba_repeated_matrix <- function(object,
     }
     rows[[k]] <- row
   }
-  df <- structure(do.call(rbind.data.frame, rows),
-                  class = c("summary.ba_repeated_matrix", "data.frame"))
+  df <- .mc_finalize_summary_df(
+    do.call(rbind.data.frame, rows),
+    class_name = "summary.ba_repeated_matrix",
+    repeated = TRUE
+  )
   if ("ar1_rho" %in% names(df) && all(is.na(df$ar1_rho))) {
     df$ar1_rho <- NULL
   }
@@ -1267,7 +1261,7 @@ summary.ba_repeated_matrix <- function(object,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("method1", "method2", "n", "bias", "sd_loa",
+        cols = c("item1", "item2", "n_obs", "bias", "sd_loa",
                  "loa_low", "loa_up", "width", "slope")
       ),
       list(
@@ -1299,7 +1293,7 @@ print.summary.ba_repeated <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("method1", "method2", "n", "bias", "sd_loa",
+        cols = c("item1", "item2", "n_obs", "bias", "sd_loa",
                  "loa_low", "loa_up", "width", "slope")
       ),
       list(
@@ -1337,7 +1331,7 @@ print.summary.ba_repeated_matrix <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("method1", "method2", "n", "bias", "sd_loa",
+        cols = c("item1", "item2", "n_obs", "bias", "sd_loa",
                  "loa_low", "loa_up", "width", "slope")
       ),
       list(
@@ -1404,11 +1398,12 @@ print.summary.ba_repeated_matrix <- function(x, digits = NULL, n = NULL,
 #'   elements used to compute the range (bands, CIs, and points if shown).
 #'   Default `TRUE`.
 #'
-#' @param show_points Logical. If `TRUE`, per-pair points are drawn when present
-#'   in the fitted object (two-method path) or when they can be reconstructed
-#'   from `x$data_long` and `x$mapping` (pairwise path). If `FALSE` or if point
-#'   data are unavailable, only the bands (and optional CI indicators) are drawn.
-#'   Default `TRUE`.
+#' @param show_points Logical. If `TRUE`, per-pair points are drawn for the
+#'   exactly-two-method path from the stored `means` and `diffs` vectors.
+#'   Pairwise matrix plots draw points only when optional reconstruction fields
+#'   are present; the minimal canonical `ba_rm()` return object does not retain
+#'   those payloads. If `FALSE` or if point data are unavailable, only the bands
+#'   (and optional CI indicators) are drawn. Default `TRUE`.
 #' @param ... Additional theme adjustments passed to `ggplot2::theme(...)`
 #'   (e.g., `plot.title.position = "plot"`, `axis.title.x = element_text(size=11)`).
 #' @param show_value Logical; included for a consistent plotting interface.

@@ -98,7 +98,7 @@ test_that("pearson_corr pairwise mode uses complete-case overlap per pair", {
     z = c(1, NA, 2, 3, 4, 5)
   )
 
-  R <- pearson_corr(X, check_na = FALSE)
+  R <- pearson_corr(X, na_method = "pairwise")
   diag_attr <- attr(R, "diagnostics", exact = TRUE)
 
   keep_xy <- stats::complete.cases(X[, "x"], X[, "y"])
@@ -117,7 +117,7 @@ test_that("pearson_corr Fisher-z confidence intervals match manual calculation",
     z = c(8, 7, 6, 5, 4, 3, 2, 1)
   )
 
-  R <- pearson_corr(X, check_na = FALSE, ci = TRUE)
+  R <- pearson_corr(X, na_method = "pairwise", ci = TRUE)
   ci <- attr(R, "ci", exact = TRUE)
   diag_attr <- attr(R, "diagnostics", exact = TRUE)
 
@@ -139,6 +139,42 @@ test_that("pearson_corr Fisher-z confidence intervals match manual calculation",
   expect_equal(ci$conf.level, 0.95)
 })
 
+test_that("pearson_corr stores CI payload only when requested", {
+  X <- cbind(
+    A = c(1, 2, 3, 4, 5, 6),
+    B = c(1.1, 2.1, 3.0, 4.2, 4.9, 6.2),
+    C = c(6, 5, 4, 3, 2, 1)
+  )
+
+  fit <- pearson_corr(X)
+  fit_ci <- pearson_corr(X, ci = TRUE)
+
+  expect_null(attr(fit, "ci", exact = TRUE))
+  expect_null(attr(fit, "diagnostics", exact = TRUE))
+
+  ci_attr <- attr(fit_ci, "ci", exact = TRUE)
+  expect_type(ci_attr, "list")
+  expect_identical(names(ci_attr), c("est", "lwr.ci", "upr.ci", "conf.level"))
+  expect_true(is.matrix(ci_attr$est))
+  expect_true(is.matrix(ci_attr$lwr.ci))
+  expect_true(is.matrix(ci_attr$upr.ci))
+  expect_false("ci" %in% names(attributes(ci_attr$est)))
+})
+
+test_that("pearson_corr honors n_threads without changing estimates", {
+  set.seed(321)
+  X <- matrix(rnorm(240), nrow = 40, ncol = 6)
+  colnames(X) <- paste0("P", seq_len(ncol(X)))
+
+  fit1 <- pearson_corr(X, n_threads = 1L)
+  fit2 <- pearson_corr(X, n_threads = 2L)
+  fit1_ci <- pearson_corr(X, ci = TRUE, n_threads = 1L)
+  fit2_ci <- pearson_corr(X, ci = TRUE, n_threads = 2L)
+
+  expect_equal(unclass(fit1), unclass(fit2), tolerance = 1e-12)
+  expect_equal(attr(fit1_ci, "ci", exact = TRUE), attr(fit2_ci, "ci", exact = TRUE), tolerance = 1e-12)
+})
+
 test_that("pearson_corr CI-aware print, summary, and plot follow the CI style", {
   skip_if_not_installed("ggplot2")
 
@@ -156,7 +192,7 @@ test_that("pearson_corr CI-aware print, summary, and plot follow the CI style", 
 
   expect_s3_class(sm, "summary.pearson_corr")
   expect_equal(nrow(sm), choose(ncol(X), 2))
-  expect_true(all(c("var1", "var2", "estimate", "n_complete", "lwr", "upr") %in% names(sm)))
+  expect_true(all(c("item1", "item2", "estimate", "n_complete", "lwr", "upr") %in% names(sm)))
   expect_match(paste(txt_print, collapse = "\n"), "Pearson correlation matrix")
   expect_false(any(grepl("Pearson correlation summary", txt_print, fixed = TRUE)))
   expect_match(paste(txt_summary, collapse = "\n"), "Pearson correlation summary")

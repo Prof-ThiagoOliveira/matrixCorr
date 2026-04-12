@@ -4,7 +4,7 @@
 \alias{print.rmcorr_matrix}
 \alias{plot.rmcorr_matrix}
 \alias{summary.rmcorr_matrix}
-\alias{print.summary_rmcorr_matrix}
+\alias{print.summary.rmcorr_matrix}
 \title{Methods for rmcorr Matrix Objects}
 \usage{
 \method{print}{rmcorr_matrix}(
@@ -39,7 +39,7 @@
   ...
 )
 
-\method{print}{summary_rmcorr_matrix}(
+\method{print}{summary.rmcorr_matrix}(
   x,
   digits = 4,
   n = NULL,
@@ -52,7 +52,7 @@
 }
 \arguments{
 \item{x}{An object of class \code{"rmcorr_matrix"} or
-\code{"summary_rmcorr_matrix"}.}
+\code{"summary.rmcorr_matrix"}.}
 
 \item{digits}{Number of significant digits to print.}
 
@@ -85,5 +85,5 @@ on heatmap tiles when the plot type supports them.}
 \description{
 Print, summarize, and plot methods for repeated-measures
 correlation matrix objects of class \code{"rmcorr_matrix"} and
-\code{"summary_rmcorr_matrix"}.
+\code{"summary.rmcorr_matrix"}.
 }

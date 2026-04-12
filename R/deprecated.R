@@ -67,7 +67,10 @@
 #'   precision matrices.
 #' @param ci Logical; if `TRUE`, request confidence intervals when supported by
 #'   the replacement function.
-#' @param check_na Logical validation flag used by `dcor()`.
+#' @param na_method Missing-data policy forwarded to the replacement function
+#'   when supported.
+#' @param ... Additional arguments forwarded to the replacement function when
+#'   supported.
 #'
 #' @details
 #' Renamed functions:
@@ -185,9 +188,9 @@ biweight_mid_corr <- function(
 
 #' @rdname deprecated-matrixCorr
 #' @export
-distance_corr <- function(data, check_na = TRUE) {
+distance_corr <- function(data, na_method = c("error", "pairwise"), ...) {
   .mc_deprecate(old = "distance_corr", new = "dcor")
-  dcor(data = data, check_na = check_na)
+  dcor(data = data, na_method = na_method, ...)
 }
 
 #' @rdname deprecated-matrixCorr

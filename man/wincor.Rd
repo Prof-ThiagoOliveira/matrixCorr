@@ -10,12 +10,12 @@
 \usage{
 wincor(
   data,
-  tr = 0.2,
   na_method = c("error", "pairwise"),
-  n_threads = getOption("matrixCorr.threads", 1L),
   ci = FALSE,
   p_value = FALSE,
   conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  tr = 0.2,
   n_boot = 500L,
   seed = NULL
 )
@@ -69,16 +69,7 @@ wincor(
 \item{data}{A numeric matrix or a data frame with at least two numeric
 columns. All non-numeric columns will be excluded.}
 
-\item{tr}{Winsorization proportion in \code{[0, 0.5)}. For a sample of size
-\eqn{n}, let \eqn{g = \lfloor tr \cdot n \rfloor}; the \eqn{g} smallest
-observations are set to the \eqn{(g+1)}-st order statistic and the
-\eqn{g} largest observations are set to the \eqn{(n-g)}-th order
-statistic. Default \code{0.2}.}
-
 \item{na_method}{One of \code{"error"} (default) or \code{"pairwise"}.}
-
-\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
-\code{getOption("matrixCorr.threads", 1L)}.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach percentile
 bootstrap confidence intervals for each pairwise estimate.}
@@ -89,6 +80,15 @@ pairwise estimate.}
 
 \item{conf_level}{Confidence level used when \code{ci = TRUE}. Default
 \code{0.95}.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
+
+\item{tr}{Winsorization proportion in \code{[0, 0.5)}. For a sample of size
+\eqn{n}, let \eqn{g = \lfloor tr \cdot n \rfloor}; the \eqn{g} smallest
+observations are set to the \eqn{(g+1)}-st order statistic and the
+\eqn{g} largest observations are set to the \eqn{(n-g)}-th order
+statistic. Default \code{0.2}.}
 
 \item{n_boot}{Integer \eqn{\geq 1}. Number of bootstrap resamples used when
 \code{ci = TRUE}. Default \code{500}.}

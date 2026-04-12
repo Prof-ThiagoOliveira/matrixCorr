@@ -8,14 +8,17 @@
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns will be excluded. Each column must have
 #' at least two non-missing values.
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, inputs must be
-#' free of \code{NA}/\code{NaN}/\code{Inf}. Set to \code{FALSE} only when the
-#' caller already handled missingness.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"pairwise"} recomputes each correlation on its own pairwise
+#'   complete-case overlap.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach pairwise
 #' Fisher-\eqn{z} confidence intervals for the off-diagonal Pearson
 #' correlations.
 #' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
 #' \code{0.95}.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)}-th element is
 #' the Pearson correlation between the \code{i}-th and \code{j}-th
@@ -53,10 +56,10 @@
 #' on the covariance diagonal due to floating-point rounding are truncated to
 #' zero before taking square roots.
 #'
-#' If a variable has zero variance (\eqn{s_i = 0}), the
-#' corresponding row and column of \eqn{R} are set to \code{NA}. When
-#' \code{check_na = FALSE}, each \eqn{(i,j)} correlation is recomputed on the
-#' pairwise complete-case overlap of columns \eqn{i} and \eqn{j}.
+#' If a variable has zero variance (\eqn{s_i = 0}), the corresponding row and
+#' column of \eqn{R} are set to \code{NA}. When
+#' \code{na_method = "pairwise"}, each \eqn{(i,j)} correlation is recomputed on
+#' the pairwise complete-case overlap of columns \eqn{i} and \eqn{j}.
 #'
 #' When \code{ci = TRUE}, Fisher-\eqn{z} confidence intervals are computed from
 #' the observed pairwise Pearson correlation \eqn{r_{ij}} and the pairwise
@@ -76,8 +79,8 @@
 #' \strong{Computational complexity.} The dominant cost is \eqn{O(n p^2)} flops
 #' with \eqn{O(p^2)} memory.
 #'
-#' @note Missing values are not allowed when \code{check_na = TRUE}. Columns
-#' with fewer than two observations are excluded.
+#' @note Missing values are rejected when \code{na_method = "error"}. Columns
+#' with fewer than two usable observations are excluded.
 #'
 #' @references
 #' Pearson, K. (1895). "Notes on regression and inheritance in the case of
@@ -127,18 +130,34 @@
 #' @seealso \code{\link{print.pearson_corr}}, \code{\link{plot.pearson_corr}}
 #' @author Thiago de Paula Oliveira
 #' @export
-pearson_corr <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
+pearson_corr <- function(data,
+                         na_method = c("error", "pairwise"),
+                         ci = FALSE,
+                         conf_level = 0.95,
+                         n_threads = getOption("matrixCorr.threads", 1L),
+                         ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
   check_bool(ci, arg = "ci")
   if (isTRUE(ci)) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   }
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
-  numeric_data <- validate_corr_input(data, check_na = check_na)
+  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
   colnames_data <- colnames(numeric_data)
   diagnostics <- NULL
   ci_attr <- NULL
 
-  if (isTRUE(check_na) && !isTRUE(ci)) {
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
+
+  if (isTRUE(na_cfg$check_na) && !isTRUE(ci)) {
     result <- pearson_matrix_cpp(numeric_data)
   } else {
     pairwise <- pearson_matrix_pairwise_cpp(
@@ -229,7 +248,7 @@ pearson_corr <- function(data, check_na = TRUE, ci = FALSE, conf_level = 0.95) {
   if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
   if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
 
-  out <- structure(df, class = c("summary.pearson_corr", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.pearson_corr")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_ci") <- include_ci
   attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level

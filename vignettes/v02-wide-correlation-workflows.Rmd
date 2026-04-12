@@ -144,19 +144,19 @@ summary(fit_dcor_p)
 
 The default wide-data behaviour is strict validation. Missing values are
 rejected unless the function explicitly supports a relaxed mode through
-`check_na = FALSE`.
+`na_method = "pairwise"`.
 
 ```{r}
 X_miss <- X
 X_miss$x2[c(3, 7)] <- NA
 
 try(pearson_corr(X_miss))
-pearson_corr(X_miss, check_na = FALSE)
+pearson_corr(X_miss, na_method = "pairwise")
 ```
 
-When `check_na = FALSE`, the package uses pairwise complete observations for
-the affected estimator. That is convenient, but it also means different pairs
-may be based on different effective sample sizes.
+When `na_method = "pairwise"`, the package uses pairwise complete observations
+for the affected estimator. That is convenient, but it also means different
+pairs may be based on different effective sample sizes.
 
 ## Practical guidance
 

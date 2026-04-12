@@ -160,12 +160,12 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 wincor <- function(data,
-                   tr = 0.2,
                    na_method = c("error", "pairwise"),
-                   n_threads = getOption("matrixCorr.threads", 1L),
                    ci = FALSE,
                    p_value = FALSE,
                    conf_level = 0.95,
+                   n_threads = getOption("matrixCorr.threads", 1L),
+                   tr = 0.2,
                    n_boot = 500L,
                    seed = NULL) {
   na_method <- match.arg(na_method)
@@ -478,7 +478,7 @@ wincor <- function(data,
   for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
   for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
-  out <- structure(df, class = c("summary.wincor", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.wincor")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_ci") <- include_ci
   attr(out, "has_p") <- include_p

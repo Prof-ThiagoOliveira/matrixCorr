@@ -10,6 +10,13 @@ ccc_rm_reml(
   subject,
   method = NULL,
   time = NULL,
+  ci = FALSE,
+  conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  ci_mode = c("auto", "raw", "logit"),
+  verbose = FALSE,
+  digits = 4,
+  use_message = TRUE,
   interaction = FALSE,
   max_iter = 100,
   tol = 1e-06,
@@ -17,12 +24,6 @@ ccc_rm_reml(
   Dmat_type = c("time-avg", "typical-visit", "weighted-avg", "weighted-sq"),
   Dmat_weights = NULL,
   Dmat_rescale = TRUE,
-  ci = FALSE,
-  conf_level = 0.95,
-  ci_mode = c("auto", "raw", "logit"),
-  verbose = FALSE,
-  digits = 4,
-  use_message = TRUE,
   ar = c("none", "ar1"),
   ar_rho = NA_real_,
   slope = c("none", "subject", "method", "custom"),
@@ -49,6 +50,37 @@ ccc_rm_reml(
 
 \item{time}{Character or \code{NULL}. Optional column name of time factor
 (added to fixed effects).}
+
+\item{ci}{Logical. If \code{TRUE}, return a CI container; limits are computed
+by a large-sample delta method for CCC (see \strong{CIs} note below).}
+
+\item{conf_level}{Numeric in \eqn{(0,1)}. Confidence level when
+\code{ci = TRUE} (default \code{0.95}).}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads to use for
+computation. Defaults to \code{getOption("matrixCorr.threads", 1L)}.}
+
+\item{ci_mode}{Character scalar; one of \code{c("auto","raw","logit")}.
+Controls how confidence intervals are computed when \code{ci = TRUE}.
+If \code{"raw"}, a Wald CI is formed on the CCC scale and truncated to
+\code{[0,1]}. If \code{"logit"}, a Wald CI is computed on the
+\eqn{\mathrm{logit}(\mathrm{CCC})} scale and back-transformed to the
+original scale (often more stable near 0 or 1). If \code{"auto"}
+(default), the method is chosen per estimate based on simple diagnostics
+(e.g., proximity to the \code{[0,1]} boundary / numerical stability),
+typically preferring \code{"logit"} near the boundaries and \code{"raw"}
+otherwise.}
+
+\item{verbose}{Logical. If \code{TRUE}, prints a structured summary of the
+fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.}
+
+\item{digits}{Integer \eqn{(\ge 0)}. Number of decimal places to use in the
+printed summary when \code{verbose = TRUE}. Default \code{4}.}
+
+\item{use_message}{Logical. When \code{verbose = TRUE}, choose the printing
+mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
+easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
+uses \code{cat()} to \code{stdout}. Default \code{TRUE}.}
 
 \item{interaction}{Logical. Include \code{method:time} interaction?
 (default \code{FALSE}).}
@@ -93,34 +125,6 @@ If unnamed, the length must equal the number of present time levels. In all case
 \eqn{D_m} is rescaled to satisfy the simple mass rule
 \eqn{1^\top D_m 1 = n_t}. This keeps the \eqn{S_B} denominator invariant and
 harmonizes with the \eqn{\kappa}-shrinkage used for variance terms.}
-
-\item{ci}{Logical. If \code{TRUE}, return a CI container; limits are computed
-by a large-sample delta method for CCC (see \strong{CIs} note below).}
-
-\item{conf_level}{Numeric in \eqn{(0,1)}. Confidence level when
-\code{ci = TRUE} (default \code{0.95}).}
-
-\item{ci_mode}{Character scalar; one of \code{c("auto","raw","logit")}.
-Controls how confidence intervals are computed when \code{ci = TRUE}.
-If \code{"raw"}, a Wald CI is formed on the CCC scale and truncated to
-\code{[0,1]}. If \code{"logit"}, a Wald CI is computed on the
-\eqn{\mathrm{logit}(\mathrm{CCC})} scale and back-transformed to the
-original scale (often more stable near 0 or 1). If \code{"auto"}
-(default), the method is chosen per estimate based on simple diagnostics
-(e.g., proximity to the \code{[0,1]} boundary / numerical stability),
-typically preferring \code{"logit"} near the boundaries and \code{"raw"}
-otherwise.}
-
-\item{verbose}{Logical. If \code{TRUE}, prints a structured summary of the
-fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.}
-
-\item{digits}{Integer \eqn{(\ge 0)}. Number of decimal places to use in the
-printed summary when \code{verbose = TRUE}. Default \code{4}.}
-
-\item{use_message}{Logical. When \code{verbose = TRUE}, choose the printing
-mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
-easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
-uses \code{cat()} to \code{stdout}. Default \code{TRUE}.}
 
 \item{ar}{Character. Residual correlation structure: \code{"none"} (iid) or
 \code{"ar1"} for subject-level AR(1) correlation within contiguous time

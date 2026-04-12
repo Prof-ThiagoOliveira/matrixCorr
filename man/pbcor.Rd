@@ -10,12 +10,12 @@
 \usage{
 pbcor(
   data,
-  beta = 0.2,
   na_method = c("error", "pairwise"),
-  n_threads = getOption("matrixCorr.threads", 1L),
   ci = FALSE,
   p_value = FALSE,
   conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  beta = 0.2,
   n_boot = 500L,
   seed = NULL
 )
@@ -68,18 +68,9 @@ pbcor(
 \arguments{
 \item{data}{A numeric matrix or data frame containing numeric columns.}
 
-\item{beta}{Bending constant in \code{[0, 0.5)} that sets the cutoff used to
-bend standardised deviations toward the interval \eqn{[-1, 1]}. Larger
-values cause more observations to be bent and increase resistance to
-marginal outliers. Default \code{0.2}. See Details.}
-
 \item{na_method}{One of \code{"error"} (default) or \code{"pairwise"}.
 With \code{"pairwise"}, each correlation is computed on the overlapping
 complete rows for the column pair.}
-
-\item{n_threads}{Integer \eqn{\geq 1}. Kept for API consistency with the
-other robust correlation wrappers. It is currently validated but not used
-by the exact percentage-bend implementation.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach percentile
 bootstrap confidence intervals for each pairwise estimate.}
@@ -90,6 +81,15 @@ pairwise estimate.}
 
 \item{conf_level}{Confidence level used when \code{ci = TRUE}. Default
 \code{0.95}.}
+
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads used for the
+point-estimate matrix computation. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
+
+\item{beta}{Bending constant in \code{[0, 0.5)} that sets the cutoff used to
+bend standardised deviations toward the interval \eqn{[-1, 1]}. Larger
+values cause more observations to be bent and increase resistance to
+marginal outliers. Default \code{0.2}. See Details.}
 
 \item{n_boot}{Integer \eqn{\geq 1}. Number of bootstrap resamples used when
 \code{ci = TRUE}. Default \code{500}.}

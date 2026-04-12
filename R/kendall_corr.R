@@ -13,14 +13,17 @@
 #' when \code{data} is a vector. If supplied, the function computes the
 #' Kendall correlation \emph{between \code{data} and \code{y}} using a
 #' low-overhead scalar path and returns a single number.
-#' @param check_na Logical (default \code{TRUE}). If \code{TRUE}, inputs must
-#' be free of missing/undefined values. Use \code{FALSE} only when missingness
-#' has already been handled upstream.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"pairwise"} recomputes each correlation on its own pairwise
+#'   complete-case overlap.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach pairwise
 #' confidence intervals for the off-diagonal Kendall correlations in
 #' matrix/data-frame mode.
 #' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
 #' \code{0.95}.
+#' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+#'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param ci_method Confidence-interval engine used when \code{ci = TRUE}.
 #' Supported Kendall methods are \code{"fieller"} (default),
 #' \code{"brown_benedetti"}, and \code{"if_el"}.
@@ -57,10 +60,10 @@
 #' denominator is zero and the correlation is undefined (returned as \code{NA}
 #' off the diagonal).
 #'
-#' When \code{check_na = FALSE}, each \eqn{(i,j)} estimate is recomputed on the
-#' pairwise complete-case overlap of columns \eqn{i} and \eqn{j}. Confidence
-#' intervals use the observed pairwise-complete Kendall estimate and the same
-#' pairwise complete-case overlap.
+#' When \code{na_method = "pairwise"}, each \eqn{(i,j)} estimate is recomputed
+#' on the pairwise complete-case overlap of columns \eqn{i} and \eqn{j}.
+#' Confidence intervals use the observed pairwise-complete Kendall estimate and
+#' the same pairwise complete-case overlap.
 #'
 #' With \code{ci_method = "fieller"}, the interval is built on the Fisher-style
 #' transformed scale \eqn{z = \operatorname{atanh}(\hat\tau)} using Fieller's
@@ -95,9 +98,9 @@
 #'   calculations and \code{"if_el"} adds extra per-pair likelihood solving.
 #' }
 #'
-#' @note Missing values are not allowed when \code{check_na = TRUE}. Columns
-#' with fewer than two observations are excluded. Confidence intervals are not
-#' available in the two-vector interface.
+#' @note Missing values are rejected when \code{na_method = "error"}. Columns
+#' with fewer than two usable observations are excluded. Confidence intervals
+#' are not available in the two-vector interface.
 #'
 #' @references
 #' Kendall, M. G. (1938). A New Measure of Rank Correlation. \emph{Biometrika},
@@ -156,14 +159,26 @@
 #' @seealso \code{\link{print.kendall_matrix}}, \code{\link{plot.kendall_matrix}}
 #' @author Thiago de Paula Oliveira
 #' @export
-kendall_tau <- function(data, y = NULL, check_na = TRUE, ci = FALSE,
+kendall_tau <- function(data,
+                        y = NULL,
+                        na_method = c("error", "pairwise"),
+                        ci = FALSE,
                         conf_level = 0.95,
-                        ci_method = c("fieller", "if_el", "brown_benedetti")) {
+                        n_threads = getOption("matrixCorr.threads", 1L),
+                        ci_method = c("fieller", "if_el", "brown_benedetti"),
+                        ...) {
+  legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
+  na_cfg <- resolve_na_args(
+    na_method = na_method,
+    check_na = legacy_args$check_na %||% NULL,
+    na_method_missing = missing(na_method)
+  )
   check_bool(ci, arg = "ci")
   ci_method <- match.arg(ci_method)
   if (isTRUE(ci)) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   }
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
   if (!is.null(y)) {
     if (isTRUE(ci)) {
@@ -177,10 +192,10 @@ kendall_tau <- function(data, y = NULL, check_na = TRUE, ci = FALSE,
       )
     }
     check_same_length(data, y, arg_x = "data", arg_y = "y")
-    if (check_na && (any(!is.finite(data)) || any(!is.finite(y)))) {
+    if (na_cfg$check_na && (any(!is.finite(data)) || any(!is.finite(y)))) {
       abort_bad_arg("data",
-        message = "and {.arg y} must be free of NA/NaN/Inf when {.arg check_na} = TRUE.",
-        .hint   = "Set `check_na = FALSE` only if missingness has been handled upstream."
+        message = "and {.arg y} must be free of NA/NaN/Inf when {.arg na_method} is {.val error}.",
+        .hint   = "Set `na_method = \"pairwise\"` to use complete-case overlaps."
       )
     }
 
@@ -188,12 +203,16 @@ kendall_tau <- function(data, y = NULL, check_na = TRUE, ci = FALSE,
     return(as.numeric(tau))
   }
 
-  numeric_data <- validate_corr_input(data, check_na = check_na)
+  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
   colnames_data <- colnames(numeric_data)
   diagnostics <- NULL
   ci_attr <- NULL
 
-  if (isTRUE(check_na) && !isTRUE(ci)) {
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  set_omp_threads(n_threads)
+
+  if (isTRUE(na_cfg$check_na) && !isTRUE(ci)) {
     result <- kendall_matrix_cpp(numeric_data)
   } else {
     pairwise <- kendall_matrix_pairwise_cpp(
@@ -287,7 +306,7 @@ kendall_tau <- function(data, y = NULL, check_na = TRUE, ci = FALSE,
   if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
   if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
 
-  out <- structure(df, class = c("summary.kendall_matrix", "data.frame"))
+  out <- .mc_finalize_summary_df(df, class_name = "summary.kendall_matrix")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
   attr(out, "has_ci") <- include_ci
   attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level

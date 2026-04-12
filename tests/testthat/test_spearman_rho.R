@@ -177,9 +177,24 @@ test_that("spearman_rho default CI behaviour remains estimate-only", {
   sp <- spearman_rho(X)
   sm <- summary(sp)
 
-  expect_s3_class(sm, "summary_corr_matrix")
+  expect_s3_class(sm, "summary.matrixCorr")
+  expect_s3_class(sm, "summary.corr_matrix")
   expect_null(attr(sp, "ci", exact = TRUE))
   expect_null(attr(sp, "conf.level", exact = TRUE))
+})
+
+test_that("spearman_rho honors n_threads without changing estimates", {
+  set.seed(654)
+  X <- matrix(rnorm(240), nrow = 40, ncol = 6)
+  colnames(X) <- paste0("S", seq_len(ncol(X)))
+
+  fit1 <- spearman_rho(X, n_threads = 1L)
+  fit2 <- spearman_rho(X, n_threads = 2L)
+  fit1_ci <- spearman_rho(X, ci = TRUE, n_threads = 1L)
+  fit2_ci <- spearman_rho(X, ci = TRUE, n_threads = 2L)
+
+  expect_equal(unclass(fit1), unclass(fit2), tolerance = 1e-12)
+  expect_equal(attr(fit1_ci, "ci", exact = TRUE), attr(fit2_ci, "ci", exact = TRUE), tolerance = 1e-12)
 })
 
 test_that("spearman_rho CI matches reference JEL implementation for positive association", {
@@ -242,7 +257,7 @@ test_that("spearman_rho CI works for pairwise-complete input and reports n_compl
     z = c(8, 7, 6, 5, 4, NA, 2, 1)
   )
 
-  sp <- spearman_rho(X, check_na = FALSE, ci = TRUE)
+  sp <- spearman_rho(X, na_method = "pairwise", ci = TRUE)
   diag_attr <- attr(sp, "diagnostics", exact = TRUE)
   ci <- attr(sp, "ci", exact = TRUE)
   ref_xy <- manual_spearman_jel_ci_R(X[, "x"], X[, "y"], conf_level = 0.95)
@@ -282,7 +297,7 @@ test_that("spearman_rho CI-aware print, summary, and plot follow the CI contract
 
   expect_s3_class(sm, "summary.spearman_rho")
   expect_equal(nrow(sm), choose(ncol(X), 2))
-  expect_true(all(c("var1", "var2", "estimate", "n_complete", "lwr", "upr") %in% names(sm)))
+  expect_true(all(c("item1", "item2", "estimate", "n_complete", "lwr", "upr") %in% names(sm)))
   expect_match(paste(txt_print, collapse = "\n"), "Spearman correlation matrix")
   expect_false(any(grepl("Spearman correlation summary", txt_print, fixed = TRUE)))
   expect_match(paste(txt_summary, collapse = "\n"), "Spearman correlation summary")

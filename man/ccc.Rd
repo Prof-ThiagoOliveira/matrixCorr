@@ -8,7 +8,13 @@
 \alias{plot.ccc}
 \title{Pairwise Lin's concordance correlation coefficient}
 \usage{
-ccc(data, ci = FALSE, conf_level = 0.95, verbose = FALSE)
+ccc(
+  data,
+  ci = FALSE,
+  conf_level = 0.95,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  verbose = FALSE
+)
 
 \method{print}{ccc}(
   x,
@@ -65,6 +71,9 @@ Non-numeric columns will be ignored.}
 
 \item{conf_level}{Confidence level for CI, default = 0.95}
 
+\item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
+\code{getOption("matrixCorr.threads", 1L)}.}
+
 \item{verbose}{Logical; if TRUE, prints how many threads are used}
 
 \item{x}{An object of class \code{"ccc"} (either a matrix or a list with CIs).}
@@ -114,8 +123,8 @@ If \code{ci = TRUE}, returns a list with elements: \code{est},
 \code{lwr.ci}, \code{upr.ci}.
 
 For \code{summary.ccc}, a data frame with columns
-\code{method1}, \code{method2}, \code{estimate} and (optionally)
-\code{lwr}, \code{upr}.
+\code{item1}, \code{item2}, \code{estimate}, and (optionally)
+\code{lwr}, \code{upr}, plus \code{n_complete} when available.
 }
 \description{
 Computes all pairwise Lin's Concordance Correlation Coefficients (CCC)

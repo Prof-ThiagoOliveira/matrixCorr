@@ -198,3 +198,16 @@ test_that("schafer_corr remains a compatibility alias", {
   expect_s3_class(old_fit, "shrinkage_corr")
   expect_s3_class(old_fit, "schafer_corr")
 })
+
+test_that("shrinkage_corr honors n_threads without changing estimates", {
+  set.seed(808)
+  X <- matrix(rnorm(240), nrow = 40, ncol = 6)
+  colnames(X) <- paste0("G", seq_len(ncol(X)))
+
+  fit1 <- shrinkage_corr(X, n_threads = 1L)
+  fit2 <- shrinkage_corr(X, n_threads = 2L)
+  alias_fit <- schafer_corr(X, n_threads = 2L)
+
+  expect_equal(unclass(fit1), unclass(fit2), tolerance = 1e-12)
+  expect_equal(unclass(fit2), unclass(alias_fit), tolerance = 1e-12)
+})
