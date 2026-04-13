@@ -238,34 +238,44 @@ dcor <- function(data,
   inf <- .mc_dcor_inference_attr(object)
   diag_attr <- attr(object, "diagnostics", exact = TRUE)
 
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
+  n_pairs <- nrow(est) * (ncol(est) - 1L) / 2L
+  var1 <- character(n_pairs)
+  var2 <- character(n_pairs)
+  estimate <- numeric(n_pairs)
+  n_complete <- if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) integer(n_pairs) else NULL
+  statistic <- if (is.list(inf)) numeric(n_pairs) else NULL
+  df_param <- if (is.list(inf)) numeric(n_pairs) else NULL
+  p_value <- if (is.list(inf)) numeric(n_pairs) else NULL
   k <- 0L
   for (i in seq_len(nrow(est) - 1L)) {
     for (j in (i + 1L):ncol(est)) {
       k <- k + 1L
-      rec <- list(
-        var1 = rn[i],
-        var2 = cn[j],
-        estimate = round(est[i, j], digits)
-      )
-      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
-        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
-      }
+      var1[k] <- rn[i]
+      var2[k] <- cn[j]
+      estimate[k] <- round(est[i, j], digits)
+      if (!is.null(n_complete)) n_complete[k] <- as.integer(diag_attr$n_complete[i, j])
       if (is.list(inf)) {
-        rec$statistic <- if (is.matrix(inf$statistic) && is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], digits) else NA_real_
-        rec$df <- if (is.matrix(inf$parameter) && is.finite(inf$parameter[i, j])) round(inf$parameter[i, j], digits) else NA_real_
-        rec$p_value <- if (is.matrix(inf$p_value) && is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
+        statistic[k] <- if (is.matrix(inf$statistic) && is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], digits) else NA_real_
+        df_param[k] <- if (is.matrix(inf$parameter) && is.finite(inf$parameter[i, j])) round(inf$parameter[i, j], digits) else NA_real_
+        p_value[k] <- if (is.matrix(inf$p_value) && is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
       }
-      rows[[k]] <- rec
     }
   }
 
-  df <- do.call(rbind.data.frame, rows)
+  df <- data.frame(
+    var1 = var1,
+    var2 = var2,
+    estimate = as.numeric(estimate),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  if (!is.null(n_complete)) df$n_complete <- as.integer(n_complete)
+  if (!is.null(statistic)) {
+    df$statistic <- as.numeric(statistic)
+    df$df <- as.numeric(df_param)
+    df$p_value <- as.numeric(p_value)
+  }
   rownames(df) <- NULL
-  num_cols <- intersect(c("estimate", "statistic", "df", "p_value"), names(df))
-  int_cols <- intersect(c("n_complete"), names(df))
-  for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
-  for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
 
   out <- .mc_finalize_summary_df(df, class_name = "summary.dcor")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)

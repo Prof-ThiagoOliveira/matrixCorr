@@ -1,6 +1,12 @@
 # Latent categorical / ordinal correlation wrappers
 
 .mc_has_missing_or_bad <- function(x) {
+  if (is.matrix(x)) {
+    if (is.logical(x)) {
+      return(anyNA(x))
+    }
+    return(anyNA(x) || !all(is.finite(x)))
+  }
   if (is.factor(x) || is.logical(x)) {
     return(anyNA(x))
   }
@@ -126,6 +132,19 @@
   check_bool(check_na)
   if (!check_na) {
     return(invisible(NULL))
+  }
+  if (is.matrix(x)) {
+    if (.mc_has_missing_or_bad(x)) {
+      abort_bad_arg(
+        arg,
+        message = "contains missing, NaN, or infinite values.",
+        .hint = "Use `na_method = \"pairwise\"` to use pairwise complete cases."
+      )
+    }
+    return(invisible(NULL))
+  }
+  if (!is.list(x)) {
+    x <- list(x)
   }
   bad <- vapply(x, .mc_has_missing_or_bad, logical(1))
   if (any(bad)) {
@@ -2380,7 +2399,7 @@ polyserial <- function(data,
       abort_bad_arg("data", message = "and {.arg y} must have the same number of observations.")
     }
     .mc_check_latent_missing(
-      c(as.list(as.data.frame(x_mat)), lapply(y_enc, `[[`, "code")),
+      c(list(.x_mat = x_mat), lapply(y_enc, `[[`, "code")),
       check_na = TRUE,
       arg = "data"
     )
@@ -2436,7 +2455,7 @@ polyserial <- function(data,
   }
 
   .mc_check_latent_missing(
-    c(as.list(as.data.frame(x_mat)), lapply(y_enc, `[[`, "code")),
+    c(list(.x_mat = x_mat), lapply(y_enc, `[[`, "code")),
     check_na = check_na,
     arg = "data"
   )
@@ -2785,7 +2804,7 @@ biserial <- function(data,
       abort_bad_arg("data", message = "and {.arg y} must have the same number of observations.")
     }
     .mc_check_latent_missing(
-      c(as.list(as.data.frame(x_mat)), lapply(y_enc, `[[`, "code")),
+      c(list(.x_mat = x_mat), lapply(y_enc, `[[`, "code")),
       check_na = TRUE,
       arg = "data"
     )
@@ -2841,7 +2860,7 @@ biserial <- function(data,
   }
 
   .mc_check_latent_missing(
-    c(as.list(as.data.frame(x_mat)), lapply(y_enc, `[[`, "code")),
+    c(list(.x_mat = x_mat), lapply(y_enc, `[[`, "code")),
     check_na = check_na,
     arg = "data"
   )

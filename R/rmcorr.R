@@ -209,7 +209,7 @@ rmcorr <- function(data = NULL, response, subject,
     }
 
     .mc_check_latent_missing(
-      c(as.list(as.data.frame(response_mat)), list(subject = subject_vec)),
+      list(response = response_mat, subject = subject_vec),
       check_na = TRUE,
       arg = "response"
     )
@@ -298,7 +298,7 @@ rmcorr <- function(data = NULL, response, subject,
 
   if (na_cfg$check_na) {
     .mc_check_latent_missing(
-      c(as.list(as.data.frame(response_mat)), list(subject = subject_vec)),
+      list(response = response_mat, subject = subject_vec),
       check_na = TRUE,
       arg = "response"
     )

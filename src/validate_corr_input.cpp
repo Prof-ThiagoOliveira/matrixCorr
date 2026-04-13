@@ -60,31 +60,29 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
           return Rcpp::NumericMatrix(data); // shallow, no copy
        }
 
-       // integer matrix: convert to double (parallel fill into a temporary buffer)
+       // integer matrix: convert to double directly into destination matrix
        if (t == INTSXP){
           Rcpp::IntegerMatrix Mi(data);
-          if (check_na){
-             for (int j = 0; j < nc; ++j)
-                if (any_na_int_vec(&(Mi(0, j)), nr)) Rcpp::stop("Missing values are not allowed.");
-          }
-
-          std::vector<double> buf(static_cast<size_t>(nr) * static_cast<size_t>(nc));
+          Rcpp::NumericMatrix M(nr, nc);
+          std::atomic<bool> bad(false);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) if(nc > 1)
 #endif
           for (int j = 0; j < nc; ++j){
+             if (bad.load(std::memory_order_relaxed)) continue;
              const int* src = &(Mi(0, j));
-             double*    dst = buf.data() + static_cast<size_t>(j) * static_cast<size_t>(nr);
-             for (int i = 0; i < nr; ++i) dst[i] = static_cast<double>(src[i]);
+             double*    dst = &(M(0, j));
+             if (check_na){
+               for (int i = 0; i < nr; ++i) {
+                 const int v = src[i];
+                 if (v == NA_INTEGER) { bad.store(true, std::memory_order_relaxed); break; }
+                 dst[i] = static_cast<double>(v);
+               }
+             } else {
+               for (int i = 0; i < nr; ++i) dst[i] = static_cast<double>(src[i]);
+             }
           }
-
-          // materialise NumericMatrix and copy buffer (serial, single touch)
-          Rcpp::NumericMatrix M(nr, nc);
-          for (int j = 0; j < nc; ++j){
-             std::copy(buf.data() + static_cast<size_t>(j) * static_cast<size_t>(nr),
-                       buf.data() + static_cast<size_t>(j + 1) * static_cast<size_t>(nr),
-                       &(M(0, j)));
-          }
+          if (bad.load(std::memory_order_relaxed)) Rcpp::stop("Missing values are not allowed.");
 
           // preserve colnames
           Rcpp::List dn = Mi.attr("dimnames");
@@ -113,6 +111,12 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
 
     // select true numeric columns (drop factors, logicals, and common time classes)
     std::vector<int> idx; idx.reserve(p_all);
+    std::vector<unsigned char> is_real;
+    std::vector<const double*> real_ptr;
+    std::vector<const int*> int_ptr;
+    is_real.reserve(p_all);
+    real_ptr.reserve(p_all);
+    int_ptr.reserve(p_all);
     int n = -1;
     for (int j = 0; j < p_all; ++j){
        SEXP col = df[j];
@@ -128,17 +132,16 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
        if (len < 2) Rcpp::stop("All numeric columns must have at least two values.");
        if (n == -1) n = len; else if (len != n) Rcpp::stop("All numeric columns must have the same length.");
 
-       // quick NA screen (serial; detailed checks happen during parallel copy)
-       if (check_na){
-          if (t == REALSXP){
-             const double* pr = REAL(col);
-             for (int i = 0; i < len; ++i) if (ISNAN(pr[i])) Rcpp::stop("Missing values are not allowed.");
-          } else { // INTSXP
-             if (any_na_int_vec(INTEGER(col), len)) Rcpp::stop("Missing values are not allowed.");
-          }
-       }
-
        idx.push_back(j);
+       if (t == REALSXP){
+         is_real.push_back(1u);
+         real_ptr.push_back(REAL(col));
+         int_ptr.push_back(nullptr);
+       } else {
+         is_real.push_back(0u);
+         real_ptr.push_back(nullptr);
+         int_ptr.push_back(INTEGER(col));
+       }
     }
 
     if (idx.empty())  Rcpp::stop("No numeric columns found in the input.");
@@ -146,8 +149,8 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
 
     const int k = static_cast<int>(idx.size());
 
-    // parallel copy into a plain buffer; do NOT touch R objects inside OpenMP
-    std::vector<double> buf(static_cast<size_t>(n) * static_cast<size_t>(k));
+    // parallel fill directly into destination matrix
+    Rcpp::NumericMatrix M(n, k);
     std::atomic<bool> bad(false);
 
 #ifdef _OPENMP
@@ -155,15 +158,9 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
 #endif
     for (int jj = 0; jj < k; ++jj){
        if (bad.load(std::memory_order_relaxed)) continue;
-
-       const int j = idx[jj];
-       SEXP col = df[j];
-       const SEXPTYPE t = TYPEOF(col);
-
-       double* dst = buf.data() + static_cast<size_t>(jj) * static_cast<size_t>(n);
-
-       if (t == REALSXP){
-          const double* pr = REAL(col);
+       double* dst = &(M(0, jj));
+       if (is_real[static_cast<size_t>(jj)]){
+          const double* pr = real_ptr[static_cast<size_t>(jj)];
           if (check_na){
              for (int i = 0; i < n; ++i){
                 const double v = pr[i];
@@ -174,7 +171,7 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
              std::copy(pr, pr + n, dst);
           }
        } else { // INTSXP
-          const int* pi = INTEGER(col);
+          const int* pi = int_ptr[static_cast<size_t>(jj)];
           if (check_na){
              for (int i = 0; i < n; ++i){
                 const int v = pi[i];
@@ -188,14 +185,6 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
     }
 
     if (bad.load(std::memory_order_relaxed)) Rcpp::stop("Missing values are not allowed.");
-
-    // materialise NumericMatrix and copy buffer (serial)
-    Rcpp::NumericMatrix M(n, k);
-    for (int jj = 0; jj < k; ++jj){
-       std::copy(buf.data() + static_cast<size_t>(jj) * static_cast<size_t>(n),
-                 buf.data() + static_cast<size_t>(jj + 1) * static_cast<size_t>(n),
-                 &(M(0, jj)));
-    }
 
     // set column names (serial; safe)
     std::vector<std::string> colnames;

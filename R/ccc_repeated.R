@@ -1680,6 +1680,9 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   df[[method]] <- droplevels(df[[method]])
   method_levels <- levels(df[[method]])
   Lm <- length(method_levels)
+  method_code_all <- as.integer(df[[method]])
+  idx_by_method <- lapply(seq_len(Lm), function(k) which(method_code_all == k))
+  Dfull_input <- if (!is.null(Dmat)) as.matrix(Dmat) else NULL
 
   est_mat <- matrix(1,  Lm, Lm, dimnames = list(method_levels, method_levels))
   if (isTRUE(ci)) {
@@ -1709,7 +1712,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     for (j in (i + 1L):Lm) {
       m1 <- method_levels[i]; m2 <- method_levels[j]
 
-      idx       <- which(df[[method]] %in% c(m1, m2))
+      idx       <- sort.int(c(idx_by_method[[i]], idx_by_method[[j]]), method = "quick")
       subj_int  <- as.integer(df[[rind]][idx])
       y_sub     <- df[[response]][idx]
       met_fac   <- droplevels(df[[method]][idx])        # exactly 2 levels
@@ -1725,7 +1728,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       # -------- Build/subset Dmat for this pair (only if >= 2 time levels) --------
       if (!is.null(time) && length(lev_time_sub) >= 2L) {
         if (!is.null(Dmat)) {
-          Dfull <- as.matrix(Dmat)
+          Dfull <- Dfull_input
           if (!is.null(all_time_lvls) &&
               nrow(Dfull) == length(all_time_lvls) && ncol(Dfull) == length(all_time_lvls)) {
             pos  <- match(lev_time_sub, all_time_lvls)

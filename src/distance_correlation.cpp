@@ -440,6 +440,23 @@ arma::mat ustat_dcor_matrix_cpp(const arma::mat& X) {
     return R;
   }
 
+  // Memory-guard path for very large n*p: avoid materialising full n x p row_sums.
+  if (static_cast<double>(n) * static_cast<double>(p) > 5e7) {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+    for (int j = 1; j < p; ++j) {
+      for (int i = 0; i < j; ++i) {
+        const double* xi = X.colptr(i);
+        const double* xj = X.colptr(j);
+        const double d = ustat_dcor_dispatch_ptr(xi, xj, n);
+        R(i, j) = d;
+        R(j, i) = d;
+      }
+    }
+    return R;
+  }
+
   arma::mat row_sums(n, p, arma::fill::zeros);
   arma::vec totals(p, arma::fill::zeros);
   arma::vec self_uvar(p, arma::fill::zeros);

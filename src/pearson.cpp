@@ -169,22 +169,23 @@ Rcpp::List pearson_matrix_pairwise_cpp(SEXP X_,
     const arma::uvec& idx_j = finite_idx[uj];
     const double* colj_ptr = X.colptr(uj);
 
-    static thread_local std::vector<arma::uword> overlap_idx;
-
     for (arma::uword k = uj + 1u; k < p; ++k) {
       const arma::uvec& idx_k = finite_idx[k];
       const std::size_t possible = std::min(idx_j.n_elem, idx_k.n_elem);
       if (possible < 2u) continue;
 
-      overlap_idx.clear();
-      overlap_idx.reserve(possible);
-
+      const double* colk_ptr = X.colptr(k);
       arma::uword ia = 0u, ib = 0u;
+      int overlap_n = 0;
+      double sum_x = 0.0;
+      double sum_y = 0.0;
       while (ia < idx_j.n_elem && ib < idx_k.n_elem) {
         const arma::uword a = idx_j[ia];
         const arma::uword b = idx_k[ib];
         if (a == b) {
-          overlap_idx.push_back(a);
+          sum_x += colj_ptr[a];
+          sum_y += colk_ptr[b];
+          ++overlap_n;
           ++ia;
           ++ib;
         } else if (a < b) {
@@ -194,19 +195,9 @@ Rcpp::List pearson_matrix_pairwise_cpp(SEXP X_,
         }
       }
 
-      const int overlap_n = static_cast<int>(overlap_idx.size());
       n_complete(uj, k) = overlap_n;
       n_complete(k, uj) = overlap_n;
       if (overlap_n < 2) continue;
-
-      const double* colk_ptr = X.colptr(k);
-      double sum_x = 0.0;
-      double sum_y = 0.0;
-      for (std::size_t t = 0; t < overlap_idx.size(); ++t) {
-        const arma::uword row = overlap_idx[t];
-        sum_x += colj_ptr[row];
-        sum_y += colk_ptr[row];
-      }
 
       const double mean_x = sum_x / static_cast<double>(overlap_n);
       const double mean_y = sum_y / static_cast<double>(overlap_n);
@@ -214,13 +205,24 @@ Rcpp::List pearson_matrix_pairwise_cpp(SEXP X_,
       double sxx = 0.0;
       double syy = 0.0;
       double sxy = 0.0;
-      for (std::size_t t = 0; t < overlap_idx.size(); ++t) {
-        const arma::uword row = overlap_idx[t];
-        const double dx = colj_ptr[row] - mean_x;
-        const double dy = colk_ptr[row] - mean_y;
-        sxx += dx * dx;
-        syy += dy * dy;
-        sxy += dx * dy;
+      ia = 0u;
+      ib = 0u;
+      while (ia < idx_j.n_elem && ib < idx_k.n_elem) {
+        const arma::uword a = idx_j[ia];
+        const arma::uword b = idx_k[ib];
+        if (a == b) {
+          const double dx = colj_ptr[a] - mean_x;
+          const double dy = colk_ptr[b] - mean_y;
+          sxx += dx * dx;
+          syy += dy * dy;
+          sxy += dx * dy;
+          ++ia;
+          ++ib;
+        } else if (a < b) {
+          ++ia;
+        } else {
+          ++ib;
+        }
       }
 
       double r = arma::datum::nan;

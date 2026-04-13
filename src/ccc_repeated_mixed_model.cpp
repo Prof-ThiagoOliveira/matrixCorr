@@ -305,12 +305,13 @@ static std::vector<PrecompGen>
 
       // Precompute with Cinv
       arma::mat CX = P.Cinv * P.X_i;
+      arma::vec Cy = P.Cinv * P.y_i;
       P.XTCX = P.X_i.t() * CX;
-      P.XTCy = P.X_i.t() * (P.Cinv * P.y_i);
+      P.XTCy = P.X_i.t() * Cy;
 
       arma::mat CU = P.Cinv * P.Ueff;
-      P.UTCX = P.Ueff.t() * (P.Cinv * P.X_i);      // or P.Ueff.t()*CX
-      P.UTCy = P.Ueff.t() * (P.Cinv * P.y_i);
+      P.UTCX = P.Ueff.t() * CX;
+      P.UTCy = P.Ueff.t() * Cy;
       P.UCU  = P.Ueff.t() * CU;
 
       out[i] = std::move(P);
@@ -477,6 +478,12 @@ Rcpp::List ccc_vc_cpp(
   std::vector<double> sag_term(m, 0.0);
   std::vector<double> se_term(m, 0.0);
 
+#ifdef _OPENMP
+  const int nthreads = omp_get_max_threads();
+  std::vector<arma::mat> XtViX_tls(nthreads, arma::mat(p,p, arma::fill::zeros));
+  std::vector<arma::vec> XtViy_tls(nthreads, arma::vec(p, arma::fill::zeros));
+#endif
+
   // ===================== EM iterations =====================
   for (int iter=0; iter<max_iter; ++iter) {
 
@@ -497,9 +504,10 @@ Rcpp::List ccc_vc_cpp(
       }
 
 #ifdef _OPENMP
-      int nthreads = omp_get_max_threads();
-      std::vector<arma::mat> XtViX_tls(nthreads, arma::mat(p,p, arma::fill::zeros));
-      std::vector<arma::vec> XtViy_tls(nthreads, arma::vec(p, arma::fill::zeros));
+      for (int t=0; t<nthreads; ++t) {
+        XtViX_tls[t].zeros();
+        XtViy_tls[t].zeros();
+      }
 #pragma omp parallel for schedule(static)
       for (int i=0; i<m; ++i) {
         if (PG[i].n_i == 0) continue;
@@ -561,9 +569,10 @@ Rcpp::List ccc_vc_cpp(
       // IID path (uses cached sufficient stats)
       const double inv_se = 1.0 / std::max(se, eps);
 #ifdef _OPENMP
-      int nthreads = omp_get_max_threads();
-      std::vector<arma::mat> XtViX_tls(nthreads, arma::mat(p,p, arma::fill::zeros));
-      std::vector<arma::vec> XtViy_tls(nthreads, arma::vec(p, arma::fill::zeros));
+      for (int t=0; t<nthreads; ++t) {
+        XtViX_tls[t].zeros();
+        XtViy_tls[t].zeros();
+      }
 #pragma omp parallel for schedule(static)
       for (int i=0; i<m; ++i) {
         const Cache& Ci = C_iid[i];

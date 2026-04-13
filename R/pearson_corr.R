@@ -251,33 +251,39 @@ pearson_corr <- function(data,
   diag_attr <- attr(object, "diagnostics", exact = TRUE)
   include_ci <- identical(show_ci, "yes") && !is.null(ci)
 
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
+  n_pairs <- nrow(est) * (ncol(est) - 1L) / 2L
+  var1 <- character(n_pairs)
+  var2 <- character(n_pairs)
+  estimate <- numeric(n_pairs)
+  n_complete <- if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) integer(n_pairs) else NULL
+  lwr <- if (include_ci) numeric(n_pairs) else NULL
+  upr <- if (include_ci) numeric(n_pairs) else NULL
   k <- 0L
   for (i in seq_len(nrow(est) - 1L)) {
     for (j in (i + 1L):ncol(est)) {
       k <- k + 1L
-      rec <- list(
-        var1 = rn[i],
-        var2 = cn[j],
-        estimate = round(est[i, j], digits)
-      )
-      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
-        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
-      }
+      var1[k] <- rn[i]
+      var2[k] <- cn[j]
+      estimate[k] <- round(est[i, j], digits)
+      if (!is.null(n_complete)) n_complete[k] <- as.integer(diag_attr$n_complete[i, j])
       if (include_ci) {
-        rec$lwr <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
-        rec$upr <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
+        lwr[k] <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
+        upr[k] <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
       }
-      rows[[k]] <- rec
     }
   }
 
-  df <- do.call(rbind.data.frame, rows)
+  df <- data.frame(
+    var1 = var1,
+    var2 = var2,
+    estimate = as.numeric(estimate),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  if (!is.null(n_complete)) df$n_complete <- as.integer(n_complete)
+  if (!is.null(lwr)) df$lwr <- as.numeric(lwr)
+  if (!is.null(upr)) df$upr <- as.numeric(upr)
   rownames(df) <- NULL
-  if ("estimate" %in% names(df)) df$estimate <- as.numeric(df$estimate)
-  if ("lwr" %in% names(df)) df$lwr <- as.numeric(df$lwr)
-  if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
-  if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
 
   out <- .mc_finalize_summary_df(df, class_name = "summary.pearson_corr")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)

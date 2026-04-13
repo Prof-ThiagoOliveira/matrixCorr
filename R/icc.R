@@ -206,9 +206,9 @@ icc <- function(data,
 
   if (identical(scope, "overall")) {
     if (na_cfg$check_na) {
-      overall_data <- validate_corr_input(data, check_na = TRUE)
+      overall_data <- numeric_data
     } else {
-      overall_data <- validate_corr_input(data, check_na = FALSE)
+      overall_data <- numeric_data
       keep <- stats::complete.cases(overall_data)
       overall_data <- overall_data[keep, , drop = FALSE]
       if (nrow(overall_data) < 2L) {
@@ -255,7 +255,7 @@ icc <- function(data,
       n_complete = nrow(mat),
       n_subjects = fit$n_subjects,
       n_raters = fit$n_raters,
-      dropped_rows = if (na_cfg$check_na) 0L else nrow(validate_corr_input(data, check_na = FALSE)) - nrow(mat)
+      dropped_rows = if (na_cfg$check_na) 0L else nrow(numeric_data) - nrow(mat)
     )
     return(out)
   }

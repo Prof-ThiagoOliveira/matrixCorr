@@ -62,8 +62,8 @@ List cccUst_rcpp(NumericVector y_vec,
     Rcpp::stop("Missing observations detected for at least one subject/time cell");
   }
 
-  arma::vec phi1_rows(ns * (ns - 1));
-  arma::vec phi2_rows(ns * (ns - 1));
+  arma::vec phi1_sum(ns, arma::fill::zeros);
+  arma::vec phi2_sum(ns, arma::fill::zeros);
   double U = 0.0, V = 0.0;
 
   // ===== OpenMP parallel loop =====
@@ -71,13 +71,14 @@ List cccUst_rcpp(NumericVector y_vec,
 #pragma omp parallel for reduction(+:U,V)
 #endif
   for (int i = 0; i < ns; ++i) {
+    const arma::rowvec Xi = X.row(i);
+    const arma::rowvec Yi = Y.row(i);
+    double phi1_acc = 0.0;
+    double phi2_acc = 0.0;
     for (int j = 0; j < ns; ++j) {
       if (i == j) continue;
-
-      int idx = i * (ns - 1) + (j < i ? j : j - 1); // unique index for (i,j)
-
-      arma::rowvec Xi = X.row(i), Yi = Y.row(i);
-      arma::rowvec Xj = X.row(j), Yj = Y.row(j);
+      const arma::rowvec Xj = X.row(j);
+      const arma::rowvec Yj = Y.row(j);
 
       arma::rowvec d1 = arma::abs(Xi - Yi);
       arma::rowvec d2 = arma::abs(Xj - Yj);
@@ -108,11 +109,13 @@ List cccUst_rcpp(NumericVector y_vec,
           arma::as_scalar(nz4 * D * nz4.t()));
       }
 
-      phi1_rows(idx) = phi1;
-      phi2_rows(idx) = phi2;
+      phi1_acc += phi1;
+      phi2_acc += phi2;
       U += phi1;
       V += phi2;
     }
+    phi1_sum[i] = phi1_acc / (ns - 1);
+    phi2_sum[i] = phi2_acc / (ns - 1);
   }
 
   // Mean U and V
@@ -123,21 +126,6 @@ List cccUst_rcpp(NumericVector y_vec,
   double CCC = ((ns - 1) * (V - U)) / (U + (ns - 1) * V);
 
   // ===== Variance & CI =====
-  arma::vec phi1_sum(ns, arma::fill::zeros);
-  arma::vec phi2_sum(ns, arma::fill::zeros);
-
-  for (int i = 0; i < ns; ++i) {
-    for (int j = 0; j < ns; ++j) {
-      if (i == j) continue;
-      int idx = i * (ns - 1) + (j < i ? j : j - 1);
-      phi1_sum[i] += phi1_rows[idx];
-      phi2_sum[i] += phi2_rows[idx];
-    }
-  }
-
-  phi1_sum /= (ns - 1);
-  phi2_sum /= (ns - 1);
-
   arma::mat phiv(ns, 2);
   phiv.col(0) = phi1_sum;
   phiv.col(1) = phi2_sum;

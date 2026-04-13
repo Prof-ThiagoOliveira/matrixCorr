@@ -1131,12 +1131,6 @@ List polychoric_inference_impl(const NumericMatrix& tab,
 
   const int nr = N.nrow();
   const int nc = N.ncol();
-  std::vector<double> tab_weights(static_cast<std::size_t>(nr * nc), 0.0);
-  for (int i = 0; i < nr; ++i) {
-    for (int j = 0; j < nc; ++j) {
-      tab_weights[static_cast<std::size_t>(i * nc + j)] = n_obs * N(i, j);
-    }
-  }
   std::vector<double> probs(static_cast<std::size_t>(nr * nc), 0.0);
   for (int i = 0; i < nr; ++i) {
     for (int j = 0; j < nc; ++j) {
@@ -1167,12 +1161,13 @@ List polychoric_inference_impl(const NumericMatrix& tab,
                               NA_REAL);
   }
 
+  for (double& v : probs) v *= n_obs;
   std::vector<double> theta0(1);
   theta0[0] = std::atanh(est_clamped / kLatentMaxcor);
   PolyWorkspace ws;
   ws.reset(rc0, cc0);
   auto fn = [&](const std::vector<double>& theta) {
-    return poly_nll_fixed_thresholds(rho_from_theta(theta[0]), tab_weights.data(), ws);
+    return poly_nll_fixed_thresholds(rho_from_theta(theta[0]), probs.data(), ws);
   };
   const arma::mat H = latent_numeric_hessian(theta0, fn);
   return latent_wald_result(est_clamped, drho_dtheta(theta0[0]), H, static_cast<int>(n_obs), conf_level,
