@@ -260,6 +260,9 @@ icc <- function(data,
     return(out)
   }
 
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+
   fit <- icc_matrix_cpp(
     mat,
     form_code = form_code,

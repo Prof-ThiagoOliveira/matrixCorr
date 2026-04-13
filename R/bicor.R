@@ -214,6 +214,8 @@ bicor <- function(
       is.null(sparse_threshold)) {
     numeric_data <- validate_corr_input(data)
     colnames_data <- colnames(numeric_data)
+    prev_threads <- get_omp_threads()
+    on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
     res <- bicor_matrix_cpp(
       numeric_data,
       c_const = 9,
@@ -284,6 +286,8 @@ bicor <- function(
   dn <- .mc_square_dimnames(colnames_data)
 
   # --- choose backend
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
   if (is.null(w) && na_method == "error") {
     res <- bicor_matrix_cpp(
       numeric_data,

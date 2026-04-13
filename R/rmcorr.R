@@ -235,6 +235,9 @@ rmcorr <- function(data = NULL, response, subject,
       ))
     }
 
+    prev_threads <- get_omp_threads()
+    on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+
     out <- rmcorr_matrix_cpp(
       x = response_mat,
       y = response_mat,
@@ -328,6 +331,9 @@ rmcorr <- function(data = NULL, response, subject,
   if (verbose) {
     cat("Using", n_threads, "OpenMP threads\n")
   }
+
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
 
   out <- rmcorr_matrix_cpp(
     x = response_mat,

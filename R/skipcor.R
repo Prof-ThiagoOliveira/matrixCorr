@@ -267,6 +267,8 @@ skipped_corr <- function(data,
 
   method_int <- switch(method, pearson = 0L, spearman = 1L)
   use_mad <- identical(outlier_rule, "mad")
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
   res <- skipcor_matrix_cpp(
     numeric_data,
     method_int = method_int,

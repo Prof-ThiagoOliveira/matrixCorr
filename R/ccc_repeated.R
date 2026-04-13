@@ -233,14 +233,13 @@ ccc_rm_ustat <- function(data,
   cccr_lwr <- matrix(NA_real_, L, L, dimnames = list(method_levels, method_levels))
   cccr_upr <- matrix(NA_real_, L, L, dimnames = list(method_levels, method_levels))
 
-  n_threads <- max(1L, as.integer(n_threads))
-  prev_threads <- get_omp_threads()
-  on.exit({
-    if (!is.null(prev_threads) && is.finite(prev_threads) && prev_threads > 0L) {
-      set_omp_threads(as.integer(prev_threads))
-    }
-  }, add = TRUE)
-  set_omp_threads(n_threads)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
   if (verbose) cat("Using", get_omp_threads(), "OpenMP threads\n")
 
   # Loop over all method pairs
@@ -264,20 +263,22 @@ ccc_rm_ustat <- function(data,
 
       df_sub$met_i <- as.integer(factor(df_sub[[method]], levels = c(m1, m2))) - 1L
 
-      subj_split <- split(df_sub, df_sub$subject_i)
-      if (!length(subj_split)) {
+      sid <- df_sub$subject_i
+      uid <- sort(unique(sid))
+      if (!length(uid)) {
         cli::cli_abort(
           "No subjects available for method pair {.val {m1}} vs {.val {m2}}."
         )
       }
-      complete_subj <- vapply(subj_split, function(subdat) {
-        if (nrow(subdat) != ntime * 2L) return(FALSE)
-        tf <- factor(subdat$time_i, levels = seq_len(ntime) - 1L)
-        mf <- factor(subdat$met_i,  levels = 0:1)
-        tab <- table(tf, mf)
-        all(tab == 1L)
-      }, logical(1))
-      keep_ids <- as.integer(names(subj_split)[complete_subj])
+
+      sid_idx <- match(sid, uid)
+      rows_by_subj <- tabulate(sid_idx, nbins = length(uid))
+      combo_code <- sid_idx + length(uid) * (df_sub$time_i + ntime * df_sub$met_i)
+      uniq_combo <- !duplicated(combo_code)
+      uniq_by_subj <- tabulate(sid_idx[uniq_combo], nbins = length(uid))
+
+      complete_subj <- (rows_by_subj == (ntime * 2L)) & (uniq_by_subj == (ntime * 2L))
+      keep_ids <- uid[complete_subj]
       if (!length(keep_ids)) {
         cli::cli_abort(
           "All subjects have incomplete method/time coverage for {.val {m1}} vs {.val {m2}}."
@@ -1170,9 +1171,13 @@ ccc_rm_reml <- function(data, response, subject,
   }
 
   # Only pairwise path remains
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
-  set_omp_threads(n_threads)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
 
   return(
     ccc_lmm_reml_pairwise(

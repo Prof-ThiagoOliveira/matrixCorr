@@ -617,6 +617,8 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   check_bool(include_slope, arg = "include_slope")
   check_bool(use_ar1, arg = "use_ar1")
   check_bool(verbose, arg = "verbose")
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
   if (isTRUE(use_ar1)) {
     if (!is.na(ar1_rho)) {
       ar1_rho <- check_ar1_rho(ar1_rho, arg = "ar1_rho", bound = 0.999)

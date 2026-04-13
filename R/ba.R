@@ -123,6 +123,8 @@ ba <- function(group1,
   if (isTRUE(verbose)) cat("Using", n_threads, "OpenMP threads\n")
 
   # -- compute in C++ ---------------------------------------------------------
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
   ba_out <- bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level, n_threads)
   ba_out <- structure(
     list(

@@ -511,6 +511,8 @@ pbcor <- function(data,
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
 
+  prev_threads <- get_omp_threads()
+  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
   res <- if (na_method == "error") {
     pbcor_matrix_cpp(numeric_data, beta = beta, n_threads = n_threads)
   } else {
