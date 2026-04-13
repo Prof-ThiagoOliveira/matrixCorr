@@ -136,25 +136,28 @@ pearson_corr <- function(data,
                          conf_level = 0.95,
                          n_threads = getOption("matrixCorr.threads", 1L),
                          ...) {
-  if (...length() == 0L && missing(na_method) && isFALSE(ci)) {
+  n_threads_missing <- missing(n_threads)
+  if (...length() == 0L &&
+      isFALSE(ci) &&
+      (missing(na_method) ||
+       (is.character(na_method) &&
+        length(na_method) == 1L &&
+        !is.na(na_method) &&
+        identical(na_method, "error")))) {
     numeric_data <- validate_corr_input(data, check_na = TRUE)
     colnames_data <- colnames(numeric_data)
+    dn <- if (is.null(colnames_data)) NULL else .mc_square_dimnames(colnames_data)
     prev_threads <- .mc_prepare_omp_threads(
       n_threads,
-      n_threads_missing = missing(n_threads)
+      n_threads_missing = n_threads_missing
     )
     if (!is.null(prev_threads)) {
       on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
     }
     result <- pearson_matrix_cpp(numeric_data)
-    if (!is.null(colnames_data)) {
-      dimnames(result) <- .mc_square_dimnames(colnames_data)
-    }
-    return(.mc_structure_corr_matrix(
-      result,
-      class_name = "pearson_corr",
-      method = "pearson",
-      description = "Pairwise Pearson correlation matrix"
+    return(.mc_structure_pearson_matrix(
+      mat = result,
+      dimnames = dn
     ))
   }
 
@@ -177,13 +180,13 @@ pearson_corr <- function(data,
 
   numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
   colnames_data <- colnames(numeric_data)
-  dn <- .mc_square_dimnames(colnames_data)
+  dn <- if (is.null(colnames_data)) NULL else .mc_square_dimnames(colnames_data)
   diagnostics <- NULL
   ci_attr <- NULL
 
   prev_threads <- .mc_prepare_omp_threads(
     n_threads,
-    n_threads_missing = missing(n_threads)
+    n_threads_missing = n_threads_missing
   )
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
@@ -211,19 +214,84 @@ pearson_corr <- function(data,
     }
   }
 
-  .mc_structure_corr_matrix(
-    result,
-    class_name = "pearson_corr",
+  .mc_structure_pearson_matrix(
+    mat = result,
+    dimnames = dn,
+    diagnostics = diagnostics,
+    ci_attr = ci_attr,
+    conf_level = if (!is.null(ci_attr)) conf_level else NULL
+  )
+}
+
+.mc_structure_pearson_matrix <- function(mat,
+                                         dimnames = NULL,
+                                         diagnostics = NULL,
+                                         ci_attr = NULL,
+                                         conf_level = NULL) {
+  if (!is.null(dimnames)) {
+    if (is.null(ci_attr)) {
+      if (is.null(diagnostics)) {
+        return(structure(
+          mat,
+          dimnames = dimnames,
+          class = c("pearson_corr", "matrix"),
+          method = "pearson",
+          description = "Pairwise Pearson correlation matrix",
+          package = "matrixCorr"
+        ))
+      }
+      return(structure(
+        mat,
+        dimnames = dimnames,
+        class = c("pearson_corr", "matrix"),
+        method = "pearson",
+        description = "Pairwise Pearson correlation matrix",
+        package = "matrixCorr",
+        diagnostics = diagnostics
+      ))
+    }
+    return(structure(
+      mat,
+      dimnames = dimnames,
+      class = c("pearson_corr", "matrix"),
+      method = "pearson",
+      description = "Pairwise Pearson correlation matrix",
+      package = "matrixCorr",
+      diagnostics = diagnostics,
+      ci = ci_attr,
+      conf.level = conf_level
+    ))
+  }
+
+  if (is.null(ci_attr)) {
+    if (is.null(diagnostics)) {
+      return(structure(
+        mat,
+        class = c("pearson_corr", "matrix"),
+        method = "pearson",
+        description = "Pairwise Pearson correlation matrix",
+        package = "matrixCorr"
+      ))
+    }
+    return(structure(
+      mat,
+      class = c("pearson_corr", "matrix"),
+      method = "pearson",
+      description = "Pairwise Pearson correlation matrix",
+      package = "matrixCorr",
+      diagnostics = diagnostics
+    ))
+  }
+
+  structure(
+    mat,
+    class = c("pearson_corr", "matrix"),
     method = "pearson",
     description = "Pairwise Pearson correlation matrix",
+    package = "matrixCorr",
     diagnostics = diagnostics,
-    dimnames = dn,
-    extra_attrs = if (!is.null(ci_attr)) {
-      list(
-        ci = ci_attr,
-        conf.level = conf_level
-      )
-    }
+    ci = ci_attr,
+    conf.level = conf_level
   )
 }
 

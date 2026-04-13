@@ -1059,22 +1059,29 @@
   if (!is.null(dimnames)) {
     dimnames(mat) <- dimnames
   }
-  do.call(
-    structure,
-    c(
-      list(
-        .Data = mat,
-        class = classes,
-        method = method,
-        description = description,
-        package = "matrixCorr",
-        diagnostics = diagnostics,
-        thresholds = thresholds,
-        correct = correct
-      ),
-      extra_attrs
-    )
+  out <- structure(
+    mat,
+    class = classes,
+    method = method,
+    description = description,
+    package = "matrixCorr",
+    diagnostics = diagnostics,
+    thresholds = thresholds,
+    correct = correct
   )
+  if (is.null(extra_attrs) || !length(extra_attrs)) {
+    return(out)
+  }
+
+  nm <- names(extra_attrs)
+  if (is.null(nm) || anyNA(nm) || any(!nzchar(nm))) {
+    return(do.call(structure, c(list(.Data = out), extra_attrs)))
+  }
+
+  for (i in seq_along(extra_attrs)) {
+    attr(out, nm[[i]]) <- extra_attrs[[i]]
+  }
+  out
 }
 
 #' @title Pairwise Tetrachoric Correlation
