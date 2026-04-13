@@ -194,6 +194,9 @@ biweight_mid_corr <- function(
 #' @export
 distance_corr <- function(data, na_method = c("error", "pairwise"), ...) {
   .mc_deprecate(old = "distance_corr", new = "dcor")
+  if (missing(na_method)) {
+    return(dcor(data = data, ...))
+  }
   dcor(data = data, na_method = na_method, ...)
 }
 

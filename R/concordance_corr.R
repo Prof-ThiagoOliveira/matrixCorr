@@ -116,6 +116,14 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
   mat <- numeric_data
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
+  diag_payload <- list(
+    n_complete = matrix(
+      as.integer(nrow(mat)),
+      nrow = ncol(mat),
+      ncol = ncol(mat),
+      dimnames = dn
+    )
+  )
 
   prev_threads <- .mc_prepare_omp_threads(
     n_threads,
@@ -149,14 +157,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
       description = "Pairwise Lin's concordance with confidence intervals",
       package = "matrixCorr",
       conf.level = conf_level,
-      diagnostics = list(
-        n_complete = matrix(
-          as.integer(nrow(mat)),
-          nrow = ncol(mat),
-          ncol = ncol(mat),
-          dimnames = dn
-        )
-      )
+      diagnostics = diag_payload
     )
   } else {
     est <- ccc_cpp(mat)
@@ -165,6 +166,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
       class_name = "ccc",
       method = "Lin's concordance",
       description = "Pairwise Lin's concordance correlation matrix",
+      diagnostics = diag_payload,
       dimnames = dn,
       classes = c("ccc", "matrix")
     )
