@@ -261,8 +261,11 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
     const arma::uword uj = static_cast<arma::uword>(j);
     const arma::uvec& idx_j = finite_idx[uj];
+    const arma::uword n_idx_j = idx_j.n_elem;
+    const arma::uword* idx_j_ptr = idx_j.memptr();
     const double* colj_ptr = X.colptr(uj);
 
+    static thread_local std::vector<arma::uword> overlap_idx;
     static thread_local arma::vec xbuf;
     static thread_local arma::vec ybuf;
     static thread_local arma::vec rx;
@@ -270,16 +273,19 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
 
     for (arma::uword k = uj + 1u; k < p; ++k) {
       const arma::uvec& idx_k = finite_idx[k];
-      const std::size_t possible = std::min(idx_j.n_elem, idx_k.n_elem);
+      const arma::uword n_idx_k = idx_k.n_elem;
+      const std::size_t possible = std::min(n_idx_j, n_idx_k);
       if (possible < 2u) continue;
 
+      const arma::uword* idx_k_ptr = idx_k.memptr();
       arma::uword ia = 0u, ib = 0u;
-      int overlap_n = 0;
-      while (ia < idx_j.n_elem && ib < idx_k.n_elem) {
-        const arma::uword a = idx_j[ia];
-        const arma::uword b = idx_k[ib];
+      overlap_idx.clear();
+      overlap_idx.reserve(possible);
+      while (ia < n_idx_j && ib < n_idx_k) {
+        const arma::uword a = idx_j_ptr[ia];
+        const arma::uword b = idx_k_ptr[ib];
         if (a == b) {
-          ++overlap_n;
+          overlap_idx.push_back(a);
           ++ia;
           ++ib;
         } else if (a < b) {
@@ -289,30 +295,18 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
         }
       }
 
+      const int overlap_n = static_cast<int>(overlap_idx.size());
       n_complete(uj, k) = overlap_n;
       n_complete(k, uj) = overlap_n;
       if (overlap_n < 2) continue;
 
       const double* colk_ptr = X.colptr(k);
-      xbuf.set_size(static_cast<arma::uword>(overlap_n));
-      ybuf.set_size(static_cast<arma::uword>(overlap_n));
-      ia = 0u;
-      ib = 0u;
-      int pos = 0;
-      while (ia < idx_j.n_elem && ib < idx_k.n_elem) {
-        const arma::uword a = idx_j[ia];
-        const arma::uword b = idx_k[ib];
-        if (a == b) {
-          xbuf[static_cast<arma::uword>(pos)] = colj_ptr[a];
-          ybuf[static_cast<arma::uword>(pos)] = colk_ptr[b];
-          ++pos;
-          ++ia;
-          ++ib;
-        } else if (a < b) {
-          ++ia;
-        } else {
-          ++ib;
-        }
+      xbuf.set_size(overlap_idx.size());
+      ybuf.set_size(overlap_idx.size());
+      for (std::size_t t = 0; t < overlap_idx.size(); ++t) {
+        const arma::uword row = overlap_idx[t];
+        xbuf[t] = colj_ptr[row];
+        ybuf[t] = colk_ptr[row];
       }
 
       const double rho = spearman_pair_core(xbuf, ybuf, rx, ry);
