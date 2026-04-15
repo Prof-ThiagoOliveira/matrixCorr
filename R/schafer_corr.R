@@ -11,6 +11,24 @@
 #' and contain no \code{NA}s.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return A symmetric numeric matrix of class \code{shrinkage_corr} (with
 #' compatibility class \code{schafer_corr}) where entry \code{(i, j)} is the
@@ -76,7 +94,15 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 shrinkage_corr <- function(data,
-                           n_threads = getOption("matrixCorr.threads", 1L)) {
+                           n_threads = getOption("matrixCorr.threads", 1L),
+                           output = c("matrix", "sparse", "edge_list"),
+                           threshold = 0,
+                           diag = TRUE) {
+  output_cfg <- .mc_validate_output_args(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   numeric_data <- validate_corr_input(data)
   colnames_data <- colnames(numeric_data)
 
@@ -94,12 +120,18 @@ shrinkage_corr <- function(data,
     dimnames(result) <- .mc_square_dimnames(colnames_data)
   }
 
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     result,
     class_name = "shrinkage_corr",
     method = "schafer_shrinkage",
     description = "Schafer-Strimmer shrinkage correlation matrix",
     classes = c("shrinkage_corr", "schafer_corr", "matrix")
+  )
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
   )
 }
 
@@ -108,8 +140,17 @@ shrinkage_corr <- function(data,
 #' @rdname shrinkage_corr
 #' @export
 schafer_corr <- function(data,
-                         n_threads = getOption("matrixCorr.threads", 1L)) {
-  shrinkage_corr(data, n_threads = n_threads)
+                         n_threads = getOption("matrixCorr.threads", 1L),
+                         output = c("matrix", "sparse", "edge_list"),
+                         threshold = 0,
+                         diag = TRUE) {
+  shrinkage_corr(
+    data,
+    n_threads = n_threads,
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
 }
 
 #' @rdname shrinkage_corr
@@ -286,3 +327,4 @@ summary.shrinkage_corr <- function(object, n = NULL, topn = NULL,
 #' @method summary schafer_corr
 #' @export
 summary.schafer_corr <- summary.shrinkage_corr
+

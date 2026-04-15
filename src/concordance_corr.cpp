@@ -2,6 +2,7 @@
 #include <RcppArmadillo.h>
 #include <cmath>
 #include "matrixCorr_detail.h"
+#include "threshold_triplets.h"
 using namespace Rcpp;
 
 // only what we use from matrixCorr_detail
@@ -120,4 +121,74 @@ int openmp_threads() {
   n = omp_get_max_threads();
 #endif
   return n;
+}
+
+// Complete-data CCC upper-triplet kernel for thresholded outputs.
+// [[Rcpp::export]]
+Rcpp::List ccc_threshold_triplets_cpp(const arma::mat& X,
+                                      const double threshold = 0.0,
+                                      const bool diag = true,
+                                      const int block_size = 256) {
+  if (!(threshold >= 0.0) || !std::isfinite(threshold)) {
+    Rcpp::stop("threshold must be finite and >= 0.");
+  }
+  if (block_size < 1) {
+    Rcpp::stop("block_size must be >= 1.");
+  }
+  if (X.n_rows < 2 || X.n_cols < 2) {
+    Rcpp::stop("Need >= 2 rows and >= 2 columns.");
+  }
+  if (!X.is_finite()) {
+    Rcpp::stop("X contains NA/NaN/Inf; please handle missingness upstream.");
+  }
+
+  const std::size_t p = static_cast<std::size_t>(X.n_cols);
+  const arma::uword n = static_cast<arma::uword>(X.n_rows);
+  const double n_d = static_cast<double>(n);
+
+  arma::vec means(X.n_cols, arma::fill::zeros);
+  arma::vec vars(X.n_cols, arma::fill::zeros);
+  col_means_vars_pop(X, means, vars);
+
+  const auto trip = matrixCorr_detail::threshold_triplets::collect_upper_triplets(
+    p,
+    static_cast<std::size_t>(block_size),
+    diag,
+    threshold,
+    [&](std::size_t j0, std::size_t j1, std::size_t k0, std::size_t k1) -> arma::mat {
+      arma::mat blk = X.cols(static_cast<arma::uword>(j0), static_cast<arma::uword>(j1 - 1u)).t() *
+        X.cols(static_cast<arma::uword>(k0), static_cast<arma::uword>(k1 - 1u));
+
+      const arma::rowvec mu_j = means.subvec(static_cast<arma::uword>(j0), static_cast<arma::uword>(j1 - 1u)).t();
+      const arma::rowvec mu_k = means.subvec(static_cast<arma::uword>(k0), static_cast<arma::uword>(k1 - 1u)).t();
+      blk -= n_d * (mu_j.t() * mu_k);
+
+      for (std::size_t r = 0u; r < (j1 - j0); ++r) {
+        const arma::uword gj = static_cast<arma::uword>(j0 + r);
+        for (std::size_t c = 0u; c < (k1 - k0); ++c) {
+          const arma::uword gk = static_cast<arma::uword>(k0 + c);
+          double val = NA_REAL;
+          if (gj == gk) {
+            val = 1.0;
+          } else {
+            const double cov_xy = blk(
+              static_cast<arma::uword>(r),
+              static_cast<arma::uword>(c)
+            ) / n_d;
+            val = ccc_from_stats_via_r(
+              means[gj],
+              means[gk],
+              vars[gj],
+              vars[gk],
+              cov_xy
+            );
+          }
+          blk(static_cast<arma::uword>(r), static_cast<arma::uword>(c)) = val;
+        }
+      }
+      return blk;
+    }
+  );
+
+  return matrixCorr_detail::threshold_triplets::as_list(trip);
 }

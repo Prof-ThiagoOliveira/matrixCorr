@@ -1059,28 +1059,32 @@
   if (!is.null(dimnames)) {
     dimnames(mat) <- dimnames
   }
-  out <- structure(
-    mat,
-    class = classes,
+  keep_classes <- setdiff(
+    classes,
+    c(class_name, "matrix", "corr_matrix", "corr_result")
+  )
+  out <- .mc_new_corr_matrix(
+    mat = mat,
+    estimator_class = class_name,
     method = method,
     description = description,
-    package = "matrixCorr",
+    output = "matrix",
+    threshold = 0,
+    diag = TRUE,
     diagnostics = diagnostics,
-    thresholds = thresholds,
-    correct = correct
+    ci = attr(mat, "ci", exact = TRUE),
+    conf.level = attr(mat, "conf.level", exact = TRUE),
+    symmetric = isTRUE(nrow(mat) == ncol(mat)) &&
+      isTRUE(isSymmetric(mat, check.attributes = FALSE)),
+    extra_attrs = c(
+      list(
+        thresholds = thresholds,
+        correct = correct
+      ),
+      extra_attrs %||% list()
+    ),
+    extra_classes = keep_classes
   )
-  if (is.null(extra_attrs) || !length(extra_attrs)) {
-    return(out)
-  }
-
-  nm <- names(extra_attrs)
-  if (is.null(nm) || anyNA(nm) || any(!nzchar(nm))) {
-    return(do.call(structure, c(list(.Data = out), extra_attrs)))
-  }
-
-  for (i in seq_along(extra_attrs)) {
-    attr(out, nm[[i]]) <- extra_attrs[[i]]
-  }
   out
 }
 
@@ -1107,6 +1111,24 @@
 #' estimated latent correlation.
 #' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
 #' \code{0.95}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return
 #' If \code{y} is supplied, a numeric scalar with attributes
@@ -1120,7 +1142,9 @@
 #' with elements \code{est}, \code{lwr.ci}, \code{upr.ci}, \code{conf.level},
 #' and \code{ci.method}, plus \code{attr(x, "conf.level")}. Scalar outputs keep
 #' the same point estimate and gain the same metadata only when inference is
-#' requested.
+#' requested. In matrix mode, \code{output = "edge_list"} returns a data frame with columns
+#' \code{row}, \code{col}, \code{value}; \code{output = "sparse"} returns a
+#' symmetric sparse matrix.
 #'
 #' @details
 #' The tetrachoric correlation assumes that the observed binary variables arise
@@ -1217,6 +1241,8 @@
 #' print(tc, digits = 3)
 #' summary(tc)
 #' plot(tc)
+#' tetrachoric(X, output = "edge_list", diag = FALSE)
+#' tetrachoric(X, output = "sparse", threshold = 0.4, diag = FALSE)
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -1235,11 +1261,25 @@ tetrachoric <- function(data,
                         p_value = FALSE,
                         conf_level = 0.95,
                         correct = 0.5,
+                        output = c("matrix", "sparse", "edge_list"),
+                        threshold = 0,
+                        diag = TRUE,
                         ...) {
-  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+  output_cfg <- .mc_validate_output_args(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value) && ...length() == 0L) {
     check_scalar_nonneg(correct, arg = "correct")
 
     if (is.null(y) && inherits(data, "table")) {
+      if (!identical(output_cfg$output, "matrix")) {
+        abort_bad_arg(
+          "output",
+          message = "must be {.val matrix} when {.arg data} is a contingency table."
+        )
+      }
       tab <- as.matrix(data)
       est <- .mc_tetrachoric_table_estimate(tab, correct = correct)
       thresholds <- .mc_tetra_table_thresholds(tab, correct = correct)
@@ -1260,6 +1300,12 @@ tetrachoric <- function(data,
     }
 
     if (!is.null(y)) {
+      if (!identical(output_cfg$output, "matrix")) {
+        abort_bad_arg(
+          "output",
+          message = "must be {.val matrix} when {.arg y} is supplied."
+        )
+      }
       check_same_length(data, y, arg_x = "data", arg_y = "y")
       .mc_check_latent_missing(list(data = data, y = y), check_na = TRUE, arg = "data")
 
@@ -1329,7 +1375,7 @@ tetrachoric <- function(data,
     }
     thresholds <- as.list(tau)
     names(thresholds) <- names(enc)
-    return(.mc_structure_corr_matrix(
+    out <- .mc_structure_corr_matrix(
       out,
       class_name = "tetrachoric_corr",
       method = "tetrachoric",
@@ -1337,6 +1383,12 @@ tetrachoric <- function(data,
       diagnostics = diag_info,
       thresholds = thresholds,
       correct = correct
+    )
+    return(.mc_finalize_corr_output(
+      out,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
     ))
   }
 
@@ -1355,6 +1407,12 @@ tetrachoric <- function(data,
   }
 
   if (is.null(y) && inherits(data, "table")) {
+    if (!identical(output_cfg$output, "matrix")) {
+      abort_bad_arg(
+        "output",
+        message = "must be {.val matrix} when {.arg data} is a contingency table."
+      )
+    }
     tab <- as.matrix(data)
     fit <- if (isTRUE(ci) || isTRUE(p_value)) {
       .mc_tetrachoric_inference_one(tab, correct = correct, conf_level = conf_level)
@@ -1388,6 +1446,12 @@ tetrachoric <- function(data,
   }
 
   if (!is.null(y)) {
+    if (!identical(output_cfg$output, "matrix")) {
+      abort_bad_arg(
+        "output",
+        message = "must be {.val matrix} when {.arg y} is supplied."
+      )
+    }
     check_same_length(data, y, arg_x = "data", arg_y = "y")
     .mc_check_latent_missing(list(data = data, y = y), check_na = check_na, arg = "data")
 
@@ -1549,7 +1613,12 @@ tetrachoric <- function(data,
       conf_level = conf_level
     )
   }
-  out
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
+  )
 }
 
 #' @rdname tetrachoric
@@ -1676,6 +1745,24 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #' estimated latent correlation.
 #' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
 #' \code{0.95}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return
 #' If \code{y} is supplied, a numeric scalar with attributes
@@ -1689,7 +1776,9 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #' with elements \code{est}, \code{lwr.ci}, \code{upr.ci}, \code{conf.level},
 #' and \code{ci.method}, plus \code{attr(x, "conf.level")}. Scalar outputs keep
 #' the same point estimate and gain the same metadata only when inference is
-#' requested.
+#' requested. In matrix mode, \code{output = "edge_list"} returns a data frame with columns
+#' \code{row}, \code{col}, \code{value}; \code{output = "sparse"} returns a
+#' symmetric sparse matrix.
 #'
 #' @details
 #' The polychoric correlation generalises the tetrachoric model to ordered
@@ -1793,6 +1882,7 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #' print(pc, digits = 3)
 #' summary(pc)
 #' plot(pc)
+#' polychoric(Y, output = "edge_list", threshold = 0.3, diag = FALSE)
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
@@ -1810,11 +1900,25 @@ polychoric <- function(data,
                        p_value = FALSE,
                        conf_level = 0.95,
                        correct = 0.5,
+                       output = c("matrix", "sparse", "edge_list"),
+                       threshold = 0,
+                       diag = TRUE,
                        ...) {
-  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+  output_cfg <- .mc_validate_output_args(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value) && ...length() == 0L) {
     check_scalar_nonneg(correct, arg = "correct")
 
     if (is.null(y) && inherits(data, "table")) {
+      if (!identical(output_cfg$output, "matrix")) {
+        abort_bad_arg(
+          "output",
+          message = "must be {.val matrix} when {.arg data} is a contingency table."
+        )
+      }
       tab <- as.matrix(data)
       est <- .mc_polychoric_table_estimate(tab, correct = correct)
       thresholds <- .mc_poly_table_thresholds(tab, correct = correct)
@@ -1835,6 +1939,12 @@ polychoric <- function(data,
     }
 
     if (!is.null(y)) {
+      if (!identical(output_cfg$output, "matrix")) {
+        abort_bad_arg(
+          "output",
+          message = "must be {.val matrix} when {.arg y} is supplied."
+        )
+      }
       check_same_length(data, y, arg_x = "data", arg_y = "y")
       .mc_check_latent_missing(list(data = data, y = y), check_na = TRUE, arg = "data")
 
@@ -1916,7 +2026,7 @@ polychoric <- function(data,
     }
     thresholds <- lapply(enc, function(z) .mc_global_cutpoints(z$code, length(z$levels)))
     names(thresholds) <- names(enc)
-    return(.mc_structure_corr_matrix(
+    out <- .mc_structure_corr_matrix(
       out,
       class_name = "polychoric_corr",
       method = "polychoric",
@@ -1924,6 +2034,12 @@ polychoric <- function(data,
       diagnostics = diag_info,
       thresholds = thresholds,
       correct = correct
+    )
+    return(.mc_finalize_corr_output(
+      out,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
     ))
   }
 
@@ -1942,6 +2058,12 @@ polychoric <- function(data,
   }
 
   if (is.null(y) && inherits(data, "table")) {
+    if (!identical(output_cfg$output, "matrix")) {
+      abort_bad_arg(
+        "output",
+        message = "must be {.val matrix} when {.arg data} is a contingency table."
+      )
+    }
     tab <- as.matrix(data)
     fit <- if (isTRUE(ci) || isTRUE(p_value)) {
       .mc_polychoric_inference_one(tab, correct = correct, conf_level = conf_level)
@@ -1975,6 +2097,12 @@ polychoric <- function(data,
   }
 
   if (!is.null(y)) {
+    if (!identical(output_cfg$output, "matrix")) {
+      abort_bad_arg(
+        "output",
+        message = "must be {.val matrix} when {.arg y} is supplied."
+      )
+    }
     check_same_length(data, y, arg_x = "data", arg_y = "y")
     .mc_check_latent_missing(list(data = data, y = y), check_na = check_na, arg = "data")
 
@@ -2155,7 +2283,12 @@ polychoric <- function(data,
       conf_level = conf_level
     )
   }
-  out
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
+  )
 }
 
 #' @rdname polychoric
@@ -2396,7 +2529,7 @@ polyserial <- function(data,
                        p_value = FALSE,
                        conf_level = 0.95,
                        ...) {
-  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value) && ...length() == 0L) {
     scalar <- is.null(dim(data)) && is.atomic(data) && !is.factor(data) &&
       is.null(dim(y)) && is.atomic(y)
 
@@ -2801,7 +2934,7 @@ biserial <- function(data,
                      p_value = FALSE,
                      conf_level = 0.95,
                      ...) {
-  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value)) {
+  if (missing(na_method) && isFALSE(ci) && isFALSE(p_value) && ...length() == 0L) {
     scalar <- is.null(dim(data)) && is.atomic(data) && !is.factor(data) &&
       is.null(dim(y)) && is.atomic(y)
 
@@ -3387,6 +3520,19 @@ print.summary.matrixCorr <- function(x,
                                      width = NULL,
                                      show_ci = NULL,
                                      ...) {
+  if (inherits(x, "summary.corr_result")) {
+    x2 <- x
+    attr(x2, "summary_title") <- "Correlation summary"
+    return(print.summary.corr_result(
+      x2,
+      digits = digits,
+      n = n,
+      topn = topn,
+      max_vars = max_vars,
+      width = width,
+      ...
+    ))
+  }
   cfg <- .mc_resolve_display_args(
     context = "summary",
     n = n,
@@ -3486,7 +3632,13 @@ print.summary_corr_matrix <- print.summary.corr_matrix
 #' @method print summary.latent_corr
 #' @export
 print.summary.latent_corr <- function(x, digits = 4, ...) {
+  if (inherits(x, "summary.corr_result")) {
+    x2 <- x
+    attr(x2, "summary_title") <- "Latent correlation summary"
+    return(print.summary.corr_result(x2, digits = digits, ...))
+  }
   print.summary.matrixCorr(x, digits = digits, ...)
 }
 
 print.summary_latent_corr <- print.summary.latent_corr
+

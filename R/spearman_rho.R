@@ -20,6 +20,24 @@
 #' \code{0.95}.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)}-th element is
 #' the Spearman correlation between the \code{i}-th and \code{j}-th
@@ -162,7 +180,15 @@ spearman_rho <- function(data,
                          ci = FALSE,
                          conf_level = 0.95,
                          n_threads = getOption("matrixCorr.threads", 1L),
+                         output = c("matrix", "sparse", "edge_list"),
+                         threshold = 0,
+                         diag = TRUE,
                          ...) {
+  output_cfg <- .mc_validate_thresholded_output_request(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   if (...length() == 0L && missing(na_method) && isFALSE(ci)) {
     numeric_data <- validate_corr_input(data, check_na = TRUE)
     colnames_data <- colnames(numeric_data)
@@ -173,12 +199,45 @@ spearman_rho <- function(data,
     if (!is.null(prev_threads)) {
       on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
     }
-    return(.mc_structure_corr_matrix(
+    if (.mc_supports_direct_threshold_path(
+      method = "spearman",
+      na_method = "error",
+      ci = FALSE,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      pairwise = FALSE,
+      has_ci = FALSE
+    )) {
+      trip <- spearman_threshold_triplets_cpp(
+        numeric_data,
+        threshold = output_cfg$threshold,
+        diag = output_cfg$diag
+      )
+      return(.mc_finalize_triplets_output(
+        triplets = trip,
+        output = output_cfg$output,
+        estimator_class = "spearman_rho",
+        method = "spearman",
+        description = "Pairwise Spearman's rank correlation matrix",
+        threshold = output_cfg$threshold,
+        diag = output_cfg$diag,
+        source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
+        source_dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data),
+        symmetric = TRUE
+      ))
+    }
+    out <- .mc_structure_corr_matrix(
       spearman_matrix_cpp(numeric_data),
       class_name = "spearman_rho",
       method = "spearman",
       description = "Pairwise Spearman's rank correlation matrix",
       dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
+    )
+    return(.mc_finalize_corr_output(
+      out,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
     ))
   }
 
@@ -213,6 +272,34 @@ spearman_rho <- function(data,
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
 
+  if (.mc_supports_direct_threshold_path(
+    method = "spearman",
+    na_method = na_cfg$na_method,
+    ci = ci,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    pairwise = !isTRUE(na_cfg$check_na),
+    has_ci = ci
+  )) {
+    trip <- spearman_threshold_triplets_cpp(
+      numeric_data,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
+    )
+    return(.mc_finalize_triplets_output(
+      triplets = trip,
+      output = output_cfg$output,
+      estimator_class = "spearman_rho",
+      method = "spearman",
+      description = "Pairwise Spearman's rank correlation matrix",
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag,
+      source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
+      source_dimnames = dn,
+      symmetric = TRUE
+    ))
+  }
+
   if (isTRUE(na_cfg$check_na) && !isTRUE(ci)) {
     result <- spearman_matrix_cpp(numeric_data)
   } else {
@@ -235,7 +322,7 @@ spearman_rho <- function(data,
     }
   }
 
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     result,
     class_name = "spearman_rho",
     method = "spearman",
@@ -248,6 +335,12 @@ spearman_rho <- function(data,
         conf.level = conf_level
       )
     }
+  )
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
   )
 }
 
@@ -512,3 +605,4 @@ print.summary.spearman_rho <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+

@@ -27,6 +27,24 @@
 #' \code{"brown_benedetti"}, and \code{"if_el"}.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return
 #' \itemize{
@@ -166,7 +184,15 @@ kendall_tau <- function(data,
                         conf_level = 0.95,
                         ci_method = c("fieller", "if_el", "brown_benedetti"),
                         n_threads = getOption("matrixCorr.threads", 1L),
+                        output = c("matrix", "sparse", "edge_list"),
+                        threshold = 0,
+                        diag = TRUE,
                         ...) {
+  output_cfg <- .mc_validate_output_args(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   if (is.null(y) && ...length() == 0L && missing(na_method) && isFALSE(ci)) {
     numeric_data <- validate_corr_input(data, check_na = TRUE)
     colnames_data <- colnames(numeric_data)
@@ -177,12 +203,18 @@ kendall_tau <- function(data,
     if (!is.null(prev_threads)) {
       on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
     }
-    return(.mc_structure_corr_matrix(
+    out <- .mc_structure_corr_matrix(
       kendall_matrix_cpp(numeric_data),
       class_name = "kendall_matrix",
       method = "kendall",
       description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
       dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
+    )
+    return(.mc_finalize_corr_output(
+      out,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
     ))
   }
 
@@ -207,6 +239,12 @@ kendall_tau <- function(data,
   }
 
   if (!is.null(y)) {
+    if (!identical(output_cfg$output, "matrix")) {
+      abort_bad_arg(
+        "output",
+        message = "non-matrix output modes are unavailable in two-vector mode."
+      )
+    }
     if (isTRUE(ci)) {
       abort_bad_arg("ci",
         message = "Confidence intervals are not available when {.arg y} is supplied."
@@ -267,7 +305,7 @@ kendall_tau <- function(data,
     }
   }
 
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     result,
     class_name = "kendall_matrix",
     method = "kendall",
@@ -281,6 +319,12 @@ kendall_tau <- function(data,
         ci.method = ci_method
       )
     }
+  )
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
   )
 }
 
@@ -535,3 +579,4 @@ print.summary.kendall_matrix <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+

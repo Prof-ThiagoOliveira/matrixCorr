@@ -7,6 +7,7 @@
 #include <cmath>      // for std::floor, std::ceil
 #include <algorithm>  // for std::max
 #include "matrixCorr_omp.h"
+#include "threshold_triplets.h"
 
 // only what we use from matrixCorr_detail
 #include "matrixCorr_detail.h"
@@ -201,6 +202,72 @@ arma::mat bicor_matrix_pairwise_cpp(const arma::mat &X,
     }
   }
   return R;
+}
+
+// Complete-data bicor upper-triplet kernel for thresholded outputs.
+// [[Rcpp::export]]
+Rcpp::List bicor_threshold_triplets_cpp(const arma::mat& X,
+                                        const double c_const = 9.0,
+                                        const double maxPOutliers = 1.0,
+                                        const int pearson_fallback = 1,
+                                        const double threshold = 0.0,
+                                        const bool diag = true,
+                                        const int block_size = 256,
+                                        const int n_threads = 1) {
+  const std::size_t n = X.n_rows, p = X.n_cols;
+  if (p == 0 || n < 2) stop("X must have >=2 rows and >=1 column.");
+  if (!X.is_finite()) stop("X contains NA/NaN/Inf; please handle missingness upstream.");
+  if (!(threshold >= 0.0) || !std::isfinite(threshold)) stop("threshold must be finite and >= 0.");
+  if (block_size < 1) stop("block_size must be >= 1.");
+
+  arma::mat Z(n, p, fill::zeros);
+  std::vector<unsigned char> col_valid(p, 0u);
+
+#ifdef _OPENMP
+  omp_set_num_threads(std::max(1, n_threads));
+#pragma omp parallel for schedule(static)
+#endif
+  for (std::ptrdiff_t j = 0; j < static_cast<std::ptrdiff_t>(p); ++j) {
+    bool ok = false;
+    arma::vec zcol(Z.colptr(static_cast<arma::uword>(j)), n, false, true);
+    standardise_bicor_column(X.col(static_cast<arma::uword>(j)), zcol, pearson_fallback, c_const, maxPOutliers, ok);
+    col_valid[static_cast<std::size_t>(j)] = ok ? 1u : 0u;
+  }
+
+  const auto trip = matrixCorr_detail::threshold_triplets::collect_upper_triplets(
+    p,
+    static_cast<std::size_t>(block_size),
+    diag,
+    threshold,
+    [&](std::size_t j0, std::size_t j1, std::size_t k0, std::size_t k1) -> arma::mat {
+      arma::mat blk = Z.cols(static_cast<arma::uword>(j0), static_cast<arma::uword>(j1 - 1u)).t() *
+        Z.cols(static_cast<arma::uword>(k0), static_cast<arma::uword>(k1 - 1u));
+
+      for (std::size_t r = 0u; r < (j1 - j0); ++r) {
+        const std::size_t gj = j0 + r;
+        for (std::size_t c = 0u; c < (k1 - k0); ++c) {
+          const std::size_t gk = k0 + c;
+          double val = NA_REAL;
+          if (gj == gk) {
+            val = 1.0;
+          } else if (col_valid[gj] && col_valid[gk]) {
+            val = blk(
+              static_cast<arma::uword>(r),
+              static_cast<arma::uword>(c)
+            );
+            if (std::isfinite(val)) {
+              if (val > 1.0) val = 1.0;
+              else if (val < -1.0) val = -1.0;
+            }
+          }
+          blk(static_cast<arma::uword>(r), static_cast<arma::uword>(c)) = val;
+        }
+      }
+      return blk;
+    }
+  );
+
+  return matrixCorr_detail::threshold_triplets::as_list(trip);
 }
 
 

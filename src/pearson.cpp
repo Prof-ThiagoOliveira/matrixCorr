@@ -4,6 +4,7 @@
 #include <limits>
 #include <cmath>
 #include <vector>
+#include "threshold_triplets.h"
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::plugins(openmp)]]
 
@@ -93,6 +94,7 @@ arma::mat pearson_matrix_cpp(SEXP X_) {
   }
 
   arma::vec inv_s = 1.0 / arma::sqrt(centered_diag);
+
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
@@ -120,6 +122,79 @@ arma::mat pearson_matrix_cpp(SEXP X_) {
   }
 
   return XtX;
+}
+
+// Complete-data Pearson upper-triplet kernel for thresholded outputs.
+// [[Rcpp::export]]
+Rcpp::List pearson_threshold_triplets_cpp(SEXP X_,
+                                          const double threshold = 0.0,
+                                          const bool diag = true,
+                                          const int block_size = 256) {
+  if (!Rf_isReal(X_) || !Rf_isMatrix(X_))
+    Rcpp::stop("Numeric double matrix required.");
+  if (!(threshold >= 0.0) || !std::isfinite(threshold))
+    Rcpp::stop("threshold must be finite and >= 0.");
+  if (block_size < 1)
+    Rcpp::stop("block_size must be >= 1.");
+
+  const arma::uword n = Rf_nrows(X_);
+  const arma::uword p = Rf_ncols(X_);
+  if (n < 2 || p < 2) Rcpp::stop("Need >= 2 rows and >= 2 columns.");
+
+  arma::mat X(REAL(X_), n, p, /*copy_aux_mem*/ false, /*strict*/ true);
+  const double n_d = static_cast<double>(n);
+
+  arma::rowvec mu = arma::sum(X, 0) / n_d;
+  arma::vec centered_diag(p, arma::fill::zeros);
+  arma::vec inv_s(p, arma::fill::zeros);
+  std::vector<unsigned char> valid(static_cast<std::size_t>(p), 0u);
+
+  for (arma::uword j = 0; j < p; ++j) {
+    const double ss = arma::dot(X.col(j), X.col(j));
+    const double d = ss - n_d * mu[j] * mu[j];
+    if (d > 0.0 && std::isfinite(d)) {
+      centered_diag[j] = d;
+      inv_s[j] = 1.0 / std::sqrt(d);
+      valid[static_cast<std::size_t>(j)] = 1u;
+    }
+  }
+
+  const auto trip = matrixCorr_detail::threshold_triplets::collect_upper_triplets(
+    static_cast<std::size_t>(p),
+    static_cast<std::size_t>(block_size),
+    diag,
+    threshold,
+    [&](std::size_t j0, std::size_t j1, std::size_t k0, std::size_t k1) -> arma::mat {
+      arma::mat blk = X.cols(static_cast<arma::uword>(j0), static_cast<arma::uword>(j1 - 1u)).t() *
+        X.cols(static_cast<arma::uword>(k0), static_cast<arma::uword>(k1 - 1u));
+
+      const arma::rowvec mu_j = mu.subvec(static_cast<arma::uword>(j0), static_cast<arma::uword>(j1 - 1u));
+      const arma::rowvec mu_k = mu.subvec(static_cast<arma::uword>(k0), static_cast<arma::uword>(k1 - 1u));
+      blk -= n_d * (mu_j.t() * mu_k);
+
+      for (std::size_t r = 0u; r < (j1 - j0); ++r) {
+        const std::size_t gj = j0 + r;
+        for (std::size_t c = 0u; c < (k1 - k0); ++c) {
+          const std::size_t gk = k0 + c;
+          double val = NA_REAL;
+          if (valid[gj] && valid[gk]) {
+            if (gj == gk) {
+              val = 1.0;
+            } else {
+              val = clamp_corr(blk(
+                static_cast<arma::uword>(r),
+                static_cast<arma::uword>(c)
+              ) * inv_s[static_cast<arma::uword>(gj)] * inv_s[static_cast<arma::uword>(gk)]);
+            }
+          }
+          blk(static_cast<arma::uword>(r), static_cast<arma::uword>(c)) = val;
+        }
+      }
+      return blk;
+    }
+  );
+
+  return matrixCorr_detail::threshold_triplets::as_list(trip);
 }
 
 // Pairwise-complete Pearson matrix with optional Fisher-z confidence intervals.

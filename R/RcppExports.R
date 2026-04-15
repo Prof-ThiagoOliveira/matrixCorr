@@ -13,6 +13,10 @@ bicor_matrix_pairwise_cpp <- function(X, c_const = 9.0, maxPOutliers = 1.0, pear
     .Call(`_matrixCorr_bicor_matrix_pairwise_cpp`, X, c_const, maxPOutliers, pearson_fallback, min_n, n_threads)
 }
 
+bicor_threshold_triplets_cpp <- function(X, c_const = 9.0, maxPOutliers = 1.0, pearson_fallback = 1L, threshold = 0.0, diag = TRUE, block_size = 256L, n_threads = 1L) {
+    .Call(`_matrixCorr_bicor_threshold_triplets_cpp`, X, c_const, maxPOutliers, pearson_fallback, threshold, diag, block_size, n_threads)
+}
+
 bicor_matrix_weighted_cpp <- function(X, w, c_const = 9.0, maxPOutliers = 1.0, pearson_fallback = 1L, n_threads = 1L) {
     .Call(`_matrixCorr_bicor_matrix_weighted_cpp`, X, w, c_const, maxPOutliers, pearson_fallback, n_threads)
 }
@@ -77,6 +81,10 @@ openmp_threads <- function() {
     .Call(`_matrixCorr_openmp_threads`)
 }
 
+ccc_threshold_triplets_cpp <- function(X, threshold = 0.0, diag = TRUE, block_size = 256L) {
+    .Call(`_matrixCorr_ccc_threshold_triplets_cpp`, X, threshold, diag, block_size)
+}
+
 ustat_dcor <- function(x, y) {
     .Call(`_matrixCorr_ustat_dcor`, x, y)
 }
@@ -121,6 +129,10 @@ pearson_matrix_cpp <- function(X_) {
     .Call(`_matrixCorr_pearson_matrix_cpp`, X_)
 }
 
+pearson_threshold_triplets_cpp <- function(X_, threshold = 0.0, diag = TRUE, block_size = 256L) {
+    .Call(`_matrixCorr_pearson_threshold_triplets_cpp`, X_, threshold, diag, block_size)
+}
+
 pearson_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95) {
     .Call(`_matrixCorr_pearson_matrix_pairwise_cpp`, X_, return_ci, conf_level)
 }
@@ -137,12 +149,20 @@ pbcor_matrix_cpp <- function(X, beta = 0.2, n_threads = 1L) {
     .Call(`_matrixCorr_pbcor_matrix_cpp`, X, beta, n_threads)
 }
 
+pbcor_threshold_triplets_cpp <- function(X, beta = 0.2, threshold = 0.0, diag = TRUE, block_size = 256L, n_threads = 1L) {
+    .Call(`_matrixCorr_pbcor_threshold_triplets_cpp`, X, beta, threshold, diag, block_size, n_threads)
+}
+
 pbcor_matrix_pairwise_cpp <- function(X, beta = 0.2, min_n = 5L, n_threads = 1L) {
     .Call(`_matrixCorr_pbcor_matrix_pairwise_cpp`, X, beta, min_n, n_threads)
 }
 
 wincor_matrix_cpp <- function(X, tr = 0.2, n_threads = 1L) {
     .Call(`_matrixCorr_wincor_matrix_cpp`, X, tr, n_threads)
+}
+
+wincor_threshold_triplets_cpp <- function(X, tr = 0.2, threshold = 0.0, diag = TRUE, block_size = 256L, n_threads = 1L) {
+    .Call(`_matrixCorr_wincor_threshold_triplets_cpp`, X, tr, threshold, diag, block_size, n_threads)
 }
 
 wincor_matrix_pairwise_cpp <- function(X, tr = 0.2, min_n = 5L, n_threads = 1L) {
@@ -163,6 +183,10 @@ spearman_matrix_cpp <- function(X_) {
 
 spearman_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95) {
     .Call(`_matrixCorr_spearman_matrix_pairwise_cpp`, X_, return_ci, conf_level)
+}
+
+spearman_threshold_triplets_cpp <- function(X_, threshold = 0.0, diag = TRUE, block_size = 256L) {
+    .Call(`_matrixCorr_spearman_threshold_triplets_cpp`, X_, threshold, diag, block_size)
 }
 
 matrixCorr_tetrachoric_mle_cpp <- function(tab, correct = 0.5) {

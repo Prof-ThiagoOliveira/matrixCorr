@@ -30,6 +30,24 @@
 #'   estimator in the ordinary low-dimensional setting.
 #' @param conf_level Confidence level used when \code{ci = TRUE}. Default is
 #'   \code{0.95}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return An object of class \code{"partial_corr"} (a list) with elements:
 #'   \itemize{
@@ -308,7 +326,15 @@
 pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
                                 ci = FALSE, conf_level = 0.95,
                                 return_cov_precision = FALSE,
-                                return_p_value = FALSE, lambda = 1e-3) {
+                                return_p_value = FALSE, lambda = 1e-3,
+                                output = c("matrix", "sparse", "edge_list"),
+                                threshold = 0,
+                                diag = TRUE) {
+  output_cfg <- .mc_validate_output_args(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   method <- match.arg(method)
   lambda <- check_scalar_numeric(lambda, arg = "lambda", lower = 0, closed_lower = TRUE)
   lambda <- as.numeric(lambda)
@@ -317,6 +343,14 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   check_bool(ci, arg = "ci")
   if (isTRUE(ci)) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  }
+  if (!identical(output_cfg$output, "matrix") &&
+      (isTRUE(return_cov_precision) || isTRUE(return_p_value) || isTRUE(ci))) {
+    abort_bad_arg(
+      "output",
+      message = "non-matrix outputs currently support point estimates only.",
+      .hint = "Set `.arg return_cov_precision = FALSE`, `.arg return_p_value = FALSE`, and `.arg ci = FALSE`."
+    )
   }
 
   numeric_data <-
@@ -403,13 +437,32 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   if (!is.null(ci_attr)) {
     res$ci <- ci_attr
   }
-  structure(
+  out <- structure(
     res,
     class = c("partial_corr", "list"),
     method = method,
     ci = ci_attr,
     conf.level = if (!is.null(ci_attr)) conf_level else NULL,
     ci.method = if (!is.null(ci_attr)) ci_attr$ci.method else NULL
+  )
+  if (identical(output_cfg$output, "matrix")) {
+    return(out)
+  }
+
+  pcor_obj <- .mc_structure_corr_matrix(
+    out$pcor,
+    class_name = "partial_corr_matrix",
+    method = paste0("partial_correlation_", method),
+    description = "Partial correlation matrix",
+    diagnostics = diagnostics,
+    dimnames = dn,
+    classes = c("partial_corr_matrix", "matrix")
+  )
+  .mc_finalize_corr_output(
+    pcor_obj,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
   )
 }
 
@@ -855,3 +908,4 @@ plot.partial_corr <- function(
 
   p
 }
+

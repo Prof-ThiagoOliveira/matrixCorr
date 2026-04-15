@@ -13,7 +13,7 @@
 #' legitimately computed even with small samples (e.g., 10 observations),
 #' and results are often similar to intraclass correlation coefficients.
 #' CCC provides a single summary of agreement, but it may not capture
-#' systematic bias; a Bland–Altman plot (differences vs. means) is recommended
+#' systematic bias; a Bland-Altman plot (differences vs. means) is recommended
 #' to visualize bias, proportional trends, and heteroscedasticity (see
 #' \code{\link{ba}}).
 #'
@@ -53,6 +53,24 @@
 #' @param conf_level Confidence level for CI, default = 0.95
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #' @param verbose Logical; if TRUE, prints how many threads are used
 #'
 #' @return A symmetric numeric matrix with class \code{"ccc"} and attributes:
@@ -105,7 +123,15 @@
 #' @export
 ccc <- function(data, ci = FALSE, conf_level = 0.95,
                 n_threads = getOption("matrixCorr.threads", 1L),
+                output = c("matrix", "sparse", "edge_list"),
+                threshold = 0,
+                diag = TRUE,
                 verbose = FALSE) {
+  output_cfg <- .mc_validate_thresholded_output_request(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   check_bool(ci, arg = "ci")
   if (isTRUE(ci)) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
@@ -135,6 +161,35 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
 
   if (verbose) cat("Using", openmp_threads(), "OpenMP threads\n")
 
+  if (!isTRUE(ci) && .mc_supports_direct_threshold_path(
+    method = "ccc",
+    na_method = "error",
+    ci = FALSE,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    pairwise = FALSE,
+    has_ci = FALSE
+  )) {
+    trip <- ccc_threshold_triplets_cpp(
+      mat,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
+    )
+    return(.mc_finalize_triplets_output(
+      triplets = trip,
+      output = output_cfg$output,
+      estimator_class = "ccc",
+      method = "Lin's concordance",
+      description = "Pairwise Lin's concordance correlation matrix",
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag,
+      source_dim = as.integer(c(ncol(mat), ncol(mat))),
+      source_dimnames = dn,
+      diagnostics = diag_payload,
+      symmetric = TRUE
+    ))
+  }
+
   if (ci) {
     if (nrow(mat) <= 2L) {
       abort_bad_arg("data",
@@ -159,6 +214,30 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
       conf.level = conf_level,
       diagnostics = diag_payload
     )
+    if (!identical(output_cfg$output, "matrix")) {
+      ci_attr <- list(
+        est = .mc_set_matrix_dimnames(unclass(ccc_lin$est), colnames_data),
+        lwr.ci = .mc_set_matrix_dimnames(unclass(ccc_lin$lwr.ci), colnames_data),
+        upr.ci = .mc_set_matrix_dimnames(unclass(ccc_lin$upr.ci), colnames_data),
+        conf.level = conf_level
+      )
+      dense_obj <- .mc_structure_corr_matrix(
+        ccc_lin$est,
+        class_name = "ccc",
+        method = "Lin's concordance",
+        description = "Pairwise Lin's concordance with confidence intervals",
+        diagnostics = diag_payload,
+        dimnames = dn,
+        classes = c("ccc", "matrix"),
+        extra_attrs = list(ci = ci_attr, conf.level = conf_level)
+      )
+      return(.mc_finalize_corr_output(
+        dense_obj,
+        output = output_cfg$output,
+        threshold = output_cfg$threshold,
+        diag = output_cfg$diag
+      ))
+    }
   } else {
     est <- ccc_cpp(mat)
     ccc_lin <- .mc_structure_corr_matrix(
@@ -169,6 +248,12 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
       diagnostics = diag_payload,
       dimnames = dn,
       classes = c("ccc", "matrix")
+    )
+    ccc_lin <- .mc_finalize_corr_output(
+      ccc_lin,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
     )
   }
 
@@ -460,3 +545,4 @@ plot.ccc <- function(x,
 
   p
 }
+

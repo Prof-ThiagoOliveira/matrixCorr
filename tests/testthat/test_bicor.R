@@ -437,7 +437,7 @@ test_that("max_p_outliers side-cap improves robustness in one-sided outliers", {
   expect_gte(R1["x","y"], R0["x","y"])
 })
 
-test_that("sparse_threshold returns sparse bicor class and preserves metadata", {
+test_that("sparse_threshold alias returns unified sparse output contract", {
   skip_if_not_installed("Matrix")
 
   # Small matrix with modest correlations
@@ -445,17 +445,24 @@ test_that("sparse_threshold returns sparse bicor class and preserves metadata", 
   X <- matrix(rnorm(200), 50, 4)
   R  <- bicor(X, sparse_threshold = 0.9)  # most off-diagonals -> 0
 
-  expect_true(inherits(R, "bicor"))
-  expect_true(grepl("Sparse threshold", attr(R, "description")))
-  # diagonal must remain 1
-  expect_equal(as.numeric(diag(R)), rep(1, ncol(X)))
+  expect_s4_class(R, "sparseMatrix")
+  expect_identical(attr(R, "output"), "sparse")
+  expect_equal(as.numeric(attr(R, "threshold")), 0.9)
+  expect_true(isTRUE(attr(R, "diag")))
+
+  meta <- attr(R, "matrixCorr_meta", exact = TRUE)
+  expect_true(is.list(meta))
+  expect_true("bicor" %in% meta$source_class)
+  expect_identical(meta$method, "biweight_mid_correlation")
+
+  # diagonal remains 1 for finite bicor diagonals
+  expect_equal(as.numeric(diag(as.matrix(R))), rep(1, ncol(X)))
   # confirm many structural zeros (at least one)
-  nz  <- Matrix::nnzero(Matrix::Matrix(R, sparse = TRUE))
+  nz  <- Matrix::nnzero(R)
   expect_lt(nz, ncol(X)^2)  # sparsity achieved
-  expect_equal(attr(R, "method"), "biweight_mid_correlation")
 })
 
-test_that("sparse path retains NA diagonals for degenerate columns", {
+test_that("sparse output drops non-finite dense entries and keeps finite thresholded values", {
   skip_if_not_installed("Matrix")
 
   M <- cbind(
@@ -463,11 +470,14 @@ test_that("sparse path retains NA diagonals for degenerate columns", {
     var   = c(0, 1, 2, 3, 4, 5)
   )
 
+  R_dense <- bicor(M, pearson_fallback = "none")
   R <- bicor(M, pearson_fallback = "none", sparse_threshold = 0.4)
+  R_sparse_dense <- as.matrix(R)
 
-  expect_true(inherits(R, "bicor"))
-  expect_true(any(is.na(diag(R))))
-  expect_true(all(is.na(R["const", ])))
+  expect_s4_class(R, "sparseMatrix")
+  finite_keep <- is.finite(R_dense) & abs(R_dense) >= 0.4
+  expect_equal(R_sparse_dense[finite_keep], R_dense[finite_keep], tolerance = 1e-12)
+  expect_true(all(R_sparse_dense[!is.finite(R_dense)] == 0))
 })
 
 test_that("plot methods do not error and return expected classes", {

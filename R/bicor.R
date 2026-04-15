@@ -11,7 +11,7 @@
 #'   Factors, logicals and common time classes are dropped in the data-frame
 #'   path. Missing values are not allowed unless \code{na_method = "pairwise"}.
 #' @param c_const Positive numeric. Tukey biweight tuning constant applied to the
-#'   \emph{raw} MAD; default \code{9} (Langfelder & Horvath’s convention).
+#'   \emph{raw} MAD; default \code{9} (Langfelder & Horvath's convention).
 #' @param max_p_outliers Numeric in \code{(0, 1]}. Optional cap on the maximum
 #'   proportion of outliers \emph{on each side}; if \code{< 1}, side-specific
 #'   rescaling maps those quantiles to \code{|u|=1}. Use \code{1} to disable.
@@ -44,6 +44,24 @@
 #'   \code{0.95}.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return A symmetric correlation matrix with class \code{bicor}
 #'   (or a \code{dgCMatrix} if \code{sparse_threshold} is used), with attributes:
@@ -99,7 +117,7 @@
 #'         \deqn{\mathrm{bicor}_{\mathrm{hyb}}(x,y) = \sum_a \bar x_a\,\tilde y_a,}
 #'         with the other column still robust-standardised.
 #'   \item \code{"all"} when all columns use ordinary Pearson standardisation; the result
-#'         equals \code{stats::cor(…, method="pearson")} when the NA policy matches.
+#'         equals \code{stats::cor(..., method="pearson")} when the NA policy matches.
 #' }
 #'
 #' \strong{Handling missing values (\code{na_method}).}
@@ -170,7 +188,7 @@
 #' @references
 #' Langfelder, P. & Horvath, S. (2012).
 #' Fast R Functions for Robust Correlations and Hierarchical Clustering.
-#' Journal of Statistical Software, 46(11), 1–17. \doi{10.18637/jss.v046.i11}
+#' Journal of Statistical Software, 46(11), 1-17. \doi{10.18637/jss.v046.i11}
 #'
 #' @importFrom Matrix Matrix
 #' @examples
@@ -196,6 +214,9 @@ bicor <- function(
     ci               = FALSE,
     conf_level       = 0.95,
     n_threads        = getOption("matrixCorr.threads", 1L),
+    output           = c("matrix", "sparse", "edge_list"),
+    threshold        = 0,
+    diag             = TRUE,
     c_const          = 9,
     max_p_outliers   = 1,
     pearson_fallback = c("hybrid", "none", "all"),
@@ -203,9 +224,39 @@ bicor <- function(
     w                = NULL,
     sparse_threshold = NULL
 ) {
+  output_missing <- missing(output)
+  threshold_missing <- missing(threshold)
+  if (!is.null(sparse_threshold)) {
+    check_scalar_nonneg(sparse_threshold, arg = "sparse_threshold", strict = FALSE)
+    if (isTRUE(output_missing)) {
+      output <- "sparse"
+    } else if (!identical(output, "sparse")) {
+      abort_bad_arg(
+        "output",
+        message = "must be {.val sparse} when {.arg sparse_threshold} is supplied."
+      )
+    }
+    if (isTRUE(threshold_missing)) {
+      threshold <- sparse_threshold
+    } else if (!isTRUE(all.equal(as.numeric(threshold), as.numeric(sparse_threshold)))) {
+      abort_bad_arg(
+        "threshold",
+        message = "must match {.arg sparse_threshold} when both are supplied."
+      )
+    }
+  }
+  output_cfg <- .mc_validate_thresholded_output_request(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
+
   if (missing(na_method) &&
       isFALSE(ci) &&
       missing(n_threads) &&
+      identical(output_cfg$output, "matrix") &&
+      identical(output_cfg$threshold, 0) &&
+      isTRUE(output_cfg$diag) &&
       identical(c_const, 9) &&
       identical(max_p_outliers, 1) &&
       missing(pearson_fallback) &&
@@ -274,16 +325,50 @@ bicor <- function(
       message = "Confidence intervals are unavailable when {.arg w} is supplied."
     )
   }
-  if (isTRUE(ci) && !is.null(sparse_threshold)) {
-    abort_bad_arg(
-      "ci",
-      message = "Confidence intervals are unavailable when {.arg sparse_threshold} is supplied."
-    )
-  }
 
   # --- MAD consistency via effective c
   c_eff <- if (isTRUE(mad_consistent)) c_const * 1.4826 else c_const
   dn <- .mc_square_dimnames(colnames_data)
+  desc <- paste0(
+    "Median/MAD-based biweight mid-correlation (bicor); max_p_outliers = ", max_p_outliers,
+    ", MAD = ", if (mad_consistent) "normal-consistent (1.4826 * raw)" else "raw",
+    "; fallback = ", pf, "; NA mode = ", na_method, "."
+  )
+
+  if (.mc_supports_direct_threshold_path(
+    method = "bicor",
+    na_method = na_method,
+    ci = ci,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    pairwise = identical(na_method, "pairwise"),
+    has_ci = ci,
+    weighted = !is.null(w)
+  )) {
+    prev_threads <- get_omp_threads()
+    on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+    trip <- bicor_threshold_triplets_cpp(
+      numeric_data,
+      c_const = c_eff,
+      maxPOutliers = max_p_outliers,
+      pearson_fallback = pf_int,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag,
+      n_threads = n_threads
+    )
+    return(.mc_finalize_triplets_output(
+      triplets = trip,
+      output = output_cfg$output,
+      estimator_class = "bicor",
+      method = "biweight_mid_correlation",
+      description = desc,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag,
+      source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
+      source_dimnames = dn,
+      symmetric = TRUE
+    ))
+  }
 
   # --- choose backend
   prev_threads <- get_omp_threads()
@@ -326,11 +411,6 @@ bicor <- function(
   res <- .mc_set_matrix_dimnames(res, colnames_data)
 
   # --- names & metadata
-  desc <- paste0(
-    "Median/MAD-based biweight mid-correlation (bicor); max_p_outliers = ", max_p_outliers,
-    ", MAD = ", if (mad_consistent) "normal-consistent (1.4826 * raw)" else "raw",
-    "; fallback = ", pf, "; NA mode = ", na_method, "."
-  )
   diagnostics <- NULL
   ci_attr <- NULL
   inference_attr <- NULL
@@ -348,51 +428,30 @@ bicor <- function(
     )
   }
 
-  # --- default: dense matrix with S3 class (original behaviour)
-  if (is.null(sparse_threshold)) {
-    return(.mc_structure_corr_matrix(
-      res,
-      class_name = "bicor",
-      method = "biweight_mid_correlation",
-      description = desc,
-      diagnostics = diagnostics,
-      extra_attrs = c(
-        if (!is.null(ci_attr)) {
-          list(
-            ci = ci_attr,
-            conf.level = conf_level
-          )
-        },
-        if (!is.null(inference_attr)) {
-          list(inference = inference_attr)
-        }
-      )
-    ))
-  }
-
-  # --- optional sparse thresholding (S4 Matrix, no S3 class mutation)
-  # zero-out small entries safely, keeping NAs intact
-  idx <- !is.na(res) & (abs(res) < sparse_threshold)
-  if (any(idx)) res[idx] <- 0
-  diag(res) <- 1
-
-  # mark degenerate columns (only diagonal finite) with NA diagonal for sparse reporting
-  degenerate_idx <- which(rowSums(is.finite(res)) <= 1)
-  if (length(degenerate_idx)) {
-    res[cbind(degenerate_idx, degenerate_idx)] <- NA_real_
-  }
-
-  sparse_obj <- Matrix::forceSymmetric(Matrix::Matrix(res, sparse = TRUE), uplo = "U")
-  sparse_info <- list(class = class(sparse_obj), threshold = sparse_threshold)
-  res_dense <- as.matrix(sparse_obj)
-  res_dense <- .mc_structure_corr_matrix(
-    res_dense,
+  out <- .mc_structure_corr_matrix(
+    res,
     class_name = "bicor",
     method = "biweight_mid_correlation",
-    description = paste0(desc, " Sparse threshold = ", sparse_threshold, "."),
-    extra_attrs = list(sparse_info = sparse_info)
+    description = desc,
+    diagnostics = diagnostics,
+    extra_attrs = c(
+      if (!is.null(ci_attr)) {
+        list(
+          ci = ci_attr,
+          conf.level = conf_level
+        )
+      },
+      if (!is.null(inference_attr)) {
+        list(inference = inference_attr)
+      }
+    )
   )
-  res_dense
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
+  )
 }
 
 .mc_bicor_n_complete <- function(x) {
@@ -817,4 +876,5 @@ print.summary.bicor <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 

@@ -16,6 +16,9 @@ polychoric(
   p_value = FALSE,
   conf_level = 0.95,
   correct = 0.5,
+  output = c("matrix", "sparse", "edge_list"),
+  threshold = 0,
+  diag = TRUE,
   ...
 )
 
@@ -90,6 +93,27 @@ estimated latent correlation.}
 \item{correct}{Non-negative continuity correction added to zero-count cells.
 Default is \code{0.5}.}
 
+\item{output}{Output representation for the computed estimates.
+\itemize{
+\item \code{"matrix"} (default): full dense matrix; best when you need
+matrix algebra, dense heatmaps, or full compatibility with existing code.
+\item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+retained entries; best when many values are dropped by thresholding.
+\item \code{"edge_list"}: long-form data frame with columns
+\code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+and network-style workflows.
+}}
+
+\item{threshold}{Non-negative absolute-value filter for non-matrix outputs:
+keep entries with \code{abs(value) >= threshold}. Use
+\code{threshold > 0} when you want only stronger associations (typically
+with \code{output = "sparse"} or \code{"edge_list"}). Keep
+\code{threshold = 0} to retain all values. Must be \code{0} when
+\code{output = "matrix"}.}
+
+\item{diag}{Logical; whether to include diagonal entries in
+\code{"sparse"} and \code{"edge_list"} outputs.}
+
 \item{...}{Additional arguments passed to \code{print()}.}
 
 \item{x}{An object of class \code{summary.polychoric_corr}.}
@@ -139,7 +163,9 @@ returned object also carries an \code{inference} attribute with elements
 with elements \code{est}, \code{lwr.ci}, \code{upr.ci}, \code{conf.level},
 and \code{ci.method}, plus \code{attr(x, "conf.level")}. Scalar outputs keep
 the same point estimate and gain the same metadata only when inference is
-requested.
+requested. In matrix mode, \code{output = "edge_list"} returns a data frame with columns
+\code{row}, \code{col}, \code{value}; \code{output = "sparse"} returns a
+symmetric sparse matrix.
 }
 \description{
 Computes the polychoric correlation for either a pair of ordinal variables
@@ -244,6 +270,7 @@ pc <- polychoric(Y)
 print(pc, digits = 3)
 summary(pc)
 plot(pc)
+polychoric(Y, output = "edge_list", threshold = 0.3, diag = FALSE)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

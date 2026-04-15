@@ -29,6 +29,9 @@
 #' @param mad_consistent Logical; if `TRUE`, uses the consistency-corrected MAD.
 #' @param w Optional vector of case weights.
 #' @param sparse_threshold Optional threshold controlling sparse output.
+#' @param output Output representation for the computed estimates.
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs.
+#' @param diag Logical; whether to include diagonal entries in non-matrix outputs.
 #' @param n_threads Integer number of OpenMP threads.
 #' @param rind Character; column identifying subjects, forwarded as `subject`
 #'   to `ccc_rm_reml()`.
@@ -173,7 +176,10 @@ biweight_mid_corr <- function(
     mad_consistent = FALSE,
     w = NULL,
     sparse_threshold = NULL,
-    n_threads = getOption("matrixCorr.threads", 1L)
+    n_threads = getOption("matrixCorr.threads", 1L),
+    output = c("matrix", "sparse", "edge_list"),
+    threshold = 0,
+    diag = TRUE
 ) {
   .mc_deprecate(old = "biweight_mid_corr", new = "bicor")
 
@@ -186,7 +192,10 @@ biweight_mid_corr <- function(
     mad_consistent = mad_consistent,
     w = w,
     sparse_threshold = sparse_threshold,
-    n_threads = n_threads
+    n_threads = n_threads,
+    output = output,
+    threshold = threshold,
+    diag = diag
   )
 }
 
@@ -207,7 +216,10 @@ partial_correlation <- function(data,
                                 lambda = 1e-3,
                                 return_cov_precision = FALSE,
                                 ci = FALSE,
-                                conf_level = 0.95) {
+                                conf_level = 0.95,
+                                output = c("matrix", "sparse", "edge_list"),
+                                threshold = 0,
+                                diag = TRUE) {
   .mc_deprecate(
     old = "partial_correlation",
     new = "pcorr",
@@ -220,7 +232,10 @@ partial_correlation <- function(data,
     lambda = lambda,
     return_cov_precision = return_cov_precision,
     ci = ci,
-    conf_level = conf_level
+    conf_level = conf_level,
+    output = output,
+    threshold = threshold,
+    diag = diag
   )
 }
 
@@ -313,3 +328,4 @@ ccc_pairwise_u_stat <- function(data,
     verbose = verbose
   )
 }
+

@@ -65,6 +65,24 @@
 #' @param seed Optional positive integer used to seed the bootstrap resampling
 #'   when \code{ci = TRUE} or \code{p_value = TRUE}. If \code{NULL}, a fresh
 #'   internal seed is generated.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #' @param x An object of class \code{skipped_corr}.
 #' @param var1,var2 Optional column names or 1-based column indices used by
 #'   [skipped_corr_masks()] to extract the skipped-row indices for one pair.
@@ -224,7 +242,15 @@ skipped_corr <- function(data,
                     p_adjust = c("none", "hochberg", "ecp"),
                     fwe_level = 0.05,
                     n_mc = 1000L,
-                    seed = NULL) {
+                    seed = NULL,
+                    output = c("matrix", "sparse", "edge_list"),
+                    threshold = 0,
+                    diag = TRUE) {
+  output_cfg <- .mc_validate_output_args(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   method <- match.arg(method)
   na_method <- match.arg(na_method)
   outlier_rule <- match.arg(outlier_rule)
@@ -393,7 +419,7 @@ skipped_corr <- function(data,
     if (identical(p_adjust, "ecp")) inference_attr$n_mc <- n_mc
   }
 
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     res_cor,
     class_name = "skipped_corr",
     method = "skipped_correlation",
@@ -409,6 +435,12 @@ skipped_corr <- function(data,
       if (!is.null(ci_attr)) list(ci = ci_attr),
       if (!is.null(inference_attr)) list(inference = inference_attr)
     )
+  )
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
   )
 }
 
@@ -810,3 +842,4 @@ print.summary.skipped_corr <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+

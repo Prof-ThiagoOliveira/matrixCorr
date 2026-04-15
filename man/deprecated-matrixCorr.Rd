@@ -47,7 +47,10 @@ biweight_mid_corr(
   mad_consistent = FALSE,
   w = NULL,
   sparse_threshold = NULL,
-  n_threads = getOption("matrixCorr.threads", 1L)
+  n_threads = getOption("matrixCorr.threads", 1L),
+  output = c("matrix", "sparse", "edge_list"),
+  threshold = 0,
+  diag = TRUE
 )
 
 distance_corr(data, na_method = c("error", "pairwise"), ...)
@@ -58,7 +61,10 @@ partial_correlation(
   lambda = 0.001,
   return_cov_precision = FALSE,
   ci = FALSE,
-  conf_level = 0.95
+  conf_level = 0.95,
+  output = c("matrix", "sparse", "edge_list"),
+  threshold = 0,
+  diag = TRUE
 )
 
 ccc_lmm_reml(
@@ -157,6 +163,12 @@ when supported.}
 \item{w}{Optional vector of case weights.}
 
 \item{sparse_threshold}{Optional threshold controlling sparse output.}
+
+\item{output}{Output representation for the computed estimates.}
+
+\item{threshold}{Non-negative absolute-value filter for non-matrix outputs.}
+
+\item{diag}{Logical; whether to include diagonal entries in non-matrix outputs.}
 
 \item{...}{Additional arguments forwarded to the replacement function when
 supported.}

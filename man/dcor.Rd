@@ -13,6 +13,9 @@ dcor(
   na_method = c("error", "pairwise"),
   p_value = FALSE,
   n_threads = getOption("matrixCorr.threads", 1L),
+  output = c("matrix", "sparse", "edge_list"),
+  threshold = 0,
+  diag = TRUE,
   ...
 )
 
@@ -73,6 +76,27 @@ distance-correlation t-test of independence.}
 
 \item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
+
+\item{output}{Output representation for the computed estimates.
+\itemize{
+\item \code{"matrix"} (default): full dense matrix; best when you need
+matrix algebra, dense heatmaps, or full compatibility with existing code.
+\item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+retained entries; best when many values are dropped by thresholding.
+\item \code{"edge_list"}: long-form data frame with columns
+\code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+and network-style workflows.
+}}
+
+\item{threshold}{Non-negative absolute-value filter for non-matrix outputs:
+keep entries with \code{abs(value) >= threshold}. Use
+\code{threshold > 0} when you want only stronger associations (typically
+with \code{output = "sparse"} or \code{"edge_list"}). Keep
+\code{threshold = 0} to retain all values. Must be \code{0} when
+\code{output = "matrix"}.}
+
+\item{diag}{Logical; whether to include diagonal entries in
+\code{"sparse"} and \code{"edge_list"} outputs.}
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}

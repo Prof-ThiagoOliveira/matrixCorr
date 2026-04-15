@@ -31,6 +31,24 @@
 #' @param seed Optional positive integer used to seed the bootstrap resampling
 #'   when \code{ci = TRUE}. If \code{NULL}, the current random-number stream is
 #'   used.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #' @param x An object of class \code{wincor}.
 #' @param digits Integer; number of digits to print.
 #' @param n Optional row threshold for compact preview output.
@@ -167,7 +185,15 @@ wincor <- function(data,
                    n_threads = getOption("matrixCorr.threads", 1L),
                    tr = 0.2,
                    n_boot = 500L,
-                   seed = NULL) {
+                   seed = NULL,
+                   output = c("matrix", "sparse", "edge_list"),
+                   threshold = 0,
+                   diag = TRUE) {
+  output_cfg <- .mc_validate_thresholded_output_request(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   na_method <- match.arg(na_method)
   check_scalar_numeric(tr,
                        arg = "tr",
@@ -183,23 +209,63 @@ wincor <- function(data,
       validate_corr_input(data, check_na = FALSE)
     }
     colnames_data <- colnames(numeric_data)
+    dn <- if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data) else NULL
+    desc <- paste0(
+      "Winsorized correlation; tr = ", tr,
+      "; NA mode = ", na_method, "."
+    )
     prev_threads <- get_omp_threads()
     on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+
+    if (.mc_supports_direct_threshold_path(
+      method = "wincor",
+      na_method = na_method,
+      ci = FALSE,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      pairwise = !identical(na_method, "error"),
+      has_ci = FALSE,
+      has_inference = FALSE
+    )) {
+      trip <- wincor_threshold_triplets_cpp(
+        numeric_data,
+        tr = tr,
+        threshold = output_cfg$threshold,
+        diag = output_cfg$diag,
+        n_threads = n_threads
+      )
+      return(.mc_finalize_triplets_output(
+        triplets = trip,
+        output = output_cfg$output,
+        estimator_class = "wincor",
+        method = "winsorized_correlation",
+        description = desc,
+        threshold = output_cfg$threshold,
+        diag = output_cfg$diag,
+        source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
+        source_dimnames = dn,
+        symmetric = TRUE
+      ))
+    }
+
     res <- if (na_method == "error") {
       wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
     } else {
       wincor_matrix_pairwise_cpp(numeric_data, tr = tr, min_n = 5L, n_threads = n_threads)
     }
 
-    return(.mc_structure_corr_matrix(
+    out <- .mc_structure_corr_matrix(
       res,
       class_name = "wincor",
       method = "winsorized_correlation",
-      description = paste0(
-        "Winsorized correlation; tr = ", tr,
-        "; NA mode = ", na_method, "."
-      ),
-      dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
+      description = desc,
+      dimnames = dn
+    )
+    return(.mc_finalize_corr_output(
+      out,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
     ))
   }
 
@@ -243,7 +309,7 @@ wincor <- function(data,
     )
   }
 
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     res,
     class_name = "wincor",
     method = "winsorized_correlation",
@@ -264,6 +330,12 @@ wincor <- function(data,
         list(inference = payload$inference)
       }
     )
+  )
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
   )
 }
 
@@ -622,3 +694,4 @@ print.summary.wincor <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+

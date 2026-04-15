@@ -25,7 +25,10 @@ skipped_corr(
   p_adjust = c("none", "hochberg", "ecp"),
   fwe_level = 0.05,
   n_mc = 1000L,
-  seed = NULL
+  seed = NULL,
+  output = c("matrix", "sparse", "edge_list"),
+  threshold = 0,
+  diag = TRUE
 )
 
 skipped_corr_masks(x, var1 = NULL, var2 = NULL)
@@ -148,6 +151,27 @@ when \code{p_adjust = "ecp"} to estimate the critical p-value. Default
 \item{seed}{Optional positive integer used to seed the bootstrap resampling
 when \code{ci = TRUE} or \code{p_value = TRUE}. If \code{NULL}, a fresh
 internal seed is generated.}
+
+\item{output}{Output representation for the computed estimates.
+\itemize{
+\item \code{"matrix"} (default): full dense matrix; best when you need
+matrix algebra, dense heatmaps, or full compatibility with existing code.
+\item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+retained entries; best when many values are dropped by thresholding.
+\item \code{"edge_list"}: long-form data frame with columns
+\code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+and network-style workflows.
+}}
+
+\item{threshold}{Non-negative absolute-value filter for non-matrix outputs:
+keep entries with \code{abs(value) >= threshold}. Use
+\code{threshold > 0} when you want only stronger associations (typically
+with \code{output = "sparse"} or \code{"edge_list"}). Keep
+\code{threshold = 0} to retain all values. Must be \code{0} when
+\code{output = "matrix"}.}
+
+\item{diag}{Logical; whether to include diagonal entries in
+\code{"sparse"} and \code{"edge_list"} outputs.}
 
 \item{x}{An object of class \code{summary.skipped_corr}.}
 

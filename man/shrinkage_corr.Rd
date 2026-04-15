@@ -11,9 +11,21 @@
 \alias{summary.schafer_corr}
 \title{Shrinkage Correlation}
 \usage{
-shrinkage_corr(data, n_threads = getOption("matrixCorr.threads", 1L))
+shrinkage_corr(
+  data,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  output = c("matrix", "sparse", "edge_list"),
+  threshold = 0,
+  diag = TRUE
+)
 
-schafer_corr(data, n_threads = getOption("matrixCorr.threads", 1L))
+schafer_corr(
+  data,
+  n_threads = getOption("matrixCorr.threads", 1L),
+  output = c("matrix", "sparse", "edge_list"),
+  threshold = 0,
+  diag = TRUE
+)
 
 \method{print}{shrinkage_corr}(
   x,
@@ -92,6 +104,27 @@ and contain no \code{NA}s.}
 
 \item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
+
+\item{output}{Output representation for the computed estimates.
+\itemize{
+\item \code{"matrix"} (default): full dense matrix; best when you need
+matrix algebra, dense heatmaps, or full compatibility with existing code.
+\item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+retained entries; best when many values are dropped by thresholding.
+\item \code{"edge_list"}: long-form data frame with columns
+\code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+and network-style workflows.
+}}
+
+\item{threshold}{Non-negative absolute-value filter for non-matrix outputs:
+keep entries with \code{abs(value) >= threshold}. Use
+\code{threshold > 0} when you want only stronger associations (typically
+with \code{output = "sparse"} or \code{"edge_list"}). Keep
+\code{threshold = 0} to retain all values. Must be \code{0} when
+\code{output = "matrix"}.}
+
+\item{diag}{Logical; whether to include diagonal entries in
+\code{"sparse"} and \code{"edge_list"} outputs.}
 
 \item{x}{An object of class \code{shrinkage_corr} or
 \code{schafer_corr}.}

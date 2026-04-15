@@ -17,6 +17,24 @@
 #' distance-correlation t-test of independence.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
+#' @param output Output representation for the computed estimates.
+#'   \itemize{
+#'   \item \code{"matrix"} (default): full dense matrix; best when you need
+#'   matrix algebra, dense heatmaps, or full compatibility with existing code.
+#'   \item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
+#'   retained entries; best when many values are dropped by thresholding.
+#'   \item \code{"edge_list"}: long-form data frame with columns
+#'   \code{row}, \code{col}, \code{value}; convenient for filtering, joins,
+#'   and network-style workflows.
+#'   }
+#' @param threshold Non-negative absolute-value filter for non-matrix outputs:
+#'   keep entries with \code{abs(value) >= threshold}. Use
+#'   \code{threshold > 0} when you want only stronger associations (typically
+#'   with \code{output = "sparse"} or \code{"edge_list"}). Keep
+#'   \code{threshold = 0} to retain all values. Must be \code{0} when
+#'   \code{output = "matrix"}.
+#' @param diag Logical; whether to include diagonal entries in
+#'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
 #' @return A symmetric numeric matrix where the \code{(i, j)} entry is the
 #' unbiased distance correlation between the \code{i}-th and \code{j}-th
@@ -135,7 +153,15 @@ dcor <- function(data,
                  na_method = c("error", "pairwise"),
                  p_value = FALSE,
                  n_threads = getOption("matrixCorr.threads", 1L),
+                 output = c("matrix", "sparse", "edge_list"),
+                 threshold = 0,
+                 diag = TRUE,
                  ...) {
+  output_cfg <- .mc_validate_output_args(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
   if (...length() == 0L && missing(na_method) && isFALSE(p_value)) {
     numeric_data <- validate_corr_input(data, check_na = TRUE)
     colnames_data <- colnames(numeric_data)
@@ -150,11 +176,17 @@ dcor <- function(data,
     if (!is.null(colnames_data)) {
       dimnames(dcor_matrix) <- .mc_square_dimnames(colnames_data)
     }
-    return(.mc_structure_corr_matrix(
+    out <- .mc_structure_corr_matrix(
       dcor_matrix,
       class_name = "dcor",
       method = "distance_correlation",
       description = "Pairwise distance correlation matrix (unbiased)"
+    )
+    return(.mc_finalize_corr_output(
+      out,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
     ))
   }
 
@@ -211,7 +243,7 @@ dcor <- function(data,
     dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
   }
 
-  .mc_structure_corr_matrix(
+  out <- .mc_structure_corr_matrix(
     dcor_matrix,
     class_name = "dcor",
     method = "distance_correlation",
@@ -219,6 +251,12 @@ dcor <- function(data,
     diagnostics = diagnostics,
     dimnames = dn,
     extra_attrs = if (!is.null(inference_attr)) list(inference = inference_attr)
+  )
+  .mc_finalize_corr_output(
+    out,
+    output = output_cfg$output,
+    threshold = output_cfg$threshold,
+    diag = output_cfg$diag
   )
 }
 
@@ -414,3 +452,4 @@ print.summary.dcor <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
