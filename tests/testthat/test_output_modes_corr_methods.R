@@ -173,6 +173,28 @@ test_that("thresholded direct outputs are materially smaller than dense outputs"
   }
 })
 
+test_that("pearson edge_list threshold=0 keeps edge-list payload contract", {
+  set.seed(20260417)
+  X <- matrix(rnorm(240 * 8), nrow = 240, ncol = 8)
+  colnames(X) <- paste0("E", seq_len(ncol(X)))
+
+  mat <- as.matrix(pearson_corr(X, na_method = "error", ci = FALSE, output = "matrix"))
+  edge <- pearson_corr(X, na_method = "error", ci = FALSE, output = "edge_list", threshold = 0, diag = FALSE)
+
+  expect_true(all(c("row", "col", "value") %in% names(edge)))
+  expect_false(any(c("i", "j", "x") %in% names(edge)))
+
+  got <- as.data.frame(edge, stringsAsFactors = FALSE)[, c("row", "col", "value")]
+  expected <- expected_edge_df(mat, threshold = 0, diag = FALSE)
+
+  got <- got[order(got$col, got$row), , drop = FALSE]
+  expected <- expected[order(expected$col, expected$row), , drop = FALSE]
+  rownames(got) <- NULL
+  rownames(expected) <- NULL
+
+  expect_equal(got, expected, tolerance = 1e-12)
+})
+
 test_that("pcorr supports output modes for point-estimate path", {
   set.seed(11)
   X <- matrix(rnorm(180 * 5), nrow = 180, ncol = 5)

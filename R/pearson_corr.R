@@ -184,6 +184,21 @@ pearson_corr <- function(data,
       on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
     }
 
+    if (identical(output_cfg$output, "edge_list") &&
+        isTRUE(output_cfg$threshold == 0)) {
+      trip <- pearson_threshold_triplets_cpp(
+        numeric_data,
+        threshold = 0,
+        diag = output_cfg$diag
+      )
+      return(.mc_finalize_pearson_edge_list_zero_threshold(
+        triplets = trip,
+        source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
+        source_dimnames = dn,
+        diag = output_cfg$diag
+      ))
+    }
+
     if (.mc_supports_direct_threshold_path(
       method = "pearson",
       na_method = "error",
@@ -259,6 +274,24 @@ pearson_corr <- function(data,
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
 
+  if (identical(output_cfg$output, "edge_list") &&
+      isTRUE(output_cfg$threshold == 0) &&
+      identical(na_cfg$na_method, "error") &&
+      isTRUE(na_cfg$check_na) &&
+      isFALSE(ci)) {
+    trip <- pearson_threshold_triplets_cpp(
+      numeric_data,
+      threshold = 0,
+      diag = output_cfg$diag
+    )
+    return(.mc_finalize_pearson_edge_list_zero_threshold(
+      triplets = trip,
+      source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
+      source_dimnames = dn,
+      diag = output_cfg$diag
+    ))
+  }
+
   if (.mc_supports_direct_threshold_path(
     method = "pearson",
     na_method = na_cfg$na_method,
@@ -330,6 +363,55 @@ pearson_corr <- function(data,
     threshold = output_cfg$threshold,
     diag = output_cfg$diag
   )
+}
+
+.mc_finalize_pearson_edge_list_zero_threshold <- function(triplets,
+                                                          source_dim,
+                                                          source_dimnames = NULL,
+                                                          diag = TRUE) {
+  ii <- as.integer(triplets$i)
+  jj <- as.integer(triplets$j)
+  vv <- as.numeric(triplets$x)
+
+  rn <- NULL
+  cn <- NULL
+  if (is.list(source_dimnames) && length(source_dimnames) == 2L) {
+    rn <- source_dimnames[[1L]]
+    cn <- source_dimnames[[2L]]
+  }
+
+  row_out <- if (is.null(rn)) as.character(ii) else rn[ii]
+  col_out <- if (is.null(cn)) as.character(jj) else cn[jj]
+
+  out <- .mc_new_corr_edge_list(
+    df = data.frame(
+      row = row_out,
+      col = col_out,
+      value = vv,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    ),
+    estimator_class = "pearson_corr",
+    method = "pearson",
+    description = "Pairwise Pearson correlation matrix",
+    threshold = 0,
+    diag = diag,
+    diagnostics = NULL,
+    ci = NULL,
+    conf.level = NULL,
+    source_dim = source_dim,
+    source_dimnames = source_dimnames,
+    symmetric = TRUE
+  )
+
+  attr(out, "matrixCorr_meta") <- list(
+    source_class = "pearson_corr",
+    method = "pearson",
+    description = "Pairwise Pearson correlation matrix",
+    package = "matrixCorr",
+    diagnostics = NULL
+  )
+  out
 }
 
 .mc_structure_pearson_matrix <- function(mat,
