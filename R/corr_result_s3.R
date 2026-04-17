@@ -100,6 +100,7 @@ as.data.frame.corr_edge_list <- function(x, row.names = NULL, optional = FALSE, 
 
 #' Matrix sparse fallback for correlation sparse output
 #' @keywords internal
+#' @exportS3Method summary sparseMatrix
 #' @noRd
 summary.sparseMatrix <- function(object, topn = NULL, show_ci = NULL, ...) {
   if (identical(attr(object, "corr_output_class", exact = TRUE), "corr_sparse") ||
@@ -110,6 +111,7 @@ summary.sparseMatrix <- function(object, topn = NULL, show_ci = NULL, ...) {
 }
 
 #' @keywords internal
+#' @exportS3Method summary dsCMatrix
 #' @noRd
 summary.dsCMatrix <- function(object, topn = NULL, show_ci = NULL, ...) {
   if (identical(attr(object, "corr_output_class", exact = TRUE), "corr_sparse") ||
@@ -120,6 +122,7 @@ summary.dsCMatrix <- function(object, topn = NULL, show_ci = NULL, ...) {
 }
 
 #' @keywords internal
+#' @exportS3Method summary dgCMatrix
 #' @noRd
 summary.dgCMatrix <- function(object, topn = NULL, show_ci = NULL, ...) {
   if (identical(attr(object, "corr_output_class", exact = TRUE), "corr_sparse") ||
@@ -437,6 +440,7 @@ plot.corr_edge_list <- function(x,
 
 #' Matrix sparse fallback for correlation sparse output
 #' @keywords internal
+#' @exportS3Method plot sparseMatrix
 #' @noRd
 plot.sparseMatrix <- function(x,
                               title = NULL,
@@ -465,6 +469,7 @@ plot.sparseMatrix <- function(x,
 }
 
 #' @keywords internal
+#' @exportS3Method plot dsCMatrix
 #' @noRd
 plot.dsCMatrix <- function(x,
                            title = NULL,
@@ -493,6 +498,7 @@ plot.dsCMatrix <- function(x,
 }
 
 #' @keywords internal
+#' @exportS3Method plot dgCMatrix
 #' @noRd
 plot.dgCMatrix <- function(x,
                            title = NULL,

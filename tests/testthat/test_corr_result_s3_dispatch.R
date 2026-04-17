@@ -19,17 +19,19 @@ test_that("correlation outputs dispatch summary/plot by representation class", {
   expect_false(inherits(sm_dense, "summaryDefault"))
   expect_s3_class(plot(dense, show_value = FALSE), "ggplot")
 
-  sparse <- pearson_corr(X, output = "sparse", threshold = 0.30, diag = FALSE)
+  sparse <- pearson_corr(X, output = "sparse", threshold = 0.30, diag = FALSE, ci = TRUE)
   expect_s4_class(sparse, "sparseMatrix")
   expect_identical(attr(sparse, "output", exact = TRUE), "sparse")
   expect_identical(attr(sparse, "method", exact = TRUE), "pearson")
+  expect_true(is.list(attr(sparse, "ci", exact = TRUE)))
 
-  sm_sparse <- summary.corr_sparse(sparse)
+  sm_sparse <- summary(sparse)
   expect_s3_class(sm_sparse, "summary.corr_result")
   expect_s3_class(sm_sparse, "summary.corr_sparse")
   expect_identical(attr(sm_sparse, "output", exact = TRUE), "sparse")
+  expect_true(isTRUE(attr(sm_sparse, "has_ci", exact = TRUE)))
   expect_false(inherits(sm_sparse, "summaryDefault"))
-  expect_s3_class(plot.corr_sparse(sparse, show_value = FALSE), "ggplot")
+  expect_s3_class(plot(sparse, show_value = FALSE), "ggplot")
 
   expect_error(pearson_corr(X, output = "packed_upper", threshold = 0.30, diag = FALSE))
 
@@ -62,12 +64,47 @@ test_that("correlation summary objects keep standardized overview metadata", {
   )
 
   for (obj in out) {
-    sm <- if (inherits(obj, "sparseMatrix")) summary.corr_sparse(obj) else summary(obj)
+    sm <- summary(obj)
     ov <- attr(sm, "overview", exact = TRUE)
     expect_true(is.list(ov))
     expect_identical(attr(sm, "method", exact = TRUE), "pearson")
     expect_true(attr(sm, "output", exact = TRUE) %in% c("matrix", "sparse", "edge_list"))
     expect_true(is.logical(attr(sm, "diag", exact = TRUE)))
     expect_true(is.numeric(attr(sm, "threshold", exact = TRUE)))
+  }
+})
+
+test_that("summary() dispatches CI-aware sparse outputs across correlation estimators", {
+  set.seed(20260417)
+  X <- matrix(rnorm(260 * 5), nrow = 260, ncol = 5)
+  colnames(X) <- paste0("S", seq_len(ncol(X)))
+
+  methods <- list(
+    pearson_corr = function(...) pearson_corr(X, ci = TRUE, ...),
+    spearman_rho = function(...) spearman_rho(X, ci = TRUE, ...),
+    kendall_tau = function(...) kendall_tau(X, ci = TRUE, ...)
+  )
+
+  for (nm in names(methods)) {
+    fn <- methods[[nm]]
+
+    dense <- fn(output = "matrix")
+    sm_dense <- summary(dense)
+    expect_s3_class(sm_dense, "summary.corr_result")
+    expect_s3_class(sm_dense, "summary.corr_matrix")
+    expect_true(isTRUE(attr(sm_dense, "has_ci", exact = TRUE)), info = paste(nm, "dense"))
+
+    sparse <- fn(output = "sparse", threshold = 0.20, diag = FALSE)
+    sm_sparse <- summary(sparse)
+    expect_s3_class(sm_sparse, "summary.corr_result")
+    expect_s3_class(sm_sparse, "summary.corr_sparse")
+    expect_true(isTRUE(attr(sm_sparse, "has_ci", exact = TRUE)), info = paste(nm, "sparse"))
+    expect_false(inherits(sm_sparse, "summaryDefault"), info = paste(nm, "sparse"))
+
+    edge <- fn(output = "edge_list", threshold = 0.20, diag = FALSE)
+    sm_edge <- summary(edge)
+    expect_s3_class(sm_edge, "summary.corr_result")
+    expect_s3_class(sm_edge, "summary.corr_edge_list")
+    expect_true(isTRUE(attr(sm_edge, "has_ci", exact = TRUE)), info = paste(nm, "edge_list"))
   }
 })
