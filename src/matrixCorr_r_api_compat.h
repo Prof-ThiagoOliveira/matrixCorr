@@ -8,19 +8,32 @@
 #define MATRIXCORR_R_API_COMPAT_H
 
 #include <Rversion.h>
+
+#if defined(R_VERSION) && (R_VERSION >= R_Version(4, 6, 0))
+
+// Prevent legacy R remap macros (e.g. length/isNull) from leaking into C++
+// headers when this compatibility header is force-included.
+#ifndef R_NO_REMAP
+#define R_NO_REMAP
+#define MATRIXCORR_UNDEF_R_NO_REMAP
+#endif
+
 #include <Rinternals.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#if defined(R_VERSION) && (R_VERSION >= R_Version(4, 6, 0))
 extern SEXP R_NamespaceRegistry;
 extern SEXP R_UnboundValue;
-#endif
-
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef MATRIXCORR_UNDEF_R_NO_REMAP
+#undef MATRIXCORR_UNDEF_R_NO_REMAP
+#undef R_NO_REMAP
+#endif
+
 #endif
 
 #endif
