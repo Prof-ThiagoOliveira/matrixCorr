@@ -329,7 +329,7 @@ print.summary.corr_result <- function(x,
 #' @param high_color Fill color for +1.
 #' @param mid_color Fill color for 0.
 #' @param value_text_size Text size for optional overlaid values.
-#' @param ci_text_size Reserved for compatibility.
+#' @param ci_text_size Text size for optional confidence-interval labels.
 #' @param show_value Logical; overlay values if `TRUE`.
 #' @param ... Additional theme arguments.
 #'
@@ -352,6 +352,7 @@ plot.corr_matrix <- function(x,
     high_color = high_color,
     mid_color = mid_color,
     value_text_size = value_text_size,
+    ci_text_size = ci_text_size,
     show_value = show_value,
     ...
   )
@@ -379,6 +380,7 @@ plot.corr_sparse <- function(x,
     high_color = high_color,
     mid_color = mid_color,
     value_text_size = value_text_size,
+    ci_text_size = ci_text_size,
     show_value = show_value,
     ...
   )
@@ -406,6 +408,7 @@ plot.corr_packed_upper <- function(x,
     high_color = high_color,
     mid_color = mid_color,
     value_text_size = value_text_size,
+    ci_text_size = ci_text_size,
     show_value = show_value,
     ...
   )
@@ -433,6 +436,7 @@ plot.corr_edge_list <- function(x,
     high_color = high_color,
     mid_color = mid_color,
     value_text_size = value_text_size,
+    ci_text_size = ci_text_size,
     show_value = show_value,
     ...
   )
@@ -824,24 +828,51 @@ plot.dgCMatrix <- function(x,
       row = character(),
       col = character(),
       value = numeric(),
+      lwr = numeric(),
+      upr = numeric(),
       stringsAsFactors = FALSE,
       check.names = FALSE
     ))
+  }
+  edf$row <- as.character(edf$row)
+  edf$col <- as.character(edf$col)
+  edf$value <- as.numeric(edf$value)
+
+  ci_attr <- attr(x, "ci", exact = TRUE)
+  has_ci <- is.list(ci_attr) &&
+    is.matrix(ci_attr$lwr.ci) &&
+    is.matrix(ci_attr$upr.ci) &&
+    identical(dim(ci_attr$lwr.ci), dm) &&
+    identical(dim(ci_attr$upr.ci), dm)
+  if (isTRUE(has_ci)) {
+    ii <- if (!is.null(dn[[1L]])) match(edf$row, dn[[1L]]) else suppressWarnings(as.integer(edf$row))
+    jj <- if (!is.null(dn[[2L]])) match(edf$col, dn[[2L]]) else suppressWarnings(as.integer(edf$col))
+    ok <- is.finite(ii) & is.finite(jj) &
+      ii >= 1L & ii <= dm[[1L]] &
+      jj >= 1L & jj <= dm[[2L]]
+    lwr <- rep(NA_real_, nrow(edf))
+    upr <- rep(NA_real_, nrow(edf))
+    if (any(ok)) {
+      lwr[ok] <- ci_attr$lwr.ci[cbind(ii[ok], jj[ok])]
+      upr[ok] <- ci_attr$upr.ci[cbind(ii[ok], jj[ok])]
+    }
+    edf$lwr <- as.numeric(lwr)
+    edf$upr <- as.numeric(upr)
+  } else {
+    edf$lwr <- NA_real_
+    edf$upr <- NA_real_
   }
 
   symm <- isTRUE(attr(x, "corr_symmetric", exact = TRUE))
   if (symm) {
     off <- edf$row != edf$col
     if (any(off)) {
+      mirror <- edf[off, , drop = FALSE]
+      mirror$row <- edf$col[off]
+      mirror$col <- edf$row[off]
       edf <- rbind(
         edf,
-        data.frame(
-          row = edf$col[off],
-          col = edf$row[off],
-          value = edf$value[off],
-          stringsAsFactors = FALSE,
-          check.names = FALSE
-        )
+        mirror
       )
     }
   }
@@ -867,10 +898,24 @@ plot.dgCMatrix <- function(x,
                                  high_color,
                                  mid_color,
                                  value_text_size,
+                                 ci_text_size,
                                  show_value,
                                  ...) {
   check_bool(show_value, arg = "show_value")
   df <- .mc_corr_plot_grid(x)
+  if (!"ci_label" %in% names(df)) {
+    has_ci_cols <- all(c("lwr", "upr") %in% names(df))
+    if (isTRUE(has_ci_cols)) {
+      same_cell <- as.character(df$row) == as.character(df$col)
+      df$ci_label <- ifelse(
+        is.finite(df$lwr) & is.finite(df$upr) & !same_cell,
+        sprintf("[%.3f, %.3f]", df$lwr, df$upr),
+        NA_character_
+      )
+    } else {
+      df$ci_label <- NA_character_
+    }
+  }
   p <- ggplot2::ggplot(df, ggplot2::aes(.data$col, .data$row, fill = .data$value)) +
     ggplot2::geom_tile(color = "white") +
     ggplot2::scale_fill_gradient2(
@@ -884,7 +929,8 @@ plot.dgCMatrix <- function(x,
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
       axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-      panel.grid = ggplot2::element_blank()
+      panel.grid = ggplot2::element_blank(),
+      ...
     ) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
@@ -894,6 +940,17 @@ plot.dgCMatrix <- function(x,
       ggplot2::aes(label = sprintf("%.2f", .data$value)),
       size = value_text_size,
       color = "black"
+    )
+  }
+  if (isTRUE(show_value) &&
+      is.finite(ci_text_size) &&
+      !is.null(ci_text_size) &&
+      any(!is.na(df$ci_label))) {
+    p <- p + ggplot2::geom_text(
+      ggplot2::aes(label = .data$ci_label, y = as.numeric(.data$row) - 0.25),
+      size = ci_text_size,
+      color = "gray30",
+      na.rm = TRUE
     )
   }
   p

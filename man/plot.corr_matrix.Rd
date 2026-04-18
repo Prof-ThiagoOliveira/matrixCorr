@@ -29,7 +29,7 @@
 
 \item{value_text_size}{Text size for optional overlaid values.}
 
-\item{ci_text_size}{Reserved for compatibility.}
+\item{ci_text_size}{Text size for optional confidence-interval labels.}
 
 \item{show_value}{Logical; overlay values if \code{TRUE}.}
 

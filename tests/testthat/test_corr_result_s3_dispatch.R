@@ -108,3 +108,30 @@ test_that("summary() dispatches CI-aware sparse outputs across correlation estim
     expect_true(isTRUE(attr(sm_edge, "has_ci", exact = TRUE)), info = paste(nm, "edge_list"))
   }
 })
+
+test_that("corr_result heatmaps show CI labels when ci=TRUE for all output modes", {
+  skip_if_not_installed("ggplot2")
+
+  set.seed(20260418)
+  x1 <- rnorm(260)
+  x2 <- x1 + rnorm(260, sd = 0.15)
+  x3 <- -x1 + rnorm(260, sd = 0.15)
+  x4 <- rnorm(260)
+  X <- cbind(x1 = x1, x2 = x2, x3 = x3, x4 = x4)
+
+  count_text_layers <- function(p) {
+    sum(vapply(p$layers, function(layer) inherits(layer$geom, "GeomText"), logical(1)))
+  }
+
+  matrix_fit <- pearson_corr(X, ci = TRUE)
+  sparse_fit <- pearson_corr(X, output = "sparse", threshold = 0.6, diag = FALSE, ci = TRUE)
+  edge_fit <- pearson_corr(X, output = "edge_list", threshold = 0.6, diag = FALSE, ci = TRUE)
+
+  gp_matrix <- plot(matrix_fit, show_value = TRUE)
+  gp_sparse <- plot(sparse_fit, show_value = TRUE)
+  gp_edge <- plot(edge_fit, show_value = TRUE)
+
+  expect_gte(count_text_layers(gp_matrix), 2L)
+  expect_gte(count_text_layers(gp_sparse), 2L)
+  expect_gte(count_text_layers(gp_edge), 2L)
+})
