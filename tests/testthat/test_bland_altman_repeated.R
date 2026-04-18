@@ -560,8 +560,22 @@ test_that("Column mapping works both with data= and with vectors", {
   )
   expect_true(inherits(fit2, "ba_repeated_matrix"))
 
-  expect_false(any(c("data_long", "mapping") %in% names(fit1)))
-  expect_false(any(c("data_long", "mapping") %in% names(fit2)))
+  expect_true(all(c("data_long", "mapping") %in% names(fit1)))
+  expect_true(all(c("data_long", "mapping") %in% names(fit2)))
+  expect_equal(names(fit1$data_long), c(".response", ".subject", ".method", ".time"))
+  expect_equal(names(fit2$data_long), c(".response", ".subject", ".method", ".time"))
+  expect_identical(fit1$mapping, list(
+    response = ".response",
+    subject = ".subject",
+    method = ".method",
+    time = ".time"
+  ))
+  expect_identical(fit2$mapping, list(
+    response = ".response",
+    subject = ".subject",
+    method = ".method",
+    time = ".time"
+  ))
 })
 
 test_that("summary/print produce expected classes and do not error", {
@@ -645,6 +659,11 @@ test_that("plot methods return a ggplot object and do not error", {
   )
   p_mat <- plot(fit_mat, smoother = "lm", facet_scales = "free_y")
   expect_s3_class(p_mat, "ggplot")
+  has_point_layer <- any(vapply(p_mat$layers, function(layer) {
+    inherits(layer$geom, "GeomPoint")
+  }, logical(1)))
+  expect_true(has_point_layer)
+  expect_identical(p_mat$labels$x, "Pair mean")
 
   # Two-method plot
   dat12 <- subset(dat, method %in% c("M1","M2"))

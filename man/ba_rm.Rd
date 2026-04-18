@@ -197,10 +197,10 @@ Default \code{TRUE}.}
 
 \item{show_points}{Logical. If \code{TRUE}, per-pair points are drawn for the
 exactly-two-method path from the stored \code{means} and \code{diffs} vectors.
-Pairwise matrix plots draw points only when optional reconstruction fields
-are present; the minimal canonical \code{ba_rm()} return object does not retain
-those payloads. If \code{FALSE} or if point data are unavailable, only the bands
-(and optional CI indicators) are drawn. Default \code{TRUE}.}
+Pairwise matrix plots draw points reconstructed from the canonical
+long-form columns stored by \code{ba_rm()}. If \code{FALSE} or if point data are
+unavailable, only the bands (and optional CI indicators) are drawn.
+Default \code{TRUE}.}
 
 \item{show_value}{Logical; included for a consistent plotting interface.
 Repeated-measures Bland-Altman plots do not overlay numeric cell values,
@@ -322,6 +322,12 @@ model is \code{"ar1"}; otherwise \code{NA} for that entry. Present only when
 indicating whether the pair-specific \code{ar1_rho_pair} was estimated internally
 (\code{TRUE}) or supplied by the user (\code{FALSE}) for entries whose final residual
 model is \code{"ar1"}; otherwise \code{NA}. Present only when \code{use_ar1 = TRUE}.
+\item \code{data_long}: canonical long-form data frame with columns
+\code{.response}, \code{.subject}, \code{.method}, and \code{.time}
+retained for pairwise plotting helpers.
+\item \code{mapping}: named list mapping \code{response}, \code{subject},
+\code{method}, and \code{time} to the canonical stored columns in
+\code{data_long}.
 }
 }
 \description{

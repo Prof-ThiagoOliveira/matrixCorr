@@ -162,6 +162,12 @@
 #'   indicating whether the pair-specific `ar1_rho_pair` was estimated internally
 #'   (`TRUE`) or supplied by the user (`FALSE`) for entries whose final residual
 #'   model is `"ar1"`; otherwise `NA`. Present only when `use_ar1 = TRUE`.
+#'   \item \code{data_long}: canonical long-form data frame with columns
+#'   \code{.response}, \code{.subject}, \code{.method}, and \code{.time}
+#'   retained for pairwise plotting helpers.
+#'   \item \code{mapping}: named list mapping \code{response}, \code{subject},
+#'   \code{method}, and \code{time} to the canonical stored columns in
+#'   \code{data_long}.
 #' }
 #'
 #' @details
@@ -808,7 +814,9 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     sigma2_subject = vc_subject,
     sigma2_resid   = vc_resid,
     ar1_rho_pair   = if (use_ar1) ar1_rho_mat else NULL,
-    ar1_estimated  = if (use_ar1) ar1_estimated else NULL
+    ar1_estimated  = if (use_ar1) ar1_estimated else NULL,
+    data_long = data_long,
+    mapping = mapping
   )
   ba_repeated <- structure(ba_repeated, class = c("ba_repeated_matrix","list"))
   attr(ba_repeated, "conf.level") <- conf_level
@@ -1416,10 +1424,10 @@ print.summary.ba_repeated_matrix <- function(x, digits = NULL, n = NULL,
 #'
 #' @param show_points Logical. If `TRUE`, per-pair points are drawn for the
 #'   exactly-two-method path from the stored `means` and `diffs` vectors.
-#'   Pairwise matrix plots draw points only when optional reconstruction fields
-#'   are present; the minimal canonical `ba_rm()` return object does not retain
-#'   those payloads. If `FALSE` or if point data are unavailable, only the bands
-#'   (and optional CI indicators) are drawn. Default `TRUE`.
+#'   Pairwise matrix plots draw points reconstructed from the canonical
+#'   long-form columns stored by `ba_rm()`. If `FALSE` or if point data are
+#'   unavailable, only the bands (and optional CI indicators) are drawn.
+#'   Default `TRUE`.
 #' @param ... Additional theme adjustments passed to `ggplot2::theme(...)`
 #'   (e.g., `plot.title.position = "plot"`, `axis.title.x = element_text(size=11)`).
 #' @param show_value Logical; included for a consistent plotting interface.
