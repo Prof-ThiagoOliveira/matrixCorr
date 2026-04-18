@@ -431,15 +431,19 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
 }
 
 .mc_prepare_corr_inputs <- function(x) {
-  objects <-
-    if (is.list(x) && !is.matrix(x) && !inherits(x, "Matrix")) {
-      if (is.null(names(x))) {
-        names(x) <- paste0("Matrix ", seq_along(x))
-      }
-      x
-    } else {
-      list(default = x)
-    }
+  parsed_single <- try(.mc_parse_corr_object(x, label = "default"), silent = TRUE)
+  if (!inherits(parsed_single, "try-error")) {
+    return(list(default = parsed_single))
+  }
+
+  if (!(is.list(x) && !is.matrix(x) && !inherits(x, "Matrix"))) {
+    return(list())
+  }
+
+  objects <- x
+  if (is.null(names(objects))) {
+    names(objects) <- paste0("Matrix ", seq_along(objects))
+  }
 
   out <- list()
   for (nm in names(objects)) {
@@ -452,6 +456,22 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   out
 }
 
+.mc_is_corr_result_like <- function(x) {
+  if (inherits(x, "corr_result")) {
+    return(TRUE)
+  }
+  if (isTRUE(attr(x, "corr_result", exact = TRUE))) {
+    return(TRUE)
+  }
+  output_class <- attr(x, "corr_output_class", exact = TRUE)
+  if (is.character(output_class) && length(output_class) == 1L && nzchar(output_class)) {
+    return(TRUE)
+  }
+  output <- attr(x, "output", exact = TRUE)
+  is.character(output) && length(output) == 1L &&
+    output %in% c("matrix", "sparse", "edge_list", "packed_upper")
+}
+
 .mc_parse_corr_object <- function(obj, label) {
   mat <- NULL
   signed <- TRUE
@@ -460,6 +480,11 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   if (inherits(obj, "partial_corr")) {
     mat <- obj$pcor
     desc <- attr(obj, "method", exact = TRUE) %||% "partial correlation"
+  } else if (.mc_is_corr_result_like(obj)) {
+    mat <- .mc_corr_as_dense_matrix(obj)
+    desc <- attr(obj, "description", exact = TRUE) %||%
+      attr(obj, "method", exact = TRUE) %||%
+      label
   } else if (inherits(obj, "Matrix")) {
     mat <- as.matrix(obj)
   } else if (is.matrix(obj)) {
@@ -467,6 +492,11 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   } else if (is.list(obj) && !is.null(obj$pcor) && is.matrix(obj$pcor)) {
     mat <- obj$pcor
     desc <- "partial correlation"
+  } else if (is.list(obj) && !is.null(obj$est) && is.matrix(obj$est)) {
+    mat <- obj$est
+    desc <- attr(obj, "description", exact = TRUE) %||%
+      attr(obj, "method", exact = TRUE) %||%
+      label
   } else {
     stop("Unsupported object class", call. = FALSE)
   }

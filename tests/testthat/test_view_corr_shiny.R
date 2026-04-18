@@ -28,6 +28,34 @@ test_that("viewer helpers coerce package outputs", {
   expect_equal(res$Shrinkage$class, paste(class(shrinkage), collapse = ", "))
 })
 
+test_that("viewer helpers accept thresholded sparse and edge-list correlation outputs", {
+  X <- mtcars
+  sparse <- pearson_corr(X, output = "sparse", threshold = 0.4, diag = FALSE)
+  edge <- pearson_corr(X, output = "edge_list", threshold = 0.4, diag = FALSE)
+
+  parsed_sparse <- matrixCorr:::`.mc_prepare_corr_inputs`(sparse)
+  parsed_edge <- matrixCorr:::`.mc_prepare_corr_inputs`(edge)
+
+  expect_length(parsed_sparse, 1L)
+  expect_length(parsed_edge, 1L)
+  expect_true(is.matrix(parsed_sparse$default$matrix))
+  expect_true(is.matrix(parsed_edge$default$matrix))
+  expect_equal(dim(parsed_sparse$default$matrix), dim(as.matrix(pearson_corr(X))))
+  expect_equal(dim(parsed_edge$default$matrix), dim(as.matrix(pearson_corr(X))))
+  expect_true(any(is.finite(parsed_edge$default$matrix)))
+  expect_true(any(is.na(parsed_edge$default$matrix)))
+})
+
+test_that("viewer helpers treat list-based CI outputs as single objects", {
+  ci_obj <- ccc(mtcars[, 1:5], ci = TRUE)
+  parsed <- matrixCorr:::`.mc_prepare_corr_inputs`(ci_obj)
+
+  expect_length(parsed, 1L)
+  expect_true("default" %in% names(parsed))
+  expect_true(is.matrix(parsed$default$matrix))
+  expect_equal(parsed$default$matrix, as.matrix(ci_obj$est), tolerance = 1e-12)
+})
+
 test_that("heatmap helper returns ggplot when plotly missing", {
   mat <- matrix(c(1, 0.4, 0.4, 1), nrow = 2)
   p <- matrixCorr:::`.mc_build_heatmap`(
