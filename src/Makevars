@@ -1,5 +1,8 @@
 CXX_STD = CXX17
 
+# Compatibility shim for evolving R C-API declarations.
+PKG_CPPFLAGS = -include matrixCorr_r_api_compat.h
+
 # Use OpenMP flags for C++
 PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS) -DARMA_USE_CURRENT
 
