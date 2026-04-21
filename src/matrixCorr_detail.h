@@ -914,11 +914,9 @@ inline bool graphical_lasso(const arma::mat& S,
   Theta.zeros(p, p);
   for (arma::uword j = 0; j < p; ++j) {
     double quad = 0.0;
-    arma::uword k = 0;
     for (arma::uword i = 0; i < p; ++i) {
       if (i == j) continue;
       quad += W(i, j) * Beta(i, j);
-      ++k;
     }
     const double denom = W(j, j) - quad;
     if (!(denom > 0.0) || !std::isfinite(denom)) return false;
