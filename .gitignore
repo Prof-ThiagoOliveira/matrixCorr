@@ -56,3 +56,6 @@ src/Makevars.libatomic
 .tmp_build/
 .tmp_lib/
 .tmp_R_lib/
+
+# local development scripts and outputs
+dev/
