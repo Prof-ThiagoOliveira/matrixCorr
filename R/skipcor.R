@@ -293,8 +293,13 @@ skipped_corr <- function(data,
 
   method_int <- switch(method, pearson = 0L, spearman = 1L)
   use_mad <- identical(outlier_rule, "mad")
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
   res <- skipcor_matrix_cpp(
     numeric_data,
     method_int = method_int,
@@ -429,6 +434,7 @@ skipped_corr <- function(data,
       "; standardise = ", stand,
       "; NA mode = ", na_method, "."
     ),
+    symmetric = TRUE,
     diagnostics = diag_payload,
     extra_attrs = c(
       if (isTRUE(return_masks)) list(skipped_masks = mask_payload),
@@ -436,7 +442,7 @@ skipped_corr <- function(data,
       if (!is.null(inference_attr)) list(inference = inference_attr)
     )
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -842,4 +848,5 @@ print.summary.skipped_corr <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 

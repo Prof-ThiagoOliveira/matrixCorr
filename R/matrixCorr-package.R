@@ -12,6 +12,8 @@
 #'
 #' Package-wide display defaults can be controlled with options:
 #' \itemize{
+#'   \item `matrixCorr.threads` (default `1L`; used as the default for
+#'   `n_threads` in thread-aware estimators)
 #'   \item `matrixCorr.print_max_rows` (default `20L`)
 #'   \item `matrixCorr.print_topn` (default `5L`)
 #'   \item `matrixCorr.print_max_vars` (default `NULL`, derived from console width)
@@ -25,6 +27,11 @@
 #' Display methods validate user-facing arguments with `cli` conditions.
 #' Confidence-interval visibility is explicit: `show_ci` accepts only `"yes"`
 #' or `"no"`.
+#'
+#' A common setup is:
+#' \preformatted{
+#' options(matrixCorr.threads = parallel::detectCores(logical = FALSE))
+#' }
 #'
 #' @name matrixCorr-package
 #' @aliases matrixCorr RcppExports

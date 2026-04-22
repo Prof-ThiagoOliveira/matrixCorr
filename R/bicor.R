@@ -265,14 +265,19 @@ bicor <- function(
       is.null(sparse_threshold)) {
     numeric_data <- validate_corr_input(data)
     colnames_data <- colnames(numeric_data)
-    prev_threads <- get_omp_threads()
-    on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+    prev_threads <- .mc_prepare_omp_threads(
+      n_threads,
+      n_threads_missing = missing(n_threads)
+    )
+    if (!is.null(prev_threads)) {
+      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+    }
     res <- bicor_matrix_cpp(
       numeric_data,
       c_const = 9,
       maxPOutliers = 1,
       pearson_fallback = 1L,
-      n_threads = getOption("matrixCorr.threads", 1L)
+      n_threads = n_threads
     )
     if (!is.null(colnames_data)) {
       dimnames(res) <- .mc_square_dimnames(colnames_data)
@@ -284,7 +289,8 @@ bicor <- function(
       description = paste0(
         "Median/MAD-based biweight mid-correlation (bicor); max_p_outliers = 1",
         ", MAD = raw; fallback = hybrid; NA mode = error."
-      )
+      ),
+      symmetric = TRUE
     ))
   }
 
@@ -345,8 +351,13 @@ bicor <- function(
     has_ci = ci,
     weighted = !is.null(w)
   )) {
-    prev_threads <- get_omp_threads()
-    on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+    prev_threads <- .mc_prepare_omp_threads(
+      n_threads,
+      n_threads_missing = missing(n_threads)
+    )
+    if (!is.null(prev_threads)) {
+      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+    }
     trip <- bicor_threshold_triplets_cpp(
       numeric_data,
       c_const = c_eff,
@@ -371,8 +382,13 @@ bicor <- function(
   }
 
   # --- choose backend
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
   if (is.null(w) && na_method == "error") {
     res <- bicor_matrix_cpp(
       numeric_data,
@@ -433,6 +449,7 @@ bicor <- function(
     class_name = "bicor",
     method = "biweight_mid_correlation",
     description = desc,
+    symmetric = TRUE,
     diagnostics = diagnostics,
     extra_attrs = c(
       if (!is.null(ci_attr)) {
@@ -446,7 +463,7 @@ bicor <- function(
       }
     )
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -876,5 +893,6 @@ print.summary.bicor <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 
 

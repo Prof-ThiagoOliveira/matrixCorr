@@ -62,51 +62,54 @@ List cccUst_rcpp(NumericVector y_vec,
     Rcpp::stop("Missing observations detected for at least one subject/time cell");
   }
 
+  const bool delta_zero = (delta == 0.0);
+  arma::vec within_quad(ns, arma::fill::zeros);
+  for (int i = 0; i < ns; ++i) {
+    arma::rowvec d = arma::abs(X.row(i) - Y.row(i));
+    if (delta_zero) {
+      d = arma::conv_to<arma::rowvec>::from(d != 0.0);
+    } else {
+      d = arma::pow(d, delta);
+    }
+    within_quad[i] = arma::as_scalar(d * D * d.t());
+  }
+
   arma::vec phi1_sum(ns, arma::fill::zeros);
   arma::vec phi2_sum(ns, arma::fill::zeros);
   double U = 0.0, V = 0.0;
-
-  // ===== OpenMP parallel loop =====
+  
+  // ===== OpenMP ordered-pair loop =====
 #ifdef _OPENMP
 #pragma omp parallel for reduction(+:U,V)
 #endif
   for (int i = 0; i < ns; ++i) {
     const arma::rowvec Xi = X.row(i);
     const arma::rowvec Yi = Y.row(i);
+    const double within_i = within_quad[i];
     double phi1_acc = 0.0;
     double phi2_acc = 0.0;
+
     for (int j = 0; j < ns; ++j) {
       if (i == j) continue;
       const arma::rowvec Xj = X.row(j);
       const arma::rowvec Yj = Y.row(j);
 
-      arma::rowvec d1 = arma::abs(Xi - Yi);
-      arma::rowvec d2 = arma::abs(Xj - Yj);
+      const double phi1 = 0.5 * (within_i + within_quad[j]);
+
       arma::rowvec d3 = arma::abs(Xi - Yj);
       arma::rowvec d4 = arma::abs(Xj - Yi);
 
-      double phi1, phi2;
-
-      if (delta != 0.0) {
-        arma::rowvec v1 = arma::pow(d1, delta);
-        arma::rowvec v2 = arma::pow(d2, delta);
+      double phi2;
+      if (delta_zero) {
+        d3 = arma::conv_to<arma::rowvec>::from(d3 != 0.0);
+        d4 = arma::conv_to<arma::rowvec>::from(d4 != 0.0);
+        phi2 = 0.5 * (arma::as_scalar(d3 * D * d3.t()) +
+          arma::as_scalar(d4 * D * d4.t()));
+      } else {
         arma::rowvec v3 = arma::pow(d3, delta);
         arma::rowvec v4 = arma::pow(d4, delta);
-
-        phi1 = 0.5 * (arma::as_scalar(v1 * D * v1.t()) +
-          arma::as_scalar(v2 * D * v2.t()));
         phi2 = 0.5 * (arma::as_scalar(v3 * D * v3.t()) +
           arma::as_scalar(v4 * D * v4.t()));
-      } else {
-        arma::rowvec nz1 = arma::conv_to<arma::rowvec>::from(d1 != 0);
-        arma::rowvec nz2 = arma::conv_to<arma::rowvec>::from(d2 != 0);
-        arma::rowvec nz3 = arma::conv_to<arma::rowvec>::from(d3 != 0);
-        arma::rowvec nz4 = arma::conv_to<arma::rowvec>::from(d4 != 0);
-
-        phi1 = 0.5 * (arma::as_scalar(nz1 * D * nz1.t()) +
-          arma::as_scalar(nz2 * D * nz2.t()));
-        phi2 = 0.5 * (arma::as_scalar(nz3 * D * nz3.t()) +
-          arma::as_scalar(nz4 * D * nz4.t()));
       }
 
       phi1_acc += phi1;
@@ -126,16 +129,22 @@ List cccUst_rcpp(NumericVector y_vec,
   double CCC = ((ns - 1) * (V - U)) / (U + (ns - 1) * V);
 
   // ===== Variance & CI =====
-  arma::mat phiv(ns, 2);
-  phiv.col(0) = phi1_sum;
-  phiv.col(1) = phi2_sum;
-
-  arma::rowvec UV = { U, V };
-  arma::mat Saux(2, 2, arma::fill::zeros);
+  double s11 = 0.0;
+  double s12 = 0.0;
+  double s22 = 0.0;
   for (int i = 0; i < ns; ++i) {
-    arma::rowvec diff = phiv.row(i) - UV;
-    Saux += diff.t() * diff;
+    const double d1 = phi1_sum[i] - U;
+    const double d2 = phi2_sum[i] - V;
+    s11 += d1 * d1;
+    s12 += d1 * d2;
+    s22 += d2 * d2;
   }
+
+  arma::mat Saux(2, 2, arma::fill::zeros);
+  Saux(0, 0) = s11;
+  Saux(0, 1) = s12;
+  Saux(1, 0) = s12;
+  Saux(1, 1) = s22;
 
   arma::mat C; C.eye(2, 2); C(1, 1) = 2;
   arma::mat Smat = C * (Saux / (ns * ns)) * C;

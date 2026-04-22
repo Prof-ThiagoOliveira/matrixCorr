@@ -1054,10 +1054,16 @@
 .mc_structure_corr_matrix <- function(mat, class_name, method, description,
                                       diagnostics = NULL, thresholds = NULL,
                                       correct = NULL, dimnames = NULL,
+                                      symmetric = NULL,
                                       extra_attrs = NULL,
                                       classes = c(class_name, "matrix")) {
   if (!is.null(dimnames)) {
     dimnames(mat) <- dimnames
+  }
+  symmetric_flag <- symmetric
+  if (is.null(symmetric_flag)) {
+    symmetric_flag <- isTRUE(nrow(mat) == ncol(mat)) &&
+      isTRUE(isSymmetric(mat, check.attributes = FALSE))
   }
   keep_classes <- setdiff(
     classes,
@@ -1074,8 +1080,7 @@
     diagnostics = diagnostics,
     ci = attr(mat, "ci", exact = TRUE),
     conf.level = attr(mat, "conf.level", exact = TRUE),
-    symmetric = isTRUE(nrow(mat) == ncol(mat)) &&
-      isTRUE(isSymmetric(mat, check.attributes = FALSE)),
+    symmetric = symmetric_flag,
     extra_attrs = c(
       list(
         thresholds = thresholds,
@@ -1380,11 +1385,12 @@ tetrachoric <- function(data,
       class_name = "tetrachoric_corr",
       method = "tetrachoric",
       description = "Pairwise tetrachoric correlation matrix",
+      symmetric = TRUE,
       diagnostics = diag_info,
       thresholds = thresholds,
       correct = correct
     )
-    return(.mc_finalize_corr_output(
+    return(.mc_finalize_corr_output_fast(
       out,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
@@ -1589,6 +1595,7 @@ tetrachoric <- function(data,
     class_name = "tetrachoric_corr",
     method = "tetrachoric",
     description = "Pairwise tetrachoric correlation matrix",
+    symmetric = TRUE,
     diagnostics = diag_info,
     thresholds = thresholds,
     correct = correct
@@ -1613,7 +1620,7 @@ tetrachoric <- function(data,
       conf_level = conf_level
     )
   }
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -2031,11 +2038,12 @@ polychoric <- function(data,
       class_name = "polychoric_corr",
       method = "polychoric",
       description = "Pairwise polychoric correlation matrix",
+      symmetric = TRUE,
       diagnostics = diag_info,
       thresholds = thresholds,
       correct = correct
     )
-    return(.mc_finalize_corr_output(
+    return(.mc_finalize_corr_output_fast(
       out,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
@@ -2259,6 +2267,7 @@ polychoric <- function(data,
     class_name = "polychoric_corr",
     method = "polychoric",
     description = "Pairwise polychoric correlation matrix",
+    symmetric = TRUE,
     diagnostics = diag_info,
     thresholds = thresholds,
     correct = correct
@@ -2283,7 +2292,7 @@ polychoric <- function(data,
       conf_level = conf_level
     )
   }
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -3641,4 +3650,5 @@ print.summary.latent_corr <- function(x, digits = 4, ...) {
 }
 
 print.summary_latent_corr <- print.summary.latent_corr
+
 

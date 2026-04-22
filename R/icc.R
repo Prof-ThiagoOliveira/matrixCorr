@@ -1134,9 +1134,13 @@ icc_rm_reml <- function(data, response, subject,
 
   metric_mode <- if (identical(type, "agreement")) 2L else 1L
 
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
-  set_omp_threads(n_threads)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
 
   out <- ccc_lmm_reml_pairwise(
     df = df,

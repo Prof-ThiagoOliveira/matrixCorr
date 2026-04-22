@@ -235,7 +235,7 @@ pearson_corr <- function(data,
       ))
     }
     out <- .mc_structure_pearson_matrix(mat = result, dimnames = dn)
-    return(.mc_finalize_corr_output(
+    return(.mc_finalize_corr_output_fast(
       out,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
@@ -357,7 +357,7 @@ pearson_corr <- function(data,
     ci_attr = ci_attr,
     conf_level = if (!is.null(ci_attr)) conf_level else NULL
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -432,7 +432,8 @@ pearson_corr <- function(data,
     diag = TRUE,
     diagnostics = diagnostics,
     ci = ci_attr,
-    conf.level = conf_level
+    conf.level = conf_level,
+    symmetric = TRUE
   )
 }
 
@@ -728,5 +729,6 @@ print.summary.pearson_corr <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 
 

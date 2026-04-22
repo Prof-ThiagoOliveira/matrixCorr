@@ -228,10 +228,11 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
         description = "Pairwise Lin's concordance with confidence intervals",
         diagnostics = diag_payload,
         dimnames = dn,
+        symmetric = TRUE,
         classes = c("ccc", "matrix"),
         extra_attrs = list(ci = ci_attr, conf.level = conf_level)
       )
-      return(.mc_finalize_corr_output(
+      return(.mc_finalize_corr_output_fast(
         dense_obj,
         output = output_cfg$output,
         threshold = output_cfg$threshold,
@@ -240,21 +241,23 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
     }
   } else {
     est <- ccc_cpp(mat)
-    ccc_lin <- .mc_structure_corr_matrix(
-      est,
-      class_name = "ccc",
+    est <- .mc_set_matrix_dimnames(est, colnames_data)
+    ccc_lin <- .mc_new_corr_matrix(
+      mat = est,
+      estimator_class = "ccc",
       method = "Lin's concordance",
       description = "Pairwise Lin's concordance correlation matrix",
       diagnostics = diag_payload,
-      dimnames = dn,
-      classes = c("ccc", "matrix")
+      symmetric = TRUE
     )
-    ccc_lin <- .mc_finalize_corr_output(
-      ccc_lin,
-      output = output_cfg$output,
-      threshold = output_cfg$threshold,
-      diag = output_cfg$diag
-    )
+    if (!identical(output_cfg$output, "matrix")) {
+      ccc_lin <- .mc_finalize_corr_output_fast(
+        ccc_lin,
+        output = output_cfg$output,
+        threshold = output_cfg$threshold,
+        diag = output_cfg$diag
+      )
+    }
   }
 
   ccc_lin
@@ -545,4 +548,5 @@ plot.ccc <- function(x,
 
   p
 }
+
 

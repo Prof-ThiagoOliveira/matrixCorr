@@ -125,9 +125,10 @@ shrinkage_corr <- function(data,
     class_name = "shrinkage_corr",
     method = "schafer_shrinkage",
     description = "Schafer-Strimmer shrinkage correlation matrix",
+    symmetric = TRUE,
     classes = c("shrinkage_corr", "schafer_corr", "matrix")
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -327,4 +328,5 @@ summary.shrinkage_corr <- function(object, n = NULL, topn = NULL,
 #' @method summary schafer_corr
 #' @export
 summary.schafer_corr <- summary.shrinkage_corr
+
 

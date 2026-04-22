@@ -173,6 +173,7 @@ Display defaults can be controlled through ordinary R options. For example:
 
 ```{r, eval = FALSE}
 options(
+  matrixCorr.threads = parallel::detectCores(logical = FALSE),
   matrixCorr.print_max_rows = 20L,
   matrixCorr.print_topn = 5L,
   matrixCorr.print_max_vars = 10L,
@@ -184,10 +185,12 @@ options(
 )
 ```
 
-The print options control compact console previews returned by `print()`. The
-summary options control the longer digest returned by `summary()`. Current
-values can be inspected with `getOption("matrixCorr.print_max_rows")` and the
-same pattern for the remaining options.
+`matrixCorr.threads` defines the default for `n_threads` across thread-aware
+estimators. The print options control compact console previews returned by
+`print()`. The summary options control the longer digest returned by
+`summary()`. Current values can be inspected with
+`getOption("matrixCorr.print_max_rows")` and the same pattern for the remaining
+options.
 
 This shared display layer is part of the package design. The goal is that
 users can move across workflow families without relearning how objects are

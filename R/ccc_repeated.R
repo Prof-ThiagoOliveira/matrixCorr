@@ -233,6 +233,15 @@ ccc_rm_ustat <- function(data,
   cccr_lwr <- matrix(NA_real_, L, L, dimnames = list(method_levels, method_levels))
   cccr_upr <- matrix(NA_real_, L, L, dimnames = list(method_levels, method_levels))
 
+  needed <- c(response, method, subject)
+  if (!is.null(time)) needed <- c(needed, time)
+  complete_mask <- stats::complete.cases(df[, needed, drop = FALSE])
+  response_vec <- df[[response]]
+  subject_vec <- df$subject_i
+  time_vec <- df$time_i
+  method_code <- as.integer(df[[method]])
+  rows_by_method <- split(seq_len(nrow(df)), method_code)
+
   prev_threads <- .mc_prepare_omp_threads(
     n_threads,
     n_threads_missing = missing(n_threads)
@@ -248,11 +257,9 @@ ccc_rm_ustat <- function(data,
       m1 <- method_levels[i]
       m2 <- method_levels[j]
 
-      df_sub <- df[df[[method]] %in% c(m1, m2), , drop = FALSE]
-      needed <- c(response, method, subject)
-      if (!is.null(time)) needed <- c(needed, time)
-      df_sub <- df_sub[stats::complete.cases(df_sub[, needed, drop = FALSE]), , drop = FALSE]
-      if (!nrow(df_sub)) {
+      pair_rows <- c(rows_by_method[[i]], rows_by_method[[j]])
+      pair_rows <- pair_rows[complete_mask[pair_rows]]
+      if (!length(pair_rows)) {
         cli::cli_abort(
           c(
             "No complete observations for method pair {.val {m1}} vs {.val {m2}}.",
@@ -261,9 +268,9 @@ ccc_rm_ustat <- function(data,
         )
       }
 
-      df_sub$met_i <- as.integer(factor(df_sub[[method]], levels = c(m1, m2))) - 1L
-
-      sid <- df_sub$subject_i
+      sid <- subject_vec[pair_rows]
+      tim <- time_vec[pair_rows]
+      met_i <- as.integer(method_code[pair_rows] == j)
       uid <- sort(unique(sid))
       if (!length(uid)) {
         cli::cli_abort(
@@ -273,7 +280,7 @@ ccc_rm_ustat <- function(data,
 
       sid_idx <- match(sid, uid)
       rows_by_subj <- tabulate(sid_idx, nbins = length(uid))
-      combo_code <- sid_idx + length(uid) * (df_sub$time_i + ntime * df_sub$met_i)
+      combo_code <- sid_idx + length(uid) * (tim + ntime * met_i)
       uniq_combo <- !duplicated(combo_code)
       uniq_by_subj <- tabulate(sid_idx[uniq_combo], nbins = length(uid))
 
@@ -294,15 +301,19 @@ ccc_rm_ustat <- function(data,
         )
       }
 
-      df_sub <- df_sub[df_sub$subject_i %in% keep_ids, , drop = FALSE]
-      keep_ids <- sort(unique(df_sub$subject_i))
-      df_sub$subject_pair <- match(df_sub$subject_i, keep_ids) - 1L
+      keep_mask <- sid %in% keep_ids
+      pair_rows <- pair_rows[keep_mask]
+      tim <- tim[keep_mask]
+      met_i <- met_i[keep_mask]
+      sid <- sid[keep_mask]
+      keep_ids <- sort(unique(sid))
+      subject_pair <- match(sid, keep_ids) - 1L
       ns <- length(keep_ids)
 
-      res <- cccUst_rcpp(df_sub[[response]],
-                         df_sub$met_i,
-                         df_sub$time_i,
-                         df_sub$subject_pair,
+      res <- cccUst_rcpp(response_vec[pair_rows],
+                         met_i,
+                         tim,
+                         subject_pair,
                          0, 1,
                          ntime, ns,
                          Dmat, delta,

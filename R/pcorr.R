@@ -454,11 +454,12 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     class_name = "partial_corr_matrix",
     method = paste0("partial_correlation_", method),
     description = "Partial correlation matrix",
+    symmetric = TRUE,
     diagnostics = diagnostics,
     dimnames = dn,
     classes = c("partial_corr_matrix", "matrix")
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     pcor_obj,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -908,4 +909,5 @@ plot.partial_corr <- function(
 
   p
 }
+
 

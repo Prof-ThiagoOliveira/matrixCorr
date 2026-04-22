@@ -1037,6 +1037,30 @@ resolve_na_args <- function(na_method = "error",
   out
 }
 
+#' Fast route for already-validated output routing
+#' @keywords internal
+#' @noRd
+.mc_finalize_corr_output_fast <- function(x,
+                                          output = "matrix",
+                                          threshold = 0,
+                                          diag = TRUE) {
+  if (identical(output, "matrix") &&
+    isTRUE(is.finite(threshold)) && isTRUE(as.numeric(threshold) == 0) &&
+    isTRUE(diag) &&
+    inherits(x, "corr_matrix")) {
+    attr(x, "output") <- "matrix"
+    attr(x, "threshold") <- 0
+    attr(x, "diag") <- TRUE
+    return(x)
+  }
+  .mc_finalize_corr_output(
+    x = x,
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
+}
+
 #' Route a computed correlation matrix object to requested output shape
 #' @keywords internal
 #' @noRd
@@ -1044,7 +1068,27 @@ resolve_na_args <- function(na_method = "error",
                                      output = c("matrix", "sparse", "edge_list"),
                                      threshold = 0,
                                      diag = TRUE) {
+  if (inherits(x, "corr_matrix") &&
+    is.character(output) &&
+    length(output) == 1L &&
+    identical(output, "matrix") &&
+    is.numeric(threshold) &&
+    length(threshold) == 1L &&
+    !is.na(threshold) &&
+    as.numeric(threshold) == 0 &&
+    isTRUE(diag)) {
+    attr(x, "output") <- "matrix"
+    attr(x, "threshold") <- 0
+    attr(x, "diag") <- TRUE
+    return(x)
+  }
   cfg <- .mc_validate_output_args(output = output, threshold = threshold, diag = diag)
+  if (identical(cfg$output, "matrix") && inherits(x, "corr_matrix")) {
+    attr(x, "output") <- "matrix"
+    attr(x, "threshold") <- 0
+    attr(x, "diag") <- TRUE
+    return(x)
+  }
   mat <- as.matrix(x)
   estimator_class <- .mc_corr_estimator_class(x)
   method <- attr(x, "method", exact = TRUE) %||% estimator_class
@@ -1063,18 +1107,19 @@ resolve_na_args <- function(na_method = "error",
   )
   source_dim <- dim(mat)
   source_dimnames <- dimnames(mat)
-  source_symmetric <- isTRUE(nrow(mat) == ncol(mat)) &&
-    (isTRUE(identical(rownames(mat), colnames(mat))) ||
-      (is.null(rownames(mat)) && is.null(colnames(mat)))) &&
-    isTRUE(isSymmetric(mat, check.attributes = FALSE))
+  source_symmetric_attr <- attr(x, "corr_symmetric", exact = TRUE)
+  source_symmetric <- if (is.logical(source_symmetric_attr) &&
+    length(source_symmetric_attr) == 1L &&
+    !is.na(source_symmetric_attr)) {
+    isTRUE(source_symmetric_attr)
+  } else {
+    isTRUE(nrow(mat) == ncol(mat)) &&
+      (isTRUE(identical(rownames(mat), colnames(mat))) ||
+        (is.null(rownames(mat)) && is.null(colnames(mat)))) &&
+      isTRUE(isSymmetric(mat, check.attributes = FALSE))
+  }
 
   if (identical(cfg$output, "matrix")) {
-    if (inherits(x, "corr_matrix")) {
-      attr(x, "output") <- "matrix"
-      attr(x, "threshold") <- 0
-      attr(x, "diag") <- TRUE
-      return(x)
-    }
     return(.mc_new_corr_matrix(
       mat = mat,
       estimator_class = estimator_class,

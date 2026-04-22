@@ -180,9 +180,10 @@ dcor <- function(data,
       dcor_matrix,
       class_name = "dcor",
       method = "distance_correlation",
-      description = "Pairwise distance correlation matrix (unbiased)"
+      description = "Pairwise distance correlation matrix (unbiased)",
+      symmetric = TRUE
     )
-    return(.mc_finalize_corr_output(
+    return(.mc_finalize_corr_output_fast(
       out,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
@@ -248,11 +249,12 @@ dcor <- function(data,
     class_name = "dcor",
     method = "distance_correlation",
     description = "Pairwise distance correlation matrix (unbiased)",
+    symmetric = TRUE,
     diagnostics = diagnostics,
     dimnames = dn,
     extra_attrs = if (!is.null(inference_attr)) list(inference = inference_attr)
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -452,4 +454,5 @@ print.summary.dcor <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 

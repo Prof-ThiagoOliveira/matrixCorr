@@ -235,8 +235,13 @@ rmcorr <- function(data = NULL, response, subject,
       ))
     }
 
-    prev_threads <- get_omp_threads()
-    on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+    prev_threads <- .mc_prepare_omp_threads(
+      n_threads,
+      n_threads_missing = missing(n_threads)
+    )
+    if (!is.null(prev_threads)) {
+      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+    }
 
     out <- rmcorr_matrix_cpp(
       x = response_mat,
@@ -264,6 +269,7 @@ rmcorr <- function(data = NULL, response, subject,
       class_name = "rmcorr_matrix",
       method = "rmcorr",
       description = "Repeated-measures correlation matrix",
+      symmetric = TRUE,
       diagnostics = diagnostics
     ))
   }
@@ -332,8 +338,13 @@ rmcorr <- function(data = NULL, response, subject,
     cat("Using", n_threads, "OpenMP threads\n")
   }
 
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
 
   out <- rmcorr_matrix_cpp(
     x = response_mat,
@@ -363,6 +374,7 @@ rmcorr <- function(data = NULL, response, subject,
     class_name = "rmcorr_matrix",
     method = "rmcorr",
     description = "Repeated-measures correlation matrix",
+    symmetric = TRUE,
     diagnostics = diagnostics
   )
   if (keep_data) {

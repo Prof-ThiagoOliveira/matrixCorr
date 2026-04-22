@@ -208,9 +208,10 @@ kendall_tau <- function(data,
       class_name = "kendall_matrix",
       method = "kendall",
       description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
+      symmetric = TRUE,
       dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
     )
-    return(.mc_finalize_corr_output(
+    return(.mc_finalize_corr_output_fast(
       out,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
@@ -310,6 +311,7 @@ kendall_tau <- function(data,
     class_name = "kendall_matrix",
     method = "kendall",
     description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
+    symmetric = TRUE,
     diagnostics = diagnostics,
     dimnames = dn,
     extra_attrs = if (!is.null(ci_attr)) {
@@ -320,7 +322,7 @@ kendall_tau <- function(data,
       )
     }
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -579,4 +581,5 @@ print.summary.kendall_matrix <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 

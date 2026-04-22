@@ -5,24 +5,7 @@
 ## Comments
 
 This is a new release of `matrixCorr`.
-* Adds optional inference for distance correlation.
-* Adds optional large-sample confidence intervals for biweight
-  mid-correlation.
-* Adds optional large-sample p-values and confidence intervals for
-  biserial correlation.
-* Adds optional p-values and percentile-bootstrap confidence intervals
-  for percentage bend correlation and pairwise Winsorized correlation.
-* Adds intraclass correlation support for wide data via `icc()`,
-  including pairwise and overall ANOVA-based coefficients.
-* Adds repeated-measures intraclass correlation via `icc_rm_reml()`
-  using the package's existing REML variance-components backend.
-* Fixes a bug in `n_threads` handling so the public thread-count controls
-  now take effect consistently across the threaded main correlation,
-  agreement, and ICC functions.
-* Adds a vignette set covering the main package workflows, including
-  wide-data correlation, robust and high-dimensional methods, latent
-  correlation, agreement and intraclass correlation, and
-  repeated-measures workflows.
+* 
 
 
 

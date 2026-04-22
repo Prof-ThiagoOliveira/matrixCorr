@@ -214,8 +214,13 @@ wincor <- function(data,
       "Winsorized correlation; tr = ", tr,
       "; NA mode = ", na_method, "."
     )
-    prev_threads <- get_omp_threads()
-    on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+    prev_threads <- .mc_prepare_omp_threads(
+      n_threads,
+      n_threads_missing = missing(n_threads)
+    )
+    if (!is.null(prev_threads)) {
+      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+    }
 
     if (.mc_supports_direct_threshold_path(
       method = "wincor",
@@ -259,9 +264,10 @@ wincor <- function(data,
       class_name = "wincor",
       method = "winsorized_correlation",
       description = desc,
+      symmetric = TRUE,
       dimnames = dn
     )
-    return(.mc_finalize_corr_output(
+    return(.mc_finalize_corr_output_fast(
       out,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
@@ -286,8 +292,13 @@ wincor <- function(data,
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
 
-  prev_threads <- get_omp_threads()
-  on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
+  prev_threads <- .mc_prepare_omp_threads(
+    n_threads,
+    n_threads_missing = missing(n_threads)
+  )
+  if (!is.null(prev_threads)) {
+    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
+  }
   res <- if (na_method == "error") {
     wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
   } else {
@@ -317,6 +328,7 @@ wincor <- function(data,
       "Winsorized correlation; tr = ", tr,
       "; NA mode = ", na_method, "."
     ),
+    symmetric = TRUE,
     diagnostics = if (is.null(payload)) NULL else payload$diagnostics,
     extra_attrs = c(
       if (!is.null(payload$ci)) {
@@ -331,7 +343,7 @@ wincor <- function(data,
       }
     )
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -694,4 +706,5 @@ print.summary.wincor <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 

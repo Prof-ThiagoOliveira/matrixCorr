@@ -231,9 +231,10 @@ spearman_rho <- function(data,
       class_name = "spearman_rho",
       method = "spearman",
       description = "Pairwise Spearman's rank correlation matrix",
+      symmetric = TRUE,
       dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
     )
-    return(.mc_finalize_corr_output(
+    return(.mc_finalize_corr_output_fast(
       out,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
@@ -327,6 +328,7 @@ spearman_rho <- function(data,
     class_name = "spearman_rho",
     method = "spearman",
     description = "Pairwise Spearman's rank correlation matrix",
+    symmetric = TRUE,
     diagnostics = diagnostics,
     dimnames = dn,
     extra_attrs = if (!is.null(ci_attr)) {
@@ -336,7 +338,7 @@ spearman_rho <- function(data,
       )
     }
   )
-  .mc_finalize_corr_output(
+  .mc_finalize_corr_output_fast(
     out,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -605,4 +607,5 @@ print.summary.spearman_rho <- function(x, digits = NULL, n = NULL,
   )
   invisible(x)
 }
+
 

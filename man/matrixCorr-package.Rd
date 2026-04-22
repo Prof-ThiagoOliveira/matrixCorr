@@ -18,6 +18,8 @@ such as \code{as.matrix()}, \code{as.data.frame()}, and \code{tidy()} where impl
 
 Package-wide display defaults can be controlled with options:
 \itemize{
+\item \code{matrixCorr.threads} (default \code{1L}; used as the default for
+\code{n_threads} in thread-aware estimators)
 \item \code{matrixCorr.print_max_rows} (default \code{20L})
 \item \code{matrixCorr.print_topn} (default \code{5L})
 \item \code{matrixCorr.print_max_vars} (default \code{NULL}, derived from console width)
@@ -31,6 +33,11 @@ Package-wide display defaults can be controlled with options:
 Display methods validate user-facing arguments with \code{cli} conditions.
 Confidence-interval visibility is explicit: \code{show_ci} accepts only \code{"yes"}
 or \code{"no"}.
+
+A common setup is:
+\preformatted{
+options(matrixCorr.threads = parallel::detectCores(logical = FALSE))
+}
 }
 \seealso{
 Useful links:

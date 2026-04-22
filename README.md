@@ -71,6 +71,20 @@ install.packages("matrixCorr")
 remotes::install_github("Prof-ThiagoOliveira/matrixCorr")
 ```
 
+## Thread settings (`n_threads`)
+
+Most computational functions expose an `n_threads` argument and default to:
+
+``` r
+getOption("matrixCorr.threads", 1L)
+```
+
+To define a package-wide default once per session:
+
+``` r
+options(matrixCorr.threads = parallel::detectCores(logical = FALSE))
+```
+
 ## Quick start
 
 ### Wide-data correlation workflow
