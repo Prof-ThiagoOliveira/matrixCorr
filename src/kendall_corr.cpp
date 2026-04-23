@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include "matrixCorr_detail.h"
+#include "matrixCorr_omp.h"
 
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::plugins(openmp)]]
@@ -569,6 +570,9 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
 
   // --- Discretise once per column for p >= 3 (matrix path)
   std::vector< std::vector<long long> > cols(p, std::vector<long long>(n));
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static) if(p > 1)
+#endif
   for (int j = 0; j < p; ++j) {
     const double* cj = &mat(0, j);
     double max_abs = 0.0;
@@ -600,8 +604,8 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
 
   // --- Avoid OpenMP overhead when p is tiny
 #if defined(_OPENMP)
-  if (p >= 3) {
-#pragma omp parallel for schedule(static)
+  if (p >= 3 && omp_get_max_threads() > 1) {
+#pragma omp parallel for schedule(dynamic, 1)
     for (int i = 0; i < p - 1; ++i) {
       fill_row(i);
     }

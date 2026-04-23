@@ -24,13 +24,28 @@ inline double pearson_from_ranks(const arma::vec& rx, const arma::vec& ry) {
   const arma::uword n = rx.n_elem;
   if (n != ry.n_elem || n < 2u) return arma::datum::nan;
 
-  const double mean_rank = 0.5 * (static_cast<double>(n) + 1.0);
-  const arma::vec xc = rx - mean_rank;
-  const arma::vec yc = ry - mean_rank;
-  const double sxx = arma::dot(xc, xc);
-  const double syy = arma::dot(yc, yc);
+  const double* rx_ptr = rx.memptr();
+  const double* ry_ptr = ry.memptr();
+
+  double sum_xx = 0.0;
+  double sum_yy = 0.0;
+  double sum_xy = 0.0;
+  for (arma::uword i = 0u; i < n; ++i) {
+    const double vx = rx_ptr[i];
+    const double vy = ry_ptr[i];
+    sum_xx += vx * vx;
+    sum_yy += vy * vy;
+    sum_xy += vx * vy;
+  }
+
+  const double n_d = static_cast<double>(n);
+  const double mean_rank = 0.5 * (n_d + 1.0);
+  const double adj = n_d * mean_rank * mean_rank;
+  const double sxx = sum_xx - adj;
+  const double syy = sum_yy - adj;
+  const double sxy = sum_xy - adj;
   if (!(sxx > 0.0) || !(syy > 0.0)) return arma::datum::nan;
-  return clamp_corr(arma::dot(xc, yc) / std::sqrt(sxx * syy));
+  return clamp_corr(sxy / std::sqrt(sxx * syy));
 }
 
 inline double spearman_pair_core(const arma::vec& x,
@@ -342,15 +357,15 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
       continue;
     }
 
-    arma::vec xj(idx.n_elem, arma::fill::none);
     const double* col_ptr = X.colptr(j);
+    double min_v = std::numeric_limits<double>::infinity();
+    double max_v = -std::numeric_limits<double>::infinity();
     for (arma::uword t = 0; t < idx.n_elem; ++t) {
-      xj[t] = col_ptr[idx[t]];
+      const double v = col_ptr[idx[t]];
+      if (v < min_v) min_v = v;
+      if (v > max_v) max_v = v;
     }
-    arma::vec rj = rank_vector(xj);
-    const double mean_rank = 0.5 * (static_cast<double>(idx.n_elem) + 1.0);
-    const double sxx = arma::dot(rj - mean_rank, rj - mean_rank);
-    est(j, j) = (sxx > 0.0) ? 1.0 : arma::datum::nan;
+    est(j, j) = (min_v < max_v) ? 1.0 : arma::datum::nan;
   }
 
   Rcpp::List out = Rcpp::List::create(
