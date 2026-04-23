@@ -152,30 +152,14 @@ inline void compute_row_sums_and_total_fast_ptr(
 // Fast O(n log n) evaluation of:
 // sum_{i != j} |x_i - x_j| |y_i - y_j|
 // using x-order traversal and Fenwick trees over y-ranks.
-inline double sum_cross_abs_prod_ptr(const double* x, const double* y, const int n) {
-  if (n < 2) return 0.0;
-
-  static thread_local std::vector<int> order;
-  static thread_local std::vector<int> y_order;
-  static thread_local std::vector<int> rank_y;
-  static thread_local std::vector<double> bit_count;
-  static thread_local std::vector<double> bit_y;
-  static thread_local std::vector<double> bit_x;
-  static thread_local std::vector<double> bit_xy;
-
-  order.resize(static_cast<std::size_t>(n));
+inline int compute_rank_y_ptr(const double* y,
+                              const int n,
+                              std::vector<int>& y_order,
+                              std::vector<int>& rank_y) {
   y_order.resize(static_cast<std::size_t>(n));
   rank_y.resize(static_cast<std::size_t>(n));
-  std::iota(order.begin(), order.end(), 0);
   std::iota(y_order.begin(), y_order.end(), 0);
 
-  std::stable_sort(order.begin(), order.end(), [x, y](const int a, const int b) {
-    if (x[a] < x[b]) return true;
-    if (x[a] > x[b]) return false;
-    if (y[a] < y[b]) return true;
-    if (y[a] > y[b]) return false;
-    return a < b;
-  });
   std::stable_sort(y_order.begin(), y_order.end(), [y](const int a, const int b) {
     if (y[a] < y[b]) return true;
     if (y[a] > y[b]) return false;
@@ -195,7 +179,32 @@ inline double sum_cross_abs_prod_ptr(const double* x, const double* y, const int
     }
     rank_y[static_cast<std::size_t>(idx)] = m;
   }
+  return m;
+}
 
+inline double sum_cross_abs_prod_ranked_ptr(const double* x,
+                                            const double* y,
+                                            const int n,
+                                            const int* rank_y,
+                                            const int m) {
+  if (n < 2) return 0.0;
+
+  static thread_local std::vector<int> order;
+  static thread_local std::vector<double> bit_count;
+  static thread_local std::vector<double> bit_y;
+  static thread_local std::vector<double> bit_x;
+  static thread_local std::vector<double> bit_xy;
+
+  order.resize(static_cast<std::size_t>(n));
+  std::iota(order.begin(), order.end(), 0);
+
+  std::stable_sort(order.begin(), order.end(), [x, y](const int a, const int b) {
+    if (x[a] < x[b]) return true;
+    if (x[a] > x[b]) return false;
+    if (y[a] < y[b]) return true;
+    if (y[a] > y[b]) return false;
+    return a < b;
+  });
   bit_count.assign(static_cast<std::size_t>(m + 1), 0.0);
   bit_y.assign(static_cast<std::size_t>(m + 1), 0.0);
   bit_x.assign(static_cast<std::size_t>(m + 1), 0.0);
@@ -241,6 +250,13 @@ inline double sum_cross_abs_prod_ptr(const double* x, const double* y, const int
   }
 
   return 2.0 * out;
+}
+
+inline double sum_cross_abs_prod_ptr(const double* x, const double* y, const int n) {
+  static thread_local std::vector<int> y_order;
+  static thread_local std::vector<int> rank_y;
+  const int m = compute_rank_y_ptr(y, n, y_order, rank_y);
+  return sum_cross_abs_prod_ranked_ptr(x, y, n, rank_y.data(), m);
 }
 
 inline double ustat_dcor_from_precomputed_quadratic_ptr(
@@ -494,14 +510,27 @@ arma::mat ustat_dcor_matrix_cpp(const arma::mat& X) {
     const double* rj = row_sums.colptr(j);
     const double Sj = totals[j];
     const double Y2 = self_uvar[j];
+    if (!(std::isfinite(Y2) && Y2 > 0.0)) {
+      for (int i = 0; i < j; ++i) {
+        R(i, j) = NA_REAL;
+        R(j, i) = NA_REAL;
+      }
+      continue;
+    }
+
+    static thread_local std::vector<int> y_order;
+    static thread_local std::vector<int> rank_y;
+    const int m = compute_rank_y_ptr(xj, n, y_order, rank_y);
     for (int i = 0; i < j; ++i) {
       const double* xi = X.colptr(i);
       const double* ri = row_sums.colptr(i);
       const double Si = totals[i];
       const double X2 = self_uvar[i];
       double d = NA_REAL;
-      if (std::isfinite(X2) && std::isfinite(Y2) && X2 > 0.0 && Y2 > 0.0) {
-        const double Sxy_pair = sum_cross_abs_prod_ptr(xi, xj, n);
+      if (std::isfinite(X2) && X2 > 0.0) {
+        const double Sxy_pair = sum_cross_abs_prod_ranked_ptr(
+          xi, xj, n, rank_y.data(), m
+        );
         const double row_dot_xy = dot_ptr(ri, rj, n);
         const double XY = u_centered_cov_stat(Sxy_pair, row_dot_xy, Si, Sj, n);
         d = finalize_dcor(XY, X2, Y2);
@@ -619,6 +648,25 @@ Rcpp::List ustat_dcor_matrix_pairwise_cpp(
     const double* rj = row_sums.colptr(j);
     const double Sj = totals[j];
     const double Y2 = self_uvar[j];
+    if (!(std::isfinite(Y2) && Y2 > 0.0)) {
+      for (int i = 0; i < j; ++i) {
+        est(i, j) = NA_REAL;
+        est(j, i) = NA_REAL;
+        estimate(i, j) = NA_REAL;
+        estimate(j, i) = NA_REAL;
+        statistic(i, j) = NA_REAL;
+        statistic(j, i) = NA_REAL;
+        parameter(i, j) = df_value;
+        parameter(j, i) = df_value;
+        p_value(i, j) = NA_REAL;
+        p_value(j, i) = NA_REAL;
+      }
+      continue;
+    }
+
+    static thread_local std::vector<int> y_order;
+    static thread_local std::vector<int> rank_y;
+    const int m = compute_rank_y_ptr(xj, n, y_order, rank_y);
     for (int i = 0; i < j; ++i) {
       const double* xi = X.colptr(i);
       const double* ri = row_sums.colptr(i);
@@ -626,8 +674,10 @@ Rcpp::List ustat_dcor_matrix_pairwise_cpp(
       const double X2 = self_uvar[i];
 
       double raw = NA_REAL;
-      if (std::isfinite(X2) && std::isfinite(Y2) && X2 > 0.0 && Y2 > 0.0) {
-        const double Sxy_pair = sum_cross_abs_prod_ptr(xi, xj, n);
+      if (std::isfinite(X2) && X2 > 0.0) {
+        const double Sxy_pair = sum_cross_abs_prod_ranked_ptr(
+          xi, xj, n, rank_y.data(), m
+        );
         const double row_dot_xy = dot_ptr(ri, rj, n);
         const double XY = u_centered_cov_stat(Sxy_pair, row_dot_xy, Si, Sj, n);
         raw = dcor_signed_ratio(XY, X2, Y2);

@@ -6,15 +6,14 @@
 #include <cmath>
 #include <algorithm>
 #include "matrixCorr_detail.h"
+#include "matrixCorr_omp.h"
 
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::plugins(openmp)]]
 
 // functions we use here:
 using namespace matrixCorr_detail;
-using matrixCorr_detail::linalg::crossprod_no_copy;
-using matrixCorr_detail::linalg::subtract_n_outer_mu;
-using matrixCorr_detail::linalg::make_pd_inplace;
+using matrixCorr_detail::linalg::centered_crossprod_no_copy;
 using matrixCorr_detail::linalg::invert_spd_inplace;
 using matrixCorr_detail::linalg::precision_to_pcor_inplace;
 using matrixCorr_detail::cov_shrinkage::oas_shrink_inplace;
@@ -28,17 +27,21 @@ arma::mat partial_correlation_p_values(const arma::mat& pcor,
   if (n <= p) {
     Rcpp::stop("return_p_value requires n > p for the sample partial-correlation test.");
   }
+  if (!pcor.is_finite()) {
+    Rcpp::stop("Partial correlation matrix must contain only finite values when return_p_value = TRUE.");
+  }
 
   const double df = static_cast<double>(n - p);
   arma::mat p_value(p, p, arma::fill::zeros);
+  const bool use_omp = (p >= 64u && omp_get_max_threads() > 1);
 
-  for (arma::uword j = 0; j < p; ++j) {
-    for (arma::uword i = 0; i < j; ++i) {
-      double r = pcor(i, j);
-      if (!std::isfinite(r)) {
-        Rcpp::stop("Partial correlation matrix must contain only finite values when return_p_value = TRUE.");
-      }
-
+ #ifdef _OPENMP
+ #pragma omp parallel for schedule(static) if (use_omp)
+ #endif
+  for (arma::sword j = 1; j < static_cast<arma::sword>(p); ++j) {
+    const arma::uword uj = static_cast<arma::uword>(j);
+    for (arma::uword i = 0; i < uj; ++i) {
+      double r = pcor(i, uj);
       r = std::max(-1.0, std::min(1.0, r));
       const double denom = 1.0 - (r * r);
       const double p_ij =
@@ -46,12 +49,47 @@ arma::mat partial_correlation_p_values(const arma::mat& pcor,
           ? 0.0
           : 2.0 * R::pt(-std::abs(r * std::sqrt(df / denom)), df, /*lower_tail*/ 1, /*log_p*/ 0);
 
-      p_value(i, j) = p_ij;
-      p_value(j, i) = p_ij;
+      p_value(i, uj) = p_ij;
+      p_value(uj, i) = p_ij;
     }
   }
 
   return p_value;
+}
+
+bool invert_spd_with_jitter_inplace(arma::mat& S,
+                                    double& jitter,
+                                    const double max_jitter = 1e-2) {
+  if (jitter < 0.0) jitter = 0.0;
+  for (;;) {
+    arma::mat work = S;
+    if (invert_spd_inplace(work)) {
+      S = std::move(work);
+      return true;
+    }
+    if (jitter == 0.0) jitter = 1e-8; else jitter *= 10.0;
+    if (jitter > max_jitter) return false;
+    S.diag() += jitter;
+  }
+}
+
+bool invert_spd_with_jitter_keep_covariance(arma::mat& Sigma,
+                                            arma::mat& Theta,
+                                            double& jitter,
+                                            const double max_jitter = 1e-2) {
+  if (jitter < 0.0) jitter = 0.0;
+  Theta = Sigma;
+  for (;;) {
+    arma::mat work = Theta;
+    if (invert_spd_inplace(work)) {
+      Theta = std::move(work);
+      return true;
+    }
+    if (jitter == 0.0) jitter = 1e-8; else jitter *= 10.0;
+    if (jitter > max_jitter) return false;
+    Sigma.diag() += jitter;
+    Theta.diag() += jitter;
+  }
 }
 
 } // namespace
@@ -91,13 +129,9 @@ arma::mat partial_correlation_p_values(const arma::mat& pcor,
    // No-copy
    arma::mat X(const_cast<double*>(x_ptr), n, p, /*copy_aux_mem*/ false, /*strict*/ true);
 
-   // Column means (1 x p)
-   arma::rowvec mu = arma::sum(X, 0) / static_cast<double>(n);
-
-   arma::mat Sigma;
-   // X'X, then subtract n * mu * mu' (no centred copy), giving centred cross-product.
-   Sigma = crossprod_no_copy(X);
-   subtract_n_outer_mu(Sigma, mu, static_cast<double>(n));
+   // (X - mu)'(X - mu), computed without forming a centered copy.
+   arma::rowvec mu;
+   arma::mat Sigma = centered_crossprod_no_copy(X, mu);
 
    double rho = NA_REAL;         // OAS shrinkage weight (if used)
    bool used_glasso = false;
@@ -129,10 +163,8 @@ arma::mat partial_correlation_p_values(const arma::mat& pcor,
    if (used_glasso) {
      arma::mat Sigma_hat;
      if (lambda == 0.0) {
-       make_pd_inplace(Sigma, jitter);
-       Theta = Sigma;
-       if (!invert_spd_inplace(Theta)) {
-         Rcpp::stop("Failed to invert covariance after positive-definite adjustment.");
+       if (!invert_spd_with_jitter_keep_covariance(Sigma, Theta, jitter)) {
+         Rcpp::stop("Covariance not positive definite; jitter exceeded limit.");
        }
      } else {
        if (!graphical_lasso(Sigma, lambda, Sigma_hat, Theta)) {
@@ -140,16 +172,12 @@ arma::mat partial_correlation_p_values(const arma::mat& pcor,
        }
        Sigma = std::move(Sigma_hat);
      }
-   } else {
-     // Ensure positive definiteness (adds minimal jitter if needed)
-     make_pd_inplace(Sigma, jitter);
    }
 
    if (return_cov_precision) {
      if (!used_glasso) {
-       Theta = Sigma;
-       if (!invert_spd_inplace(Theta)) {
-         Rcpp::stop("Failed to invert covariance after positive-definite adjustment.");
+       if (!invert_spd_with_jitter_keep_covariance(Sigma, Theta, jitter)) {
+         Rcpp::stop("Covariance not positive definite; jitter exceeded limit.");
        }
      }
 
@@ -177,8 +205,8 @@ arma::mat partial_correlation_p_values(const arma::mat& pcor,
    } else {
      if (used_glasso) {
        Sigma = std::move(Theta);
-     } else if (!invert_spd_inplace(Sigma)) {
-       Rcpp::stop("Failed to invert covariance after positive-definite adjustment.");
+     } else if (!invert_spd_with_jitter_inplace(Sigma, jitter)) {
+       Rcpp::stop("Covariance not positive definite; jitter exceeded limit.");
      }
      if (!precision_to_pcor_inplace(Sigma)) {
        Rcpp::stop("Precision diagonal must be positive and finite.");

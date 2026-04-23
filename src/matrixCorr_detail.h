@@ -6,6 +6,7 @@
 #include <vector>
 #include <numeric>
 #include <limits>
+#include "matrixCorr_omp.h"
 
 namespace matrixCorr_detail {
 
@@ -527,8 +528,9 @@ namespace linalg {
 // temporary full matrix.
 inline void copy_upper_to_lower_inplace(arma::mat& M) {
   const arma::uword p = M.n_cols;
+  const bool use_omp = (p >= 64u && omp_get_max_threads() > 1);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if (use_omp)
 #endif
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
     const arma::uword uj = static_cast<arma::uword>(j);
@@ -567,8 +569,9 @@ return XtX;
 inline void subtract_n_outer_mu(arma::mat& M, const arma::rowvec& mu, double n) {
   const arma::uword p = M.n_cols;
   const double scale = -n;
+  const bool use_omp = (p >= 64u && omp_get_max_threads() > 1);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if (use_omp)
 #endif
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
     const arma::uword uj = static_cast<arma::uword>(j);
@@ -581,11 +584,48 @@ inline void subtract_n_outer_mu(arma::mat& M, const arma::rowvec& mu, double n) 
   copy_upper_to_lower_inplace(M);
 }
 
-// M := scale * (M - n * mu * mu') on the upper triangle, optionally adding a
-// diagonal shift, then symmetrize once.
+// Compute (X - mu)'(X - mu) without forming a centered copy of X.
+// This avoids an extra full-matrix symmetrization compared with
+// crossprod_no_copy() + subtract_n_outer_mu().
+inline arma::mat centered_crossprod_no_copy(const arma::mat& X, arma::rowvec& mu_out) {
+  const arma::uword n = X.n_rows;
+  const arma::uword p = X.n_cols;
 
-// M := scale * (M - n * mu * mu') on the upper triangle, optionally adding a
-// diagonal shift, then symmetrize once.
+  mu_out = arma::sum(X, 0) / static_cast<double>(n);
+
+  arma::mat XtX(p, p);
+#if defined(ARMA_USE_BLAS)
+{
+  XtX.zeros();
+  const arma::blas_int N = static_cast<arma::blas_int>(p);
+  const arma::blas_int K = static_cast<arma::blas_int>(n);
+  const double alpha = 1.0, beta = 0.0;
+  const char uplo  = 'U';
+  const char trans = 'T';
+  arma::blas::syrk<double>(&uplo, &trans, &N, &K,
+                           &alpha, X.memptr(), &K,
+                           &beta,  XtX.memptr(), &N);
+}
+#else
+XtX = X.t() * X;
+#endif
+
+  const double scale = -static_cast<double>(n);
+  const bool use_omp = (p >= 64u && omp_get_max_threads() > 1);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if (use_omp)
+#endif
+  for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
+    const arma::uword uj = static_cast<arma::uword>(j);
+    const double muj = mu_out[uj];
+    const double fj  = scale * muj; // = -n * mu_j
+    for (arma::uword i = 0; i <= uj; ++i) {
+      XtX(i, uj) += fj * mu_out[i];
+    }
+  }
+  copy_upper_to_lower_inplace(XtX);
+  return XtX;
+}
 
 // Ensure positive definiteness by geometric diagonal jitter until chol succeeds.
 inline void make_pd_inplace(arma::mat& S, double& jitter, const double max_jitter = 1e-2) {
@@ -630,8 +670,9 @@ inline bool precision_to_pcor_inplace(arma::mat& Theta) {
   d = 1.0 / arma::sqrt(d);
 
   const arma::uword p = Theta.n_cols;
+  const bool use_omp = (p >= 64u && omp_get_max_threads() > 1);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if (use_omp)
 #endif
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
     const arma::uword uj = static_cast<arma::uword>(j);
