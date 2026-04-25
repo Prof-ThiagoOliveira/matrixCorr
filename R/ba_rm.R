@@ -666,6 +666,18 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
   methods <- mlev
   mm <- length(methods)
+  valid_common <- is.finite(y) & !is.na(s) & !is.na(t) & !is.na(m)
+  y_valid <- y[valid_common]
+  s_valid <- s[valid_common]
+  t_valid <- t[valid_common]
+  m_valid <- m[valid_common]
+  method_code <- as.integer(m_valid)
+  idx_split <- split(seq_along(method_code), method_code)
+  idx_by_method <- vector("list", mm)
+  for (idx in seq_len(mm)) {
+    hit <- idx_split[[as.character(idx)]]
+    idx_by_method[[idx]] <- if (is.null(hit)) integer(0L) else hit
+  }
 
   bias         <- .make_named_matrix_ba(methods)
   sd_loa       <- .make_named_matrix_ba(methods)
@@ -708,13 +720,33 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
   for (j in 1:(mm - 1L)) for (k in (j + 1L):mm) {
     lev_j <- methods[j]; lev_k <- methods[k]
-    sel <- m %in% c(lev_j, lev_k) & is.finite(y) & !is.na(s) & !is.na(t)
-    if (!any(sel)) next
-    m12 <- ifelse(m[sel] == lev_j, 1L, 2L)
-    n_pair <- .count_ba_rm_complete_pairs(y[sel], s[sel], m12, t[sel])
-    n_mat[j,k] <- n_mat[k,j] <- n_pair
+    idx_j <- idx_by_method[[j]]
+    idx_k <- idx_by_method[[k]]
+    if (!length(idx_j) && !length(idx_k)) next
+    idx_pair <- sort.int(c(idx_j, idx_k), method = "radix")
+    pair_y <- y_valid[idx_pair]
+    pair_s <- s_valid[idx_pair]
+    pair_t <- t_valid[idx_pair]
+    pair_m12 <- as.integer(method_code[idx_pair] == k) + 1L
 
-    if (n_pair < 2L) {
+    pair_label <- paste(lev_j, lev_k, sep = "-")
+    fit_info <- tryCatch(
+      .fit_ba_rm_pair_model(
+        response = pair_y, subject = pair_s, method12 = pair_m12, time = pair_t,
+        n_threads = n_threads,
+        include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
+        max_iter = max_iter, tol = tol, conf_level = conf_level,
+        loa_multiplier = loa_multiplier, pair_label = pair_label
+      ),
+      error = identity
+    )
+
+    if (inherits(fit_info, "error")) {
+      n_pair <- .count_ba_rm_complete_pairs(pair_y, pair_s, pair_m12, pair_t)
+      n_mat[j,k] <- n_mat[k,j] <- n_pair
+      if (n_pair >= 2L) {
+        stop(fit_info)
+      }
       bias[j,k]      <- bias[k,j]      <- NA_real_
       sd_loa[j,k]    <- sd_loa[k,j]    <- NA_real_
       loa_lower[j,k] <- loa_lower[k,j] <- NA_real_
@@ -747,15 +779,41 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       next
     }
 
-    pair_label <- paste(lev_j, lev_k, sep = "-")
-    fit_info <- .fit_ba_rm_pair_model(
-      response = y[sel], subject = s[sel], method12 = m12, time = t[sel],
-      n_threads = n_threads,
-      include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
-      max_iter = max_iter, tol = tol, conf_level = conf_level,
-      loa_multiplier = loa_multiplier, pair_label = pair_label
-    )
     fit <- fit_info$fit
+    n_pair <- as.integer(fit$n_pairs)
+    n_mat[j,k] <- n_mat[k,j] <- n_pair
+    if (n_pair < 2L) {
+      bias[j,k]      <- bias[k,j]      <- NA_real_
+      sd_loa[j,k]    <- sd_loa[k,j]    <- NA_real_
+      loa_lower[j,k] <- loa_lower[k,j] <- NA_real_
+      loa_upper[j,k] <- loa_upper[k,j] <- NA_real_
+      width[j,k]     <- width[k,j]     <- NA_real_
+
+      mean_ci_low[j,k]  <- mean_ci_low[k,j]   <- NA_real_
+      mean_ci_high[j,k] <- mean_ci_high[k,j]  <- NA_real_
+      lo_ci_low[j,k]    <- lo_ci_low[k,j]     <- NA_real_
+      lo_ci_high[j,k]   <- lo_ci_high[k,j]    <- NA_real_
+      hi_ci_low[j,k]    <- hi_ci_low[k,j]     <- NA_real_
+      hi_ci_high[j,k]   <- hi_ci_high[k,j]    <- NA_real_
+
+      vc_subject[j,k] <- vc_subject[k,j] <- NA_real_
+      vc_resid[j,k]   <- vc_resid[k,j]   <- NA_real_
+      residual_model[j,k] <- residual_model[k,j] <- NA_character_
+
+      if (!is.null(slope_mat)) {
+        slope_mat[j,k] <- slope_mat[k,j] <- NA_real_
+      }
+      if (isTRUE(use_ar1)) {
+        ar1_rho_mat[j,k] <- ar1_rho_mat[k,j] <- NA_real_
+        ar1_estimated[j,k] <- ar1_estimated[k,j] <- NA
+      }
+
+      inform_if_verbose(
+        "Skipping Bland-Altman pair {.val {lev_j}} vs {.val {lev_k}}: need at least 2 complete subject-time pairs (found {n_pair}).",
+        .verbose = verbose
+      )
+      next
+    }
     comp <- .recompose_pair(fit)
 
     bias[j,k]      <- comp$md;  bias[k,j]      <- -comp$md
@@ -930,23 +988,34 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 .ba_rep_two_methods <- function(response, subject, method12, time,
                                 loa_multiplier, conf_level, n_threads, include_slope,
                                 use_ar1, ar1_rho, max_iter, tol) {
-  n_pairs <- .count_ba_rm_complete_pairs(response, subject, method12, time)
+  fit_info <- tryCatch(
+    .fit_ba_rm_pair_model(
+      response = response, subject = subject, method12 = method12, time = time,
+      n_threads = n_threads,
+      include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
+      max_iter = max_iter, tol = tol, conf_level = conf_level,
+      loa_multiplier = loa_multiplier
+    ),
+    error = identity
+  )
+  if (inherits(fit_info, "error")) {
+    n_pairs <- .count_ba_rm_complete_pairs(response, subject, method12, time)
+    if (n_pairs < 2L) {
+      abort_bad_arg("response",
+        message = "must provide at least two subject-time matched pairs after removing missing observations; only {n_pairs} available.",
+        n_pairs = n_pairs
+      )
+    }
+    stop(fit_info)
+  }
+  fit <- fit_info$fit
+  n_pairs <- as.integer(fit$n_pairs)
   if (n_pairs < 2L) {
     abort_bad_arg("response",
       message = "must provide at least two subject-time matched pairs after removing missing observations; only {n_pairs} available.",
       n_pairs = n_pairs
     )
   }
-
-  fit_info <- .fit_ba_rm_pair_model(
-    response = response, subject = subject, method12 = method12, time = time,
-    n_threads = n_threads,
-    include_slope = include_slope, use_ar1 = use_ar1, ar1_rho = ar1_rho,
-    max_iter = max_iter, tol = tol, conf_level = conf_level,
-    loa_multiplier = loa_multiplier
-  )
-  fit <- fit_info$fit
-  n_pairs <- as.integer(fit$n_pairs)
 
   md  <- as.numeric(fit$bias_mu0)
   sdL <- as.numeric(fit$sd_loa)

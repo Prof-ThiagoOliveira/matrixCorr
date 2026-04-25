@@ -8,7 +8,6 @@ using namespace Rcpp;
 // only what we use from matrixCorr_detail
 using namespace matrixCorr_detail;
 using matrixCorr_detail::moments::col_means_vars_pop;
-using matrixCorr_detail::moments::cov_xy_pop_manual;
 using matrixCorr_detail::ccc_bits::ccc_from_stats_via_r;
 using matrixCorr_detail::norm1::qnorm01;
 using matrixCorr_detail::ccc_se::se_delta;
@@ -26,7 +25,12 @@ arma::mat ccc_cpp(const arma::mat& X) {
   arma::vec means(p), vars(p);
   // Precompute means and population variances (identical scaling)
   col_means_vars_pop(X, means, vars);
-  const arma::uword n = static_cast<arma::uword>(X.n_rows);
+  const double n = static_cast<double>(X.n_rows);
+
+  // Compute all population covariances in one BLAS-backed pass.
+  arma::mat cov = X.t() * X;
+  cov /= n;
+  cov -= means * means.t();
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
@@ -37,15 +41,7 @@ arma::mat ccc_cpp(const arma::mat& X) {
       const double mean_y = means[j];
       const double var_x  = vars[i];
       const double var_y  = vars[j];
-
-      // population covariance via manual loop
-      const double cov_xy = cov_xy_pop_manual(
-        X.colptr(static_cast<arma::uword>(i)),
-        X.colptr(static_cast<arma::uword>(j)),
-        n,
-        mean_x,
-        mean_y
-      );
+      const double cov_xy = cov(static_cast<arma::uword>(i), static_cast<arma::uword>(j));
 
       // CCC with identical algebraic order (r -> sxy -> p)
       const double pij = ccc_from_stats_via_r(mean_x, mean_y, var_x, var_y, cov_xy);
@@ -69,6 +65,12 @@ List ccc_with_ci_cpp(const arma::mat& X, double conf_level = 0.95) {
   arma::vec means(p), vars(p);
   // Precompute means and population variances
   col_means_vars_pop(X, means, vars);
+  const double n_d = static_cast<double>(n);
+
+  // Compute all population covariances in one BLAS-backed pass.
+  arma::mat cov = X.t() * X;
+  cov /= n_d;
+  cov -= means * means.t();
 
   const double alpha  = 1.0 - conf_level;
   const double zcrit  = qnorm01(1.0 - alpha / 2.0);
@@ -80,14 +82,7 @@ List ccc_with_ci_cpp(const arma::mat& X, double conf_level = 0.95) {
     for (int j = i + 1; j < p; ++j) {
       const double mean_x = means[i], mean_y = means[j];
       const double var_x  = vars[i],  var_y  = vars[j];
-
-      const double cov_xy = cov_xy_pop_manual(
-        X.colptr(static_cast<arma::uword>(i)),
-        X.colptr(static_cast<arma::uword>(j)),
-        static_cast<arma::uword>(n),
-        mean_x,
-        mean_y
-      );
+      const double cov_xy = cov(static_cast<arma::uword>(i), static_cast<arma::uword>(j));
 
       // CCC estimate
       const double p_val = ccc_from_stats_via_r(mean_x, mean_y, var_x, var_y, cov_xy);

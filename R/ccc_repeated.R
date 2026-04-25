@@ -285,14 +285,14 @@ ccc_rm_ustat <- function(data,
       uniq_by_subj <- tabulate(sid_idx[uniq_combo], nbins = length(uid))
 
       complete_subj <- (rows_by_subj == (ntime * 2L)) & (uniq_by_subj == (ntime * 2L))
-      keep_ids <- uid[complete_subj]
-      if (!length(keep_ids)) {
+      ns_complete <- sum(complete_subj)
+      if (!ns_complete) {
         cli::cli_abort(
           "All subjects have incomplete method/time coverage for {.val {m1}} vs {.val {m2}}."
         )
       }
 
-      if (length(keep_ids) < 2L) {
+      if (ns_complete < 2L) {
         cli::cli_abort(
           c(
             "At least two subjects with complete observations are required for {.val {m1}} vs {.val {m2}}.",
@@ -301,14 +301,13 @@ ccc_rm_ustat <- function(data,
         )
       }
 
-      keep_mask <- sid %in% keep_ids
+      keep_mask <- complete_subj[sid_idx]
       pair_rows <- pair_rows[keep_mask]
       tim <- tim[keep_mask]
       met_i <- met_i[keep_mask]
-      sid <- sid[keep_mask]
-      keep_ids <- sort(unique(sid))
-      subject_pair <- match(sid, keep_ids) - 1L
-      ns <- length(keep_ids)
+      complete_map <- cumsum(complete_subj) - 1L
+      subject_pair <- complete_map[sid_idx[keep_mask]]
+      ns <- ns_complete
 
       res <- cccUst_rcpp(response_vec[pair_rows],
                          met_i,

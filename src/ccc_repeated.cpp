@@ -1,9 +1,77 @@
 // Thiago de Paula Oliveira
 #include <RcppArmadillo.h>
+#include <cmath>
+#include <vector>
 #include "matrixCorr_omp.h"
 using namespace Rcpp;
 
 // [[Rcpp::plugins(openmp)]]
+
+namespace {
+
+inline bool is_diagonal_matrix(const arma::mat& M) {
+  const arma::uword nr = M.n_rows;
+  const arma::uword nc = M.n_cols;
+  if (nr != nc) return false;
+  for (arma::uword j = 0; j < nc; ++j) {
+    for (arma::uword i = 0; i < nr; ++i) {
+      if (i != j && M(i, j) != 0.0) return false;
+    }
+  }
+  return true;
+}
+
+inline void fill_abs_delta_diff(const arma::mat& A,
+                                const int row_a,
+                                const arma::mat& B,
+                                const int row_b,
+                                const int ntime,
+                                const bool delta_zero,
+                                const bool delta_one,
+                                const bool delta_two,
+                                const double delta,
+                                std::vector<double>& out) {
+  for (int t = 0; t < ntime; ++t) {
+    const double d = std::fabs(A(row_a, t) - B(row_b, t));
+    if (delta_zero) {
+      out[static_cast<std::size_t>(t)] = (d != 0.0) ? 1.0 : 0.0;
+    } else if (delta_one) {
+      out[static_cast<std::size_t>(t)] = d;
+    } else if (delta_two) {
+      out[static_cast<std::size_t>(t)] = d * d;
+    } else {
+      out[static_cast<std::size_t>(t)] = std::pow(d, delta);
+    }
+  }
+}
+
+inline double qform_diag(const std::vector<double>& v,
+                         const std::vector<double>& diag_w) {
+  const std::size_t n = v.size();
+  double acc = 0.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double vi = v[i];
+    acc += diag_w[i] * vi * vi;
+  }
+  return acc;
+}
+
+inline double qform_dense(const std::vector<double>& v,
+                          const arma::mat& D,
+                          const int ntime) {
+  double acc = 0.0;
+  for (int r = 0; r < ntime; ++r) {
+    const double vr = v[static_cast<std::size_t>(r)];
+    double row_acc = 0.0;
+    for (int c = 0; c < ntime; ++c) {
+      row_acc += D(r, c) * v[static_cast<std::size_t>(c)];
+    }
+    acc += vr * row_acc;
+  }
+  return acc;
+}
+
+} // namespace
 
 // [[Rcpp::export]]
 List cccUst_rcpp(NumericVector y_vec,
@@ -18,9 +86,17 @@ List cccUst_rcpp(NumericVector y_vec,
                  double delta,
                  double cl) {
 
-  arma::mat D = Rcpp::as<arma::mat>(Dmat);  // Convert once
+  arma::mat D = Rcpp::as<arma::mat>(Dmat); // Convert once
+  const bool D_is_diag = is_diagonal_matrix(D);
+  std::vector<double> D_diag;
+  if (D_is_diag) {
+    D_diag.resize(static_cast<std::size_t>(ntime));
+    for (int t = 0; t < ntime; ++t) {
+      D_diag[static_cast<std::size_t>(t)] = D(t, t);
+    }
+  }
 
-  // Reshape into ns × ntime matrices
+  // Reshape into ns x ntime matrices
   if (y_vec.size() != met_vec.size() ||
       y_vec.size() != time_vec.size() ||
       y_vec.size() != subj_vec.size()) {
@@ -63,60 +139,62 @@ List cccUst_rcpp(NumericVector y_vec,
   }
 
   const bool delta_zero = (delta == 0.0);
+  const bool delta_one = (!delta_zero && delta == 1.0);
+  const bool delta_two = (!delta_zero && delta == 2.0);
+
   arma::vec within_quad(ns, arma::fill::zeros);
+  std::vector<double> diff_within(static_cast<std::size_t>(ntime));
   for (int i = 0; i < ns; ++i) {
-    arma::rowvec d = arma::abs(X.row(i) - Y.row(i));
-    if (delta_zero) {
-      d = arma::conv_to<arma::rowvec>::from(d != 0.0);
-    } else {
-      d = arma::pow(d, delta);
-    }
-    within_quad[i] = arma::as_scalar(d * D * d.t());
+    fill_abs_delta_diff(
+      X, i, Y, i, ntime,
+      delta_zero, delta_one, delta_two, delta,
+      diff_within
+    );
+    within_quad[i] = D_is_diag ? qform_diag(diff_within, D_diag) : qform_dense(diff_within, D, ntime);
   }
 
   arma::vec phi1_sum(ns, arma::fill::zeros);
   arma::vec phi2_sum(ns, arma::fill::zeros);
   double U = 0.0, V = 0.0;
-  
-  // ===== OpenMP ordered-pair loop =====
+
+  // OpenMP ordered-pair loop
 #ifdef _OPENMP
 #pragma omp parallel for reduction(+:U,V)
 #endif
   for (int i = 0; i < ns; ++i) {
-    const arma::rowvec Xi = X.row(i);
-    const arma::rowvec Yi = Y.row(i);
+    std::vector<double> d3(static_cast<std::size_t>(ntime));
+    std::vector<double> d4(static_cast<std::size_t>(ntime));
+
     const double within_i = within_quad[i];
     double phi1_acc = 0.0;
     double phi2_acc = 0.0;
 
     for (int j = 0; j < ns; ++j) {
       if (i == j) continue;
-      const arma::rowvec Xj = X.row(j);
-      const arma::rowvec Yj = Y.row(j);
 
       const double phi1 = 0.5 * (within_i + within_quad[j]);
 
-      arma::rowvec d3 = arma::abs(Xi - Yj);
-      arma::rowvec d4 = arma::abs(Xj - Yi);
+      fill_abs_delta_diff(
+        X, i, Y, j, ntime,
+        delta_zero, delta_one, delta_two, delta,
+        d3
+      );
+      fill_abs_delta_diff(
+        X, j, Y, i, ntime,
+        delta_zero, delta_one, delta_two, delta,
+        d4
+      );
 
-      double phi2;
-      if (delta_zero) {
-        d3 = arma::conv_to<arma::rowvec>::from(d3 != 0.0);
-        d4 = arma::conv_to<arma::rowvec>::from(d4 != 0.0);
-        phi2 = 0.5 * (arma::as_scalar(d3 * D * d3.t()) +
-          arma::as_scalar(d4 * D * d4.t()));
-      } else {
-        arma::rowvec v3 = arma::pow(d3, delta);
-        arma::rowvec v4 = arma::pow(d4, delta);
-        phi2 = 0.5 * (arma::as_scalar(v3 * D * v3.t()) +
-          arma::as_scalar(v4 * D * v4.t()));
-      }
+      const double phi2 = D_is_diag
+        ? 0.5 * (qform_diag(d3, D_diag) + qform_diag(d4, D_diag))
+        : 0.5 * (qform_dense(d3, D, ntime) + qform_dense(d4, D, ntime));
 
       phi1_acc += phi1;
       phi2_acc += phi2;
       U += phi1;
       V += phi2;
     }
+
     phi1_sum[i] = phi1_acc / (ns - 1);
     phi2_sum[i] = phi2_acc / (ns - 1);
   }
@@ -128,7 +206,7 @@ List cccUst_rcpp(NumericVector y_vec,
 
   double CCC = ((ns - 1) * (V - U)) / (U + (ns - 1) * V);
 
-  // ===== Variance & CI =====
+  // Variance and CI
   double s11 = 0.0;
   double s12 = 0.0;
   double s22 = 0.0;
@@ -193,4 +271,3 @@ int get_omp_threads() {
   return 1;
 #endif
 }
-

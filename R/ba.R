@@ -125,7 +125,15 @@ ba <- function(group1,
   # -- compute in C++ ---------------------------------------------------------
   prev_threads <- get_omp_threads()
   on.exit(set_omp_threads(as.integer(prev_threads)), add = TRUE)
-  ba_out <- bland_altman_cpp(group1, group2, loa_multiplier, mode, conf_level, n_threads)
+  ba_out <- bland_altman_cpp(
+    group1 = group1,
+    group2 = group2,
+    loa_multiplier = loa_multiplier,
+    mode = mode,
+    conf_level = conf_level,
+    n_threads = n_threads,
+    include_legacy_payload = FALSE
+  )
   ba_out <- structure(
     list(
       means = as.numeric(ba_out$means),

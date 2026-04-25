@@ -1,15 +1,15 @@
 // Thiago de Paula Oliveira
 #include <RcppArmadillo.h>
 #include <limits>
-#include <vector>
 #include <cmath>
+#include <vector>
 #include "matrixCorr_detail.h"
 #include "threshold_triplets.h"
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::plugins(openmp)]]
 
-using matrixCorr_detail::ranking::rank_vector;
 using matrixCorr_detail::ranking::safe_inv_stddev;
+using matrixCorr_detail::ranking::rank_vector;
 
 namespace {
 
@@ -190,10 +190,12 @@ arma::mat spearman_matrix_cpp(SEXP X_) {
 
   arma::mat R(n, p);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if (p >= 4u && omp_get_max_threads() > 1)
 #endif
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
-    R.col(static_cast<arma::uword>(j)) = rank_vector(X.col(static_cast<arma::uword>(j)));
+    const arma::uword uj = static_cast<arma::uword>(j);
+    arma::vec out_col(R.colptr(uj), n, false, true);
+    rank_vector(X.col(uj), out_col);
   }
 
   arma::mat RtR(p, p);
@@ -208,11 +210,11 @@ arma::mat spearman_matrix_cpp(SEXP X_) {
     arma::blas::syrk<double>(&uplo, &trans, &N, &K,
                              &alpha, R.memptr(), &K,
                              &beta,  RtR.memptr(), &N);
+    matrixCorr_detail::linalg::copy_upper_to_lower_inplace(RtR);
   }
 #else
   RtR = R.t() * R;
 #endif
-  RtR = arma::symmatu(RtR);
 
   const double mu = 0.5 * (static_cast<double>(n) + 1.0);
   RtR -= static_cast<double>(n) * mu * mu;
@@ -221,21 +223,21 @@ arma::mat spearman_matrix_cpp(SEXP X_) {
   s2 = arma::clamp(s2, 0.0, std::numeric_limits<double>::infinity());
   arma::vec s  = arma::sqrt(s2);
 
-  arma::mat corr = RtR / static_cast<double>(n - 1);
+  RtR /= static_cast<double>(n - 1);
   arma::vec inv_s = safe_inv_stddev(s);
-  corr.each_row() %= inv_s.t();
-  corr.each_col() %= inv_s;
+  RtR.each_row() %= inv_s.t();
+  RtR.each_col() %= inv_s;
 
-  corr.diag().ones();
+  RtR.diag().ones();
   arma::uvec zero = arma::find(s == 0.0);
   for (arma::uword k = 0; k < zero.n_elem; ++k) {
     const arma::uword j = zero[k];
-    corr.row(j).fill(arma::datum::nan);
-    corr.col(j).fill(arma::datum::nan);
-    corr(j, j) = arma::datum::nan;
+    RtR.row(j).fill(arma::datum::nan);
+    RtR.col(j).fill(arma::datum::nan);
+    RtR(j, j) = arma::datum::nan;
   }
 
-  return corr;
+  return RtR;
 }
 
 // [[Rcpp::export]]
@@ -272,7 +274,7 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) if (p >= 4u && omp_get_max_threads() > 1)
 #endif
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
     const arma::uword uj = static_cast<arma::uword>(j);
@@ -281,7 +283,6 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
     const arma::uword* idx_j_ptr = idx_j.memptr();
     const double* colj_ptr = X.colptr(uj);
 
-    static thread_local std::vector<arma::uword> overlap_idx;
     static thread_local arma::vec xbuf;
     static thread_local arma::vec ybuf;
     static thread_local arma::vec rx;
@@ -293,15 +294,21 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
       const std::size_t possible = std::min(n_idx_j, n_idx_k);
       if (possible < 2u) continue;
 
+      if (xbuf.n_elem < possible) {
+        xbuf.set_size(static_cast<arma::uword>(possible));
+        ybuf.set_size(static_cast<arma::uword>(possible));
+      }
       const arma::uword* idx_k_ptr = idx_k.memptr();
+      const double* colk_ptr = X.colptr(k);
       arma::uword ia = 0u, ib = 0u;
-      overlap_idx.clear();
-      overlap_idx.reserve(possible);
+      arma::uword overlap_n = 0u;
       while (ia < n_idx_j && ib < n_idx_k) {
         const arma::uword a = idx_j_ptr[ia];
         const arma::uword b = idx_k_ptr[ib];
         if (a == b) {
-          overlap_idx.push_back(a);
+          xbuf[overlap_n] = colj_ptr[a];
+          ybuf[overlap_n] = colk_ptr[b];
+          ++overlap_n;
           ++ia;
           ++ib;
         } else if (a < b) {
@@ -311,28 +318,21 @@ Rcpp::List spearman_matrix_pairwise_cpp(SEXP X_,
         }
       }
 
-      const int overlap_n = static_cast<int>(overlap_idx.size());
-      n_complete(uj, k) = overlap_n;
-      n_complete(k, uj) = overlap_n;
-      if (overlap_n < 2) continue;
+      const int overlap_n_i = static_cast<int>(overlap_n);
+      n_complete(uj, k) = overlap_n_i;
+      n_complete(k, uj) = overlap_n_i;
+      if (overlap_n < 2u) continue;
 
-      const double* colk_ptr = X.colptr(k);
-      xbuf.set_size(overlap_idx.size());
-      ybuf.set_size(overlap_idx.size());
-      for (std::size_t t = 0; t < overlap_idx.size(); ++t) {
-        const arma::uword row = overlap_idx[t];
-        xbuf[t] = colj_ptr[row];
-        ybuf[t] = colk_ptr[row];
-      }
-
-      const double rho = spearman_pair_core(xbuf, ybuf, rx, ry);
+      arma::vec x_view(xbuf.memptr(), overlap_n, false, true);
+      arma::vec y_view(ybuf.memptr(), overlap_n, false, true);
+      const double rho = spearman_pair_core(x_view, y_view, rx, ry);
       est(uj, k) = rho;
       est(k, uj) = rho;
 
       if (return_ci && std::isfinite(rho)) {
         double lo = arma::datum::nan;
         double hi = arma::datum::nan;
-        if (spearman_jel_ci_core(xbuf, ybuf, rho, conf_level, lo, hi)) {
+        if (spearman_jel_ci_core(x_view, y_view, rho, conf_level, lo, hi)) {
           lwr(uj, k) = lo;
           lwr(k, uj) = lo;
           upr(uj, k) = hi;

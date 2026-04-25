@@ -11,12 +11,11 @@ using namespace Rcpp;
 #include "matrixCorr_omp.h"
 using matrixCorr_detail::moments::sample_var;
 
-inline double mean_ba(const std::vector<double>& x) {
-  const size_t n = x.size();
-  if (n == 0) return NA_REAL;
+inline double mean_ba_ptr(const double* x, int n) {
+  if (n <= 0) return NA_REAL;
   long double s = 0.0L;
-  for (double v : x) s += v;
-  return static_cast<double>(s / n);
+  for (int i = 0; i < n; ++i) s += x[i];
+  return static_cast<double>(s / static_cast<long double>(n));
 }
 
 // [[Rcpp::export]]
@@ -25,7 +24,8 @@ List bland_altman_cpp(NumericVector group1,
                       double loa_multiplier = 1.96,
                       int    mode       = 1,
                       double conf_level = 0.95,
-                      int n_threads = 1) {
+                      int n_threads = 1,
+                      bool include_legacy_payload = true) {
   if (group1.size() != group2.size())
     stop("Error in bland.altman.stats: groups differ in length.");
   if (loa_multiplier <= 0.0)
@@ -37,12 +37,14 @@ List bland_altman_cpp(NumericVector group1,
   omp_set_num_threads(std::max(1, n_threads));
 
   const int n_all = group1.size();
-
   // -- pairwise NA removal -----------------------------------------------------
-  std::vector<double> g1; g1.reserve(n_all);
-  std::vector<double> g2; g2.reserve(n_all);
+  std::vector<double> g1;
+  std::vector<double> g2;
+  g1.reserve(n_all);
+  g2.reserve(n_all);
   for (int i = 0; i < n_all; ++i) {
-    double a = group1[i], b = group2[i];
+    const double a = group1[i];
+    const double b = group2[i];
     if (!NumericVector::is_na(a) && !NumericVector::is_na(b)) {
       g1.push_back(a);
       g2.push_back(b);
@@ -56,17 +58,18 @@ List bland_altman_cpp(NumericVector group1,
   // -- compute means and diffs -------------------------------------------------
   NumericVector means(n), diffs(n);
   for (int i = 0; i < n; ++i) {
-    means[i] = (g1[i] + g2[i]) / 2.0;
-    diffs[i] = (mode == 1) ? (g1[i] - g2[i]) : (g2[i] - g1[i]);
+    const double a = g1[i];
+    const double b = g2[i];
+    means[i] = (a + b) / 2.0;
+    diffs[i] = (mode == 1) ? (a - b) : (b - a);
   }
 
   // -- summary stats -----------------------------------------------------------
-  std::vector<double> diffs_std(diffs.begin(), diffs.end());
-  const double mean_diffs = mean_ba(diffs_std);
+  const double mean_diffs = mean_ba_ptr(diffs.begin(), n);
 
   double sd_diffs = NA_REAL;
   if (n >= 2) {
-    arma::vec diffs_view(diffs_std.data(), static_cast<arma::uword>(diffs_std.size()), /*copy_aux_mem*/ false);
+    arma::vec diffs_view(diffs.begin(), static_cast<arma::uword>(n), /*copy_aux_mem*/ false, /*strict*/ true);
     sd_diffs = std::sqrt(sample_var(diffs_view));
   }
 
@@ -97,17 +100,31 @@ List bland_altman_cpp(NumericVector group1,
     _["upper.limit.ci.upper"] = upper + t2 * se_limit
   );
 
-  // groups dataframe (after NA omission)
-  DataFrame groups = DataFrame::create(
-    _["group1"] = wrap(g1),
-    _["group2"] = wrap(g2),
-    _["stringsAsFactors"] = false
-  );
+  if (include_legacy_payload) {
+    DataFrame groups = DataFrame::create(
+      _["group1"] = wrap(g1),
+      _["group2"] = wrap(g2),
+      _["stringsAsFactors"] = false
+    );
+
+    return List::create(
+      _["means"]         = means,
+      _["diffs"]         = diffs,
+      _["groups"]        = groups,
+      _["based.on"]      = n,
+      _["lower.limit"]   = lower,
+      _["mean.diffs"]    = mean_diffs,
+      _["upper.limit"]   = upper,
+      _["lines"]         = lines,
+      _["CI.lines"]      = CI_lines,
+      _["loa_multiplier"] = loa_multiplier,
+      _["critical.diff"] = critical
+    );
+  }
 
   return List::create(
     _["means"]         = means,
     _["diffs"]         = diffs,
-    _["groups"]        = groups,
     _["based.on"]      = n,
     _["lower.limit"]   = lower,
     _["mean.diffs"]    = mean_diffs,

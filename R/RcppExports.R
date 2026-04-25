@@ -25,8 +25,8 @@ bicor_matrix_weighted_pairwise_cpp <- function(X, w, c_const = 9.0, maxPOutliers
     .Call(`_matrixCorr_bicor_matrix_weighted_pairwise_cpp`, X, w, c_const, maxPOutliers, pearson_fallback, min_n, n_threads)
 }
 
-bland_altman_cpp <- function(group1, group2, loa_multiplier = 1.96, mode = 1L, conf_level = 0.95, n_threads = 1L) {
-    .Call(`_matrixCorr_bland_altman_cpp`, group1, group2, loa_multiplier, mode, conf_level, n_threads)
+bland_altman_cpp <- function(group1, group2, loa_multiplier = 1.96, mode = 1L, conf_level = 0.95, n_threads = 1L, include_legacy_payload = TRUE) {
+    .Call(`_matrixCorr_bland_altman_cpp`, group1, group2, loa_multiplier, mode, conf_level, n_threads, include_legacy_payload)
 }
 
 ba_openmp_threads <- function() {

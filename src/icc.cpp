@@ -21,26 +21,39 @@ inline bool is_positive_finite(const double x) {
   return std::isfinite(x) && x > 0.0;
 }
 
-inline bool compute_overlap_pair(const arma::uvec& idx_j,
-                                 const arma::uvec& idx_k,
-                                 const double* colj_ptr,
-                                 const double* colk_ptr,
-                                 const int min_n,
-                                 std::vector<arma::uword>& overlap_idx,
-                                 arma::vec& xbuf,
-                                 arma::vec& ybuf) {
+struct PairMoments {
+  int n = 0;
+  double sum_x = 0.0;
+  double sum_y = 0.0;
+  double sum_x2 = 0.0;
+  double sum_y2 = 0.0;
+  double sum_xy = 0.0;
+};
+
+inline bool compute_overlap_moments(const arma::uvec& idx_j,
+                                    const arma::uvec& idx_k,
+                                    const double* colj_ptr,
+                                    const double* colk_ptr,
+                                    const int min_n,
+                                    PairMoments& out) {
   const std::size_t possible = std::min(idx_j.n_elem, idx_k.n_elem);
   if (possible < static_cast<std::size_t>(min_n)) return false;
 
-  overlap_idx.clear();
-  overlap_idx.reserve(possible);
+  out = PairMoments{};
 
   arma::uword ia = 0u, ib = 0u;
   while (ia < idx_j.n_elem && ib < idx_k.n_elem) {
     const arma::uword a = idx_j[ia];
     const arma::uword b = idx_k[ib];
     if (a == b) {
-      overlap_idx.push_back(a);
+      const double x = colj_ptr[a];
+      const double y = colk_ptr[b];
+      out.n += 1;
+      out.sum_x += x;
+      out.sum_y += y;
+      out.sum_x2 += x * x;
+      out.sum_y2 += y * y;
+      out.sum_xy += x * y;
       ++ia;
       ++ib;
     } else if (a < b) {
@@ -50,72 +63,43 @@ inline bool compute_overlap_pair(const arma::uvec& idx_j,
     }
   }
 
-  const arma::uword n = static_cast<arma::uword>(overlap_idx.size());
-  if (n < static_cast<arma::uword>(min_n)) return false;
-
-  xbuf.set_size(n);
-  ybuf.set_size(n);
-  for (arma::uword t = 0u; t < n; ++t) {
-    const arma::uword row = overlap_idx[t];
-    xbuf[t] = colj_ptr[row];
-    ybuf[t] = colk_ptr[row];
-  }
-  return true;
+  return out.n >= min_n;
 }
 
-inline bool icc_pair_complete_core(const double* x,
-                                   const double* y,
-                                   const int n,
-                                   const int form_code,
-                                   const bool average_unit,
-                                   const bool return_ci,
-                                   const double conf_level,
-                                   double& estimate,
-                                   double& lwr,
-                                   double& upr) {
+inline bool icc_pair_from_moments(const PairMoments& moments,
+                                  const int form_code,
+                                  const bool average_unit,
+                                  const bool return_ci,
+                                  const double conf_level,
+                                  double& estimate,
+                                  double& lwr,
+                                  double& upr) {
   estimate = NA_REAL;
   lwr = NA_REAL;
   upr = NA_REAL;
 
+  const int n = moments.n;
   if (n < 2) return false;
 
-  double sum_x = 0.0;
-  double sum_y = 0.0;
-  for (int i = 0; i < n; ++i) {
-    sum_x += x[i];
-    sum_y += y[i];
-  }
+  const double n_d = static_cast<double>(n);
+  const double mean_x = moments.sum_x / n_d;
+  const double mean_y = moments.sum_y / n_d;
 
-  const double mean_x = sum_x / static_cast<double>(n);
-  const double mean_y = sum_y / static_cast<double>(n);
+  double ss_x = moments.sum_x2 - (moments.sum_x * moments.sum_x) / n_d;
+  double ss_y = moments.sum_y2 - (moments.sum_y * moments.sum_y) / n_d;
+  const double cov_num = moments.sum_xy - (moments.sum_x * moments.sum_y) / n_d;
 
-  double ss_x = 0.0;
-  double ss_y = 0.0;
-  double ssr = 0.0;
-  double sse = 0.0;
+  const double tol_x = 1e-12 * std::max(1.0, moments.sum_x2);
+  const double tol_y = 1e-12 * std::max(1.0, moments.sum_y2);
+  if (ss_x < 0.0 && std::abs(ss_x) <= tol_x) ss_x = 0.0;
+  if (ss_y < 0.0 && std::abs(ss_y) <= tol_y) ss_y = 0.0;
 
-  const double mean_s = mean_x + mean_y;
+  const double ssr = 0.5 * (ss_x + ss_y + 2.0 * cov_num);
+  const double sse = 0.5 * (ss_x + ss_y - 2.0 * cov_num);
   const double mean_d = mean_x - mean_y;
-
-  for (int i = 0; i < n; ++i) {
-    const double dx = x[i] - mean_x;
-    const double dy = y[i] - mean_y;
-    ss_x += dx * dx;
-    ss_y += dy * dy;
-
-    const double s = x[i] + y[i];
-    const double d = x[i] - y[i];
-    const double ds = s - mean_s;
-    const double dd = d - mean_d;
-    ssr += ds * ds;
-    sse += dd * dd;
-  }
+  const double ssc = 0.5 * n_d * mean_d * mean_d;
 
   if (!is_positive_finite(ss_x) || !is_positive_finite(ss_y)) return false;
-
-  ssr *= 0.5;
-  sse *= 0.5;
-  const double ssc = 0.5 * static_cast<double>(n) * mean_d * mean_d;
 
   const double df_subject = static_cast<double>(n - 1);
   const double df_error = static_cast<double>(n - 1);
@@ -134,7 +118,7 @@ inline bool icc_pair_complete_core(const double* x,
     if (!is_positive_finite(denom)) return false;
     single_est = (msr - msw) / denom;
   } else if (form_code == ICC_FORM_2) {
-    const double denom = msr + (k - 1.0) * mse + k * (msc - mse) / static_cast<double>(n);
+    const double denom = msr + (k - 1.0) * mse + k * (msc - mse) / n_d;
     if (!is_positive_finite(denom)) return false;
     single_est = (msr - mse) / denom;
   } else {
@@ -176,10 +160,10 @@ inline bool icc_pair_complete_core(const double* x,
     if (!std::isfinite(Fj) || Fj < 0.0) return true;
 
     const double vn = (k - 1.0) * df_subject *
-      std::pow(k * single_est * Fj + static_cast<double>(n) * (1.0 + (k - 1.0) * single_est) - k * single_est, 2.0);
+      std::pow(k * single_est * Fj + n_d * (1.0 + (k - 1.0) * single_est) - k * single_est, 2.0);
     const double vd =
       df_subject * k * k * single_est * single_est * Fj * Fj +
-      std::pow(static_cast<double>(n) * (1.0 + (k - 1.0) * single_est) - k * single_est, 2.0);
+      std::pow(n_d * (1.0 + (k - 1.0) * single_est) - k * single_est, 2.0);
     if (!is_positive_finite(vn) || !is_positive_finite(vd)) return true;
 
     const double v = vn / vd;
@@ -189,12 +173,12 @@ inline bool icc_pair_complete_core(const double* x,
     const double F_lo = R::qf(1.0 - alpha / 2.0, v, df_subject, 1, 0);
     if (!std::isfinite(F_lo) || !std::isfinite(F_hi)) return true;
 
-    const double denom_lo = F_hi * (k * msc + (k * static_cast<double>(n) - k - static_cast<double>(n)) * mse) + static_cast<double>(n) * msr;
-    const double denom_hi = k * msc + (k * static_cast<double>(n) - k - static_cast<double>(n)) * mse + static_cast<double>(n) * F_lo * msr;
+    const double denom_lo = F_hi * (k * msc + (k * n_d - k - n_d) * mse) + n_d * msr;
+    const double denom_hi = k * msc + (k * n_d - k - n_d) * mse + n_d * F_lo * msr;
     if (!is_positive_finite(denom_lo) || !is_positive_finite(denom_hi)) return true;
 
-    lwr = static_cast<double>(n) * (msr - F_hi * mse) / denom_lo;
-    upr = static_cast<double>(n) * (F_lo * msr - mse) / denom_hi;
+    lwr = n_d * (msr - F_hi * mse) / denom_lo;
+    upr = n_d * (F_lo * msr - mse) / denom_hi;
   }
 
   if (average_unit && std::isfinite(lwr) && std::isfinite(upr)) {
@@ -204,6 +188,39 @@ inline bool icc_pair_complete_core(const double* x,
 
   if (std::isfinite(lwr) && std::isfinite(upr) && lwr > upr) std::swap(lwr, upr);
   return true;
+}
+
+inline bool icc_pair_complete_core(const double* x,
+                                   const double* y,
+                                   const int n,
+                                   const int form_code,
+                                   const bool average_unit,
+                                   const bool return_ci,
+                                   const double conf_level,
+                                   double& estimate,
+                                   double& lwr,
+                                   double& upr) {
+  PairMoments moments;
+  moments.n = n;
+  for (int i = 0; i < n; ++i) {
+    const double xi = x[i];
+    const double yi = y[i];
+    moments.sum_x += xi;
+    moments.sum_y += yi;
+    moments.sum_x2 += xi * xi;
+    moments.sum_y2 += yi * yi;
+    moments.sum_xy += xi * yi;
+  }
+  return icc_pair_from_moments(
+    moments,
+    form_code,
+    average_unit,
+    return_ci,
+    conf_level,
+    estimate,
+    lwr,
+    upr
+  );
 }
 
 } // namespace
@@ -244,18 +261,27 @@ Rcpp::List icc_matrix_cpp(const arma::mat& X,
       Rcpp::stop("X contains NA/NaN/Inf; please handle missingness upstream.");
     }
 
+    const double n_d = static_cast<double>(n);
+    const arma::vec col_means = arma::mean(X, 0).t();
+    const arma::mat cross = X.t() * X;
+
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
     for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
       const arma::uword uj = static_cast<arma::uword>(j);
-      const double* colj_ptr = X.colptr(uj);
       for (arma::uword k = uj + 1u; k < p; ++k) {
+        PairMoments moments;
+        moments.n = static_cast<int>(n);
+        moments.sum_x = col_means[uj] * n_d;
+        moments.sum_y = col_means[k] * n_d;
+        moments.sum_x2 = cross(uj, uj);
+        moments.sum_y2 = cross(k, k);
+        moments.sum_xy = cross(uj, k);
+
         double estimate = NA_REAL, ci_l = NA_REAL, ci_u = NA_REAL;
-        const bool ok = icc_pair_complete_core(
-          colj_ptr,
-          X.colptr(k),
-          static_cast<int>(n),
+        const bool ok = icc_pair_from_moments(
+          moments,
           form_code,
           average_unit,
           return_ci,
@@ -293,24 +319,18 @@ Rcpp::List icc_matrix_cpp(const arma::mat& X,
       const arma::uvec& idx_j = finite_idx[uj];
       const double* colj_ptr = X.colptr(uj);
 
-      static thread_local std::vector<arma::uword> overlap_idx;
-      static thread_local arma::vec xbuf;
-      static thread_local arma::vec ybuf;
-
       for (arma::uword k = uj + 1u; k < p; ++k) {
         const arma::uvec& idx_k = finite_idx[k];
-        if (!compute_overlap_pair(idx_j, idx_k, colj_ptr, X.colptr(k), 2, overlap_idx, xbuf, ybuf)) {
+        PairMoments moments;
+        if (!compute_overlap_moments(idx_j, idx_k, colj_ptr, X.colptr(k), 2, moments)) {
           n_complete(uj, k) = 0;
           n_complete(k, uj) = 0;
           continue;
         }
 
-        const int n_pair = static_cast<int>(xbuf.n_elem);
         double estimate = NA_REAL, ci_l = NA_REAL, ci_u = NA_REAL;
-        const bool ok = icc_pair_complete_core(
-          xbuf.memptr(),
-          ybuf.memptr(),
-          n_pair,
+        const bool ok = icc_pair_from_moments(
+          moments,
           form_code,
           average_unit,
           return_ci,
@@ -319,8 +339,8 @@ Rcpp::List icc_matrix_cpp(const arma::mat& X,
           ci_l,
           ci_u
         );
-        n_complete(uj, k) = n_pair;
-        n_complete(k, uj) = n_pair;
+        n_complete(uj, k) = moments.n;
+        n_complete(k, uj) = moments.n;
         est(uj, k) = ok ? estimate : NA_REAL;
         est(k, uj) = est(uj, k);
         if (return_ci) {

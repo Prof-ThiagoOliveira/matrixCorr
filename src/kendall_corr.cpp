@@ -27,8 +27,7 @@ struct KendallColumnOrder {
   long long m1 = 0;
 };
 
-inline KendallColumnOrder build_kendall_column_order(const std::vector<long long>& x) {
-  const int n = static_cast<int>(x.size());
+inline KendallColumnOrder build_kendall_column_order(const long long* x, const int n) {
   KendallColumnOrder state;
   state.ord.resize(n);
   std::iota(state.ord.begin(), state.ord.end(), 0);
@@ -50,7 +49,7 @@ inline KendallColumnOrder build_kendall_column_order(const std::vector<long long
   return state;
 }
 
-inline double kendall_tau_from_order(const std::vector<long long>& y,
+inline double kendall_tau_from_order(const long long* y,
                                      const KendallColumnOrder& state) {
   const int n = static_cast<int>(state.ord.size());
   thread_local std::vector<long long> ybuf, mrg;
@@ -569,12 +568,13 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
   }
 
   // --- Discretise once per column for p >= 3 (matrix path)
-  std::vector< std::vector<long long> > cols(p, std::vector<long long>(n));
+  std::vector<long long> cols(static_cast<std::size_t>(p) * static_cast<std::size_t>(n));
 #if defined(_OPENMP)
-#pragma omp parallel for schedule(static) if(p > 1)
+#pragma omp parallel for schedule(static) if(p > 1 && omp_get_max_threads() > 1)
 #endif
   for (int j = 0; j < p; ++j) {
     const double* cj = &mat(0, j);
+    long long* col_j = cols.data() + static_cast<std::size_t>(j) * static_cast<std::size_t>(n);
     double max_abs = 0.0;
     for (int i = 0; i < n; ++i)
       max_abs = std::max(max_abs, std::abs(cj[i]));
@@ -588,16 +588,18 @@ Rcpp::NumericMatrix kendall_matrix_cpp(Rcpp::NumericMatrix mat){
     }
 
     for (int i = 0; i < n; ++i)
-      cols[j][i] = static_cast<long long>(std::floor(cj[i] * scale));
+      col_j[i] = static_cast<long long>(std::floor(cj[i] * scale));
   }
 
   Rcpp::NumericMatrix out(p, p);
   for (int j = 0; j < p; ++j) out(j,j) = 1.0;
 
   auto fill_row = [&](int i) {
-    const KendallColumnOrder state = build_kendall_column_order(cols[i]);
+    const long long* col_i = cols.data() + static_cast<std::size_t>(i) * static_cast<std::size_t>(n);
+    const KendallColumnOrder state = build_kendall_column_order(col_i, n);
     for (int j = i + 1; j < p; ++j) {
-      const double tau = kendall_tau_from_order(cols[j], state);
+      const long long* col_j = cols.data() + static_cast<std::size_t>(j) * static_cast<std::size_t>(n);
+      const double tau = kendall_tau_from_order(col_j, state);
       out(i, j) = out(j, i) = tau;
     }
   };
@@ -681,31 +683,39 @@ Rcpp::List kendall_matrix_pairwise_cpp(SEXP X_,
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) if(p >= 4u && omp_get_max_threads() > 1)
 #endif
   for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
     const arma::uword uj = static_cast<arma::uword>(j);
     const arma::uvec& idx_j = finite_idx[uj];
+    const arma::uword n_idx_j = idx_j.n_elem;
+    const arma::uword* idx_j_ptr = idx_j.memptr();
     const double* colj_ptr = X.colptr(uj);
 
-    static thread_local std::vector<arma::uword> overlap_idx;
     static thread_local arma::vec xbuf;
     static thread_local arma::vec ybuf;
 
     for (arma::uword k = uj + 1u; k < p; ++k) {
       const arma::uvec& idx_k = finite_idx[k];
-      const std::size_t possible = std::min(idx_j.n_elem, idx_k.n_elem);
+      const arma::uword n_idx_k = idx_k.n_elem;
+      const std::size_t possible = std::min(n_idx_j, n_idx_k);
       if (possible < 2u) continue;
 
-      overlap_idx.clear();
-      overlap_idx.reserve(possible);
-
+      if (xbuf.n_elem < possible) {
+        xbuf.set_size(static_cast<arma::uword>(possible));
+        ybuf.set_size(static_cast<arma::uword>(possible));
+      }
+      const arma::uword* idx_k_ptr = idx_k.memptr();
+      const double* colk_ptr = X.colptr(k);
       arma::uword ia = 0u, ib = 0u;
-      while (ia < idx_j.n_elem && ib < idx_k.n_elem) {
-        const arma::uword a = idx_j[ia];
-        const arma::uword b = idx_k[ib];
+      arma::uword overlap_n = 0u;
+      while (ia < n_idx_j && ib < n_idx_k) {
+        const arma::uword a = idx_j_ptr[ia];
+        const arma::uword b = idx_k_ptr[ib];
         if (a == b) {
-          overlap_idx.push_back(a);
+          xbuf[overlap_n] = colj_ptr[a];
+          ybuf[overlap_n] = colk_ptr[b];
+          ++overlap_n;
           ++ia;
           ++ib;
         } else if (a < b) {
@@ -715,22 +725,15 @@ Rcpp::List kendall_matrix_pairwise_cpp(SEXP X_,
         }
       }
 
-      const int overlap_n = static_cast<int>(overlap_idx.size());
-      n_complete(uj, k) = overlap_n;
-      n_complete(k, uj) = overlap_n;
-      if (overlap_n < 2) continue;
+      const int overlap_n_i = static_cast<int>(overlap_n);
+      n_complete(uj, k) = overlap_n_i;
+      n_complete(k, uj) = overlap_n_i;
+      if (overlap_n < 2u) continue;
 
-      const double* colk_ptr = X.colptr(k);
-      xbuf.set_size(overlap_idx.size());
-      ybuf.set_size(overlap_idx.size());
-      for (std::size_t t = 0; t < overlap_idx.size(); ++t) {
-        const arma::uword row = overlap_idx[t];
-        xbuf[t] = colj_ptr[row];
-        ybuf[t] = colk_ptr[row];
-      }
-
-      const double tau = tau_two_vectors_fast(xbuf.memptr(), ybuf.memptr(),
-                                              static_cast<int>(xbuf.n_elem));
+      arma::vec x_view(xbuf.memptr(), overlap_n, false, true);
+      arma::vec y_view(ybuf.memptr(), overlap_n, false, true);
+      const double tau = tau_two_vectors_fast(x_view.memptr(), y_view.memptr(),
+                                              static_cast<int>(overlap_n));
       est(uj, k) = tau;
       est(k, uj) = tau;
 
@@ -739,16 +742,16 @@ Rcpp::List kendall_matrix_pairwise_cpp(SEXP X_,
         double hi = arma::datum::nan;
         bool ok = false;
         if (ci_method == "fieller") {
-          ok = kendall_fieller_ci_core(tau, overlap_n, conf_level, lo, hi);
+          ok = kendall_fieller_ci_core(tau, overlap_n_i, conf_level, lo, hi);
         } else if (ci_method == "brown_benedetti") {
           double tau_bb = arma::datum::nan;
-          ok = kendall_brown_benedetti_ci_core(xbuf, ybuf, conf_level, tau_bb, lo, hi);
+          ok = kendall_brown_benedetti_ci_core(x_view, y_view, conf_level, tau_bb, lo, hi);
           if (ok && std::isfinite(tau_bb)) {
             est(uj, k) = tau_bb;
             est(k, uj) = tau_bb;
           }
         } else {
-          ok = kendall_ifel_ci_core(xbuf, ybuf, tau, conf_level, lo, hi);
+          ok = kendall_ifel_ci_core(x_view, y_view, tau, conf_level, lo, hi);
         }
         if (ok) {
           lwr(uj, k) = lo;

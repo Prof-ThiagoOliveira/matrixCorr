@@ -287,18 +287,23 @@ inline void rank_vector_eps(const arma::vec& x,
   const arma::uword n = x.n_elem;
   // Sort indices (non-stable is faster, stability not needed for average tie ranks)
   arma::uvec idx = stable ? arma::stable_sort_index(x) : arma::sort_index(x);
-  // Build sorted values (contiguous for cache-friendly tie scan)
-  arma::vec xs = x.elem(idx);
-
   // no ties
   bool has_tie = false;
-  if (abs_eps == 0.0 && rel_eps == 0.0) {
-    for (arma::uword k = 1; k < n; ++k) {
-      if (xs[k] == xs[k - 1]) { has_tie = true; break; }
-    }
-  } else {
-    for (arma::uword k = 1; k < n; ++k) {
-      if (is_close(xs[k], xs[k - 1], abs_eps, rel_eps)) { has_tie = true; break; }
+  if (n > 1u) {
+    if (abs_eps == 0.0 && rel_eps == 0.0) {
+      double prev = x[idx[0]];
+      for (arma::uword k = 1; k < n; ++k) {
+        const double cur = x[idx[k]];
+        if (cur == prev) { has_tie = true; break; }
+        prev = cur;
+      }
+    } else {
+      double prev = x[idx[0]];
+      for (arma::uword k = 1; k < n; ++k) {
+        const double cur = x[idx[k]];
+        if (is_close(cur, prev, abs_eps, rel_eps)) { has_tie = true; break; }
+        prev = cur;
+      }
     }
   }
 
@@ -308,6 +313,9 @@ inline void rank_vector_eps(const arma::vec& x,
       out[idx[k]] = static_cast<double>(k + 1);
     return;
   }
+
+  // Build sorted values only when ties are present.
+  arma::vec xs = x.elem(idx);
 
   // average ranks over tie groups
   arma::uword i = 0;

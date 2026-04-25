@@ -5,7 +5,7 @@
 ## Comments
 
 This is a new release of `matrixCorr`.
-* 
+* updated cpp generic scripts to remove unnecessary overhead
 
 
 
