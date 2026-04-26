@@ -23,7 +23,9 @@ run_cpp(
   sb_zero_tol = 1e-10,
   eval_single_visit = FALSE,
   time_weights = NULL,
-  metric_mode = 0L
+  metric_mode = 0L,
+  loglik_only = FALSE,
+  need_reml_loglik = TRUE
 )
 }
 \description{

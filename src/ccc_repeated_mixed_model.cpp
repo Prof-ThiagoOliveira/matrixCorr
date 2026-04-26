@@ -242,7 +242,8 @@ static std::vector<PrecompGen>
     std::vector<PrecompGen> out(m);
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+    const bool parallel_subjects = (m > 1 && omp_get_max_threads() > 1);
+#pragma omp parallel for schedule(static) if(parallel_subjects)
 #endif
     for (int i=0; i<m; ++i) {
       const auto& rows_i = S.rows[i];
@@ -342,7 +343,9 @@ Rcpp::List ccc_vc_cpp(
     double sb_zero_tol = 1e-10,
     bool eval_single_visit = false,
     Rcpp::Nullable<Rcpp::NumericVector> time_weights = R_NilValue,
-    int metric_mode = 0
+    int metric_mode = 0,
+    bool ll_only = false,
+    bool need_loglik = true
 ) {
 #ifdef _OPENMP
 #ifndef MATRIXCORR_NO_BLAS_GUARD
@@ -426,6 +429,8 @@ Rcpp::List ccc_vc_cpp(
   // ---------- Precompute invariants ----------
   // IID residual path cache
   std::vector<Cache> C_iid;
+  bool iid_shared_utu = false;
+  arma::mat iid_utu_ref;
   if (!(use_ar1 || has_extra)) {
     C_iid.resize(m);
     for (int i=0; i<m; ++i) {
@@ -459,6 +464,18 @@ Rcpp::List ccc_vc_cpp(
           for (int idx : rows) sxx += X(idx,k) * X(idx,l);
           C_iid[i].XtX(k,l) = sxx;
           if (l!=k) C_iid[i].XtX(l,k) = sxx;
+        }
+      }
+    }
+
+    if (m > 0 && C_iid[0].n_i > 0) {
+      iid_shared_utu = true;
+      iid_utu_ref = C_iid[0].UtU;
+      for (int i = 1; i < m; ++i) {
+        if (C_iid[i].n_i == 0) continue;
+        if (!arma::approx_equal(C_iid[i].UtU, iid_utu_ref, "absdiff", 0.0)) {
+          iid_shared_utu = false;
+          break;
         }
       }
     }
@@ -508,7 +525,7 @@ Rcpp::List ccc_vc_cpp(
         XtViX_tls[t].zeros();
         XtViy_tls[t].zeros();
       }
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(nthreads > 1)
       for (int i=0; i<m; ++i) {
         if (PG[i].n_i == 0) continue;
         int tid = omp_get_thread_num();
@@ -516,24 +533,17 @@ Rcpp::List ccc_vc_cpp(
         M.diag() = prior_prec;
         M += inv_se * PG[i].UCU;
 
+        arma::vec S_y = inv_se * PG[i].UTCy;
+        arma::mat S_X = inv_se * PG[i].UTCX;
         arma::mat A(r_eff, 1+p);
-        A.col(0)      = inv_se * PG[i].UTCy;
-        A.cols(1, p)  = inv_se * PG[i].UTCX;
+        A.col(0)      = S_y;
+        A.cols(1, p)  = S_X;
         arma::mat Zsol = solve_sympd_safe(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1, p);
-
-        arma::mat XTRinvX = inv_se * PG[i].XTCX;
-        arma::vec XTRinvY = inv_se * PG[i].XTCy;
-        for (int k=0; k<p; ++k)
-          XtViy_tls[tid][k] += XTRinvY[k] - dot(A.cols(1,p).col(k), Z_y);
-
-        for (int k=0; k<p; ++k) for (int l=k; l<p; ++l) {
-          double val = XTRinvX(k,l) - dot(A.cols(1,p).col(k), Z_X.col(l));
-          XtViX_tls[tid](k,l) += val;
-          if (l!=k) XtViX_tls[tid](l,k) += val;
-        }
+        XtViy_tls[tid] += (inv_se * PG[i].XTCy) - (S_X.t() * Z_y);
+        XtViX_tls[tid] += arma::symmatu((inv_se * PG[i].XTCX) - (S_X.t() * Z_X));
       }
       for (int t=0; t<nthreads; ++t) { XtViX += XtViX_tls[t]; XtViy += XtViy_tls[t]; }
 #else
@@ -544,64 +554,65 @@ Rcpp::List ccc_vc_cpp(
         M.diag() = prior_prec;
         M += inv_se * PG[i].UCU;
 
+        arma::vec S_y = inv_se * PG[i].UTCy;
+        arma::mat S_X = inv_se * PG[i].UTCX;
         arma::mat A(r_eff, 1+p);
-        A.col(0)      = inv_se * PG[i].UTCy;
-        A.cols(1, p)  = inv_se * PG[i].UTCX;
+        A.col(0)      = S_y;
+        A.cols(1, p)  = S_X;
         arma::mat Zsol = solve_sympd_safe(M, A);
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1, p);
-
-        arma::mat XTRinvX = inv_se * PG[i].XTCX;
-        arma::vec XTRinvY = inv_se * PG[i].XTCy;
-
-        for (int k=0; k<p; ++k)
-          XtViy[k] += XTRinvY[k] - dot(A.cols(1,p).col(k), Z_y);
-
-        for (int k=0; k<p; ++k) for (int l=k; l<p; ++l) {
-          double val = XTRinvX(k,l) - dot(A.cols(1,p).col(k), Z_X.col(l));
-          XtViX(k,l) += val; if (l!=k) XtViX(l,k) += val;
-        }
+        XtViy += (inv_se * PG[i].XTCy) - (S_X.t() * Z_y);
+        XtViX += arma::symmatu((inv_se * PG[i].XTCX) - (S_X.t() * Z_X));
       }
 #endif
 
     } else {
       // IID path (uses cached sufficient stats)
       const double inv_se = 1.0 / std::max(se, eps);
+      arma::mat Minv_shared_beta;
+      bool use_shared_beta = false;
+      if (iid_shared_utu) {
+        arma::mat M_shared(r, r, arma::fill::zeros);
+        M_shared(0,0) = 1.0 / std::max(sa, eps);
+        int off = 1;
+        if (nm_re>0) { for (int l=0; l<nm_re; ++l) M_shared(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+        if (nt_re>0) { for (int t=0; t<nt_re; ++t) M_shared(off+t, off+t) = 1.0 / std::max(sag, eps); }
+        M_shared += inv_se * iid_utu_ref;
+        use_shared_beta = inv_sympd_safe(Minv_shared_beta, M_shared) && Minv_shared_beta.is_finite();
+      }
 #ifdef _OPENMP
       for (int t=0; t<nthreads; ++t) {
         XtViX_tls[t].zeros();
         XtViy_tls[t].zeros();
       }
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(nthreads > 1)
       for (int i=0; i<m; ++i) {
         const Cache& Ci = C_iid[i];
         if (Ci.n_i == 0) continue;
         int tid = omp_get_thread_num();
 
-        arma::mat M(r,r,fill::zeros);
-        M(0,0) = 1.0 / std::max(sa,  eps);
-        int off = 1;
-        if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
-        if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
-        M += inv_se * Ci.UtU;
-
+        arma::vec S_y = Ci.Uty * inv_se;
+        arma::mat S_X = Ci.Utx * inv_se;
         arma::mat A(r, 1+p);
-        A.col(0)    = Ci.Uty * inv_se;
-        A.cols(1,p) = Ci.Utx * inv_se;
-        arma::mat Zsol = solve_sympd_safe(M, A);
+        A.col(0)    = S_y;
+        A.cols(1,p) = S_X;
+        arma::mat Zsol = use_shared_beta ? (Minv_shared_beta * A) : arma::mat();
+        if (!use_shared_beta) {
+          arma::mat M(r,r,fill::zeros);
+          M(0,0) = 1.0 / std::max(sa,  eps);
+          int off = 1;
+          if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+          if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
+          M += inv_se * Ci.UtU;
+          Zsol = solve_sympd_safe(M, A);
+        }
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1,p);
-
-        for (int k=0; k<p; ++k) {
-          XtViy_tls[tid][k] += inv_se * (Ci.Xty[k] - dot(Ci.Utx.col(k), Z_y));
-          for (int l=k; l<p; ++l) {
-            double val = inv_se * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Z_X.col(l)));
-            XtViX_tls[tid](k,l) += val;
-            if (l!=k) XtViX_tls[tid](l,k) += val;
-          }
-        }
+        XtViy_tls[tid] += (inv_se * Ci.Xty) - (S_X.t() * Z_y);
+        XtViX_tls[tid] += arma::symmatu((inv_se * Ci.XtX) - (S_X.t() * Z_X));
       }
       for (int t=0; t<nthreads; ++t) { XtViX += XtViX_tls[t]; XtViy += XtViy_tls[t]; }
 #else
@@ -609,28 +620,26 @@ Rcpp::List ccc_vc_cpp(
         const Cache& Ci = C_iid[i];
         if (Ci.n_i == 0) continue;
 
-        arma::mat M(r,r,fill::zeros);
-        M(0,0) = 1.0 / std::max(sa,  eps);
-        int off = 1;
-        if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
-        if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
-        M += inv_se * Ci.UtU;
-
+        arma::vec S_y = Ci.Uty * inv_se;
+        arma::mat S_X = Ci.Utx * inv_se;
         arma::mat A(r, 1+p);
-        A.col(0)    = Ci.Uty * inv_se;
-        A.cols(1,p) = Ci.Utx * inv_se;
-        arma::mat Zsol = solve_sympd_safe(M, A);
+        A.col(0)    = S_y;
+        A.cols(1,p) = S_X;
+        arma::mat Zsol = use_shared_beta ? (Minv_shared_beta * A) : arma::mat();
+        if (!use_shared_beta) {
+          arma::mat M(r,r,fill::zeros);
+          M(0,0) = 1.0 / std::max(sa,  eps);
+          int off = 1;
+          if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+          if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0 / std::max(sag, eps); }
+          M += inv_se * Ci.UtU;
+          Zsol = solve_sympd_safe(M, A);
+        }
 
         arma::vec Z_y = Zsol.col(0);
         arma::mat Z_X = Zsol.cols(1,p);
-
-        for (int k=0; k<p; ++k) {
-          XtViy[k] += inv_se * (Ci.Xty[k] - dot(Ci.Utx.col(k), Z_y));
-          for (int l=k; l<p; ++l) {
-            double val = inv_se * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Z_X.col(l)));
-            XtViX(k,l) += val; if (l!=k) XtViX(l,k) += val;
-          }
-        }
+        XtViy += (inv_se * Ci.Xty) - (S_X.t() * Z_y);
+        XtViX += arma::symmatu((inv_se * Ci.XtX) - (S_X.t() * Z_X));
       }
 #endif
     }
@@ -680,7 +689,7 @@ Rcpp::List ccc_vc_cpp(
       sag_tls(nthreads2,0.0), ss_tls(nthreads2,0.0),
       tr_tls(nthreads2,0.0);
       std::vector<arma::vec> tau2_tls(nthreads2, arma::vec(qZ, arma::fill::zeros));
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(nthreads2 > 1)
       for (int i=0; i<m; ++i) {
         if (PG[i].n_i == 0) continue;
         int tid = omp_get_thread_num();
@@ -779,27 +788,45 @@ Rcpp::List ccc_vc_cpp(
 
     } else {
       // IID path
+      const double inv_se_iid = 1.0 / std::max(se, eps);
+      arma::mat Minv_shared_mstep;
+      bool use_shared_mstep = false;
+      if (iid_shared_utu) {
+        arma::mat M_shared(r, r, arma::fill::zeros);
+        M_shared(0,0) = 1.0 / std::max(sa, eps);
+        int off = 1;
+        if (nm_re>0) { for (int l=0; l<nm_re; ++l) M_shared(off+l, off+l) = 1.0 / std::max(sab, eps); off += nm_re; }
+        if (nt_re>0) { for (int t=0; t<nt_re; ++t) M_shared(off+t, off+t) = 1.0 / std::max(sag, eps); }
+        M_shared += inv_se_iid * iid_utu_ref;
+        use_shared_mstep = inv_sympd_safe(Minv_shared_mstep, M_shared) && Minv_shared_mstep.is_finite();
+      }
 #ifdef _OPENMP
       int nthreads2 = omp_get_max_threads();
       std::vector<double> sa_tls(nthreads2,0.0), sab_tls(nthreads2,0.0),
       sag_tls(nthreads2,0.0), ss_tls(nthreads2,0.0),
       tr_tls(nthreads2,0.0);
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(nthreads2 > 1)
       for (int i=0; i<m; ++i) {
         const Cache& Ci = C_iid[i];
         if (Ci.n_i == 0) continue;
         int tid = omp_get_thread_num();
 
-        arma::mat M(r,r, fill::zeros);
-        M(0,0) = 1.0 / std::max(sa, eps);
-        int off = 1;
-        if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
-        if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
-        M += (1.0/std::max(se,eps)) * Ci.UtU;
-
         arma::vec Utr = (Ci.Uty - Ci.Utx * beta) / std::max(se,eps);
-        arma::vec b_i = solve_sympd_safe(M, Utr);
-        arma::mat Minv; inv_sympd_safe(Minv, M);
+        arma::vec b_i;
+        arma::mat Minv;
+        if (use_shared_mstep) {
+          b_i = Minv_shared_mstep * Utr;
+          Minv = Minv_shared_mstep;
+        } else {
+          arma::mat M(r,r, fill::zeros);
+          M(0,0) = 1.0 / std::max(sa, eps);
+          int off = 1;
+          if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+          if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+          M += (1.0/std::max(se,eps)) * Ci.UtU;
+          b_i = solve_sympd_safe(M, Utr);
+          inv_sympd_safe(Minv, M);
+        }
 
         arma::vec r_i(Ci.n_i);
         for (int t=0; t<Ci.n_i; ++t) r_i[t] = r_global[ S.rows[i][t] ];
@@ -828,16 +855,22 @@ Rcpp::List ccc_vc_cpp(
         const Cache& Ci = C_iid[i];
         if (Ci.n_i == 0) continue;
 
-        arma::mat M(r,r, fill::zeros);
-        M(0,0) = 1.0 / std::max(sa, eps);
-        int off = 1;
-        if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
-        if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
-        M += (1.0/std::max(se,eps)) * Ci.UtU;
-
         arma::vec Utr = (Ci.Uty - Ci.Utx * beta) / std::max(se,eps);
-        arma::vec b_i = solve_sympd_safe(M, Utr);
-        arma::mat Minv; inv_sympd_safe(Minv, M);
+        arma::vec b_i;
+        arma::mat Minv;
+        if (use_shared_mstep) {
+          b_i = Minv_shared_mstep * Utr;
+          Minv = Minv_shared_mstep;
+        } else {
+          arma::mat M(r,r, fill::zeros);
+          M(0,0) = 1.0 / std::max(sa, eps);
+          int off = 1;
+          if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+          if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+          M += (1.0/std::max(se,eps)) * Ci.UtU;
+          b_i = solve_sympd_safe(M, Utr);
+          inv_sympd_safe(Minv, M);
+        }
 
         arma::vec r_i(Ci.n_i);
         for (int t=0; t<Ci.n_i; ++t) r_i[t] = r_global[ S.rows[i][t] ];
@@ -894,7 +927,7 @@ Rcpp::List ccc_vc_cpp(
 #ifdef _OPENMP
     int nthreads3 = omp_get_max_threads();
     std::vector<arma::mat> XtViX_tls2(nthreads3, arma::mat(p,p, arma::fill::zeros));
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(nthreads3 > 1)
     for (int i=0; i<m; ++i) {
       if (PG[i].n_i == 0) continue;
       int tid = omp_get_thread_num();
@@ -904,12 +937,7 @@ Rcpp::List ccc_vc_cpp(
 
       arma::mat S_ux = inv_se * PG[i].UTCX;     // r_eff x p
       arma::mat Zx   = solve_sympd_safe(M, S_ux);
-      arma::mat XTRinvX = inv_se * PG[i].XTCX;
-
-      for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
-        double val = XTRinvX(k,l) - dot(S_ux.col(k), Zx.col(l));
-        XtViX_tls2[tid](k,l) += val; if (l!=k) XtViX_tls2[tid](l,k) += val;
-      }
+      XtViX_tls2[tid] += arma::symmatu((inv_se * PG[i].XTCX) - (S_ux.t() * Zx));
     }
     for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
 #else
@@ -921,52 +949,60 @@ Rcpp::List ccc_vc_cpp(
 
       arma::mat S_ux = inv_se * PG[i].UTCX;
       arma::mat Zx   = solve_sympd_safe(M, S_ux);
-      arma::mat XTRinvX = inv_se * PG[i].XTCX;
-
-      for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
-        double val = XTRinvX(k,l) - dot(S_ux.col(k), Zx.col(l));
-        XtViX_final(k,l) += val; if (l!=k) XtViX_final(l,k) += val;
-      }
+      XtViX_final += arma::symmatu((inv_se * PG[i].XTCX) - (S_ux.t() * Zx));
     }
 #endif
   } else {
     const double inv_se_final = 1.0 / std::max(se, eps);
+    arma::mat Minv_shared_final;
+    bool use_shared_final = false;
+    if (iid_shared_utu) {
+      arma::mat M_shared(r, r, arma::fill::zeros);
+      M_shared(0,0) = 1.0 / std::max(sa, eps);
+      int off = 1;
+      if (nm_re>0) { for (int l=0; l<nm_re; ++l) M_shared(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+      if (nt_re>0) { for (int t=0; t<nt_re; ++t) M_shared(off+t, off+t) = 1.0/std::max(sag,eps); }
+      M_shared += inv_se_final * iid_utu_ref;
+      use_shared_final = inv_sympd_safe(Minv_shared_final, M_shared) && Minv_shared_final.is_finite();
+    }
 #ifdef _OPENMP
     int nthreads3 = omp_get_max_threads();
     std::vector<arma::mat> XtViX_tls2(nthreads3, arma::mat(p,p, arma::fill::zeros));
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(nthreads3 > 1)
     for (int i=0; i<m; ++i) {
       const Cache& Ci = C_iid[i];
       if (Ci.n_i == 0) continue;
       int tid = omp_get_thread_num();
-      arma::mat M(r,r, fill::zeros);
-      M(0,0) = 1.0 / std::max(sa, eps);
-      int off = 1;
-      if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
-      if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
-      M += inv_se_final * Ci.UtU;
-      arma::mat Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
-      for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
-        double val = inv_se_final * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Zx.col(l)));
-        XtViX_tls2[tid](k,l) += val; if (l!=k) XtViX_tls2[tid](l,k) += val;
+      arma::mat S_ux = Ci.Utx * inv_se_final;
+      arma::mat Zx = use_shared_final ? (Minv_shared_final * S_ux) : arma::mat();
+      if (!use_shared_final) {
+        arma::mat M(r,r, fill::zeros);
+        M(0,0) = 1.0 / std::max(sa, eps);
+        int off = 1;
+        if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+        if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+        M += inv_se_final * Ci.UtU;
+        Zx = solve_sympd_safe(M, S_ux);
       }
+      XtViX_tls2[tid] += arma::symmatu((inv_se_final * Ci.XtX) - (S_ux.t() * Zx));
     }
     for (int t=0; t<nthreads3; ++t) XtViX_final += XtViX_tls2[t];
 #else
     for (int i=0; i<m; ++i) {
       const Cache& Ci = C_iid[i];
       if (Ci.n_i == 0) continue;
-      arma::mat M(r,r, fill::zeros);
-      M(0,0) = 1.0 / std::max(sa, eps);
-      int off = 1;
-      if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
-      if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
-      M += inv_se_final * Ci.UtU;
-      arma::mat Zx = solve_sympd_safe(M, Ci.Utx * inv_se_final);
-      for (int k=0;k<p;++k) for (int l=k;l<p;++l) {
-        double val = inv_se_final * (Ci.XtX(k,l) - dot(Ci.Utx.col(k), Zx.col(l)));
-        XtViX_final(k,l) += val; if (l!=k) XtViX_final(l,k) += val;
+      arma::mat S_ux = Ci.Utx * inv_se_final;
+      arma::mat Zx = use_shared_final ? (Minv_shared_final * S_ux) : arma::mat();
+      if (!use_shared_final) {
+        arma::mat M(r,r, fill::zeros);
+        M(0,0) = 1.0 / std::max(sa, eps);
+        int off = 1;
+        if (nm_re>0) { for (int l=0;l<nm_re;++l) M(off+l, off+l) = 1.0/std::max(sab,eps); off += nm_re; }
+        if (nt_re>0) { for (int t=0;t<nt_re;++t) M(off+t, off+t) = 1.0/std::max(sag,eps); }
+        M += inv_se_final * Ci.UtU;
+        Zx = solve_sympd_safe(M, S_ux);
       }
+      XtViX_final += arma::symmatu((inv_se_final * Ci.XtX) - (S_ux.t() * Zx));
     }
 #endif
   }
@@ -974,6 +1010,136 @@ Rcpp::List ccc_vc_cpp(
   arma::mat VarFix;
   if (!inv_sympd_safe(VarFix, XtViX_final)) Rcpp::stop("Failed to invert XtViX.");
   if (!VarFix.is_finite()) Rcpp::stop("VarFix is not finite");
+
+  if (ll_only) {
+    // Fast path used by internal REML-LRT and rho profiling: only return REML log-likelihood.
+    const double two_pi = 2.0 * std::acos(-1.0);
+
+    const double lg_sa  = std::log(std::max(sa,  eps));
+    const double lg_sab = (nm_re>0 ? std::log(std::max(sab, eps)) : 0.0);
+    const double lg_sag = (nt_re>0 ? std::log(std::max(sag, eps)) : 0.0);
+    double sum_lg_tau = 0.0;
+    if (has_extra) {
+      for (int j=0; j<qZ; ++j) sum_lg_tau += std::log(std::max(tau2[j], eps));
+    }
+
+    double logdetG_one = 0.0;
+    logdetG_one += lg_sa;
+    if (nm_re>0) logdetG_one += nm_re * lg_sab;
+    if (nt_re>0) logdetG_one += nt_re * lg_sag;
+    logdetG_one += sum_lg_tau;
+
+    double sum_logdetR  = 0.0;
+    double sum_logdetM  = 0.0;
+    arma::vec XtViy_final(p, arma::fill::zeros);
+    double yTRVY_final  = 0.0;
+
+    if (use_ar1 || has_extra) {
+      const double inv_se = 1.0 / std::max(se, eps);
+
+      arma::vec prior_prec(r_eff, fill::zeros);
+      int pos2 = 0;
+      prior_prec[pos2++] = 1.0 / std::max(sa,  eps);
+      for (int l=0; l<nm_re; ++l) prior_prec[pos2++] = 1.0 / std::max(sab, eps);
+      for (int t=0; t<nt_re; ++t) prior_prec[pos2++] = 1.0 / std::max(sag, eps);
+      for (int j=0; j<qZ;    ++j) prior_prec[pos2++] = 1.0 / std::max(tau2[j], eps);
+
+      const double lg_se = std::log(std::max(se, eps));
+      for (int i=0; i<m; ++i) {
+        if (PG[i].n_i == 0) continue;
+
+        if (use_ar1 && nt > 0) {
+          // R_i = se * C_i, and we already have Cinv_i = C_i^{-1} (by method)
+          // log|R_i| = n_i*log(se) + log|C_i| = n_i*lg_se - log|Cinv_i|
+          sum_logdetR += PG[i].n_i * lg_se - logdet_spd_safe(PG[i].Cinv);
+        } else {
+          sum_logdetR += PG[i].n_i * lg_se;
+        }
+
+        arma::mat M(r_eff, r_eff, fill::zeros);
+        M.diag() = prior_prec;
+        M += inv_se * PG[i].UCU;
+
+        sum_logdetM += logdet_spd_safe(M);
+
+        double yTRiny = inv_se * arma::as_scalar( PG[i].y_i.t() * (PG[i].Cinv * PG[i].y_i) );
+        arma::vec S_uy = inv_se * PG[i].UTCy;
+        arma::mat Minv; inv_sympd_safe(Minv, M);
+        double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
+        yTRVY_final += (yTRiny - corr);
+
+        arma::mat S_ux = inv_se * PG[i].UTCX;
+        arma::vec tmpv = inv_se * PG[i].XTCy;
+        XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
+      }
+    } else {
+      const double inv_se_iid = 1.0 / std::max(se, eps);
+      arma::mat Minv_shared_ll;
+      bool use_shared_ll = false;
+      double shared_logdetM = NA_REAL;
+      if (iid_shared_utu) {
+        arma::mat M_shared(r, r, arma::fill::zeros);
+        M_shared(0,0) = 1.0 / std::max(sa, eps);
+        int off = 1;
+        if (nm_re>0) { for (int l=0; l<nm_re; ++l) M_shared(off+l, off+l) = 1.0/std::max(sab, eps); off += nm_re; }
+        if (nt_re>0) { for (int t=0; t<nt_re; ++t) M_shared(off+t, off+t) = 1.0/std::max(sag, eps); }
+        M_shared += inv_se_iid * iid_utu_ref;
+        use_shared_ll = inv_sympd_safe(Minv_shared_ll, M_shared) && Minv_shared_ll.is_finite();
+        if (use_shared_ll) shared_logdetM = logdet_spd_safe(M_shared);
+      }
+      for (int i=0; i<m; ++i) {
+        const Cache& Ci = C_iid[i];
+        if (Ci.n_i == 0) continue;
+
+        sum_logdetR += Ci.n_i * std::log(std::max(se, eps));
+
+        arma::mat Minv;
+        if (use_shared_ll) {
+          Minv = Minv_shared_ll;
+        } else {
+          arma::mat M(r,r, fill::zeros);
+          M(0,0) = 1.0 / std::max(sa,  eps);
+          int off = 1;
+          if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab, eps); off += nm_re; }
+          if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag, eps); }
+          M += (1.0/std::max(se, eps)) * Ci.UtU;
+          sum_logdetM += logdet_spd_safe(M);
+          inv_sympd_safe(Minv, M);
+        }
+        if (use_shared_ll) {
+          sum_logdetM += shared_logdetM;
+        }
+
+        arma::vec S_uy = (1.0/std::max(se, eps)) * (Ci.Uty);
+
+        double y2 = 0.0;
+        for (int idx : S.rows[i]) { const double yi = y[idx]; y2 += yi * yi; }
+        double yTRiny = (1.0/std::max(se, eps)) * y2;
+
+        double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
+        yTRVY_final += (yTRiny - corr);
+
+        arma::mat S_ux = (1.0/std::max(se, eps)) * Ci.Utx;
+        arma::vec tmpv = (1.0/std::max(se, eps)) * Ci.Xty;
+        XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
+      }
+    }
+
+    double logdetXtViX = logdet_spd_safe(XtViX_final);
+    double yPy = yTRVY_final - arma::as_scalar( XtViy_final.t() * (VarFix * XtViy_final) );
+    double reml_loglik = -0.5 * (
+      ((double)n - (double)p) * std::log(two_pi)
+      + sum_logdetR
+      + (double)m * logdetG_one
+      + sum_logdetM
+      + logdetXtViX
+      + yPy
+    );
+
+    return Rcpp::List::create(
+      _["reml_loglik"] = reml_loglik
+    );
+  }
 
   // -------- SB & CCC & CI --------
   double SB = 0.0, varSB = 0.0;
@@ -1300,105 +1466,108 @@ Rcpp::List ccc_vc_cpp(
   }
 
   // -------- REML log-likelihood (uses precomp) --------
-  const double two_pi = 2.0 * std::acos(-1.0);
+  double reml_loglik = NA_REAL;
+  if (need_loglik) {
+    const double two_pi = 2.0 * std::acos(-1.0);
 
-  const double lg_sa  = std::log(std::max(sa,  eps));
-  const double lg_sab = (nm_re>0 ? std::log(std::max(sab, eps)) : 0.0);
-  const double lg_sag = (nt_re>0 ? std::log(std::max(sag, eps)) : 0.0);
-  double sum_lg_tau = 0.0; if (has_extra) for (int j=0; j<qZ; ++j) sum_lg_tau += std::log(std::max(tau2[j], eps));
+    const double lg_sa  = std::log(std::max(sa,  eps));
+    const double lg_sab = (nm_re>0 ? std::log(std::max(sab, eps)) : 0.0);
+    const double lg_sag = (nt_re>0 ? std::log(std::max(sag, eps)) : 0.0);
+    double sum_lg_tau = 0.0; if (has_extra) for (int j=0; j<qZ; ++j) sum_lg_tau += std::log(std::max(tau2[j], eps));
 
-  double logdetG_one = 0.0;
-  logdetG_one += lg_sa;
-  if (nm_re>0) logdetG_one += nm_re * lg_sab;
-  if (nt_re>0) logdetG_one += nt_re * lg_sag;
-  logdetG_one += sum_lg_tau;
+    double logdetG_one = 0.0;
+    logdetG_one += lg_sa;
+    if (nm_re>0) logdetG_one += nm_re * lg_sab;
+    if (nt_re>0) logdetG_one += nt_re * lg_sag;
+    logdetG_one += sum_lg_tau;
 
-  double sum_logdetR  = 0.0;
-  double sum_logdetM  = 0.0;
-  arma::vec   XtViy_final(p, arma::fill::zeros);
-  double      yTRVY_final  = 0.0;
+    double sum_logdetR  = 0.0;
+    double sum_logdetM  = 0.0;
+    arma::vec XtViy_final(p, arma::fill::zeros);
+    double yTRVY_final  = 0.0;
+    if (use_ar1 || has_extra) {
+      const double inv_se = 1.0 / std::max(se, eps);
 
-  if (use_ar1 || has_extra) {
-    const double inv_se = 1.0 / std::max(se, eps);
+      arma::vec prior_prec(r_eff, fill::zeros);
+      int pos2 = 0;
+      prior_prec[pos2++] = 1.0 / std::max(sa,  eps);
+      for (int l=0; l<nm_re; ++l) prior_prec[pos2++] = 1.0 / std::max(sab, eps);
+      for (int t=0; t<nt_re; ++t) prior_prec[pos2++] = 1.0 / std::max(sag, eps);
+      for (int j=0; j<qZ;    ++j) prior_prec[pos2++] = 1.0 / std::max(tau2[j], eps);
 
-    arma::vec prior_prec(r_eff, fill::zeros);
-    int pos2 = 0;
-    prior_prec[pos2++] = 1.0 / std::max(sa,  eps);
-    for (int l=0; l<nm_re; ++l) prior_prec[pos2++] = 1.0 / std::max(sab, eps);
-    for (int t=0; t<nt_re; ++t) prior_prec[pos2++] = 1.0 / std::max(sag, eps);
-    for (int j=0; j<qZ;    ++j) prior_prec[pos2++] = 1.0 / std::max(tau2[j], eps);
+      const double lg_se = std::log(std::max(se, eps));
+      for (int i=0; i<m; ++i) {
+        if (PG[i].n_i == 0) continue;
 
-    const double lg_se = std::log(std::max(se, eps));
-    for (int i=0; i<m; ++i) {
-      if (PG[i].n_i == 0) continue;
+        if (use_ar1 && nt > 0) {
+          // R_i = se * C_i, and we already have Cinv_i = C_i^{-1} (by method)
+          // log|R_i| = n_i*log(se) + log|C_i| = n_i*lg_se - log|Cinv_i|
+          sum_logdetR += PG[i].n_i * lg_se - logdet_spd_safe(PG[i].Cinv);
+        } else {
+          sum_logdetR += PG[i].n_i * lg_se;
+        }
 
-      if (use_ar1 && nt > 0) {
-        // R_i = se * C_i, and we already have Cinv_i = C_i^{-1} (by method)
-        // log|R_i| = n_i*log(se) + log|C_i| = n_i*lg_se - log|Cinv_i|
-        sum_logdetR += PG[i].n_i * lg_se - logdet_spd_safe(PG[i].Cinv);
-      } else {
-        sum_logdetR += PG[i].n_i * lg_se;
+        arma::mat M(r_eff, r_eff, fill::zeros);
+        M.diag() = prior_prec;
+        M += inv_se * PG[i].UCU;
+
+        sum_logdetM += logdet_spd_safe(M);
+
+        double yTRiny = inv_se * arma::as_scalar( PG[i].y_i.t() * (PG[i].Cinv * PG[i].y_i) );
+        arma::vec S_uy = inv_se * PG[i].UTCy;
+        arma::mat Minv; inv_sympd_safe(Minv, M);
+        double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
+        yTRVY_final += (yTRiny - corr);
+
+        arma::mat S_ux = inv_se * PG[i].UTCX;
+        arma::vec tmpv = inv_se * PG[i].XTCy;
+        XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
       }
+    } else {
+      for (int i=0; i<m; ++i) {
+        const Cache& Ci = C_iid[i];
+        if (Ci.n_i == 0) continue;
 
-      arma::mat M(r_eff, r_eff, fill::zeros);
-      M.diag() = prior_prec;
-      M += inv_se * PG[i].UCU;
+        sum_logdetR += Ci.n_i * std::log(std::max(se, eps));
 
-      sum_logdetM += logdet_spd_safe(M);
+        arma::mat M(r,r, fill::zeros);
+        M(0,0) = 1.0 / std::max(sa,  eps);
+        int off = 1;
+        if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab, eps); off += nm_re; }
+        if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag, eps); }
+        M += (1.0/std::max(se, eps)) * Ci.UtU;
 
-      double yTRiny = inv_se * arma::as_scalar( PG[i].y_i.t() * (PG[i].Cinv * PG[i].y_i) );
-      arma::vec S_uy = inv_se * PG[i].UTCy;
-      arma::mat Minv; inv_sympd_safe(Minv, M);
-      double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
-      yTRVY_final += (yTRiny - corr);
+        sum_logdetM += logdet_spd_safe(M);
 
-      arma::mat S_ux = inv_se * PG[i].UTCX;
-      arma::vec tmpv = inv_se * PG[i].XTCy;
-      XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
+        arma::mat Minv; inv_sympd_safe(Minv, M);
+
+        arma::vec S_uy = (1.0/std::max(se, eps)) * (Ci.Uty);
+
+        double y2 = 0.0;
+        for (int idx : S.rows[i]) { const double yi = y[idx]; y2 += yi * yi; }
+        double yTRiny = (1.0/std::max(se, eps)) * y2;
+
+        double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
+        yTRVY_final += (yTRiny - corr);
+
+        arma::mat S_ux = (1.0/std::max(se, eps)) * Ci.Utx;
+        arma::vec tmpv = (1.0/std::max(se, eps)) * Ci.Xty;
+        XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
+
+      }
     }
-  } else {
-    for (int i=0; i<m; ++i) {
-      const Cache& Ci = C_iid[i];
-      if (Ci.n_i == 0) continue;
 
-      sum_logdetR += Ci.n_i * std::log(std::max(se, eps));
-
-      arma::mat M(r,r, fill::zeros);
-      M(0,0) = 1.0 / std::max(sa,  eps);
-      int off = 1;
-      if (nm_re>0) { for (int l=0; l<nm_re; ++l) M(off+l, off+l) = 1.0/std::max(sab, eps); off += nm_re; }
-      if (nt_re>0) { for (int t=0; t<nt_re; ++t) M(off+t, off+t) = 1.0/std::max(sag, eps); }
-      M += (1.0/std::max(se, eps)) * Ci.UtU;
-
-      sum_logdetM += logdet_spd_safe(M);
-
-      arma::mat Minv; inv_sympd_safe(Minv, M);
-
-      arma::vec S_uy = (1.0/std::max(se, eps)) * (Ci.Uty);
-
-      double y2 = 0.0;
-      for (int idx : S.rows[i]) { const double yi = y[idx]; y2 += yi * yi; }
-      double yTRiny = (1.0/std::max(se, eps)) * y2;
-
-      double corr = arma::as_scalar(S_uy.t() * (Minv * S_uy));
-      yTRVY_final += (yTRiny - corr);
-
-      arma::mat S_ux = (1.0/std::max(se, eps)) * Ci.Utx;
-      arma::vec tmpv = (1.0/std::max(se, eps)) * Ci.Xty;
-      XtViy_final += tmpv - S_ux.t() * (Minv * S_uy);
-    }
+    double logdetXtViX = logdet_spd_safe(XtViX_final);
+    double yPy = yTRVY_final - arma::as_scalar( XtViy_final.t() * (VarFix * XtViy_final) );
+    reml_loglik = -0.5 * (
+      ((double)n - (double)p) * std::log(two_pi)
+      + sum_logdetR
+      + (double)m * logdetG_one
+      + sum_logdetM
+      + logdetXtViX
+      + yPy
+    );
   }
-
-  double logdetXtViX = logdet_spd_safe(XtViX_final);
-  double yPy = yTRVY_final - arma::as_scalar( XtViy_final.t() * (VarFix * XtViy_final) );
-  double reml_loglik = -0.5 * (
-    ((double)n - (double)p) * std::log(two_pi)
-    + sum_logdetR
-  + (double)m * logdetG_one
-  + sum_logdetM
-  + logdetXtViX
-  + yPy
-  );
 
   // AR(1) diagnostic (moments)
   double ar1_rho_mom  = NA_REAL;
@@ -1409,6 +1578,17 @@ Rcpp::List ccc_vc_cpp(
     arma::mat Ubase, Ueff, Zi, M;
     arma::mat X_i;
     arma::vec y_i, r_i, Utr, b_i, e;
+    arma::mat Minv_diag_shared;
+    bool use_shared_diag = false;
+    if (iid_shared_utu && !has_extra) {
+      arma::mat M_shared(r, r, arma::fill::zeros);
+      M_shared(0,0) = 1.0 / std::max(sa, 1e-12);
+      int offs = 1;
+      if (include_subj_method) { for (int l = 0; l < nm; ++l) M_shared(offs + l, offs + l) = 1.0 / std::max(sab, 1e-12); offs += nm; }
+      if (include_subj_time)   { for (int t = 0; t < nt; ++t) M_shared(offs + t, offs + t) = 1.0 / std::max(sag, 1e-12); }
+      M_shared += (1.0 / std::max(se, 1e-12)) * iid_utu_ref;
+      use_shared_diag = inv_sympd_safe(Minv_diag_shared, M_shared) && Minv_diag_shared.is_finite();
+    }
     std::vector<double> num_m(nm, 0.0), den1_m(nm, 0.0), den2_m(nm, 0.0);
     std::vector<int>    pairs_m(nm, 0);
     for (int i = 0; i < m; ++i) {
@@ -1454,16 +1634,19 @@ Rcpp::List ccc_vc_cpp(
       }
       Ueff = Ubase;
 
-      M.zeros(Ueff.n_cols, Ueff.n_cols);
-      int off = 0;
-      M(off,off) = 1.0 / std::max(sa, 1e-12); off += 1;
-      if (include_subj_method) { for (int l = 0; l < nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, 1e-12); off += nm; }
-      if (include_subj_time)   { for (int t = 0; t < nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, 1e-12); off += nt; }
-      M += (1.0 / std::max(se, 1e-12)) * (Ueff.t() * Ueff);
-
       r_i = y_i - X_i * beta;
       Utr = (1.0 / std::max(se, 1e-12)) * (Ueff.t() * r_i);
-      b_i = solve_sympd_safe(M, Utr);
+      if (use_shared_diag) {
+        b_i = Minv_diag_shared * Utr;
+      } else {
+        M.zeros(Ueff.n_cols, Ueff.n_cols);
+        int off = 0;
+        M(off,off) = 1.0 / std::max(sa, 1e-12); off += 1;
+        if (include_subj_method) { for (int l = 0; l < nm; ++l) M(off+l, off+l) = 1.0 / std::max(sab, 1e-12); off += nm; }
+        if (include_subj_time)   { for (int t = 0; t < nt; ++t) M(off+t, off+t) = 1.0 / std::max(sag, 1e-12); off += nt; }
+        M += (1.0 / std::max(se, 1e-12)) * (Ueff.t() * Ueff);
+        b_i = solve_sympd_safe(M, Utr);
+      }
       e   = r_i - Ueff * b_i;
 
       for (int l = 0; l < nm; ++l) {
