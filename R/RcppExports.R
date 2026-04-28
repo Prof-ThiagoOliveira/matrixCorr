@@ -141,8 +141,16 @@ rmcorr_pair_cpp <- function(x, y, subject, conf_level = 0.95) {
     .Call(`_matrixCorr_rmcorr_pair_cpp`, x, y, subject, conf_level)
 }
 
+rmcorr_pair_weighted_cpp <- function(x, y, subject, conf_level = 0.95) {
+    .Call(`_matrixCorr_rmcorr_pair_weighted_cpp`, x, y, subject, conf_level)
+}
+
 rmcorr_matrix_cpp <- function(x, y, subject, symmetric = FALSE, conf_level = 0.95, n_threads = 1L) {
     .Call(`_matrixCorr_rmcorr_matrix_cpp`, x, y, subject, symmetric, conf_level, n_threads)
+}
+
+rmcorr_matrix_weighted_cpp <- function(x, y, subject, symmetric = FALSE, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_rmcorr_matrix_weighted_cpp`, x, y, subject, symmetric, conf_level, n_threads)
 }
 
 pbcor_matrix_cpp <- function(X, beta = 0.2, n_threads = 1L) {

@@ -30,8 +30,8 @@ Description: Compute correlation, association, agreement, and reliability
     <doi:10.1016/S0047-259X(03)00096-4>; high-dimensional shrinkage covariance
     estimation <doi:10.2202/1544-6115.1175>; Lin (1989)
     <doi:10.2307/2532051>; Wilcox (1994) <doi:10.1007/BF02294395>; Wilcox
-    (2004)
-    <doi:10.1080/0266476032000148821>.
+    (2004) <doi:10.1080/0266476032000148821>; weighted repeated-measures
+    correlation by Kondo et al. (2025) <doi:10.1002/sim.70046>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LinkingTo:

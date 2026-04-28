@@ -283,14 +283,12 @@ print.summary.corr_result <- function(x,
   if (identical(cfg$show_ci, "no")) {
     preview <- preview[, setdiff(names(preview), c("lwr", "upr")), drop = FALSE]
   }
-  if (nrow(preview)) {
-    if ("estimate" %in% names(preview)) {
-      preview$estimate <- formatC(as.numeric(preview$estimate), format = "f", digits = digits)
-    }
-    for (nm in intersect(c("lwr", "upr", "statistic", "df", "p_value", "fisher_z"), names(preview))) {
-      preview[[nm]] <- formatC(as.numeric(preview[[nm]]), format = "f", digits = digits)
-    }
-  }
+  ci_digits <- .mc_coalesce(attr(x, "ci_digits", exact = TRUE), digits)
+  preview <- .mc_format_summary_numeric_table(
+    preview,
+    digits = digits,
+    ci_digits = ci_digits
+  )
   .mc_print_preview_table(
     preview,
     n = cfg$n,
@@ -306,6 +304,11 @@ print.summary.corr_result <- function(x,
     if (identical(cfg$show_ci, "no")) {
       top_tbl <- top_tbl[, setdiff(names(top_tbl), c("lwr", "upr")), drop = FALSE]
     }
+    top_tbl <- .mc_format_summary_numeric_table(
+      top_tbl,
+      digits = digits,
+      ci_digits = ci_digits
+    )
     cat("\nStrongest pairs by |estimate|\n\n")
     .mc_print_preview_table(
       top_tbl,

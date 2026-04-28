@@ -7,7 +7,7 @@
     }
     return(anyNA(x) || !all(is.finite(x)))
   }
-  if (is.factor(x) || is.logical(x)) {
+  if (is.factor(x) || is.logical(x) || is.character(x)) {
     return(anyNA(x))
   }
   anyNA(x) || any(!is.finite(x))
@@ -3626,6 +3626,8 @@ print.summary.matrixCorr <- function(x,
       topn = cfg$topn,
       max_vars = cfg$max_vars,
       width = cfg$width,
+      digits = digits,
+      ci_digits = .mc_coalesce(attr(x, "ci_digits", exact = TRUE), digits),
       show_ci = cfg$show_ci,
       ...
     )

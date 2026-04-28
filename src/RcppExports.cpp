@@ -523,6 +523,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// rmcorr_pair_weighted_cpp
+List rmcorr_pair_weighted_cpp(NumericVector x, NumericVector y, IntegerVector subject, double conf_level);
+RcppExport SEXP _matrixCorr_rmcorr_pair_weighted_cpp(SEXP xSEXP, SEXP ySEXP, SEXP subjectSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(rmcorr_pair_weighted_cpp(x, y, subject, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rmcorr_matrix_cpp
 List rmcorr_matrix_cpp(NumericMatrix x, NumericMatrix y, IntegerVector subject, bool symmetric, double conf_level, int n_threads);
 RcppExport SEXP _matrixCorr_rmcorr_matrix_cpp(SEXP xSEXP, SEXP ySEXP, SEXP subjectSEXP, SEXP symmetricSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
@@ -536,6 +550,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
     rcpp_result_gen = Rcpp::wrap(rmcorr_matrix_cpp(x, y, subject, symmetric, conf_level, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rmcorr_matrix_weighted_cpp
+List rmcorr_matrix_weighted_cpp(NumericMatrix x, NumericMatrix y, IntegerVector subject, bool symmetric, double conf_level, int n_threads);
+RcppExport SEXP _matrixCorr_rmcorr_matrix_weighted_cpp(SEXP xSEXP, SEXP ySEXP, SEXP subjectSEXP, SEXP symmetricSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type y(ySEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< bool >::type symmetric(symmetricSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(rmcorr_matrix_weighted_cpp(x, y, subject, symmetric, conf_level, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -918,7 +948,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_pearson_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_pearson_threshold_triplets_cpp, 4},
     {"_matrixCorr_pearson_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_pairwise_cpp, 3},
     {"_matrixCorr_rmcorr_pair_cpp", (DL_FUNC) &_matrixCorr_rmcorr_pair_cpp, 4},
+    {"_matrixCorr_rmcorr_pair_weighted_cpp", (DL_FUNC) &_matrixCorr_rmcorr_pair_weighted_cpp, 4},
     {"_matrixCorr_rmcorr_matrix_cpp", (DL_FUNC) &_matrixCorr_rmcorr_matrix_cpp, 6},
+    {"_matrixCorr_rmcorr_matrix_weighted_cpp", (DL_FUNC) &_matrixCorr_rmcorr_matrix_weighted_cpp, 6},
     {"_matrixCorr_pbcor_matrix_cpp", (DL_FUNC) &_matrixCorr_pbcor_matrix_cpp, 3},
     {"_matrixCorr_pbcor_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_pbcor_threshold_triplets_cpp, 6},
     {"_matrixCorr_pbcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_pbcor_matrix_pairwise_cpp, 4},

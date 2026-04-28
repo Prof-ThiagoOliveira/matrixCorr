@@ -23,6 +23,20 @@
 #'   single character string naming the subject column in \code{data}.
 #' @param conf_level Confidence level used for Wald confidence intervals on the
 #'   repeated-measures correlation (default \code{0.95}).
+#' @param estimator Character scalar selecting the repeated-measures
+#'   correlation estimator. \code{"ancova"} (default) is the classical
+#'   subject-centred repeated-measures correlation. \code{"weighted"} is the
+#'   weighted repeated-measures correlation coefficient of Kondo et al. (2025),
+#'   designed for incomplete or unbalanced repeated-measurement schedules.
+#' @param ci_method Confidence-interval engine. \code{"auto"} (default)
+#'   resolves to \code{"fisher_z"} for \code{estimator = "ancova"} and to
+#'   subject-level \code{"bootstrap"} for \code{estimator = "weighted"} when
+#'   \code{n_boot > 0}; otherwise \code{"none"}. \code{"none"} returns
+#'   \code{NA} bounds.
+#' @param n_boot Integer \eqn{\ge 0}. Number of subject-level bootstrap
+#'   resamples when \code{ci_method = "bootstrap"}.
+#' @param seed Optional positive integer seed used for bootstrap
+#'   reproducibility.
 #' @param na_method Character scalar controlling missing-data handling.
 #'   \code{"error"} rejects missing values in the selected response columns or
 #'   \code{subject}. \code{"pairwise"} uses pairwise complete cases and drops
@@ -115,10 +129,24 @@
 #' matrix mode, the same estimator is applied to every pair of selected
 #' response columns.
 #'
+#' With \code{estimator = "weighted"}, the package implements the weighted
+#' repeated-measures estimator from Kondo et al. (2025) using complete observed
+#' \eqn{(x,y)} pairs per contrast. This estimator does not impute missing data;
+#' it uses per-subject complete-pair sets and weighted sums of explained and
+#' residual quantities from the fixed-subject ANCOVA decomposition.
+#'
+#' Bootstrap confidence intervals use non-parametric subject-level resampling
+#' (subjects are resampled as blocks, not rows).
+#'
 #' @references
 #' Bakdash, J. Z., & Marusich, L. R. (2017). Repeated Measures Correlation.
 #' \emph{Frontiers in Psychology}, 8, 456.
 #' \doi{10.3389/fpsyg.2017.00456}
+#'
+#' Kondo, M., Nagashima, K., Isono, S., & Sato, Y. (2025). Weighted Repeated
+#' Measures Correlation Coefficient: A New Correlation Coefficient for Handling
+#' Missing Data With Repeated Measures. \emph{Statistics in Medicine},
+#' 44(10-12), e70046. \doi{10.1002/sim.70046}
 #'
 #' @examples
 #' set.seed(2026)
@@ -162,6 +190,10 @@ rmcorr <- function(data = NULL, response, subject,
                    n_threads = getOption("matrixCorr.threads", 1L),
                    keep_data = FALSE,
                    verbose = FALSE,
+                   estimator = c("ancova", "weighted"),
+                   ci_method = c("auto", "fisher_z", "bootstrap", "none"),
+                   n_boot = 999L,
+                   seed = NULL,
                    ...) {
   # legacy positional signature support: rmcorr(response, subject, ...)
   if (!missing(data) && missing(subject)) {
@@ -183,10 +215,24 @@ rmcorr <- function(data = NULL, response, subject,
     }
   }
 
+  estimator <- match.arg(estimator)
+  ci_method <- match.arg(ci_method)
+  n_boot <- .mc_rmcorr_check_n_boot(n_boot)
+  if (!is.null(seed)) {
+    seed <- check_scalar_int_pos(seed, arg = "seed")
+  }
+  ci_method_resolved <- .mc_rmcorr_resolve_ci_method(
+    estimator = estimator,
+    ci_method = ci_method,
+    n_boot = n_boot
+  )
+
   if (...length() == 0L &&
       missing(na_method) &&
       isFALSE(keep_data) &&
-      isFALSE(verbose)) {
+      isFALSE(verbose) &&
+      identical(estimator, "ancova") &&
+      identical(ci_method_resolved, "fisher_z")) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
     n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
@@ -285,6 +331,7 @@ rmcorr <- function(data = NULL, response, subject,
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
   check_bool(keep_data, arg = "keep_data")
   check_bool(verbose, arg = "verbose")
+  ci_conf_level_cpp <- if (identical(ci_method_resolved, "fisher_z")) conf_level else -1
 
   resolved <- .mc_rmcorr_resolve_inputs(data = data, response = response, subject = subject)
   response_mat <- resolved$response
@@ -316,11 +363,32 @@ rmcorr <- function(data = NULL, response, subject,
   subj_info <- .mc_rmcorr_encode_subject(subject_vec, arg = "subject")
 
   if (ncol(response_mat) == 2L) {
-    stats <- rmcorr_pair_cpp(
+    stats <- .mc_rmcorr_pair_stats_dispatch(
       x = response_mat[, 1L],
       y = response_mat[, 2L],
-      subject = subj_info$code,
-      conf_level = conf_level
+      subject_code = subj_info$code,
+      estimator = estimator,
+      conf_level = ci_conf_level_cpp
+    )
+    if (identical(ci_method_resolved, "bootstrap")) {
+      dat_pair <- .mc_rmcorr_pair_data(response_mat, subject_vec)
+      ci_vals <- .mc_rmcorr_bootstrap_ci_from_pair_data(
+        dat = dat_pair,
+        estimator = estimator,
+        conf_level = conf_level,
+        n_boot = n_boot,
+        seed = seed
+      )
+      stats$conf_low <- ci_vals[[1L]]
+      stats$conf_high <- ci_vals[[2L]]
+    } else if (identical(ci_method_resolved, "none")) {
+      stats$conf_low <- NA_real_
+      stats$conf_high <- NA_real_
+    }
+
+    include_extended <- !(
+      identical(estimator, "ancova") &&
+      identical(ci_method_resolved, "fisher_z")
     )
     return(.mc_rmcorr_build_pair_object(
       stats = stats,
@@ -330,7 +398,11 @@ rmcorr <- function(data = NULL, response, subject,
       subject_name = resolved$subject_name,
       na_method = na_cfg$na_method,
       conf_level = conf_level,
-      keep_data = keep_data
+      keep_data = keep_data,
+      estimator = if (include_extended) estimator else NULL,
+      ci_method = if (include_extended) ci_method_resolved else NULL,
+      n_boot = if (include_extended && identical(ci_method_resolved, "bootstrap")) n_boot else NULL,
+      seed = if (include_extended && identical(ci_method_resolved, "bootstrap")) seed else NULL
     ))
   }
 
@@ -346,17 +418,34 @@ rmcorr <- function(data = NULL, response, subject,
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
 
-  out <- rmcorr_matrix_cpp(
-    x = response_mat,
-    y = response_mat,
-    subject = subj_info$code,
-    symmetric = TRUE,
-    conf_level = conf_level,
+  out <- .mc_rmcorr_matrix_stats_dispatch(
+    response_mat = response_mat,
+    subject_code = subj_info$code,
+    estimator = estimator,
+    conf_level = ci_conf_level_cpp,
     n_threads = n_threads
   )
 
   est <- out$estimate
   dimnames(est) <- list(response_names, response_names)
+  conf_low <- .mc_rmcorr_set_dimnames(out$conf_low, response_names)
+  conf_high <- .mc_rmcorr_set_dimnames(out$conf_high, response_names)
+  if (identical(ci_method_resolved, "bootstrap")) {
+    boot_ci <- .mc_rmcorr_matrix_bootstrap_ci(
+      response_mat = response_mat,
+      subject = subject_vec,
+      estimator = estimator,
+      conf_level = conf_level,
+      n_boot = n_boot,
+      seed = seed,
+      diag_values = diag(est)
+    )
+    conf_low <- boot_ci$conf_low
+    conf_high <- boot_ci$conf_high
+  } else if (identical(ci_method_resolved, "none")) {
+    conf_low[,] <- NA_real_
+    conf_high[,] <- NA_real_
+  }
 
   diagnostics <- list(
     slope = .mc_rmcorr_set_dimnames(out$slope, response_names),
@@ -364,10 +453,22 @@ rmcorr <- function(data = NULL, response, subject,
     df = .mc_rmcorr_set_dimnames(out$df, response_names),
     n_complete = .mc_rmcorr_set_dimnames(out$n_complete, response_names),
     n_subjects = .mc_rmcorr_set_dimnames(out$n_subjects, response_names),
-    conf_low = .mc_rmcorr_set_dimnames(out$conf_low, response_names),
-    conf_high = .mc_rmcorr_set_dimnames(out$conf_high, response_names),
+    conf_low = conf_low,
+    conf_high = conf_high,
     conf_level = conf_level
   )
+  if (identical(estimator, "weighted")) {
+    diagnostics$weighted_ss_x <- .mc_rmcorr_set_dimnames(out$weighted_ss_x, response_names)
+    diagnostics$weighted_ss_e <- .mc_rmcorr_set_dimnames(out$weighted_ss_e, response_names)
+    diagnostics$obs_per_subject_min <- .mc_rmcorr_set_dimnames(out$obs_per_subject_min, response_names)
+    diagnostics$obs_per_subject_max <- .mc_rmcorr_set_dimnames(out$obs_per_subject_max, response_names)
+    diagnostics$valid <- .mc_rmcorr_set_dimnames(out$valid, response_names)
+    diag(diagnostics$valid) <- NA
+    diagnostics$estimator <- "weighted"
+    diagnostics$ci_method <- ci_method_resolved
+  } else if (!identical(ci_method_resolved, "fisher_z")) {
+    diagnostics$ci_method <- ci_method_resolved
+  }
 
   out_obj <- .mc_structure_corr_matrix(
     est,
@@ -382,10 +483,241 @@ rmcorr <- function(data = NULL, response, subject,
       response_mat = response_mat,
       subject = subject_vec,
       subject_name = resolved$subject_name,
-      conf_level = conf_level
+      conf_level = conf_level,
+      estimator = estimator,
+      ci_method = ci_method_resolved,
+      n_boot = if (identical(ci_method_resolved, "bootstrap")) n_boot else NULL
     )
   }
   out_obj
+}
+
+#' @rdname rmcorr
+#' @export
+rmcorr_weighted <- function(data = NULL, response, subject, ...) {
+  rmcorr(
+    data = data,
+    response = response,
+    subject = subject,
+    estimator = "weighted",
+    ...
+  )
+}
+
+.mc_rmcorr_check_n_boot <- function(n_boot) {
+  ok <- length(n_boot) == 1L &&
+    is.numeric(n_boot) &&
+    !is.na(n_boot) &&
+    is.finite(n_boot) &&
+    n_boot >= 0 &&
+    abs(n_boot - round(n_boot)) <= sqrt(.Machine$double.eps)
+  if (!ok) {
+    abort_bad_arg("n_boot", message = "must be a non-negative integer.")
+  }
+  as.integer(n_boot)
+}
+
+.mc_rmcorr_resolve_ci_method <- function(estimator, ci_method, n_boot) {
+  if (identical(ci_method, "auto")) {
+    if (identical(estimator, "ancova")) {
+      return("fisher_z")
+    }
+    return(if (n_boot > 0L) "bootstrap" else "none")
+  }
+  if (identical(ci_method, "bootstrap") && n_boot <= 0L) {
+    abort_bad_arg(
+      "n_boot",
+      message = "must be positive when {.arg ci_method} is {.val bootstrap}."
+    )
+  }
+  ci_method
+}
+
+.mc_rmcorr_pair_stats_dispatch <- function(x, y, subject_code, estimator, conf_level) {
+  if (identical(estimator, "weighted")) {
+    return(rmcorr_pair_weighted_cpp(
+      x = x,
+      y = y,
+      subject = subject_code,
+      conf_level = conf_level
+    ))
+  }
+  rmcorr_pair_cpp(
+    x = x,
+    y = y,
+    subject = subject_code,
+    conf_level = conf_level
+  )
+}
+
+.mc_rmcorr_matrix_stats_dispatch <- function(response_mat, subject_code, estimator,
+                                             conf_level, n_threads) {
+  if (identical(estimator, "weighted")) {
+    return(rmcorr_matrix_weighted_cpp(
+      x = response_mat,
+      y = response_mat,
+      subject = subject_code,
+      symmetric = TRUE,
+      conf_level = conf_level,
+      n_threads = n_threads
+    ))
+  }
+  rmcorr_matrix_cpp(
+    x = response_mat,
+    y = response_mat,
+    subject = subject_code,
+    symmetric = TRUE,
+    conf_level = conf_level,
+    n_threads = n_threads
+  )
+}
+
+.mc_rmcorr_resample_subject_blocks <- function(dat, draw = NULL, keep_source = FALSE) {
+  if (!nrow(dat)) {
+    return(list(data = dat, draw = integer()))
+  }
+  dat$.subject <- droplevels(factor(dat$.subject))
+  idx_by_subject <- split(seq_len(nrow(dat)), dat$.subject, drop = TRUE)
+  n_subjects <- length(idx_by_subject)
+  if (!n_subjects) {
+    return(list(data = dat[0, , drop = FALSE], draw = integer()))
+  }
+  if (is.null(draw)) {
+    draw <- sample.int(n_subjects, size = n_subjects, replace = TRUE)
+  } else {
+    draw <- as.integer(draw)
+    bad_draw <- !length(draw) ||
+      any(is.na(draw)) ||
+      any(draw < 1L | draw > n_subjects, na.rm = TRUE)
+    if (bad_draw) {
+      abort_bad_arg("draw", message = "contains invalid subject indices.")
+    }
+  }
+
+  counts <- vapply(idx_by_subject, length, integer(1))
+  n_out <- sum(counts[draw], na.rm = TRUE)
+  out <- data.frame(
+    .response1 = numeric(n_out),
+    .response2 = numeric(n_out),
+    .subject = integer(n_out),
+    check.names = FALSE
+  )
+  if (isTRUE(keep_source)) {
+    out$.subject_source <- character(n_out)
+  }
+
+  cursor <- 1L
+  subj_levels <- levels(dat$.subject)
+  src_row_names <- attr(dat, "row.names")
+  if (length(src_row_names) == 2L &&
+      is.na(src_row_names[[1L]]) &&
+      src_row_names[[2L]] < 0L) {
+    src_row_names <- seq_len(nrow(dat))
+  }
+  out_row_names <- vector(mode = typeof(src_row_names), length = n_out)
+  for (b in seq_along(draw)) {
+    src <- draw[[b]]
+    idx <- idx_by_subject[[src]]
+    len <- length(idx)
+    if (!len) next
+    rng <- seq.int(cursor, cursor + len - 1L)
+    out$.response1[rng] <- dat$.response1[idx]
+    out$.response2[rng] <- dat$.response2[idx]
+    out$.subject[rng] <- b
+    out_row_names[rng] <- src_row_names[idx]
+    if (isTRUE(keep_source)) {
+      out$.subject_source[rng] <- subj_levels[[src]]
+    }
+    cursor <- cursor + len
+  }
+
+  out$.subject <- factor(out$.subject, levels = seq_along(draw))
+  if (isTRUE(keep_source)) {
+    out$.subject_source <- factor(out$.subject_source, levels = subj_levels)
+  }
+  attr(out, "row.names") <- out_row_names
+  list(data = out, draw = draw)
+}
+
+.mc_rmcorr_bootstrap_ci_from_pair_data <- function(dat, estimator, conf_level, n_boot, seed = NULL) {
+  if (n_boot <= 0L || !nrow(dat)) {
+    return(c(NA_real_, NA_real_))
+  }
+  dat$.subject <- droplevels(factor(dat$.subject))
+  if (nlevels(dat$.subject) < 2L) {
+    return(c(NA_real_, NA_real_))
+  }
+  if (any(table(dat$.subject) < 2L)) {
+    return(c(NA_real_, NA_real_))
+  }
+
+  boot_vals <- .mc_eval_with_seed(
+    seed,
+    replicate(
+      n_boot,
+      {
+        sampled <- .mc_rmcorr_resample_subject_blocks(dat)$data
+        stats <- .mc_rmcorr_pair_stats_dispatch(
+          x = sampled$.response1,
+          y = sampled$.response2,
+          subject_code = as.integer(sampled$.subject),
+          estimator = estimator,
+          conf_level = -1
+        )
+        if (isTRUE(stats$valid) && is.finite(stats$estimate)) {
+          as.numeric(stats$estimate)
+        } else {
+          NA_real_
+        }
+      }
+    )
+  )
+  .mc_percentile_boot_ci(boot_vals, conf_level = conf_level)
+}
+
+.mc_rmcorr_matrix_bootstrap_ci <- function(response_mat,
+                                           subject,
+                                           estimator,
+                                           conf_level,
+                                           n_boot,
+                                           seed = NULL,
+                                           diag_values = NULL) {
+  p <- ncol(response_mat)
+  nm <- colnames(response_mat)
+  out_low <- matrix(NA_real_, nrow = p, ncol = p, dimnames = list(nm, nm))
+  out_high <- matrix(NA_real_, nrow = p, ncol = p, dimnames = list(nm, nm))
+
+  if (p < 2L || n_boot <= 0L) {
+    if (p >= 1L && !is.null(diag_values)) {
+      diag(out_low) <- diag_values
+      diag(out_high) <- diag_values
+    }
+    return(list(conf_low = out_low, conf_high = out_high))
+  }
+
+  if (!is.null(diag_values) && length(diag_values) == p) {
+    diag(out_low) <- diag_values
+    diag(out_high) <- diag_values
+  }
+
+  pair_id <- 0L
+  for (j in seq_len(p - 1L)) {
+    for (k in seq.int(j + 1L, p)) {
+      pair_id <- pair_id + 1L
+      dat <- .mc_rmcorr_pair_data(response_mat[, c(j, k), drop = FALSE], subject)
+      ci_vals <- .mc_rmcorr_bootstrap_ci_from_pair_data(
+        dat = dat,
+        estimator = estimator,
+        conf_level = conf_level,
+        n_boot = n_boot,
+        seed = .mc_seed_offset(seed, pair_id - 1L)
+      )
+      out_low[j, k] <- out_low[k, j] <- ci_vals[[1L]]
+      out_high[j, k] <- out_high[k, j] <- ci_vals[[2L]]
+    }
+  }
+
+  list(conf_low = out_low, conf_high = out_high)
 }
 
 .mc_rmcorr_resolve_inputs <- function(data, response, subject) {
@@ -476,30 +808,46 @@ rmcorr <- function(data = NULL, response, subject,
 .mc_rmcorr_build_pair_object <- function(stats, response_mat, subject,
                                          response_names, subject_name,
                                          na_method,
-                                         conf_level, keep_data = FALSE) {
+                                         conf_level, keep_data = FALSE,
+                                         estimator = NULL,
+                                         ci_method = NULL,
+                                         n_boot = NULL,
+                                         seed = NULL) {
   dat <- .mc_rmcorr_pair_data(response_mat, subject)
   slope <- as.numeric(stats$slope)
   valid <- isTRUE(stats$valid) && is.finite(stats$estimate)
 
   subj_counts <- if (nrow(dat)) as.integer(table(dat$.subject)) else integer()
+  payload <- list(
+    estimate = as.numeric(stats$estimate),
+    p_value = as.numeric(stats$p_value),
+    lwr = as.numeric(stats$conf_low),
+    upr = as.numeric(stats$conf_high),
+    conf_level = conf_level,
+    slope = slope,
+    df = as.numeric(stats$df),
+    n_obs = as.integer(stats$n_complete),
+    n_subjects = as.integer(stats$n_subjects),
+    na_method = na_method,
+    responses = response_names,
+    subject_name = subject_name,
+    obs_per_subject_min = if (length(subj_counts)) min(subj_counts) else NA_integer_,
+    obs_per_subject_max = if (length(subj_counts)) max(subj_counts) else NA_integer_,
+    valid = valid
+  )
+
+  if (!is.null(estimator)) {
+    payload$estimator <- estimator
+    payload$ci_method <- ci_method %||% NA_character_
+    payload$n_complete <- as.integer(stats$n_complete)
+    if (!is.null(n_boot)) payload$n_boot <- as.integer(n_boot)
+    if (!is.null(seed)) payload$seed <- as.integer(seed)
+    payload$weighted_ss_x <- as.numeric(stats$weighted_ss_x)
+    payload$weighted_ss_e <- as.numeric(stats$weighted_ss_e)
+  }
+
   out <- structure(
-    list(
-      estimate = as.numeric(stats$estimate),
-      p_value = as.numeric(stats$p_value),
-      lwr = as.numeric(stats$conf_low),
-      upr = as.numeric(stats$conf_high),
-      conf_level = conf_level,
-      slope = slope,
-      df = as.numeric(stats$df),
-      n_obs = as.integer(stats$n_complete),
-      n_subjects = as.integer(stats$n_subjects),
-      na_method = na_method,
-      responses = response_names,
-      subject_name = subject_name,
-      obs_per_subject_min = if (length(subj_counts)) min(subj_counts) else NA_integer_,
-      obs_per_subject_max = if (length(subj_counts)) max(subj_counts) else NA_integer_,
-      valid = valid
-    ),
+    payload,
     class = "rmcorr",
     method = "rmcorr",
     description = "Repeated-measures correlation",
@@ -510,7 +858,10 @@ rmcorr <- function(data = NULL, response, subject,
       response_mat = response_mat,
       subject = subject,
       subject_name = subject_name,
-      conf_level = conf_level
+      conf_level = conf_level,
+      estimator = estimator,
+      ci_method = ci_method,
+      n_boot = n_boot
     )
   }
   out
@@ -536,9 +887,12 @@ rmcorr <- function(data = NULL, response, subject,
 }
 
 .mc_rmcorr_compact_source_data <- function(response_mat, subject, subject_name,
-                                           conf_level) {
+                                           conf_level,
+                                           estimator = NULL,
+                                           ci_method = NULL,
+                                           n_boot = NULL) {
   f <- factor(subject)
-  list(
+  out <- list(
     response = unname(response_mat),
     response_names = colnames(response_mat),
     subject_code = as.integer(f),
@@ -546,6 +900,10 @@ rmcorr <- function(data = NULL, response, subject,
     subject_name = subject_name,
     conf_level = conf_level
   )
+  if (!is.null(estimator)) out$estimator <- estimator
+  if (!is.null(ci_method)) out$ci_method <- ci_method
+  if (!is.null(n_boot)) out$n_boot <- as.integer(n_boot)
+  out
 }
 
 .mc_rmcorr_pair_plot_payload <- function(x) {
@@ -594,6 +952,14 @@ rmcorr <- function(data = NULL, response, subject,
     "n_obs", "n_subjects", "na_method", "responses", "subject_name",
     "obs_per_subject_min", "obs_per_subject_max", "valid"
   )
+  extra <- intersect(
+    c(
+      "estimator", "ci_method", "n_boot", "seed", "n_complete",
+      "weighted_ss_x", "weighted_ss_e"
+    ),
+    names(unclass(x))
+  )
+  out <- c(out, extra)
   out <- c(out, "r", "conf_int", "based.on")
   if (!is.null(attr(x, "source_data", exact = TRUE))) {
     out <- c(out, "source_data", "data_long", "intercepts", "fitted")
@@ -680,6 +1046,7 @@ print.rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
   )
   digest <- c(
     method = attr(x, "method"),
+    if (!is.null(x$estimator)) c(estimator = x$estimator),
     responses = sprintf("%s vs %s", x$responses[[1L]], x$responses[[2L]]),
     n_obs = x$n_obs,
     n_subjects = x$n_subjects,
@@ -704,6 +1071,7 @@ summary.rmcorr <- function(object, n = NULL, topn = NULL,
                            max_vars = NULL, width = NULL,
                            show_ci = NULL, ...) {
   check_inherits(object, "rmcorr")
+  ci_method <- object$ci_method %||% "fisher_z"
   out <- list(
     class = "rmcorr",
     method = attr(object, "method"),
@@ -721,10 +1089,16 @@ summary.rmcorr <- function(object, n = NULL, topn = NULL,
     obs_per_subject_min = object$obs_per_subject_min %||% NA_integer_,
     obs_per_subject_max = object$obs_per_subject_max %||% NA_integer_,
     n_intercepts = object$n_subjects %||% NA_integer_,
-    ci_method = "fisher_z",
+    ci_method = ci_method,
     ci_width = if (all(is.finite(c(object$lwr, object$upr)))) object$upr - object$lwr else NA_real_,
     valid = isTRUE(object$valid)
   )
+  if (!is.null(object$estimator)) out$estimator <- object$estimator
+  if (!is.null(object$n_complete)) out$n_complete <- object$n_complete
+  if (!is.null(object$weighted_ss_x)) out$weighted_ss_x <- object$weighted_ss_x
+  if (!is.null(object$weighted_ss_e)) out$weighted_ss_e <- object$weighted_ss_e
+  if (!is.null(object$n_boot)) out$n_boot <- object$n_boot
+  if (!is.null(object$seed)) out$seed <- object$seed
   .mc_finalize_summary_list(out, class_name = "summary.rmcorr")
 }
 
@@ -741,6 +1115,7 @@ print.summary.rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
   )
   digest <- c(
     method = x$method,
+    if (!is.null(x$estimator)) c(estimator = x$estimator),
     responses = sprintf("%s vs %s", x$responses[[1L]], x$responses[[2L]]),
     n_obs = x$n_obs,
     n_subjects = x$n_subjects,
@@ -769,6 +1144,18 @@ print.summary.rmcorr <- function(x, digits = 4, n = NULL, topn = NULL,
   )
   if (is.finite(x$n_intercepts) && x$n_intercepts > 0L) {
     digest <- c(digest, fitted_subjects = x$n_intercepts)
+  }
+  if (!is.null(x$n_complete) && is.finite(x$n_complete)) {
+    digest <- c(digest, n_complete = x$n_complete)
+  }
+  if (!is.null(x$weighted_ss_x) && is.finite(x$weighted_ss_x)) {
+    digest <- c(digest, weighted_ss_x = format(signif(x$weighted_ss_x, digits = digits)))
+  }
+  if (!is.null(x$weighted_ss_e) && is.finite(x$weighted_ss_e)) {
+    digest <- c(digest, weighted_ss_e = format(signif(x$weighted_ss_e, digits = digits)))
+  }
+  if (!is.null(x$n_boot) && is.finite(x$n_boot)) {
+    digest <- c(digest, n_boot = x$n_boot)
   }
   if (!isTRUE(x$valid)) {
     digest <- c(digest, valid = "no")
@@ -931,6 +1318,8 @@ summary.rmcorr_matrix <- function(object, n = NULL, topn = NULL,
     class = class(object)[1L],
     method = attr(object, "method"),
     description = attr(object, "description"),
+    estimator = diag_attr$estimator %||% "ancova",
+    ci_method = diag_attr$ci_method %||% "fisher_z",
     n_variables = if (symmetric) nrow(m) else NA_integer_,
     n_pairs = as.integer(n_pairs),
     n_rows = nrow(m),
@@ -974,6 +1363,41 @@ summary.rmcorr_matrix <- function(object, n = NULL, topn = NULL,
     if (length(vals)) max(vals) else NA_real_
   }
   out$conf_level <- diag_attr$conf_level %||% NA_real_
+  out$weighted_ss_x_min <- {
+    vals <- .mc_rmcorr_pick_diag_vals(diag_attr, object, "weighted_ss_x")
+    if (length(vals)) min(vals) else NA_real_
+  }
+  out$weighted_ss_x_max <- {
+    vals <- .mc_rmcorr_pick_diag_vals(diag_attr, object, "weighted_ss_x")
+    if (length(vals)) max(vals) else NA_real_
+  }
+  out$weighted_ss_e_min <- {
+    vals <- .mc_rmcorr_pick_diag_vals(diag_attr, object, "weighted_ss_e")
+    if (length(vals)) min(vals) else NA_real_
+  }
+  out$weighted_ss_e_max <- {
+    vals <- .mc_rmcorr_pick_diag_vals(diag_attr, object, "weighted_ss_e")
+    if (length(vals)) max(vals) else NA_real_
+  }
+  out$obs_per_subject_min <- {
+    vals <- .mc_rmcorr_pick_diag_vals(diag_attr, object, "obs_per_subject_min")
+    if (length(vals)) min(vals) else NA_real_
+  }
+  out$obs_per_subject_max <- {
+    vals <- .mc_rmcorr_pick_diag_vals(diag_attr, object, "obs_per_subject_max")
+    if (length(vals)) max(vals) else NA_real_
+  }
+  out$valid_rate <- {
+    vv <- diag_attr$valid
+    if (is.matrix(vv) && identical(dim(vv), dim(m))) {
+      selector <- if (symmetric && nrow(m) > 1L) upper.tri(m, diag = FALSE) else matrix(TRUE, nrow(m), ncol(m))
+      vals <- as.logical(vv[selector])
+      vals <- vals[!is.na(vals)]
+      if (length(vals)) mean(vals) else NA_real_
+    } else {
+      NA_real_
+    }
+  }
   out$top_results <- .mc_summary_top_pairs(object, digits = 4, topn = .mc_coalesce(topn, .mc_display_option("summary_topn", 5L)))
   .mc_finalize_summary_list(out, class_name = "summary.rmcorr_matrix")
 }
@@ -994,10 +1418,14 @@ print.summary.rmcorr_matrix <- function(x, digits = 4, n = NULL,
   )
   digest <- c(
     method = x$method,
+    estimator = x$estimator %||% "ancova",
     dimensions = sprintf("%d x %d", x$n_rows, x$n_cols),
     pairs = .mc_count_fmt(x$n_pairs),
     estimate = .mc_format_scalar_or_range(x$estimate_min, x$estimate_max, digits = digits)
   )
+  if (!is.null(x$ci_method) && nzchar(x$ci_method)) {
+    digest <- c(digest, ci_method = x$ci_method)
+  }
   if (!is.na(x$n_variables)) digest <- c(digest, n_variables = x$n_variables)
   if (is.finite(x$conf_level)) digest <- c(digest, conf_level = format(signif(x$conf_level, digits = digits)))
   if (is.finite(x$n_complete_min) && is.finite(x$n_complete_max)) {
@@ -1012,6 +1440,18 @@ print.summary.rmcorr_matrix <- function(x, digits = 4, n = NULL,
   if (is.finite(x$p_value_min) && is.finite(x$p_value_max)) {
     digest <- c(digest, p_value = .mc_format_scalar_or_range(x$p_value_min, x$p_value_max, digits = digits))
   }
+  if (is.finite(x$obs_per_subject_min) && is.finite(x$obs_per_subject_max)) {
+    digest <- c(digest, obs_per_subject = .mc_format_scalar_or_range(x$obs_per_subject_min, x$obs_per_subject_max, digits = digits))
+  }
+  if (is.finite(x$weighted_ss_x_min) && is.finite(x$weighted_ss_x_max)) {
+    digest <- c(digest, weighted_ss_x = .mc_format_scalar_or_range(x$weighted_ss_x_min, x$weighted_ss_x_max, digits = digits))
+  }
+  if (is.finite(x$weighted_ss_e_min) && is.finite(x$weighted_ss_e_max)) {
+    digest <- c(digest, weighted_ss_e = .mc_format_scalar_or_range(x$weighted_ss_e_min, x$weighted_ss_e_max, digits = digits))
+  }
+  if (is.finite(x$valid_rate)) {
+    digest <- c(digest, valid_rate = sprintf("%.1f%%", 100 * x$valid_rate))
+  }
   if (isTRUE(x$n_missing > 0L)) {
     digest <- c(digest, missing = .mc_count_fmt(x$n_missing))
   }
@@ -1023,6 +1463,8 @@ print.summary.rmcorr_matrix <- function(x, digits = 4, n = NULL,
       topn = cfg$topn,
       max_vars = cfg$max_vars,
       width = cfg$width,
+      digits = digits,
+      ci_digits = .mc_coalesce(attr(x, "ci_digits", exact = TRUE), digits),
       show_ci = cfg$show_ci,
       ...
     )

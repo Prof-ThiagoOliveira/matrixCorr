@@ -2,6 +2,7 @@
 % Please edit documentation in R/rmcorr.R
 \name{rmcorr}
 \alias{rmcorr}
+\alias{rmcorr_weighted}
 \title{Repeated-Measures Correlation (rmcorr)}
 \usage{
 rmcorr(
@@ -13,8 +14,14 @@ rmcorr(
   n_threads = getOption("matrixCorr.threads", 1L),
   keep_data = FALSE,
   verbose = FALSE,
+  estimator = c("ancova", "weighted"),
+  ci_method = c("auto", "fisher_z", "bootstrap", "none"),
+  n_boot = 999L,
+  seed = NULL,
   ...
 )
+
+rmcorr_weighted(data = NULL, response, subject, ...)
 }
 \arguments{
 \item{data}{Optional \code{data.frame}/matrix containing the repeated-measures
@@ -54,6 +61,24 @@ returned object alone.}
 
 \item{verbose}{Logical; if \code{TRUE}, prints a short note about the thread
 count used in matrix mode.}
+
+\item{estimator}{Character scalar selecting the repeated-measures
+correlation estimator. \code{"ancova"} (default) is the classical
+subject-centred repeated-measures correlation. \code{"weighted"} is the
+weighted repeated-measures correlation coefficient of Kondo et al. (2025),
+designed for incomplete or unbalanced repeated-measurement schedules.}
+
+\item{ci_method}{Confidence-interval engine. \code{"auto"} (default)
+resolves to \code{"fisher_z"} for \code{estimator = "ancova"} and to
+subject-level \code{"bootstrap"} for \code{estimator = "weighted"} when
+\code{n_boot > 0}; otherwise \code{"none"}. \code{"none"} returns
+\code{NA} bounds.}
+
+\item{n_boot}{Integer \eqn{\ge 0}. Number of subject-level bootstrap
+resamples when \code{ci_method = "bootstrap"}.}
+
+\item{seed}{Optional positive integer seed used for bootstrap
+reproducibility.}
 
 \item{...}{Deprecated compatibility aliases. The legacy \code{check_na}
 argument is still accepted here temporarily.}
@@ -139,6 +164,15 @@ Confidence intervals are computed with a Fisher \eqn{z}-transformation of
 \eqn{r_{\mathrm{rm}}} and then back-transformed to the correlation scale. In
 matrix mode, the same estimator is applied to every pair of selected
 response columns.
+
+With \code{estimator = "weighted"}, the package implements the weighted
+repeated-measures estimator from Kondo et al. (2025) using complete observed
+\eqn{(x,y)} pairs per contrast. This estimator does not impute missing data;
+it uses per-subject complete-pair sets and weighted sums of explained and
+residual quantities from the fixed-subject ANCOVA decomposition.
+
+Bootstrap confidence intervals use non-parametric subject-level resampling
+(subjects are resampled as blocks, not rows).
 }
 \examples{
 set.seed(2026)
@@ -180,6 +214,11 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 Bakdash, J. Z., & Marusich, L. R. (2017). Repeated Measures Correlation.
 \emph{Frontiers in Psychology}, 8, 456.
 \doi{10.3389/fpsyg.2017.00456}
+
+Kondo, M., Nagashima, K., Isono, S., & Sato, Y. (2025). Weighted Repeated
+Measures Correlation Coefficient: A New Correlation Coefficient for Handling
+Missing Data With Repeated Measures. \emph{Statistics in Medicine},
+44(10-12), e70046. \doi{10.1002/sim.70046}
 }
 \author{
 Thiago de Paula Oliveira

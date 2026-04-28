@@ -613,25 +613,32 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   source_data <- info$source_data
   response <- as.matrix(source_data$response)
   colnames(response) <- source_data$response_names
-  response_mat <- response[, c(x_var, y_var), drop = FALSE]
   subject <- factor(
     source_data$subject_levels[source_data$subject_code],
     levels = source_data$subject_levels
   )
-  subj_info <- list(code = source_data$subject_code, levels = source_data$subject_levels)
-  stats <- rmcorr_pair_cpp(
-    x = response_mat[, 1L],
-    y = response_mat[, 2L],
-    subject = subj_info$code,
-    conf_level = source_data$conf_level %||% info$conf_level %||% 0.95
+  estimator <- source_data$estimator %||% "ancova"
+  ci_method <- source_data$ci_method %||% "auto"
+  n_boot <- source_data$n_boot %||% 999L
+
+  dat <- data.frame(
+    .x = response[, x_var],
+    .y = response[, y_var],
+    .subject = subject,
+    check.names = FALSE
   )
-  .mc_rmcorr_build_pair_object(
-    stats = stats,
-    response_mat = response_mat,
-    subject = subject,
-    response_names = c(x_var, y_var),
-    subject_name = source_data$subject_name %||% "subject",
+
+  fit <- rmcorr(
+    data = dat,
+    response = c(".x", ".y"),
+    subject = ".subject",
     na_method = "pairwise",
-    conf_level = source_data$conf_level %||% info$conf_level %||% 0.95
+    conf_level = source_data$conf_level %||% info$conf_level %||% 0.95,
+    estimator = estimator,
+    ci_method = ci_method,
+    n_boot = n_boot,
+    keep_data = TRUE
   )
+  fit$responses <- c(x_var, y_var)
+  fit
 }

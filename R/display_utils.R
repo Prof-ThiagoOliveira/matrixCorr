@@ -530,12 +530,15 @@ NULL
                                            topn = 5L,
                                            max_vars = NULL,
                                            width = getOption("width", 80L),
+                                           digits = 4,
+                                           ci_digits = digits,
                                            show_ci = "yes",
                                            ...) {
   top <- .mc_pairwise_top_results(df, topn = topn, show_ci = show_ci)
   if (!nrow(top)) {
     return(invisible(top))
   }
+  top <- .mc_format_summary_numeric_table(top, digits = digits, ci_digits = ci_digits)
   cat("\n", header, "\n\n", sep = "")
   .mc_print_preview_table(
     top,
@@ -557,6 +560,31 @@ NULL
   )
   if (length(foot)) cat(paste0(foot, collapse = "\n"), "\n", sep = "")
   invisible(top)
+}
+
+.mc_format_summary_numeric_table <- function(df,
+                                             digits = 4,
+                                             ci_digits = digits) {
+  if (!is.data.frame(df) || !nrow(df)) {
+    return(df)
+  }
+  ci_digits <- .mc_coalesce(ci_digits, digits)
+
+  format_cols <- function(x, cols, ndigits) {
+    for (nm in intersect(cols, names(x))) {
+      x[[nm]] <- formatC(as.numeric(x[[nm]]), format = "f", digits = ndigits)
+    }
+    x
+  }
+
+  df <- format_cols(df, c("estimate"), digits)
+  df <- format_cols(df, c("lwr", "upr"), ci_digits)
+  df <- format_cols(
+    df,
+    c("statistic", "df", "p_value", "fisher_z", "p_value_adjusted", "skipped_prop"),
+    digits
+  )
+  df
 }
 
 .mc_corr_summary_digest_items <- function(x, digits = 4, show_ci = "yes") {
@@ -689,6 +717,8 @@ NULL
     topn = cfg$topn,
     max_vars = cfg$max_vars,
     width = cfg$width,
+    digits = digits,
+    ci_digits = .mc_coalesce(attr(x, "ci_digits", exact = TRUE), digits),
     show_ci = cfg$show_ci,
     ...
   )
