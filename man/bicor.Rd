@@ -11,7 +11,7 @@
 \usage{
 bicor(
   data,
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   ci = FALSE,
   conf_level = 0.95,
   n_threads = getOption("matrixCorr.threads", 1L),
@@ -84,9 +84,13 @@ diag.bicor(x, ...)
 Factors, logicals and common time classes are dropped in the data-frame
 path. Missing values are not allowed unless \code{na_method = "pairwise"}.}
 
-\item{na_method}{One of \code{"error"} (default, fastest) or \code{"pairwise"}.
-With \code{"pairwise"}, each \eqn{(j,k)} correlation is computed on the
-intersection of non-missing rows for the pair.}
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing, \code{NaN}, and infinite values.
+\code{"pairwise"} recomputes each estimate on its own pairwise
+complete-case overlap. This is permissive, but different matrix entries
+may be based on different rows. \code{"complete"} performs listwise
+deletion once across the retained numeric columns and then computes the
+estimator on the common complete sample.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach approximate
 Fisher-z confidence intervals for the off-diagonal biweight

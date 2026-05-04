@@ -345,19 +345,21 @@ match_arg <- function(arg,
 #' @keywords internal
 #' @noRd
 validate_na_method <- function(na_method,
-                               arg = as.character(substitute(na_method))) {
+                               arg = as.character(substitute(na_method)),
+                               allowed = c("error", "pairwise")) {
   if (is.logical(na_method) && length(na_method) == 1L && !is.na(na_method)) {
-    return(if (isTRUE(na_method)) "error" else "pairwise")
+    resolved <- if (isTRUE(na_method)) "error" else "pairwise"
+    if (resolved %in% allowed) return(resolved)
   }
   if (is.character(na_method) &&
       length(na_method) == 1L &&
       !is.na(na_method) &&
-      (identical(na_method, "error") || identical(na_method, "pairwise"))) {
+      (na_method %in% allowed)) {
     return(na_method)
   }
   match_arg(
     na_method,
-    values = c("error", "pairwise"),
+    values = allowed,
     arg_name = arg
   )
 }
@@ -370,11 +372,14 @@ resolve_na_args <- function(na_method = "error",
                             na_method_missing = FALSE,
                             arg_na_method = "na_method",
                             arg_check_na = "check_na",
+                            allowed = c("error", "pairwise"),
                             warn = TRUE) {
+  allowed <- match.arg(allowed, c("error", "pairwise", "complete"), several.ok = TRUE)
   if (is.null(check_na) && isTRUE(na_method_missing)) {
     return(list(
       na_method = "error",
-      check_na = TRUE
+      check_na = TRUE,
+      common_sample = TRUE
     ))
   }
   if (!is.null(check_na)) {
@@ -398,9 +403,13 @@ resolve_na_args <- function(na_method = "error",
       )
     }
     resolved <- if (isTRUE(check_na)) "error" else "pairwise"
+    if (!resolved %in% allowed) {
+      resolved <- "error"
+    }
     return(list(
       na_method = resolved,
-      check_na = identical(resolved, "error")
+      check_na = identical(resolved, "error"),
+      common_sample = !identical(resolved, "pairwise")
     ))
   }
 
@@ -418,11 +427,58 @@ resolve_na_args <- function(na_method = "error",
     }
   }
 
-  resolved <- validate_na_method(na_method, arg = arg_na_method)
+  resolved <- validate_na_method(na_method, arg = arg_na_method, allowed = allowed)
   list(
     na_method = resolved,
-    check_na = identical(resolved, "error")
+    check_na = identical(resolved, "error"),
+    common_sample = !identical(resolved, "pairwise")
   )
+}
+
+#' Apply listwise finite-row deletion for na_method = "complete"
+#' @keywords internal
+#' @noRd
+.mc_complete_case_matrix <- function(x,
+                                     min_n = 2L,
+                                     arg = "data") {
+  x <- as.matrix(x)
+  min_n <- as.integer(min_n)
+  finite_row <- apply(is.finite(x), 1L, all)
+  keep <- finite_row
+
+  n_original <- nrow(x)
+  n_complete <- sum(keep)
+
+  if (n_complete < min_n) {
+    abort_bad_arg(
+      arg,
+      message = "must retain at least {min_n} complete rows when {.arg na_method} is {.val complete}; retained {n_complete}.",
+      min_n = min_n,
+      n_complete = n_complete
+    )
+  }
+
+  out <- x[keep, , drop = FALSE]
+  list(
+    data = out,
+    diagnostics = list(
+      na_method = "complete",
+      n_original = n_original,
+      n_complete = n_complete,
+      n_removed = n_original - n_complete,
+      complete_rows = keep,
+      common_sample = TRUE
+    )
+  )
+}
+
+#' Merge correlation diagnostics
+#' @keywords internal
+#' @noRd
+.mc_merge_diagnostics <- function(x, y) {
+  if (is.null(x)) return(y)
+  if (is.null(y)) return(x)
+  utils::modifyList(x, y)
 }
 
 #' Set OpenMP threads only when a change is required

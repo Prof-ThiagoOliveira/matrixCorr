@@ -9,7 +9,7 @@ rmcorr(
   data = NULL,
   response,
   subject,
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   conf_level = 0.95,
   n_threads = getOption("matrixCorr.threads", 1L),
   keep_data = FALSE,
@@ -43,7 +43,9 @@ single character string naming the subject column in \code{data}.}
 \item{na_method}{Character scalar controlling missing-data handling.
 \code{"error"} rejects missing values in the selected response columns or
 \code{subject}. \code{"pairwise"} uses pairwise complete cases and drops
-subjects with fewer than two complete pairs for the specific contrast.}
+subjects with fewer than two complete pairs for the specific contrast.
+\code{"complete"} removes rows with missing or non-finite values in
+\code{subject} and all selected response variables before fitting.}
 
 \item{conf_level}{Confidence level used for Wald confidence intervals on the
 repeated-measures correlation (default \code{0.95}).}

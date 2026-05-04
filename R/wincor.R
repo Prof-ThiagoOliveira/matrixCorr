@@ -16,7 +16,13 @@
 #'   observations are set to the \eqn{(g+1)}-st order statistic and the
 #'   \eqn{g} largest observations are set to the \eqn{(n-g)}-th order
 #'   statistic. Default \code{0.2}.
-#' @param na_method One of \code{"error"} (default) or \code{"pairwise"}.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"pairwise"} recomputes each estimate on its own pairwise
+#'   complete-case overlap. This is permissive, but different matrix entries
+#'   may be based on different rows. \code{"complete"} performs listwise
+#'   deletion once across the retained numeric columns and then computes the
+#'   estimator on the common complete sample.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach percentile
@@ -178,7 +184,7 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 wincor <- function(data,
-                   na_method = c("error", "pairwise"),
+                   na_method = c("error", "pairwise", "complete"),
                    ci = FALSE,
                    p_value = FALSE,
                    conf_level = 0.95,
@@ -208,6 +214,12 @@ wincor <- function(data,
     } else {
       validate_corr_input(data, check_na = FALSE)
     }
+    diagnostics_extra <- NULL
+    if (identical(na_method, "complete")) {
+      cc <- .mc_complete_case_matrix(numeric_data, min_n = 5L, arg = "data")
+      numeric_data <- cc$data
+      diagnostics_extra <- cc$diagnostics
+    }
     colnames_data <- colnames(numeric_data)
     dn <- if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data) else NULL
     desc <- paste0(
@@ -228,7 +240,7 @@ wincor <- function(data,
       ci = FALSE,
       output = output_cfg$output,
       threshold = output_cfg$threshold,
-      pairwise = !identical(na_method, "error"),
+      pairwise = identical(na_method, "pairwise"),
       has_ci = FALSE,
       has_inference = FALSE
     )) {
@@ -253,7 +265,7 @@ wincor <- function(data,
       ))
     }
 
-    res <- if (na_method == "error") {
+    res <- if (!identical(na_method, "pairwise")) {
       wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
     } else {
       wincor_matrix_pairwise_cpp(numeric_data, tr = tr, min_n = 5L, n_threads = n_threads)
@@ -265,6 +277,7 @@ wincor <- function(data,
       method = "winsorized_correlation",
       description = desc,
       symmetric = TRUE,
+      diagnostics = diagnostics_extra,
       dimnames = dn
     )
     return(.mc_finalize_corr_output_fast(
@@ -289,6 +302,12 @@ wincor <- function(data,
   } else {
     validate_corr_input(data, check_na = FALSE)
   }
+  diagnostics_extra <- NULL
+  if (identical(na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = 5L, arg = "data")
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
 
@@ -299,7 +318,7 @@ wincor <- function(data,
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
-  res <- if (na_method == "error") {
+  res <- if (!identical(na_method, "pairwise")) {
     wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
   } else {
     wincor_matrix_pairwise_cpp(numeric_data, tr = tr, min_n = 5L, n_threads = n_threads)
@@ -329,7 +348,10 @@ wincor <- function(data,
       "; NA mode = ", na_method, "."
     ),
     symmetric = TRUE,
-    diagnostics = if (is.null(payload)) NULL else payload$diagnostics,
+    diagnostics = .mc_merge_diagnostics(
+      if (is.null(payload)) NULL else payload$diagnostics,
+      diagnostics_extra
+    ),
     extra_attrs = c(
       if (!is.null(payload$ci)) {
         list(

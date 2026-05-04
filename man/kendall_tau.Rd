@@ -11,7 +11,7 @@
 kendall_tau(
   data,
   y = NULL,
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   ci = FALSE,
   conf_level = 0.95,
   ci_method = c("fieller", "if_el", "brown_benedetti"),
@@ -81,7 +81,10 @@ low-overhead scalar path and returns a single number.}
 \item{na_method}{Character scalar controlling missing-data handling.
 \code{"error"} rejects missing, \code{NaN}, and infinite values.
 \code{"pairwise"} recomputes each correlation on its own pairwise
-complete-case overlap.}
+complete-case overlap. This is permissive, but different matrix entries
+may be based on different rows. \code{"complete"} performs listwise
+deletion once across the retained numeric columns and then computes the
+estimator on the common complete sample.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach pairwise
 confidence intervals for the off-diagonal Kendall correlations in

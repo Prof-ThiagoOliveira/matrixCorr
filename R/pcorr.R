@@ -12,6 +12,11 @@
 #'   Non-numeric columns are ignored.
 #' @param method Character; one of \code{"sample"}, \code{"oas"},
 #'   \code{"ridge"}, or \code{"glasso"}. Default \code{"sample"}.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"complete"} performs listwise deletion once across the retained
+#'   numeric columns and then computes the estimator on the common complete
+#'   sample. Pairwise deletion is not supported for partial correlations.
 #' @param lambda Numeric \eqn{\ge 0}; regularisation strength. For
 #'   \code{method = "ridge"}, this is the penalty added to the covariance
 #'   diagonal. For \code{method = "glasso"}, this is the off-diagonal
@@ -324,6 +329,7 @@
 #'
 #' @export
 pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
+                                na_method = c("error", "complete"),
                                 ci = FALSE, conf_level = 0.95,
                                 return_cov_precision = FALSE,
                                 return_p_value = FALSE, lambda = 1e-3,
@@ -336,6 +342,7 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     diag = diag
   )
   method <- match.arg(method)
+  na_method <- match.arg(na_method)
   lambda <- check_scalar_numeric(lambda, arg = "lambda", lower = 0, closed_lower = TRUE)
   lambda <- as.numeric(lambda)
   check_bool(return_cov_precision, arg = "return_cov_precision")
@@ -353,13 +360,16 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     )
   }
 
-  numeric_data <-
-    if (is.matrix(data) && is.double(data)) {
-      data
-    } else {
-      # drops non-numeric
-      validate_corr_input(data)
-    }
+  numeric_data <- validate_corr_input(
+    data,
+    check_na = identical(na_method, "error")
+  )
+  diagnostics_extra <- NULL
+  if (identical(na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = 2L, arg = "data")
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
 
   if (isTRUE(return_p_value) && !identical(method, "sample")) {
     cli::cli_abort(
@@ -415,6 +425,7 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
       dimnames = dn
     )
   )
+  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
   diag(diagnostics$n_conditioning) <- 0L
   ci_attr <- NULL
   if (isTRUE(ci)) {

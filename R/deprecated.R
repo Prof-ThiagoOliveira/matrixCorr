@@ -172,7 +172,7 @@ biweight_mid_corr <- function(
     c_const = 9,
     max_p_outliers = 1,
     pearson_fallback = c("hybrid", "none", "all"),
-    na_method = c("error", "pairwise"),
+    na_method = c("error", "pairwise", "complete"),
     mad_consistent = FALSE,
     w = NULL,
     sparse_threshold = NULL,
@@ -201,7 +201,7 @@ biweight_mid_corr <- function(
 
 #' @rdname deprecated-matrixCorr
 #' @export
-distance_corr <- function(data, na_method = c("error", "pairwise"), ...) {
+distance_corr <- function(data, na_method = c("error", "pairwise", "complete"), ...) {
   .mc_deprecate(old = "distance_corr", new = "dcor")
   if (missing(na_method)) {
     return(dcor(data = data, ...))

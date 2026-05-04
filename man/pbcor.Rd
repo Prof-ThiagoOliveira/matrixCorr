@@ -10,7 +10,7 @@
 \usage{
 pbcor(
   data,
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   ci = FALSE,
   p_value = FALSE,
   conf_level = 0.95,
@@ -71,7 +71,13 @@ pbcor(
 \arguments{
 \item{data}{A numeric matrix or data frame containing numeric columns.}
 
-\item{na_method}{One of \code{"error"} (default) or \code{"pairwise"}.
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing, \code{NaN}, and infinite values.
+\code{"pairwise"} recomputes each estimate on its own pairwise
+complete-case overlap. This is permissive, but different matrix entries
+may be based on different rows. \code{"complete"} performs listwise
+deletion once across the retained numeric columns and then computes the
+estimator on the common complete sample.
 With \code{"pairwise"}, each correlation is computed on the overlapping
 complete rows for the column pair.}
 

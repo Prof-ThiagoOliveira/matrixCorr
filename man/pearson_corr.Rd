@@ -10,7 +10,7 @@
 \usage{
 pearson_corr(
   data,
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   ci = FALSE,
   conf_level = 0.95,
   n_threads = getOption("matrixCorr.threads", 1L),
@@ -74,7 +74,10 @@ at least two non-missing values.}
 \item{na_method}{Character scalar controlling missing-data handling.
 \code{"error"} rejects missing, \code{NaN}, and infinite values.
 \code{"pairwise"} recomputes each correlation on its own pairwise
-complete-case overlap.}
+complete-case overlap. This is permissive, but different matrix entries
+may be based on different rows. \code{"complete"} performs listwise
+deletion once across the retained numeric columns and then computes the
+estimator on the common complete sample.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach pairwise
 Fisher-\eqn{z} confidence intervals for the off-diagonal Pearson
@@ -218,8 +221,10 @@ Confidence intervals are reported only when \eqn{n_{ij} > 3}.
 with \eqn{O(p^2)} memory.
 }
 \note{
-Missing values are rejected when \code{na_method = "error"}. Columns
-with fewer than two usable observations are excluded.
+\code{na_method = "complete"} is useful when a common analysis sample is
+required across all matrix entries. For covariance- or cross-product-based
+correlations, it also avoids the non-positive-semidefinite matrices that can
+arise from pairwise deletion.
 }
 \examples{
 ## MVN with AR(1) correlation

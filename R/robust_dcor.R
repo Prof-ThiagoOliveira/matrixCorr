@@ -10,7 +10,10 @@
 #' @param na_method Character scalar controlling missing-data handling.
 #'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
 #'   \code{"pairwise"} recomputes each association on its own pairwise
-#'   complete-case overlap.
+#'   complete-case overlap. This is permissive, but different matrix entries
+#'   may be based on different rows. \code{"complete"} performs listwise
+#'   deletion once across the retained numeric columns and then computes the
+#'   estimator on the common complete sample.
 #' @param p_value Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' permutation p-values for pairwise independence.
 #' @param inference Character scalar. Use \code{"none"} (default) for estimates
@@ -165,7 +168,7 @@
 #'
 #' @export
 robust_dcor <- function(data,
-                        na_method = c("error", "pairwise"),
+                        na_method = c("error", "pairwise", "complete"),
                         p_value = FALSE,
                         inference = c("none", "permutation"),
                         n_perm = 999L,
@@ -186,7 +189,8 @@ robust_dcor <- function(data,
   na_cfg <- resolve_na_args(
     na_method = na_method,
     check_na = legacy_args$check_na %||% NULL,
-    na_method_missing = missing(na_method)
+    na_method_missing = missing(na_method),
+    allowed = c("error", "pairwise", "complete")
   )
 
   check_bool(p_value, arg = "p_value")
@@ -208,6 +212,12 @@ robust_dcor <- function(data,
   }
 
   numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
+  diagnostics_extra <- NULL
+  if (identical(na_cfg$na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = 4L, arg = "data")
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
 
@@ -221,7 +231,7 @@ robust_dcor <- function(data,
 
   diagnostics <- NULL
   inference_attr <- NULL
-  if (isTRUE(na_cfg$check_na) && !isTRUE(p_value)) {
+  if (!identical(na_cfg$na_method, "pairwise") && !isTRUE(p_value)) {
     est <- robust_dcor_matrix_cpp(
       numeric_data,
       c_const = c_const,
@@ -259,6 +269,7 @@ robust_dcor <- function(data,
       )
     }
   }
+  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
 
   est <- .mc_set_matrix_dimnames(est, colnames_data)
 

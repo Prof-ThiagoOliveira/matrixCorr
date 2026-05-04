@@ -10,7 +10,7 @@
 \usage{
 dcor(
   data,
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   p_value = FALSE,
   n_threads = getOption("matrixCorr.threads", 1L),
   output = c("matrix", "sparse", "edge_list"),
@@ -68,7 +68,10 @@ columns. All non-numeric columns are dropped. Columns must be numeric.}
 \item{na_method}{Character scalar controlling missing-data handling.
 \code{"error"} rejects missing, \code{NaN}, and infinite values.
 \code{"pairwise"} recomputes each association on its own pairwise
-complete-case overlap.}
+complete-case overlap. This is permissive, but different matrix entries
+may be based on different rows. \code{"complete"} performs listwise
+deletion once across the retained numeric columns and then computes the
+estimator on the common complete sample.}
 
 \item{p_value}{Logical (default \code{FALSE}). If \code{TRUE}, attach
 pairwise p-values, test statistics, and degrees of freedom from the

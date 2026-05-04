@@ -16,7 +16,7 @@ icc(
   type = c("consistency", "agreement"),
   unit = c("single", "average"),
   scope = c("pairwise", "overall"),
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   ci = FALSE,
   conf_level = 0.95,
   n_threads = getOption("matrixCorr.threads", 1L),
@@ -124,7 +124,8 @@ columns analysed jointly.}
 \code{"error"} rejects missing, \code{NaN}, and infinite values before
 estimation. \code{"pairwise"} uses pair-specific complete cases for
 \code{scope = "pairwise"} and complete rows across all analysed columns
-for \code{scope = "overall"}.}
+for \code{scope = "overall"}. \code{"complete"} performs listwise
+deletion once across all analysed columns before ICC estimation.}
 
 \item{ci}{Logical; if \code{TRUE}, return confidence intervals.}
 

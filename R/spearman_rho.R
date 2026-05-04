@@ -12,7 +12,10 @@
 #' @param na_method Character scalar controlling missing-data handling.
 #'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
 #'   \code{"pairwise"} recomputes each correlation on its own pairwise
-#'   complete-case overlap.
+#'   complete-case overlap. This is permissive, but different matrix entries
+#'   may be based on different rows. \code{"complete"} performs listwise
+#'   deletion once across the retained numeric columns and then computes the
+#'   estimator on the common complete sample.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' jackknife Euclidean-likelihood confidence intervals for the off-diagonal
 #' Spearman correlations.
@@ -176,7 +179,7 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 spearman_rho <- function(data,
-                         na_method = c("error", "pairwise"),
+                         na_method = c("error", "pairwise", "complete"),
                          ci = FALSE,
                          conf_level = 0.95,
                          n_threads = getOption("matrixCorr.threads", 1L),
@@ -249,7 +252,8 @@ spearman_rho <- function(data,
     na_cfg <- resolve_na_args(
       na_method = na_method,
       check_na = legacy_args$check_na %||% NULL,
-      na_method_missing = missing(na_method)
+      na_method_missing = missing(na_method),
+      allowed = c("error", "pairwise", "complete")
     )
   }
   if (!isFALSE(ci)) {
@@ -260,6 +264,12 @@ spearman_rho <- function(data,
   }
 
   numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
+  diagnostics_extra <- NULL
+  if (identical(na_cfg$na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = 2L, arg = "data")
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
   diagnostics <- NULL
@@ -279,7 +289,7 @@ spearman_rho <- function(data,
     ci = ci,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
-    pairwise = !isTRUE(na_cfg$check_na),
+    pairwise = identical(na_cfg$na_method, "pairwise"),
     has_ci = ci
   )) {
     trip <- spearman_threshold_triplets_cpp(
@@ -301,7 +311,7 @@ spearman_rho <- function(data,
     ))
   }
 
-  if (isTRUE(na_cfg$check_na) && !isTRUE(ci)) {
+  if (!identical(na_cfg$na_method, "pairwise") && !isTRUE(ci)) {
     result <- spearman_matrix_cpp(numeric_data)
   } else {
     pairwise <- spearman_matrix_pairwise_cpp(
@@ -322,6 +332,7 @@ spearman_rho <- function(data,
       )
     }
   }
+  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
 
   out <- .mc_structure_corr_matrix(
     result,

@@ -108,7 +108,8 @@
 #'   \code{"error"} rejects missing, \code{NaN}, and infinite values before
 #'   estimation. \code{"pairwise"} uses pair-specific complete cases for
 #'   \code{scope = "pairwise"} and complete rows across all analysed columns
-#'   for \code{scope = "overall"}.
+#'   for \code{scope = "overall"}. \code{"complete"} performs listwise
+#'   deletion once across all analysed columns before ICC estimation.
 #' @param n_threads Integer number of OpenMP threads.
 #' @param verbose Logical; if `TRUE`, report how many threads are requested.
 #'
@@ -163,7 +164,7 @@ icc <- function(data,
                 type = c("consistency", "agreement"),
                 unit = c("single", "average"),
                 scope = c("pairwise", "overall"),
-                na_method = c("error", "pairwise"),
+                na_method = c("error", "pairwise", "complete"),
                 ci = FALSE,
                 conf_level = 0.95,
                 n_threads = getOption("matrixCorr.threads", 1L),
@@ -177,7 +178,8 @@ icc <- function(data,
   na_cfg <- resolve_na_args(
     na_method = na_method,
     check_na = legacy_args$check_na %||% NULL,
-    na_method_missing = missing(na_method)
+    na_method_missing = missing(na_method),
+    allowed = c("error", "pairwise", "complete")
   )
 
   check_bool(ci, arg = "ci")
@@ -195,6 +197,12 @@ icc <- function(data,
   }
 
   numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
+  diagnostics_extra <- NULL
+  if (identical(na_cfg$na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = 2L, arg = "data")
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
   mat <- as.matrix(numeric_data)
   colnames_data <- colnames(numeric_data)
 
@@ -205,7 +213,7 @@ icc <- function(data,
   selected_coefficient <- .mc_icc_selected_coefficient(model, type, unit)
 
   if (identical(scope, "overall")) {
-    if (na_cfg$check_na) {
+    if (na_cfg$check_na || identical(na_cfg$na_method, "complete")) {
       overall_data <- numeric_data
     } else {
       overall_data <- numeric_data
@@ -251,12 +259,12 @@ icc <- function(data,
     attr(out, "selected_row") <- coefficients[coefficients$selected, , drop = FALSE]
     attr(out, "conf.level") <- conf_level
     attr(out, "ci.method") <- if (isTRUE(ci)) "anova_f" else NULL
-    attr(out, "diagnostics") <- list(
+    attr(out, "diagnostics") <- .mc_merge_diagnostics(list(
       n_complete = nrow(mat),
       n_subjects = fit$n_subjects,
       n_raters = fit$n_raters,
       dropped_rows = if (na_cfg$check_na) 0L else nrow(numeric_data) - nrow(mat)
-    )
+    ), diagnostics_extra)
     return(out)
   }
 
@@ -267,7 +275,7 @@ icc <- function(data,
     mat,
     form_code = form_code,
     average_unit = average_unit,
-    pairwise_complete = !na_cfg$check_na,
+    pairwise_complete = identical(na_cfg$na_method, "pairwise"),
     return_ci = ci,
     conf_level = conf_level,
     n_threads = n_threads
@@ -302,7 +310,10 @@ icc <- function(data,
   attr(out, "k") <- 2L
   attr(out, "conf.level") <- conf_level
   attr(out, "ci.method") <- if (isTRUE(ci)) "anova_f" else NULL
-  attr(out, "diagnostics") <- list(n_complete = fit$n_complete)
+  attr(out, "diagnostics") <- .mc_merge_diagnostics(
+    list(n_complete = fit$n_complete),
+    diagnostics_extra
+  )
   out
 }
 

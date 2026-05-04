@@ -24,9 +24,13 @@
 #'       degenerate after weighting.
 #'     \item \code{"all"}: force ordinary Pearson for all columns.
 #'   }
-#' @param na_method One of \code{"error"} (default, fastest) or \code{"pairwise"}.
-#'   With \code{"pairwise"}, each \eqn{(j,k)} correlation is computed on the
-#'   intersection of non-missing rows for the pair.
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"pairwise"} recomputes each estimate on its own pairwise
+#'   complete-case overlap. This is permissive, but different matrix entries
+#'   may be based on different rows. \code{"complete"} performs listwise
+#'   deletion once across the retained numeric columns and then computes the
+#'   estimator on the common complete sample.
 #' @param mad_consistent Logical; if \code{TRUE}, use the normal-consistent MAD
 #'   (\code{MAD_raw * 1.4826}) in the bicor weights. Default \code{FALSE} to
 #'   match Langfelder & Horvath (2012).
@@ -210,7 +214,7 @@
 #' @export
 bicor <- function(
     data,
-    na_method        = c("error", "pairwise"),
+    na_method        = c("error", "pairwise", "complete"),
     ci               = FALSE,
     conf_level       = 0.95,
     n_threads        = getOption("matrixCorr.threads", 1L),
@@ -323,8 +327,17 @@ bicor <- function(
   } else {
     validate_corr_input(data, check_na = FALSE)
   }
-  colnames_data <- colnames(numeric_data)
   w <- check_weights(w, n = nrow(numeric_data), arg = "w")
+  diagnostics_extra <- NULL
+  if (identical(na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = 5L, arg = "data")
+    numeric_data <- cc$data
+    if (!is.null(w)) {
+      w <- w[cc$diagnostics$complete_rows]
+    }
+    diagnostics_extra <- cc$diagnostics
+  }
+  colnames_data <- colnames(numeric_data)
   if (isTRUE(ci) && !is.null(w)) {
     abort_bad_arg(
       "ci",
@@ -389,7 +402,7 @@ bicor <- function(
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
-  if (is.null(w) && na_method == "error") {
+  if (is.null(w) && !identical(na_method, "pairwise")) {
     res <- bicor_matrix_cpp(
       numeric_data,
       c_const          = c_eff,
@@ -397,7 +410,7 @@ bicor <- function(
       pearson_fallback = pf_int,
       n_threads        = n_threads
     )
-  } else if (is.null(w) && na_method == "pairwise") {
+  } else if (is.null(w) && identical(na_method, "pairwise")) {
     res <- bicor_matrix_pairwise_cpp(
       numeric_data,
       c_const          = c_eff,
@@ -406,7 +419,7 @@ bicor <- function(
       min_n            = 5L,
       n_threads        = n_threads
     )
-  } else if (!is.null(w) && na_method == "error") {
+  } else if (!is.null(w) && !identical(na_method, "pairwise")) {
     res <- bicor_matrix_weighted_cpp(
       numeric_data, w,
       c_const          = c_eff,
@@ -443,6 +456,7 @@ bicor <- function(
       conf_level = conf_level
     )
   }
+  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
 
   out <- .mc_structure_corr_matrix(
     res,

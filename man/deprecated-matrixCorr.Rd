@@ -43,7 +43,7 @@ biweight_mid_corr(
   c_const = 9,
   max_p_outliers = 1,
   pearson_fallback = c("hybrid", "none", "all"),
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   mad_consistent = FALSE,
   w = NULL,
   sparse_threshold = NULL,
@@ -53,7 +53,7 @@ biweight_mid_corr(
   diag = TRUE
 )
 
-distance_corr(data, na_method = c("error", "pairwise"), ...)
+distance_corr(data, na_method = c("error", "pairwise", "complete"), ...)
 
 partial_correlation(
   data,
