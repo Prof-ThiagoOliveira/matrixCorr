@@ -47,19 +47,20 @@ intraclass correlation for both wide and repeated-measures designs.
 
 ## Features
 
-- High-performance C++ backend using `Rcpp`
-- General correlations such as `pearson_corr()`, `spearman_rho()`, `kendall_tau()`
-- Robust correlation metrics (`bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`)
-- Distance correlation (`dcor()`)
-- Partial correlation (`pcorr()`)
-- Latent categorical/ordinal correlations (`tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()`)
-- Repeated-measures correlation (`rmcorr()`)
-- Shrinkage for $p >> n$ (`shrinkage_corr()`)
-- Agreement metrics
-    * Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
-    * Lin's concordance correlation coefficient (pairwise `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric `ccc_rm_ustat()`),
-    * Intraclass correlation (wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()`)
-- Interactive Shiny viewers for matrix-style outputs with a dedicated repeated-measures correlation viewer (`view_rmcorr_shiny()`)
+| Area | Functions and tools |
+| --- | --- |
+| Backend | High-performance C++ backend using `Rcpp` |
+| General correlations | `pearson_corr()`, `spearman_rho()`, `kendall_tau()` |
+| Robust correlations | `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()` |
+| Distance correlation | `dcor()`, `robust_dcor()` |
+| Partial correlation | `pcorr()` |
+| Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
+| Repeated-measures correlation | `rmcorr()` |
+| Shrinkage for $p >> n$ | `shrinkage_corr()` |
+| Agreement: Bland-Altman | Two-method `ba()`, repeated-measures `ba_rm()` |
+| Agreement: concordance | Pairwise Lin's CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
+| Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |
+| Interactive viewers | Matrix-style Shiny viewers, including the repeated-measures correlation viewer `view_rmcorr_shiny()` |
 
 ## Installation
 

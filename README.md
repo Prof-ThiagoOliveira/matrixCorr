@@ -39,26 +39,20 @@ repeated-measures designs.
 
 ## Features
 
-- High-performance C++ backend using `Rcpp`
-- General correlations such as `pearson_corr()`, `spearman_rho()`,
-  `kendall_tau()`
-- Robust correlation metrics (`bicor()`, `pbcor()`, `wincor()`,
-  `skipped_corr()`)
-- Distance correlation (`dcor()`)
-- Partial correlation (`pcorr()`)
-- Latent categorical/ordinal correlations (`tetrachoric()`,
-  `polychoric()`, `polyserial()`, `biserial()`)
-- Repeated-measures correlation (`rmcorr()`)
-- Shrinkage for $p >> n$ (`shrinkage_corr()`)
-- Agreement metrics
-  - Bland-Altman (two-method `ba()` and repeated-measures `ba_rm()`),
-  - Lin’s concordance correlation coefficient (pairwise `ccc()`,
-    repeated-measures LMM/REML `ccc_rm_reml()` and non-parametric
-    `ccc_rm_ustat()`),
-  - Intraclass correlation (wide-data `icc()` with pairwise and overall
-    scope, repeated-measures REML `icc_rm_reml()`)
-- Interactive Shiny viewers for matrix-style outputs with a dedicated
-  repeated-measures correlation viewer (`view_rmcorr_shiny()`)
+| Area | Functions and tools |
+|----|----|
+| Backend | High-performance C++ backend using `Rcpp` |
+| General correlations | `pearson_corr()`, `spearman_rho()`, `kendall_tau()` |
+| Robust correlations | `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()` |
+| Distance correlation | `dcor()`, `robust_dcor()` |
+| Partial correlation | `pcorr()` |
+| Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
+| Repeated-measures correlation | `rmcorr()` |
+| Shrinkage for $p >> n$ | `shrinkage_corr()` |
+| Agreement: Bland-Altman | Two-method `ba()`, repeated-measures `ba_rm()` |
+| Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
+| Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |
+| Interactive viewers | Matrix-style Shiny viewers, including the repeated-measures correlation viewer `view_rmcorr_shiny()` |
 
 ## Installation
 
@@ -73,7 +67,8 @@ remotes::install_github("Prof-ThiagoOliveira/matrixCorr")
 
 ## Thread settings (`n_threads`)
 
-Most computational functions expose an `n_threads` argument and default to:
+Most computational functions expose an `n_threads` argument and default
+to:
 
 ``` r
 getOption("matrixCorr.threads", 1L)
@@ -114,28 +109,40 @@ print(R_pear, digits = 2)
 #> V6  0.01  0.13 -0.14  0.03  0.04  1.00
 summary(R_pear)
 #> Pearson correlation summary
-#>   method      : pearson
+#>   output      : matrix
 #>   dimensions  : 6 x 6
-#>   pairs       : 15
-#>   n_complete  : 300
-#>   estimate    : -0.1410 to 0.1272
-#>   most_negative: V3-V6 (-0.1410)
-#>   most_positive: V2-V6 (0.1272)
+#>   retained_pairs: 21
+#>   threshold   : 0.0000
+#>   diag        : included
+#>   estimate    : -0.1410 to 1.0000
 #>   ci          : 95%
 #>   ci_method   : fisher_z
 #>   ci_width    : 0.222 to 0.226
 #>   cross_zero  : 13 pair(s)
 #> 
+#>  item1 item2 estimate n_complete lwr     upr     fisher_z statistic p_value
+#>  V3    V6    -0.1410  300        -0.2502 -0.0282 -0.1419  -2.4459   0.0144 
+#>  V2    V6    0.1272   300        0.0142  0.2371  0.1279   2.2047    0.0275 
+#>  V3    V5    0.0776   300        -0.0360 0.1892  0.0778   1.3401    0.1802 
+#>  V4    V5    0.0724   300        -0.0412 0.1841  0.0725   1.2491    0.2116 
+#>  V1    V5    -0.0650  300        -0.1770 0.0486  -0.0651  -1.1222   0.2618 
+#>  ...   ...   ...      ...        ...     ...     ...      ...       ...    
+#>  V2    V4    0.0335   300        -0.0801 0.1462  0.0335   0.5773    0.5638 
+#>  V4    V6    0.0324   300        -0.0811 0.1451  0.0324   0.5584    0.5766 
+#>  V1    V2    0.0236   300        -0.0899 0.1365  0.0236   0.4064    0.6845 
+#>  V1    V4    -0.0185  300        -0.1315 0.0949  -0.0185  -0.3187   0.7500 
+#>  V1    V6    0.0130   300        -0.1004 0.1261  0.0130   0.2243    0.8225 
+#> ... 5 more rows not shown (omitted)
+#> Use as.data.frame()/tidy()/as.matrix() to inspect the full result.
+#> 
 #> Strongest pairs by |estimate|
 #> 
-#>  item1 item2 estimate n_complete lwr    upr   
-#>  V3    V6    -0.1410  300        -0.250 -0.028
-#>  V2    V6     0.1272  300         0.014  0.237
-#>  V3    V5     0.0776  300        -0.036  0.189
-#>  V4    V5     0.0724  300        -0.041  0.184
-#>  V1    V5    -0.0650  300        -0.177  0.049
-#> ... 10 more rows not shown (omitted)
-#> Use as.data.frame()/tidy()/as.matrix() to inspect the full result.
+#>  item1 item2 estimate n_complete lwr     upr     fisher_z statistic p_value
+#>  V3    V6    -0.1410  300        -0.2502 -0.0282 -0.1419  -2.4459   0.0144 
+#>  V2    V6    0.1272   300        0.0142  0.2371  0.1279   2.2047    0.0275 
+#>  V3    V5    0.0776   300        -0.0360 0.1892  0.0778   1.3401    0.1802 
+#>  V4    V5    0.0724   300        -0.0412 0.1841  0.0725   1.2491    0.2116 
+#>  V1    V5    -0.0650  300        -0.1770 0.0486  -0.0651  -1.1222   0.2618
 plot(R_bicor)
 ```
 
@@ -178,17 +185,17 @@ summary(fit_ccc_rm)
 #> Concordance estimates
 #> 
 #>  item1 item2 estimate n_subjects n_obs SB     se_ccc
-#>  A     B     0.8996   24         96    0.0554 0.0184
+#>  A     B     0.8841   24         192   0.0548 0.0216
 #> 
 #> Variance components
 #> 
 #>  sigma2_subject sigma2_subject_method sigma2_subject_time sigma2_error
-#>  0.7941         0                     0                   0.1329      
+#>  0.7866         0.0176                0                   0.1229      
 #> 
 #> AR(1) diagnostics
 #> 
 #>  ar1_rho ar1_rho_lag1 ar1_rho_mom ar1_pairs ar1_pval use_ar1 ar1_recommend
-#>  0.0179  0.0179       0.0179      144       0.8298   FALSE   FALSE
+#>  -0.1256 -0.1256      -0.1256     144       0.1318   FALSE   FALSE
 ```
 
 Agreement and reliability methods use the same general inspection
