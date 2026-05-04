@@ -7,6 +7,8 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
+#include <random>
+#include <cstdint>
 #include "matrixCorr_omp.h"
 
 // Fenwick-tree utilities for prefix sums over ranked y values.
@@ -709,6 +711,409 @@ Rcpp::List ustat_dcor_matrix_pairwise_cpp(
     Rcpp::Named("estimate") = estimate,
     Rcpp::Named("statistic") = statistic,
     Rcpp::Named("parameter") = parameter,
+    Rcpp::Named("p_value") = p_value
+  );
+}
+
+struct BiloopColumn {
+  std::vector<double> u;
+  std::vector<double> v;
+  bool valid;
+  double centre;
+  double scale;
+};
+
+inline double median_cpp(std::vector<double> x) {
+  const int n = static_cast<int>(x.size());
+  if (n == 0) return NA_REAL;
+  std::sort(x.begin(), x.end());
+  const int mid = n / 2;
+  if (n % 2 == 1) return x[static_cast<std::size_t>(mid)];
+  return 0.5 * (x[static_cast<std::size_t>(mid - 1)] + x[static_cast<std::size_t>(mid)]);
+}
+
+inline double quantile_type7_sorted(const std::vector<double>& x, const double prob) {
+  const int n = static_cast<int>(x.size());
+  if (n == 0) return NA_REAL;
+  if (n == 1) return x[0];
+  const double h = 1.0 + (static_cast<double>(n) - 1.0) * prob;
+  const int lo = static_cast<int>(std::floor(h));
+  const int hi = static_cast<int>(std::ceil(h));
+  const double frac = h - static_cast<double>(lo);
+  const double xlo = x[static_cast<std::size_t>(lo - 1)];
+  const double xhi = x[static_cast<std::size_t>(hi - 1)];
+  return xlo + frac * (xhi - xlo);
+}
+
+inline double raw_mad_cpp(const std::vector<double>& x, const double med) {
+  std::vector<double> dev;
+  dev.reserve(x.size());
+  for (double xi : x) dev.push_back(std::abs(xi - med));
+  return median_cpp(dev);
+}
+
+inline double iqr_scale_cpp(std::vector<double> x) {
+  const int n = static_cast<int>(x.size());
+  if (n < 2) return NA_REAL;
+  std::sort(x.begin(), x.end());
+  const double q1 = quantile_type7_sorted(x, 0.25);
+  const double q3 = quantile_type7_sorted(x, 0.75);
+  const double out = (q3 - q1) / 1.34898;
+  return std::isfinite(out) ? out : NA_REAL;
+}
+
+inline double sample_sd_cpp(const std::vector<double>& x) {
+  const int n = static_cast<int>(x.size());
+  if (n < 2) return NA_REAL;
+  double mean = 0.0;
+  for (double xi : x) mean += xi;
+  mean /= static_cast<double>(n);
+  double ss = 0.0;
+  for (double xi : x) {
+    const double d = xi - mean;
+    ss += d * d;
+  }
+  const double out = std::sqrt(ss / static_cast<double>(n - 1));
+  return std::isfinite(out) ? out : NA_REAL;
+}
+
+inline BiloopColumn biloop_transform_column(
+  const double* x,
+  const int n,
+  const double c_const
+) {
+  BiloopColumn out;
+  out.u.assign(static_cast<std::size_t>(n), NA_REAL);
+  out.v.assign(static_cast<std::size_t>(n), NA_REAL);
+  out.valid = false;
+  out.centre = NA_REAL;
+  out.scale = NA_REAL;
+
+  if (n < 4 || !(std::isfinite(c_const) && c_const > 0.0)) return out;
+
+  std::vector<double> vals;
+  vals.reserve(static_cast<std::size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    if (!std::isfinite(x[i])) return out;
+    vals.push_back(x[i]);
+  }
+
+  const double med = median_cpp(vals);
+  double scale = raw_mad_cpp(vals, med);
+  if (!(std::isfinite(scale) && scale > 0.0)) scale = iqr_scale_cpp(vals);
+  if (!(std::isfinite(scale) && scale > 0.0)) scale = sample_sd_cpp(vals);
+  if (!(std::isfinite(scale) && scale > 0.0)) {
+    out.centre = med;
+    out.scale = scale;
+    return out;
+  }
+
+  constexpr double two_pi = 6.283185307179586476925286766559;
+  for (int i = 0; i < n; ++i) {
+    const double z = (x[i] - med) / scale;
+    const double theta = two_pi * std::tanh(z / c_const);
+    const double loop = c_const * (1.0 - std::cos(theta));
+    out.u[static_cast<std::size_t>(i)] = (z > 0.0) ? loop : ((z < 0.0) ? -loop : 0.0);
+    out.v[static_cast<std::size_t>(i)] = std::sin(theta);
+  }
+  out.valid = true;
+  out.centre = med;
+  out.scale = scale;
+  return out;
+}
+
+inline std::size_t upper_index(const int a, const int b, const int n) {
+  const int i = (a < b) ? a : b;
+  const int j = (a < b) ? b : a;
+  return static_cast<std::size_t>(
+    static_cast<long long>(i) * static_cast<long long>(2 * n - i - 1) / 2LL +
+      static_cast<long long>(j - i - 1)
+  );
+}
+
+inline std::vector<double> ucentered_biloop_upper(
+  const BiloopColumn& col,
+  const int n,
+  double& uvar
+) {
+  const std::size_t m = static_cast<std::size_t>(n) * static_cast<std::size_t>(n - 1) / 2U;
+  std::vector<double> out(m, NA_REAL);
+  uvar = NA_REAL;
+  if (!col.valid || n < 4) return out;
+
+  std::vector<double> row_sums(static_cast<std::size_t>(n), 0.0);
+  double total = 0.0;
+  std::size_t idx = 0U;
+  for (int a = 0; a < n; ++a) {
+    const double ua = col.u[static_cast<std::size_t>(a)];
+    const double va = col.v[static_cast<std::size_t>(a)];
+    for (int b = a + 1; b < n; ++b, ++idx) {
+      const double du = ua - col.u[static_cast<std::size_t>(b)];
+      const double dv = va - col.v[static_cast<std::size_t>(b)];
+      const double d = std::sqrt(du * du + dv * dv);
+      out[idx] = d;
+      row_sums[static_cast<std::size_t>(a)] += d;
+      row_sums[static_cast<std::size_t>(b)] += d;
+      total += 2.0 * d;
+    }
+  }
+
+  const double inv_nm2 = 1.0 / static_cast<double>(n - 2);
+  const double add = total / static_cast<double>((n - 1) * (n - 2));
+  double ss = 0.0;
+  idx = 0U;
+  for (int a = 0; a < n; ++a) {
+    for (int b = a + 1; b < n; ++b, ++idx) {
+      const double centered = out[idx] -
+        (row_sums[static_cast<std::size_t>(a)] + row_sums[static_cast<std::size_t>(b)]) * inv_nm2 +
+        add;
+      out[idx] = centered;
+      ss += centered * centered;
+    }
+  }
+
+  uvar = (2.0 / (static_cast<double>(n) * static_cast<double>(n - 3))) * ss;
+  if (!(std::isfinite(uvar) && uvar > 0.0)) uvar = NA_REAL;
+  return out;
+}
+
+inline double robust_dcor_from_ucentered(
+  const std::vector<double>& ax,
+  const std::vector<double>& ay,
+  const double vx,
+  const double vy,
+  const int n
+) {
+  if (!(std::isfinite(vx) && vx > 0.0 && std::isfinite(vy) && vy > 0.0)) return NA_REAL;
+  double dot = 0.0;
+  const std::size_t m = ax.size();
+  for (std::size_t i = 0; i < m; ++i) dot += ax[i] * ay[i];
+  const double cov = (2.0 / (static_cast<double>(n) * static_cast<double>(n - 3))) * dot;
+  return finalize_dcor(cov, vx, vy);
+}
+
+inline double robust_dcor_pair_complete_ptr(
+  const double* x,
+  const double* y,
+  const int n,
+  const double c_const
+) {
+  BiloopColumn bx = biloop_transform_column(x, n, c_const);
+  BiloopColumn by = biloop_transform_column(y, n, c_const);
+  double vx = NA_REAL;
+  double vy = NA_REAL;
+  std::vector<double> ax = ucentered_biloop_upper(bx, n, vx);
+  std::vector<double> ay = ucentered_biloop_upper(by, n, vy);
+  return robust_dcor_from_ucentered(ax, ay, vx, vy, n);
+}
+
+inline double robust_dcor_permutation_p_value(
+  const std::vector<double>& ax,
+  const std::vector<double>& ay,
+  const double vx,
+  const double vy,
+  const double observed,
+  const int n,
+  const int n_perm,
+  std::mt19937_64& rng
+) {
+  if (!(std::isfinite(observed) && n_perm > 0)) return NA_REAL;
+  std::vector<int> perm(static_cast<std::size_t>(n));
+  std::iota(perm.begin(), perm.end(), 0);
+  int ge = 0;
+  const double scale = 2.0 / (static_cast<double>(n) * static_cast<double>(n - 3));
+  for (int b = 0; b < n_perm; ++b) {
+    std::shuffle(perm.begin(), perm.end(), rng);
+    double dot = 0.0;
+    std::size_t idx = 0U;
+    for (int a = 0; a < n; ++a) {
+      for (int c = a + 1; c < n; ++c, ++idx) {
+        const std::size_t y_idx = upper_index(perm[static_cast<std::size_t>(a)], perm[static_cast<std::size_t>(c)], n);
+        dot += ax[idx] * ay[y_idx];
+      }
+    }
+    const double perm_est = finalize_dcor(scale * dot, vx, vy);
+    if (std::isfinite(perm_est) && perm_est >= observed - 1e-15) ++ge;
+  }
+  return (static_cast<double>(ge) + 1.0) / (static_cast<double>(n_perm) + 1.0);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix robust_dcor_matrix_cpp(
+  Rcpp::NumericMatrix X,
+  double c_const = 4.0,
+  int n_threads = 1
+) {
+  const int n = X.nrow();
+  const int p = X.ncol();
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased robust dCor");
+  if (!(std::isfinite(c_const) && c_const > 0.0)) Rcpp::stop("c_const must be positive and finite");
+
+  Rcpp::NumericMatrix R(p, p);
+  for (int j = 0; j < p; ++j) R(j, j) = 1.0;
+
+  std::vector<BiloopColumn> cols(static_cast<std::size_t>(p));
+  std::vector< std::vector<double> > uc(static_cast<std::size_t>(p));
+  std::vector<double> uvar(static_cast<std::size_t>(p), NA_REAL);
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) num_threads(n_threads)
+#endif
+  for (int j = 0; j < p; ++j) {
+    cols[static_cast<std::size_t>(j)] = biloop_transform_column(&X(0, j), n, c_const);
+    uc[static_cast<std::size_t>(j)] = ucentered_biloop_upper(
+      cols[static_cast<std::size_t>(j)],
+      n,
+      uvar[static_cast<std::size_t>(j)]
+    );
+  }
+
+  for (int j = 0; j < p; ++j) {
+    if (!(std::isfinite(uvar[static_cast<std::size_t>(j)]) && uvar[static_cast<std::size_t>(j)] > 0.0)) {
+      R(j, j) = NA_REAL;
+    }
+  }
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) num_threads(n_threads)
+#endif
+  for (int j = 1; j < p; ++j) {
+    for (int i = 0; i < j; ++i) {
+      const double d = robust_dcor_from_ucentered(
+        uc[static_cast<std::size_t>(i)],
+        uc[static_cast<std::size_t>(j)],
+        uvar[static_cast<std::size_t>(i)],
+        uvar[static_cast<std::size_t>(j)],
+        n
+      );
+      R(i, j) = d;
+      R(j, i) = d;
+    }
+  }
+  return R;
+}
+
+// [[Rcpp::export]]
+Rcpp::List robust_dcor_matrix_pairwise_cpp(
+  Rcpp::NumericMatrix X,
+  double c_const = 4.0,
+  bool return_inference = false,
+  int n_perm = 999,
+  Rcpp::Nullable<Rcpp::IntegerVector> seed = R_NilValue,
+  int n_threads = 1
+) {
+  const int n = X.nrow();
+  const int p = X.ncol();
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased robust dCor");
+  if (!(std::isfinite(c_const) && c_const > 0.0)) Rcpp::stop("c_const must be positive and finite");
+  if (return_inference && n_perm < 1) Rcpp::stop("n_perm must be positive");
+
+  Rcpp::NumericMatrix est(p, p);
+  Rcpp::NumericMatrix n_complete(p, p);
+  Rcpp::NumericMatrix estimate(p, p);
+  Rcpp::NumericMatrix p_value(p, p);
+  for (int j = 0; j < p; ++j) {
+    est(j, j) = 1.0;
+    estimate(j, j) = 1.0;
+    p_value(j, j) = NA_REAL;
+    int n_j = 0;
+    for (int r = 0; r < n; ++r) {
+      if (std::isfinite(X(r, j))) ++n_j;
+    }
+    n_complete(j, j) = n_j;
+  }
+
+  if (!return_inference) {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) num_threads(n_threads)
+#endif
+    for (int j = 1; j < p; ++j) {
+      for (int i = 0; i < j; ++i) {
+        std::vector<double> xi;
+        std::vector<double> xj;
+        xi.reserve(static_cast<std::size_t>(n));
+        xj.reserve(static_cast<std::size_t>(n));
+        for (int r = 0; r < n; ++r) {
+          const double a = X(r, i);
+          const double b = X(r, j);
+          if (std::isfinite(a) && std::isfinite(b)) {
+            xi.push_back(a);
+            xj.push_back(b);
+          }
+        }
+        const int nij = static_cast<int>(xi.size());
+        double d = NA_REAL;
+        if (nij >= 4) d = robust_dcor_pair_complete_ptr(xi.data(), xj.data(), nij, c_const);
+        est(i, j) = d;
+        est(j, i) = d;
+        n_complete(i, j) = nij;
+        n_complete(j, i) = nij;
+      }
+    }
+    return Rcpp::List::create(
+      Rcpp::Named("est") = est,
+      Rcpp::Named("n_complete") = n_complete
+    );
+  }
+
+  int seed_base = 1234567;
+  if (seed.isNotNull()) {
+    Rcpp::IntegerVector seed_vec(seed);
+    if (seed_vec.size() > 0 && seed_vec[0] != NA_INTEGER) seed_base = seed_vec[0];
+  } else {
+    seed_base = static_cast<int>(std::random_device{}());
+  }
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) num_threads(n_threads)
+#endif
+  for (int j = 1; j < p; ++j) {
+    for (int i = 0; i < j; ++i) {
+      std::vector<double> xi;
+      std::vector<double> xj;
+      xi.reserve(static_cast<std::size_t>(n));
+      xj.reserve(static_cast<std::size_t>(n));
+      for (int r = 0; r < n; ++r) {
+        const double a = X(r, i);
+        const double b = X(r, j);
+        if (std::isfinite(a) && std::isfinite(b)) {
+          xi.push_back(a);
+          xj.push_back(b);
+        }
+      }
+      const int nij = static_cast<int>(xi.size());
+      double d = NA_REAL;
+      double pval = NA_REAL;
+      if (nij >= 4) {
+        BiloopColumn bx = biloop_transform_column(xi.data(), nij, c_const);
+        BiloopColumn by = biloop_transform_column(xj.data(), nij, c_const);
+        double vx = NA_REAL;
+        double vy = NA_REAL;
+        std::vector<double> ax = ucentered_biloop_upper(bx, nij, vx);
+        std::vector<double> ay = ucentered_biloop_upper(by, nij, vy);
+        d = robust_dcor_from_ucentered(ax, ay, vx, vy, nij);
+        std::mt19937_64 rng(
+          static_cast<std::uint64_t>(seed_base) +
+            104729ULL * static_cast<std::uint64_t>(i + 1) +
+            1000003ULL * static_cast<std::uint64_t>(j + 1)
+        );
+        pval = robust_dcor_permutation_p_value(ax, ay, vx, vy, d, nij, n_perm, rng);
+      }
+      est(i, j) = d;
+      est(j, i) = d;
+      estimate(i, j) = d;
+      estimate(j, i) = d;
+      p_value(i, j) = pval;
+      p_value(j, i) = pval;
+      n_complete(i, j) = nij;
+      n_complete(j, i) = nij;
+    }
+  }
+
+  return Rcpp::List::create(
+    Rcpp::Named("est") = est,
+    Rcpp::Named("n_complete") = n_complete,
+    Rcpp::Named("estimate") = estimate,
     Rcpp::Named("p_value") = p_value
   );
 }
