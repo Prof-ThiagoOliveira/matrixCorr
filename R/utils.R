@@ -1335,6 +1335,11 @@ resolve_na_args <- function(na_method = "error",
   thr <- attr(x, "threshold", exact = TRUE) %||% 0
   use_diag <- attr(x, "diag", exact = TRUE) %||% TRUE
   symmetric <- isTRUE(attr(x, "corr_symmetric", exact = TRUE))
+  pair_edges <- if (isTRUE(symmetric)) {
+    .mc_corr_pairs(x, diag = FALSE)
+  } else {
+    edges
+  }
   has_ci <- !is.null(attr(x, "ci", exact = TRUE))
   inf_attr <- attr(x, "inference", exact = TRUE)
   has_p <- is.list(inf_attr) && is.matrix(inf_attr$p_value)
@@ -1350,14 +1355,23 @@ resolve_na_args <- function(na_method = "error",
     NA_character_
   }
 
-  vals <- as.numeric(edges$value)
-  vals <- vals[is.finite(vals)]
   m <- .mc_corr_as_dense_matrix(x)
   selector <- if (symmetric && dm[[1L]] == dm[[2L]]) {
     upper.tri(m, diag = FALSE)
   } else {
     matrix(TRUE, nrow = dm[[1L]], ncol = dm[[2L]])
   }
+  vals <- if (is.matrix(m) && identical(dim(m), dm)) {
+    as.numeric(m[selector])
+  } else {
+    edge_vals <- as.numeric(edges$value)
+    if (symmetric && dm[[1L]] == dm[[2L]] && nrow(edges)) {
+      edge_vals[as.character(edges$row) != as.character(edges$col)]
+    } else {
+      edge_vals
+    }
+  }
+  vals <- vals[is.finite(vals)]
   pick_range <- function(mat) {
     if (!is.matrix(mat) || !identical(dim(mat), dm)) {
       return(c(NA_real_, NA_real_))
@@ -1405,8 +1419,8 @@ resolve_na_args <- function(na_method = "error",
     n_variables = if (symmetric) as.integer(dm[[1L]]) else NA_integer_,
     n_rows = as.integer(dm[[1L]]),
     n_cols = as.integer(dm[[2L]]),
-    n_pairs = nrow(edges),
-    n_pairs_retained = nrow(edges),
+    n_pairs = nrow(pair_edges),
+    n_pairs_retained = nrow(pair_edges),
     symmetric = symmetric,
     n_missing = n_missing,
     threshold_sets = threshold_sets,

@@ -97,6 +97,14 @@ ustat_dcor_matrix_pairwise_cpp <- function(X, return_inference = FALSE) {
     .Call(`_matrixCorr_ustat_dcor_matrix_pairwise_cpp`, X, return_inference)
 }
 
+robust_dcor_matrix_cpp <- function(X, c_const = 4.0, n_threads = 1L) {
+    .Call(`_matrixCorr_robust_dcor_matrix_cpp`, X, c_const, n_threads)
+}
+
+robust_dcor_matrix_pairwise_cpp <- function(X, c_const = 4.0, return_inference = FALSE, n_perm = 999L, seed = NULL, n_threads = 1L) {
+    .Call(`_matrixCorr_robust_dcor_matrix_pairwise_cpp`, X, c_const, return_inference, n_perm, seed, n_threads)
+}
+
 icc_matrix_cpp <- function(X, form_code = 0L, average_unit = FALSE, pairwise_complete = FALSE, return_ci = FALSE, conf_level = 0.95, n_threads = 1L) {
     .Call(`_matrixCorr_icc_matrix_cpp`, X, form_code, average_unit, pairwise_complete, return_ci, conf_level, n_threads)
 }

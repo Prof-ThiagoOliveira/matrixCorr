@@ -378,6 +378,35 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// robust_dcor_matrix_cpp
+Rcpp::NumericMatrix robust_dcor_matrix_cpp(Rcpp::NumericMatrix X, double c_const, int n_threads);
+RcppExport SEXP _matrixCorr_robust_dcor_matrix_cpp(SEXP XSEXP, SEXP c_constSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< double >::type c_const(c_constSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(robust_dcor_matrix_cpp(X, c_const, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// robust_dcor_matrix_pairwise_cpp
+Rcpp::List robust_dcor_matrix_pairwise_cpp(Rcpp::NumericMatrix X, double c_const, bool return_inference, int n_perm, Rcpp::Nullable<Rcpp::IntegerVector> seed, int n_threads);
+RcppExport SEXP _matrixCorr_robust_dcor_matrix_pairwise_cpp(SEXP XSEXP, SEXP c_constSEXP, SEXP return_inferenceSEXP, SEXP n_permSEXP, SEXP seedSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< double >::type c_const(c_constSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_inference(return_inferenceSEXP);
+    Rcpp::traits::input_parameter< int >::type n_perm(n_permSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(robust_dcor_matrix_pairwise_cpp(X, c_const, return_inference, n_perm, seed, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // icc_matrix_cpp
 Rcpp::List icc_matrix_cpp(const arma::mat& X, const int form_code, const bool average_unit, const bool pairwise_complete, const bool return_ci, const double conf_level, const int n_threads);
 RcppExport SEXP _matrixCorr_icc_matrix_cpp(SEXP XSEXP, SEXP form_codeSEXP, SEXP average_unitSEXP, SEXP pairwise_completeSEXP, SEXP return_ciSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
@@ -937,6 +966,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_ustat_dcor", (DL_FUNC) &_matrixCorr_ustat_dcor, 2},
     {"_matrixCorr_ustat_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_cpp, 1},
     {"_matrixCorr_ustat_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_pairwise_cpp, 2},
+    {"_matrixCorr_robust_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_robust_dcor_matrix_cpp, 3},
+    {"_matrixCorr_robust_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_robust_dcor_matrix_pairwise_cpp, 6},
     {"_matrixCorr_icc_matrix_cpp", (DL_FUNC) &_matrixCorr_icc_matrix_cpp, 7},
     {"_matrixCorr_icc_overall_cpp", (DL_FUNC) &_matrixCorr_icc_overall_cpp, 3},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},
