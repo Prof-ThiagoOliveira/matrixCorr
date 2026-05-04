@@ -12,7 +12,7 @@
 skipped_corr(
   data,
   method = c("pearson", "spearman"),
-  na_method = c("error", "pairwise"),
+  na_method = c("error", "pairwise", "complete"),
   ci = FALSE,
   p_value = FALSE,
   conf_level = 0.95,
@@ -86,16 +86,17 @@ columns. All non-numeric columns will be excluded.}
 \item{method}{Correlation computed after removing projected outliers. One of
 \code{"pearson"} (default) or \code{"spearman"}.}
 
-\item{na_method}{One of \code{"error"} (default) or \code{"pairwise"}.
+\item{na_method}{Character scalar controlling missing-data handling.
 With \code{"error"}, the function requires all retained numeric columns to
 be free of missing or non-finite values and aborts otherwise. This is the
 recommended setting when you want a single common sample size across all
 pairs, reproducible skipped-row diagnostics on the same rows, or bootstrap
-inference via \code{ci = TRUE} / \code{p_value = TRUE}. With
-\code{"pairwise"}, each variable pair is computed on its own overlap of
-finite rows. This is more permissive for incomplete data, but different
-pairs can be based on different effective samples and different skipped-row
-sets, so the resulting matrix is less directly comparable across entries.}
+inference via \code{ci = TRUE} / \code{p_value = TRUE}.
+\code{"pairwise"} recomputes each estimate on its own pairwise
+complete-case overlap. This is permissive, but different matrix entries
+may be based on different rows. \code{"complete"} performs listwise
+deletion once across the retained numeric columns and then computes the
+estimator on the common complete sample.}
 
 \item{ci}{Logical; if \code{TRUE}, attach percentile-bootstrap confidence
 intervals for each skipped correlation using the Wilcox (2015) B2
@@ -281,7 +282,10 @@ requires a full bivariate projection search, so the dominant cost is higher
 than for marginal robust methods. The implementation evaluates pairs in
 'C++'; where available, pairs are processed with 'OpenMP' parallelism. With
 \code{na_method = "pairwise"}, each pair is recomputed on its overlap of
-non-missing rows.
+non-missing rows. With \code{na_method = "complete"}, rows with any
+non-finite value across the retained numeric columns are removed before any
+pairwise outlier search. This gives a common row universe for all
+skipped-correlation masks.
 
 \strong{Bootstrap inference.} When \code{ci = TRUE} or \code{p_value = TRUE},
 the implementation uses the percentile-bootstrap strategy studied by Wilcox
@@ -291,7 +295,8 @@ resampled data, and recomputes the skipped correlation on the retained
 observations. This corresponds to Wilcox's B2 method and avoids the
 statistically unsatisfactory shortcut of removing outliers only once before
 bootstrapping. Bootstrap inference currently requires complete data
-(\code{na_method = "error"}). When \code{p_adjust = "hochberg"}, the
+(\code{na_method = "error"} or \code{"complete"}). When
+\code{p_adjust = "hochberg"}, the
 bootstrap p-values are processed with Hochberg's step-up procedure (method H
 in Wilcox, Rousselet, and Pernet, 2018). When \code{p_adjust = "ecp"}, the
 package follows their ECP method and simulates \code{n_mc} null data sets

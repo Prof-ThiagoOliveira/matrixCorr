@@ -11,7 +11,10 @@
 #' @param na_method Character scalar controlling missing-data handling.
 #'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
 #'   \code{"pairwise"} recomputes each association on its own pairwise
-#'   complete-case overlap.
+#'   complete-case overlap. This is permissive, but different matrix entries
+#'   may be based on different rows. \code{"complete"} performs listwise
+#'   deletion once across the retained numeric columns and then computes the
+#'   estimator on the common complete sample.
 #' @param p_value Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' pairwise p-values, test statistics, and degrees of freedom from the
 #' distance-correlation t-test of independence.
@@ -150,7 +153,7 @@
 #'
 #' @export
 dcor <- function(data,
-                 na_method = c("error", "pairwise"),
+                 na_method = c("error", "pairwise", "complete"),
                  p_value = FALSE,
                  n_threads = getOption("matrixCorr.threads", 1L),
                  output = c("matrix", "sparse", "edge_list"),
@@ -198,7 +201,8 @@ dcor <- function(data,
     na_cfg <- resolve_na_args(
       na_method = na_method,
       check_na = legacy_args$check_na %||% NULL,
-      na_method_missing = missing(na_method)
+      na_method_missing = missing(na_method),
+      allowed = c("error", "pairwise", "complete")
     )
   }
   if (!isFALSE(p_value)) {
@@ -207,6 +211,12 @@ dcor <- function(data,
     check_bool(p_value, arg = "p_value")
   }
   numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
+  diagnostics_extra <- NULL
+  if (identical(na_cfg$na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = 4L, arg = "data")
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
   diagnostics <- NULL
@@ -220,7 +230,7 @@ dcor <- function(data,
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
 
-  if (isTRUE(p_value) || !isTRUE(na_cfg$check_na)) {
+  if (isTRUE(p_value) || identical(na_cfg$na_method, "pairwise")) {
     pairwise <- ustat_dcor_matrix_pairwise_cpp(
       numeric_data,
       return_inference = p_value
@@ -243,6 +253,7 @@ dcor <- function(data,
   } else {
     dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
   }
+  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
 
   out <- .mc_structure_corr_matrix(
     dcor_matrix,

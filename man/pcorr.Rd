@@ -11,6 +11,7 @@
 pcorr(
   data,
   method = c("sample", "oas", "ridge", "glasso"),
+  na_method = c("error", "complete"),
   ci = FALSE,
   conf_level = 0.95,
   return_cov_precision = FALSE,
@@ -73,6 +74,12 @@ Non-numeric columns are ignored.}
 
 \item{method}{Character; one of \code{"sample"}, \code{"oas"},
 \code{"ridge"}, or \code{"glasso"}. Default \code{"sample"}.}
+
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing, \code{NaN}, and infinite values.
+\code{"complete"} performs listwise deletion once across the retained
+numeric columns and then computes the estimator on the common complete
+sample. Pairwise deletion is not supported for partial correlations.}
 
 \item{ci}{Logical (default \code{FALSE}). If \code{TRUE}, attach Fisher-z
 confidence intervals for the off-diagonal partial correlations. This

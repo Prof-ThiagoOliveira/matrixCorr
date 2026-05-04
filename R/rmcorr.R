@@ -41,6 +41,8 @@
 #'   \code{"error"} rejects missing values in the selected response columns or
 #'   \code{subject}. \code{"pairwise"} uses pairwise complete cases and drops
 #'   subjects with fewer than two complete pairs for the specific contrast.
+#'   \code{"complete"} removes rows with missing or non-finite values in
+#'   \code{subject} and all selected response variables before fitting.
 #' @param n_threads Integer \eqn{\ge 1}. Number of OpenMP threads used by the
 #'   C++ backend in matrix mode. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
@@ -186,7 +188,7 @@
 #' @author Thiago de Paula Oliveira
 #' @export
 rmcorr <- function(data = NULL, response, subject,
-                   na_method = c("error", "pairwise"), conf_level = 0.95,
+                   na_method = c("error", "pairwise", "complete"), conf_level = 0.95,
                    n_threads = getOption("matrixCorr.threads", 1L),
                    keep_data = FALSE,
                    verbose = FALSE,
@@ -324,7 +326,8 @@ rmcorr <- function(data = NULL, response, subject,
   na_cfg <- resolve_na_args(
     na_method = na_method,
     check_na = legacy_args$check_na %||% NULL,
-    na_method_missing = missing(na_method)
+    na_method_missing = missing(na_method),
+    allowed = c("error", "pairwise", "complete")
   )
 
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
@@ -336,6 +339,13 @@ rmcorr <- function(data = NULL, response, subject,
   resolved <- .mc_rmcorr_resolve_inputs(data = data, response = response, subject = subject)
   response_mat <- resolved$response
   subject_vec <- resolved$subject
+  diagnostics_extra <- NULL
+  if (identical(na_cfg$na_method, "complete")) {
+    cc <- .mc_rmcorr_complete_cases(response_mat, subject_vec, min_n = 2L)
+    response_mat <- cc$response
+    subject_vec <- cc$subject
+    diagnostics_extra <- cc$diagnostics
+  }
   response_names <- colnames(response_mat)
 
   if (ncol(response_mat) < 2L) {
@@ -402,7 +412,8 @@ rmcorr <- function(data = NULL, response, subject,
       estimator = if (include_extended) estimator else NULL,
       ci_method = if (include_extended) ci_method_resolved else NULL,
       n_boot = if (include_extended && identical(ci_method_resolved, "bootstrap")) n_boot else NULL,
-      seed = if (include_extended && identical(ci_method_resolved, "bootstrap")) seed else NULL
+      seed = if (include_extended && identical(ci_method_resolved, "bootstrap")) seed else NULL,
+      diagnostics_extra = diagnostics_extra
     ))
   }
 
@@ -469,6 +480,7 @@ rmcorr <- function(data = NULL, response, subject,
   } else if (!identical(ci_method_resolved, "fisher_z")) {
     diagnostics$ci_method <- ci_method_resolved
   }
+  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
 
   out_obj <- .mc_structure_corr_matrix(
     est,
@@ -805,6 +817,37 @@ rmcorr_weighted <- function(data = NULL, response, subject, ...) {
   dat
 }
 
+.mc_rmcorr_complete_cases <- function(response_mat, subject, min_n = 2L) {
+  finite_response <- apply(is.finite(response_mat), 1L, all)
+  valid_subject <- !is.na(subject)
+  if (is.numeric(subject)) {
+    valid_subject <- valid_subject & is.finite(subject)
+  }
+  keep <- finite_response & valid_subject
+  n_original <- nrow(response_mat)
+  n_complete <- sum(keep)
+  if (n_complete < min_n) {
+    abort_bad_arg(
+      "response",
+      message = "must retain at least {min_n} complete rows when {.arg na_method} is {.val complete}; retained {n_complete}.",
+      min_n = min_n,
+      n_complete = n_complete
+    )
+  }
+  list(
+    response = response_mat[keep, , drop = FALSE],
+    subject = subject[keep],
+    diagnostics = list(
+      na_method = "complete",
+      n_original = n_original,
+      n_complete = n_complete,
+      n_removed = n_original - n_complete,
+      complete_rows = keep,
+      common_sample = TRUE
+    )
+  )
+}
+
 .mc_rmcorr_build_pair_object <- function(stats, response_mat, subject,
                                          response_names, subject_name,
                                          na_method,
@@ -812,7 +855,8 @@ rmcorr_weighted <- function(data = NULL, response, subject, ...) {
                                          estimator = NULL,
                                          ci_method = NULL,
                                          n_boot = NULL,
-                                         seed = NULL) {
+                                         seed = NULL,
+                                         diagnostics_extra = NULL) {
   dat <- .mc_rmcorr_pair_data(response_mat, subject)
   slope <- as.numeric(stats$slope)
   valid <- isTRUE(stats$valid) && is.finite(stats$estimate)
@@ -845,6 +889,7 @@ rmcorr_weighted <- function(data = NULL, response, subject, ...) {
     payload$weighted_ss_x <- as.numeric(stats$weighted_ss_x)
     payload$weighted_ss_e <- as.numeric(stats$weighted_ss_e)
   }
+  payload <- .mc_merge_diagnostics(payload, diagnostics_extra)
 
   out <- structure(
     payload,
