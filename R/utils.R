@@ -454,10 +454,6 @@ resolve_na_args <- function(na_method = "error",
 .mc_prepare_omp_threads <- function(n_threads,
                                     n_threads_missing = FALSE,
                                     arg = "n_threads") {
-  if (isTRUE(n_threads_missing) &&
-      identical(getOption("matrixCorr.threads", 1L), 1L)) {
-    return(NULL)
-  }
   .mc_enter_omp_threads(check_scalar_int_pos(n_threads, arg = arg))
 }
 

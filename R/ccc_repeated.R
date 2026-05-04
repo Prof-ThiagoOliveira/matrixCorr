@@ -793,9 +793,9 @@ ccc_rm_ustat <- function(data,
 #'
 #' @section Threading and BLAS guards:
 #' The C++ backend uses OpenMP loops while also forcing vendor BLAS libraries to
-#' run single-threaded so that overall CPU usage stays predictable. On OpenBLAS
-#' and Apple's Accelerate this is handled automatically. On Intel MKL builds the
-#' guard is disabled by default, but you can also opt out manually by setting
+#' run single-threaded so that overall CPU usage stays predictable. This guard
+#' is applied to OpenBLAS, Apple's Accelerate, and Intel MKL when their runtime
+#' controls are available. You can opt out manually by setting
 #' \code{MATRIXCORR_DISABLE_BLAS_GUARD=1} in the environment before loading
 #' \pkg{matrixCorr}.
 #'
