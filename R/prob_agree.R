@@ -117,6 +117,7 @@
 #' print(fit4)
 #' plot(fit4)
 #'
+#' @author Thiago de Paula Oliveira
 #' @export
 prob_agree <- function(data,
                        response,

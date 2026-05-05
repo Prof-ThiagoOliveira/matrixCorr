@@ -166,6 +166,7 @@
 #' summary(robust_multi)
 #' plot(robust_multi)
 #'
+#' @author Thiago de Paula Oliveira
 #' @export
 robust_dcor <- function(data,
                         na_method = c("error", "pairwise", "complete"),
