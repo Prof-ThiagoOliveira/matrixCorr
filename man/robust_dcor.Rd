@@ -241,3 +241,6 @@ correlation through bounded transformations.
 \seealso{
 \code{\link[=dcor]{dcor()}}, \code{\link[=wincor]{wincor()}}, \code{\link[=pbcor]{pbcor()}}, \code{\link[=skipped_corr]{skipped_corr()}}
 }
+\author{
+Thiago de Paula Oliveira
+}

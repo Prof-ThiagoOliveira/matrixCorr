@@ -996,9 +996,11 @@ plot.ba_matrix <- function(x,
       )
     }
     hit <- match(against, methods)
-    all_pairs <- subset(all_pairs, i == hit | j == hit)
+    keep_against <- all_pairs[["i"]] == hit | all_pairs[["j"]] == hit
+    all_pairs <- all_pairs[keep_against, , drop = FALSE]
   } else if (!is.null(pairs)) {
-    all_pairs <- subset(all_pairs, lab %in% pairs)
+    keep_pairs <- all_pairs[["lab"]] %in% pairs
+    all_pairs <- all_pairs[keep_pairs, , drop = FALSE]
     if (!nrow(all_pairs)) {
       abort_bad_arg("pairs",
         message = "None of the requested pairs matched available contrasts."

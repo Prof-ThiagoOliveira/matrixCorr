@@ -154,3 +154,6 @@ Stevens, N. T. and Anderson-Cook, C. M. (2017). Comparing the Reliability of
 Related Populations With the Probability of Agreement. \emph{Technometrics},
 59(3), 371-380. doi:10.1080/00401706.2016.1214180.
 }
+\author{
+Thiago de Paula Oliveira
+}
