@@ -4,6 +4,9 @@
 #' Computes Bland-Altman mean difference and limits of agreement (LoA)
 #' between two numeric measurement vectors, including t-based confidence
 #' intervals for the mean difference and for each LoA using 'C++' backend.
+#' If `group2` is omitted and `group1` is a numeric matrix or data frame with
+#' at least two numeric columns, `ba()` computes all pairwise contrasts across
+#' methods and returns a pairwise Bland-Altman matrix object.
 #'
 #' Note: Lin's concordance correlation coefficient (CCC) is a complementary,
 #' single-number summary of agreement (precision + accuracy). It is useful for
@@ -17,6 +20,12 @@
 #' The limits of agreement (LoA) are \eqn{\bar d \pm z \cdot s_d}, where
 #' \eqn{s_d} is the sample standard deviation of \eqn{d_i} and \eqn{z}
 #' (argument \code{loa_multiplier}) is typically 1.96 for nominal 95% LoA.
+#'
+#' When `group2` is omitted and `group1` is a wide numeric matrix or data
+#' frame, the same two-method calculation is applied to every unordered column
+#' pair. The returned pairwise matrices follow the requested `mode`: with
+#' `mode = 1`, upper-triangle entries represent row minus column; with
+#' `mode = 2`, upper-triangle entries represent column minus row.
 #'
 #' Confidence intervals use Student's \eqn{t} distribution with \eqn{n-1}
 #' degrees of freedom, with
@@ -40,7 +49,11 @@
 #' probability that two estimated quantities or curves agree within a
 #' user-specified practical tolerance.
 #'
-#' @param group1,group2 Numeric vectors of equal length.
+#' @param group1 Numeric vector of paired measurements, or a numeric matrix/data
+#'   frame with at least two numeric columns when `group2` is omitted.
+#' @param group2 Optional numeric vector of paired measurements. If omitted,
+#'   `group1` must be a numeric matrix or data frame and all unordered numeric
+#'   column pairs are analysed.
 #' @param loa_multiplier Positive scalar; the multiple of the standard deviation used to
 #'   define the LoA (default 1.96 for nominal 95\% agreement). The confidence
 #'   intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.
@@ -50,7 +63,9 @@
 #'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param verbose Logical; if TRUE, prints how many OpenMP threads are used.
 #'
-#' @return An object of class \code{"ba"} (list) with elements:
+#' @return
+#' If `group1` and `group2` are both supplied, an object of class
+#' \code{"ba"} (list) with elements:
 #' \itemize{
 #'   \item \code{means}, \code{diffs}: numeric vectors
 #'   \item \code{groups}: data.frame used after NA removal
@@ -60,6 +75,26 @@
 #'   \item \code{lines}: named numeric vector (lower, mean, upper)
 #'   \item \code{CI.lines}: named numeric vector for CIs of those lines
 #'   \item \code{loa_multiplier}, \code{critical.diff}
+#' }
+#'
+#' If `group2` is omitted and `group1` is a wide numeric matrix or data frame,
+#' an object of class \code{"ba_matrix"} with pairwise components:
+#' \itemize{
+#'   \item \code{bias}: pairwise matrix of Bland-Altman mean differences.
+#'   \item \code{sd_loa}: pairwise matrix of SDs of differences.
+#'   \item \code{loa_lower}, \code{loa_upper}: pairwise matrices of LoA
+#'   endpoints.
+#'   \item \code{width}: pairwise matrix of LoA widths.
+#'   \item \code{n}: integer pairwise matrix of complete-case counts.
+#'   \item \code{mean_ci_low}, \code{mean_ci_high}: pairwise matrices of CI
+#'   bounds for the mean difference.
+#'   \item \code{loa_lower_ci_low}, \code{loa_lower_ci_high}: pairwise matrices
+#'   of CI bounds for the lower LoA.
+#'   \item \code{loa_upper_ci_low}, \code{loa_upper_ci_high}: pairwise matrices
+#'   of CI bounds for the upper LoA.
+#'   \item \code{methods}: character vector of analysed method names.
+#'   \item \code{loa_multiplier}, \code{mode}: calculation settings reused for
+#'   every pair.
 #' }
 #'
 #' @seealso \code{\link{print.ba}}, \code{\link{plot.ba}},
@@ -73,6 +108,18 @@
 #' fit_ba <- ba(x, y)
 #' print(fit_ba)
 #' plot(fit_ba)
+#'
+#' # Pairwise Bland-Altman across 3 methods
+#' set.seed(7)
+#' wide3 <- data.frame(
+#'   ref = rnorm(80, 100, 8),
+#'   m2  = rnorm(80, 101, 8),
+#'   m3  = rnorm(80,  99, 9)
+#' )
+#' fit_ba3 <- ba(wide3)
+#' print(fit_ba3)
+#' summary(fit_ba3)
+#' plot(fit_ba3)
 #'
 #' @references
 #' Bland JM, Altman DG (1986). Statistical methods for assessing agreement
@@ -91,6 +138,35 @@ ba <- function(group1,
                conf_level = 0.95,
                n_threads = getOption("matrixCorr.threads", 1L),
                verbose = FALSE) {
+  if (missing(group2)) {
+    return(.mc_ba_fit_matrix(
+      data = group1,
+      loa_multiplier = loa_multiplier,
+      mode = mode,
+      conf_level = conf_level,
+      n_threads = n_threads,
+      verbose = verbose
+    ))
+  }
+
+  .mc_ba_fit_two(
+    group1 = group1,
+    group2 = group2,
+    loa_multiplier = loa_multiplier,
+    mode = mode,
+    conf_level = conf_level,
+    n_threads = n_threads,
+    verbose = verbose
+  )
+}
+
+.mc_ba_fit_two <- function(group1,
+                           group2,
+                           loa_multiplier,
+                           mode,
+                           conf_level,
+                           n_threads,
+                           verbose) {
   # -- validate ---------------------------------------------------------------
   if (!is.numeric(group1) || !is.numeric(group2)) {
     abort_bad_arg("group1",
@@ -165,6 +241,164 @@ ba <- function(group1,
   attr(ba_out, "conf.level") <- conf_level
   attr(ba_out, "called.with") <- length(group1)
   ba_out
+}
+
+.mc_ba_fit_matrix <- function(data,
+                              loa_multiplier,
+                              mode,
+                              conf_level,
+                              n_threads,
+                              verbose) {
+  if (is.data.frame(data)) {
+    is_num <- vapply(data, is.numeric, logical(1))
+    if (!any(is_num)) {
+      abort_bad_arg("group1",
+        message = "must contain at least two numeric columns when {.arg group2} is omitted."
+      )
+    }
+    data <- data[is_num]
+  }
+
+  if (!is.matrix(data) && !is.data.frame(data)) {
+    abort_bad_arg("group1",
+      message = "must be a numeric matrix or data frame when {.arg group2} is omitted."
+    )
+  }
+  if (is.matrix(data) && !is.numeric(data)) {
+    abort_bad_arg("group1",
+      message = "must be a numeric matrix when {.arg group2} is omitted."
+    )
+  }
+
+  data_wide <- as.data.frame(data, check.names = FALSE, stringsAsFactors = FALSE)
+  if (ncol(data_wide) < 2L) {
+    abort_bad_arg("group1",
+      message = "must contain at least two numeric columns when {.arg group2} is omitted."
+    )
+  }
+  methods <- names(data_wide)
+  if (is.null(methods) || anyNA(methods) || any(methods == "")) {
+    methods <- paste0("method", seq_len(ncol(data_wide)))
+    names(data_wide) <- methods
+  }
+
+  if (!is.numeric(loa_multiplier) || length(loa_multiplier) != 1L || !is.finite(loa_multiplier) || loa_multiplier <= 0) {
+    abort_bad_arg("loa_multiplier",
+      message = "`{arg}` must be a positive scalar."
+    )
+  }
+  if (!rlang::is_scalar_integerish(mode) || !(as.integer(mode) %in% c(1L, 2L))) {
+    abort_bad_arg("mode",
+      message = "must be 1 or 2."
+    )
+  }
+  mode <- as.integer(mode)
+  if (!is.numeric(conf_level) || length(conf_level) != 1L ||
+      !is.finite(conf_level) || conf_level <= 0 || conf_level >= 1) {
+    abort_bad_arg("conf_level",
+      message = "`conf_level` must be in (0, 1)."
+    )
+  }
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
+  check_bool(verbose, arg = "verbose")
+
+  if (isTRUE(verbose)) {
+    inform_if_verbose(
+      "Pairwise Bland-Altman: {ncol(data_wide)} methods -> {choose(ncol(data_wide), 2L)} pairs.",
+      .verbose = TRUE
+    )
+  }
+
+  mm <- length(methods)
+  bias <- .make_named_matrix_ba(methods)
+  sd_loa <- .make_named_matrix_ba(methods)
+  loa_lower <- .make_named_matrix_ba(methods)
+  loa_upper <- .make_named_matrix_ba(methods)
+  width <- .make_named_matrix_ba(methods)
+  n_mat <- .make_named_matrix_ba(methods, NA_integer_, "integer")
+  mean_ci_low <- .make_named_matrix_ba(methods)
+  mean_ci_high <- .make_named_matrix_ba(methods)
+  lo_ci_low <- .make_named_matrix_ba(methods)
+  lo_ci_high <- .make_named_matrix_ba(methods)
+  hi_ci_low <- .make_named_matrix_ba(methods)
+  hi_ci_high <- .make_named_matrix_ba(methods)
+
+  for (i in 1:(mm - 1L)) for (j in (i + 1L):mm) {
+    keep <- !is.na(data_wide[[i]]) & !is.na(data_wide[[j]])
+    n_pair <- sum(keep)
+    n_mat[i, j] <- n_pair
+    n_mat[j, i] <- n_pair
+    if (n_pair < 2L) {
+      next
+    }
+
+    fit <- .mc_ba_fit_two(
+      group1 = data_wide[[i]],
+      group2 = data_wide[[j]],
+      loa_multiplier = loa_multiplier,
+      mode = mode,
+      conf_level = conf_level,
+      n_threads = n_threads,
+      verbose = FALSE
+    )
+
+    md <- as.numeric(fit$mean.diffs)
+    sdv <- as.numeric(fit$critical.diff) / as.numeric(fit$loa_multiplier)
+    lo <- as.numeric(fit$lower.limit)
+    hi <- as.numeric(fit$upper.limit)
+
+    bias[i, j] <- md
+    bias[j, i] <- -md
+    sd_loa[i, j] <- sdv
+    sd_loa[j, i] <- sdv
+    loa_lower[i, j] <- lo
+    loa_lower[j, i] <- -hi
+    loa_upper[i, j] <- hi
+    loa_upper[j, i] <- -lo
+    width[i, j] <- hi - lo
+    width[j, i] <- hi - lo
+
+    mean_ci_low[i, j] <- as.numeric(fit$CI.lines[["mean.diff.ci.lower"]])
+    mean_ci_high[i, j] <- as.numeric(fit$CI.lines[["mean.diff.ci.upper"]])
+    lo_ci_low[i, j] <- as.numeric(fit$CI.lines[["lower.limit.ci.lower"]])
+    lo_ci_high[i, j] <- as.numeric(fit$CI.lines[["lower.limit.ci.upper"]])
+    hi_ci_low[i, j] <- as.numeric(fit$CI.lines[["upper.limit.ci.lower"]])
+    hi_ci_high[i, j] <- as.numeric(fit$CI.lines[["upper.limit.ci.upper"]])
+
+    mean_ci_low[j, i] <- -mean_ci_high[i, j]
+    mean_ci_high[j, i] <- -mean_ci_low[i, j]
+    lo_ci_low[j, i] <- -hi_ci_high[i, j]
+    lo_ci_high[j, i] <- -hi_ci_low[i, j]
+    hi_ci_low[j, i] <- -lo_ci_high[i, j]
+    hi_ci_high[j, i] <- -lo_ci_low[i, j]
+  }
+
+  out <- structure(
+    list(
+      bias = bias,
+      sd_loa = sd_loa,
+      loa_lower = loa_lower,
+      loa_upper = loa_upper,
+      width = width,
+      n = n_mat,
+      mean_ci_low = mean_ci_low,
+      mean_ci_high = mean_ci_high,
+      loa_lower_ci_low = lo_ci_low,
+      loa_lower_ci_high = lo_ci_high,
+      loa_upper_ci_low = hi_ci_low,
+      loa_upper_ci_high = hi_ci_high,
+      methods = methods,
+      loa_multiplier = loa_multiplier,
+      mode = mode,
+      data_wide = data_wide
+    ),
+    class = c("ba_matrix", "list")
+  )
+  attr(out, "method") <- "Bland-Altman"
+  attr(out, "description") <- "Pairwise mean differences and limits of agreement with CIs"
+  attr(out, "package") <- "matrixCorr"
+  attr(out, "conf.level") <- conf_level
+  out
 }
 
 .mc_ba_normalize_ci_lines <- function(x) {
@@ -556,4 +790,306 @@ plot.ba <- function(x,
                   x = "Mean of methods", y = "Difference between methods")
 
   p
+}
+
+#' @rdname ba
+#' @method print ba_matrix
+#' @param x A \code{"ba_matrix"} object.
+#' @param style Show the pairwise result as \code{"pairs"} or \code{"matrices"}.
+#' @export
+print.ba_matrix <- function(x,
+                            digits = 3,
+                            ci_digits = 3,
+                            n = NULL,
+                            topn = NULL,
+                            max_vars = NULL,
+                            width = NULL,
+                            show_ci = NULL,
+                            style = c("pairs", "matrices"),
+                            ...) {
+  check_inherits(x, "ba_matrix")
+  style <- match.arg(style)
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "print")
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+
+  if (style == "matrices") {
+    .mc_print_named_digest(
+      c(
+        methods = length(x$methods),
+        mode = if (identical(as.integer(x$mode), 1L)) "row - column" else "column - row",
+        if (identical(show_ci, "yes") && is.finite(cl)) c(ci = sprintf("%g%%", 100 * cl)),
+        components = "bias, sd_loa, loa_low, loa_up, width, n"
+      ),
+      header = "Bland-Altman matrix preview:"
+    )
+    cat("\nPrimary component: bias\n\n")
+    .mc_print_preview_matrix(
+      x$bias,
+      digits = digits,
+      n = .mc_coalesce(n, .mc_display_option("print_max_rows", 20L)),
+      topn = .mc_coalesce(topn, .mc_display_option("print_topn", 5L)),
+      max_vars = .mc_coalesce(max_vars, .mc_display_option("print_max_vars", NULL)),
+      width = .mc_coalesce(width, getOption("width", 80L)),
+      context = "print",
+      full_hint = TRUE,
+      summary_hint = TRUE,
+      ...
+    )
+    return(invisible(x))
+  }
+
+  sm <- summary(x, digits = digits, ci_digits = ci_digits)
+  cols <- c("method1", "method2", "bias", "sd_loa", "loa_low", "loa_up", "width", "n_obs")
+  if (identical(show_ci, "yes")) {
+    cols <- c(cols, "bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+  }
+  df <- as.data.frame(sm)[, cols[cols %in% names(sm)], drop = FALSE]
+  header <- .mc_header_with_ci(
+    sprintf("Bland-Altman (%s)", if (identical(as.integer(x$mode), 1L)) "row - column" else "column - row"),
+    cl,
+    show_ci
+  )
+  .mc_print_summary_table(
+    df,
+    header = header,
+    digits = digits,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    print_overview = FALSE,
+    ...
+  )
+  invisible(x)
+}
+
+#' @rdname ba
+#' @method summary ba_matrix
+#' @export
+summary.ba_matrix <- function(object,
+                              digits = 3,
+                              ci_digits = 3,
+                              ...) {
+  check_inherits(object, "ba_matrix")
+  methods <- object$methods
+  m <- length(methods)
+
+  rows <- vector("list", m * (m - 1L) / 2L)
+  k <- 0L
+  for (i in 1:(m - 1L)) for (j in (i + 1L):m) {
+    k <- k + 1L
+    rows[[k]] <- list(
+      method1 = methods[i],
+      method2 = methods[j],
+      bias = round(object$bias[i, j], digits),
+      sd_loa = round(object$sd_loa[i, j], digits),
+      loa_low = round(object$loa_lower[i, j], digits),
+      loa_up = round(object$loa_upper[i, j], digits),
+      width = round(object$width[i, j], digits),
+      n_obs = suppressWarnings(as.integer(object$n[i, j])),
+      loa_multiplier = round(as.numeric(object$loa_multiplier), digits),
+      bias_lwr = round(object$mean_ci_low[i, j], ci_digits),
+      bias_upr = round(object$mean_ci_high[i, j], ci_digits),
+      lo_lwr = round(object$loa_lower_ci_low[i, j], ci_digits),
+      lo_upr = round(object$loa_lower_ci_high[i, j], ci_digits),
+      up_lwr = round(object$loa_upper_ci_low[i, j], ci_digits),
+      up_upr = round(object$loa_upper_ci_high[i, j], ci_digits)
+    )
+  }
+
+  out <- .mc_finalize_summary_df(
+    do.call(rbind.data.frame, rows),
+    class_name = "summary.ba_matrix"
+  )
+  attr(out, "conf.level") <- suppressWarnings(as.numeric(attr(object, "conf.level")))
+  attr(out, "mode") <- as.integer(object$mode)
+  out
+}
+
+#' @rdname ba
+#' @method print summary.ba_matrix
+#' @export
+print.summary.ba_matrix <- function(x, digits = NULL, n = NULL,
+                                    topn = NULL, max_vars = NULL,
+                                    width = NULL, show_ci = NULL, ...) {
+  cl <- suppressWarnings(as.numeric(attr(x, "conf.level")))
+  mode <- as.integer(attr(x, "mode") %||% 1L)
+  show_ci <- .mc_resolve_show_ci(show_ci, context = "summary")
+  header <- .mc_header_with_ci(
+    sprintf("Bland-Altman (%s)", if (identical(mode, 1L)) "pairwise row - column" else "pairwise column - row"),
+    cl,
+    show_ci
+  )
+  .mc_print_sectioned_table(
+    x,
+    sections = list(
+      list(
+        title = "Agreement estimates",
+        cols = c("item1", "item2", "n_obs", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
+      ),
+      list(
+        title = "Confidence intervals",
+        cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
+      )
+    ),
+    header = header,
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci,
+    print_overview = FALSE,
+    ...
+  )
+  invisible(x)
+}
+
+#' @rdname ba
+#' @method plot ba_matrix
+#' @param pairs Optional character vector of pair labels to display.
+#' @param against Optional single method name; if supplied, only contrasts
+#'   involving that method are plotted.
+#' @param facet_scales Either \code{"free_y"} (default) or \code{"fixed"}.
+#' @export
+plot.ba_matrix <- function(x,
+                           pairs = NULL,
+                           against = NULL,
+                           facet_scales = c("free_y", "fixed"),
+                           title = "Bland-Altman (pairwise)",
+                           point_alpha = 0.6,
+                           point_size = 1.8,
+                           line_size = 0.7,
+                           shade_ci = TRUE,
+                           shade_alpha = 0.08,
+                           smoother = c("none", "loess", "lm"),
+                           show_value = TRUE,
+                           ...) {
+  check_inherits(x, "ba_matrix")
+  check_bool(show_value, arg = "show_value")
+  facet_scales <- match.arg(facet_scales)
+  smoother <- match.arg(smoother)
+  methods <- x$methods
+  mode <- as.integer(x$mode %||% 1L)
+  m <- length(methods)
+  lab_pair <- function(i, j) {
+    if (identical(mode, 2L)) {
+      paste(methods[j], "\u2212", methods[i])
+    } else {
+      paste(methods[i], "\u2212", methods[j])
+    }
+  }
+
+  idx_upper <- which(upper.tri(matrix(NA_real_, m, m)), arr.ind = TRUE)
+  all_pairs <- data.frame(
+    i = idx_upper[, 1],
+    j = idx_upper[, 2],
+    lab = lab_pair(idx_upper[, 1], idx_upper[, 2]),
+    stringsAsFactors = FALSE
+  )
+
+  if (!is.null(against)) {
+    if (!against %in% methods) {
+      abort_bad_arg("against",
+        message = "must be one of: {methods*?{, }{ and }}.",
+        methods = methods
+      )
+    }
+    hit <- match(against, methods)
+    all_pairs <- subset(all_pairs, i == hit | j == hit)
+  } else if (!is.null(pairs)) {
+    all_pairs <- subset(all_pairs, lab %in% pairs)
+    if (!nrow(all_pairs)) {
+      abort_bad_arg("pairs",
+        message = "None of the requested pairs matched available contrasts."
+      )
+    }
+  }
+  pairs_order <- all_pairs$lab
+
+  bands <- data.frame(
+    pair = lab_pair(idx_upper[, 1], idx_upper[, 2]),
+    md = as.vector(x$bias[idx_upper]),
+    loaL = as.vector(x$loa_lower[idx_upper]),
+    loaU = as.vector(x$loa_upper[idx_upper]),
+    md_l = as.vector(x$mean_ci_low[idx_upper]),
+    md_u = as.vector(x$mean_ci_high[idx_upper]),
+    lo_l = as.vector(x$loa_lower_ci_low[idx_upper]),
+    lo_u = as.vector(x$loa_lower_ci_high[idx_upper]),
+    hi_l = as.vector(x$loa_upper_ci_low[idx_upper]),
+    hi_u = as.vector(x$loa_upper_ci_high[idx_upper]),
+    stringsAsFactors = FALSE
+  )
+  bands <- bands[bands$pair %in% pairs_order, , drop = FALSE]
+  bands$pair <- factor(bands$pair, levels = pairs_order)
+
+  pts <- do.call(rbind, lapply(seq_len(nrow(all_pairs)), function(k) {
+    i <- all_pairs$i[k]
+    j <- all_pairs$j[k]
+    a <- x$data_wide[[i]]
+    b <- x$data_wide[[j]]
+    keep <- !is.na(a) & !is.na(b)
+    if (!any(keep)) {
+      return(NULL)
+    }
+    means <- (a[keep] + b[keep]) / 2
+    diffs <- if (identical(mode, 2L)) b[keep] - a[keep] else a[keep] - b[keep]
+    data.frame(pair = all_pairs$lab[k], means = means, diffs = diffs, stringsAsFactors = FALSE)
+  }))
+  if (!is.null(pts) && nrow(pts)) {
+    pts$pair <- factor(pts$pair, levels = pairs_order)
+  } else {
+    pts <- NULL
+  }
+
+  p <- ggplot2::ggplot() + ggplot2::facet_wrap(~ pair, scales = facet_scales)
+  p <- p +
+    ggplot2::geom_blank(data = bands, ggplot2::aes(x = 0, y = md)) +
+    ggplot2::geom_blank(data = bands, ggplot2::aes(x = 0, y = loaL)) +
+    ggplot2::geom_blank(data = bands, ggplot2::aes(x = 0, y = loaU))
+
+  if (shade_ci) {
+    p <- p +
+      ggplot2::geom_rect(data = bands, ggplot2::aes(xmin = -Inf, xmax = Inf, ymin = md_l, ymax = md_u),
+                         inherit.aes = FALSE, alpha = shade_alpha) +
+      ggplot2::geom_rect(data = bands, ggplot2::aes(xmin = -Inf, xmax = Inf, ymin = lo_l, ymax = lo_u),
+                         inherit.aes = FALSE, alpha = shade_alpha) +
+      ggplot2::geom_rect(data = bands, ggplot2::aes(xmin = -Inf, xmax = Inf, ymin = hi_l, ymax = hi_u),
+                         inherit.aes = FALSE, alpha = shade_alpha)
+  } else {
+    p <- p +
+      ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = md_l), linetype = "dashed") +
+      ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = md_u), linetype = "dashed") +
+      ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = lo_l), linetype = "dashed") +
+      ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = lo_u), linetype = "dashed") +
+      ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = hi_l), linetype = "dashed") +
+      ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = hi_u), linetype = "dashed")
+  }
+
+  p <- p +
+    ggplot2::geom_hline(yintercept = 0, linewidth = 0.35, linetype = "dotted", colour = "grey40") +
+    ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = md), linewidth = line_size) +
+    ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = loaL), linewidth = line_size) +
+    ggplot2::geom_hline(data = bands, ggplot2::aes(yintercept = loaU), linewidth = line_size)
+
+  if (!is.null(pts)) {
+    p <- p + ggplot2::geom_point(data = pts, ggplot2::aes(x = means, y = diffs),
+                                 alpha = point_alpha, size = point_size)
+    if (smoother == "lm") {
+      p <- p + ggplot2::geom_smooth(data = pts, ggplot2::aes(x = means, y = diffs),
+                                    method = "lm", se = FALSE, linewidth = 0.7)
+    } else if (smoother == "loess") {
+      p <- p + ggplot2::geom_smooth(data = pts, ggplot2::aes(x = means, y = diffs),
+                                    method = "loess", se = FALSE, linewidth = 0.7, span = 0.9)
+    }
+  }
+
+  p +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(panel.grid = ggplot2::element_blank(), ...) +
+    ggplot2::labs(
+      title = title,
+      x = if (!is.null(pts)) "Mean of methods" else NULL,
+      y = if (identical(mode, 2L)) "Difference (column - row)" else "Difference (row - column)"
+    )
 }

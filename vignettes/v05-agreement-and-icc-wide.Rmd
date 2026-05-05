@@ -55,6 +55,15 @@ The two summaries are complementary rather than redundant. `ccc()` gives a
 single concordance coefficient, while `ba()` makes the scale of disagreement
 explicit.
 
+If you have at least 3 methods in wide form, `ba()` can now compute every
+unordered Bland-Altman contrast directly:
+
+```{r}
+fit_ba_pairwise <- ba(data.frame(m1 = m1, m2 = m2, m3 = ref - 0.8 + rnorm(50, sd = 2.5)))
+print(fit_ba_pairwise)
+summary(fit_ba_pairwise)
+```
+
 ## Pairwise ICC
 
 `icc()` extends the wide-data reliability workflow in two directions. It can

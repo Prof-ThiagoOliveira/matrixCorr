@@ -6,6 +6,10 @@
 \alias{summary.ba}
 \alias{print.summary.ba}
 \alias{plot.ba}
+\alias{print.ba_matrix}
+\alias{summary.ba_matrix}
+\alias{print.summary.ba_matrix}
+\alias{plot.ba_matrix}
 \title{Bland-Altman statistics with confidence intervals}
 \usage{
 ba(
@@ -57,9 +61,56 @@ ba(
   show_value = TRUE,
   ...
 )
+
+\method{print}{ba_matrix}(
+  x,
+  digits = 3,
+  ci_digits = 3,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  style = c("pairs", "matrices"),
+  ...
+)
+
+\method{summary}{ba_matrix}(object, digits = 3, ci_digits = 3, ...)
+
+\method{print}{summary.ba_matrix}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
+
+\method{plot}{ba_matrix}(
+  x,
+  pairs = NULL,
+  against = NULL,
+  facet_scales = c("free_y", "fixed"),
+  title = "Bland-Altman (pairwise)",
+  point_alpha = 0.6,
+  point_size = 1.8,
+  line_size = 0.7,
+  shade_ci = TRUE,
+  shade_alpha = 0.08,
+  smoother = c("none", "loess", "lm"),
+  show_value = TRUE,
+  ...
+)
 }
 \arguments{
-\item{group1, group2}{Numeric vectors of equal length.}
+\item{group1}{Numeric vector of paired measurements, or a numeric matrix/data
+frame with at least two numeric columns when \code{group2} is omitted.}
+
+\item{group2}{Optional numeric vector of paired measurements. If omitted,
+\code{group1} must be a numeric matrix or data frame and all unordered numeric
+column pairs are analysed.}
 
 \item{loa_multiplier}{Positive scalar; the multiple of the standard deviation used to
 define the LoA (default 1.96 for nominal 95\\% agreement). The confidence
@@ -74,7 +125,7 @@ intervals always use \eqn{t_{n-1,\,1-\alpha/2}} regardless of this choice.}
 
 \item{verbose}{Logical; if TRUE, prints how many OpenMP threads are used.}
 
-\item{x}{A \code{"ba"} object.}
+\item{x}{A \code{"ba_matrix"} object.}
 
 \item{digits}{Number of digits for estimates (default 3).}
 
@@ -118,9 +169,19 @@ with symmetric limits.}
 \item{show_value}{Logical; included for a consistent plotting interface.
 Bland-Altman plots do not overlay numeric cell values, so this argument
 currently has no effect.}
+
+\item{style}{Show the pairwise result as \code{"pairs"} or \code{"matrices"}.}
+
+\item{pairs}{Optional character vector of pair labels to display.}
+
+\item{against}{Optional single method name; if supplied, only contrasts
+involving that method are plotted.}
+
+\item{facet_scales}{Either \code{"free_y"} (default) or \code{"fixed"}.}
 }
 \value{
-An object of class \code{"ba"} (list) with elements:
+If \code{group1} and \code{group2} are both supplied, an object of class
+\code{"ba"} (list) with elements:
 \itemize{
 \item \code{means}, \code{diffs}: numeric vectors
 \item \code{groups}: data.frame used after NA removal
@@ -131,11 +192,34 @@ An object of class \code{"ba"} (list) with elements:
 \item \code{CI.lines}: named numeric vector for CIs of those lines
 \item \code{loa_multiplier}, \code{critical.diff}
 }
+
+If \code{group2} is omitted and \code{group1} is a wide numeric matrix or data frame,
+an object of class \code{"ba_matrix"} with pairwise components:
+\itemize{
+\item \code{bias}: pairwise matrix of Bland-Altman mean differences.
+\item \code{sd_loa}: pairwise matrix of SDs of differences.
+\item \code{loa_lower}, \code{loa_upper}: pairwise matrices of LoA
+endpoints.
+\item \code{width}: pairwise matrix of LoA widths.
+\item \code{n}: integer pairwise matrix of complete-case counts.
+\item \code{mean_ci_low}, \code{mean_ci_high}: pairwise matrices of CI
+bounds for the mean difference.
+\item \code{loa_lower_ci_low}, \code{loa_lower_ci_high}: pairwise matrices
+of CI bounds for the lower LoA.
+\item \code{loa_upper_ci_low}, \code{loa_upper_ci_high}: pairwise matrices
+of CI bounds for the upper LoA.
+\item \code{methods}: character vector of analysed method names.
+\item \code{loa_multiplier}, \code{mode}: calculation settings reused for
+every pair.
+}
 }
 \description{
 Computes Bland-Altman mean difference and limits of agreement (LoA)
 between two numeric measurement vectors, including t-based confidence
 intervals for the mean difference and for each LoA using 'C++' backend.
+If \code{group2} is omitted and \code{group1} is a numeric matrix or data frame with
+at least two numeric columns, \code{ba()} computes all pairwise contrasts across
+methods and returns a pairwise Bland-Altman matrix object.
 
 Note: Lin's concordance correlation coefficient (CCC) is a complementary,
 single-number summary of agreement (precision + accuracy). It is useful for
@@ -149,6 +233,12 @@ Given paired measurements \eqn{(x_i, y_i)}, Bland-Altman analysis uses
 The limits of agreement (LoA) are \eqn{\bar d \pm z \cdot s_d}, where
 \eqn{s_d} is the sample standard deviation of \eqn{d_i} and \eqn{z}
 (argument \code{loa_multiplier}) is typically 1.96 for nominal 95\% LoA.
+
+When \code{group2} is omitted and \code{group1} is a wide numeric matrix or data
+frame, the same two-method calculation is applied to every unordered column
+pair. The returned pairwise matrices follow the requested \code{mode}: with
+\code{mode = 1}, upper-triangle entries represent row minus column; with
+\code{mode = 2}, upper-triangle entries represent column minus row.
 
 Confidence intervals use Student's \eqn{t} distribution with \eqn{n-1}
 degrees of freedom, with
@@ -179,6 +269,18 @@ y <- x + rnorm(100, 0, 8)
 fit_ba <- ba(x, y)
 print(fit_ba)
 plot(fit_ba)
+
+# Pairwise Bland-Altman across 3 methods
+set.seed(7)
+wide3 <- data.frame(
+  ref = rnorm(80, 100, 8),
+  m2  = rnorm(80, 101, 8),
+  m3  = rnorm(80,  99, 9)
+)
+fit_ba3 <- ba(wide3)
+print(fit_ba3)
+summary(fit_ba3)
+plot(fit_ba3)
 
 }
 \references{

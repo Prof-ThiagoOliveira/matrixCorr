@@ -49,7 +49,7 @@ repeated-measures designs.
 | Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
 | Repeated-measures correlation | `rmcorr()` |
 | Shrinkage for $p >> n$ | `shrinkage_corr()` |
-| Agreement: Bland-Altman | Two-method `ba()`, repeated-measures `ba_rm()` |
+| Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
 | Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
 | Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |

@@ -89,6 +89,61 @@ test_that("summary.ba returns a compact summary object and prints grouped sectio
   expect_true(any(grepl("^Confidence intervals$", out)))
 })
 
+test_that("ba accepts wide input and returns pairwise matrices", {
+  set.seed(12)
+  dat <- data.frame(
+    A = rnorm(40, 100, 8),
+    B = rnorm(40, 101, 9),
+    C = rnorm(40,  99, 7)
+  )
+
+  fit <- ba(dat)
+  sm <- summary(fit)
+
+  expect_s3_class(fit, "ba_matrix")
+  expect_s3_class(sm, "summary.ba_matrix")
+  expect_equal(dim(fit$bias), c(3L, 3L))
+  expect_equal(fit$methods, c("A", "B", "C"))
+  expect_equal(unname(diag(fit$bias)), rep(NA_real_, 3L))
+  expect_equal(fit$bias[lower.tri(fit$bias)], -t(fit$bias)[lower.tri(fit$bias)], tolerance = 1e-12)
+  expect_equal(fit$sd_loa[lower.tri(fit$sd_loa)], t(fit$sd_loa)[lower.tri(fit$sd_loa)], tolerance = 1e-12)
+  expect_equal(nrow(sm), 3L)
+  expect_true(all(c("item1", "item2", "bias", "sd_loa", "loa_low", "loa_up",
+                    "width", "n_obs", "bias_lwr", "bias_upr",
+                    "lo_lwr", "lo_upr", "up_lwr", "up_upr") %in% names(sm)))
+})
+
+test_that("wide ba honors mode orientation", {
+  set.seed(13)
+  dat <- data.frame(
+    A = rnorm(30),
+    B = rnorm(30),
+    C = rnorm(30)
+  )
+
+  fit1 <- ba(dat, mode = 1L)
+  fit2 <- ba(dat, mode = 2L)
+
+  expect_equal(fit1$bias, -fit2$bias, tolerance = 1e-12)
+  expect_equal(fit1$loa_lower, -fit2$loa_upper, tolerance = 1e-12)
+  expect_equal(fit1$loa_upper, -fit2$loa_lower, tolerance = 1e-12)
+})
+
+test_that("wide ba skips contrasts with fewer than two complete pairs", {
+  dat <- data.frame(
+    A = c(1, 2, NA, NA),
+    B = c(1, 2, 3, NA),
+    C = c(NA, NA, 3, 4)
+  )
+
+  fit <- ba(dat)
+
+  expect_equal(fit$n["A", "B"], 2L)
+  expect_equal(fit$n["A", "C"], 0L)
+  expect_true(is.na(fit$bias["A", "C"]))
+  expect_true(is.na(fit$sd_loa["A", "C"]))
+})
+
 test_that("'loa_multiplier' scales the LoA correctly", {
   set.seed(2)
   x <- rnorm(50, 100, 10)
@@ -181,7 +236,7 @@ test_that("errors on invalid inputs", {
   expect_error(ba(letters[1:3], 1:3), "numeric", ignore.case = TRUE)
   expect_error(ba(1:3, 1:3, loa_multiplier = 0), "positive")
   expect_error(ba(1:3, 1:3, mode = 0), "1 or 2")
-
+  expect_error(ba(data.frame(a = letters[1:3], b = letters[4:6])), "numeric columns")
   expect_error(ba(1:3, 1:3, conf_level = 1.5), "in \\(0, 1\\)")
 })
 
@@ -202,6 +257,22 @@ test_that("plot.ba returns a ggplot without line-size deprecation warnings", {
   x <- rnorm(40, 100, 10)
   y <- x + rnorm(40, 0, 8)
   fit <- ba(x, y)
+
+  expect_no_warning(
+    expect_s3_class(plot(fit), "ggplot")
+  )
+})
+
+test_that("plot.ba_matrix returns a ggplot without line-size deprecation warnings", {
+  skip_if_not_installed("ggplot2")
+
+  set.seed(14)
+  dat <- data.frame(
+    A = rnorm(40, 100, 8),
+    B = rnorm(40, 101, 9),
+    C = rnorm(40,  99, 7)
+  )
+  fit <- ba(dat)
 
   expect_no_warning(
     expect_s3_class(plot(fit), "ggplot")
