@@ -538,6 +538,28 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// prob_agree_fit_cpp
+Rcpp::List prob_agree_fit_cpp(const Rcpp::NumericVector& response, const Rcpp::NumericVector& predictor, const Rcpp::IntegerVector& group, const Rcpp::NumericVector& eval_predictor, int link_code, const Rcpp::NumericVector& lower, const Rcpp::NumericVector& upper, bool ci, int ci_method, double conf_level, int max_iter, double tol);
+RcppExport SEXP _matrixCorr_prob_agree_fit_cpp(SEXP responseSEXP, SEXP predictorSEXP, SEXP groupSEXP, SEXP eval_predictorSEXP, SEXP link_codeSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP ciSEXP, SEXP ci_methodSEXP, SEXP conf_levelSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type response(responseSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type predictor(predictorSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type group(groupSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type eval_predictor(eval_predictorSEXP);
+    Rcpp::traits::input_parameter< int >::type link_code(link_codeSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< bool >::type ci(ciSEXP);
+    Rcpp::traits::input_parameter< int >::type ci_method(ci_methodSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(prob_agree_fit_cpp(response, predictor, group, eval_predictor, link_code, lower, upper, ci, ci_method, conf_level, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rmcorr_pair_cpp
 List rmcorr_pair_cpp(NumericVector x, NumericVector y, IntegerVector subject, double conf_level);
 RcppExport SEXP _matrixCorr_rmcorr_pair_cpp(SEXP xSEXP, SEXP ySEXP, SEXP subjectSEXP, SEXP conf_levelSEXP) {
@@ -978,6 +1000,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_pearson_matrix_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_cpp, 1},
     {"_matrixCorr_pearson_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_pearson_threshold_triplets_cpp, 4},
     {"_matrixCorr_pearson_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_pearson_matrix_pairwise_cpp, 3},
+    {"_matrixCorr_prob_agree_fit_cpp", (DL_FUNC) &_matrixCorr_prob_agree_fit_cpp, 12},
     {"_matrixCorr_rmcorr_pair_cpp", (DL_FUNC) &_matrixCorr_rmcorr_pair_cpp, 4},
     {"_matrixCorr_rmcorr_pair_weighted_cpp", (DL_FUNC) &_matrixCorr_rmcorr_pair_weighted_cpp, 4},
     {"_matrixCorr_rmcorr_matrix_cpp", (DL_FUNC) &_matrixCorr_rmcorr_matrix_cpp, 6},

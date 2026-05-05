@@ -164,6 +164,13 @@ variability across the measurement range; if differences increase with
 magnitude, consider a transformation before analysis. Missing values are
 removed pairwise (rows with an \code{NA} in either input are dropped before
 calling the C++ backend).
+
+Probability of agreement, available through \code{\link{prob_agree}}, is a
+tolerance-based companion to Bland-Altman analysis. Bland-Altman reports bias
+and limits of agreement for paired differences. \code{prob_agree()} instead uses
+the sampling distribution of estimated differences to quantify the
+probability that two estimated quantities or curves agree within a
+user-specified practical tolerance.
 }
 \examples{
 set.seed(1)
@@ -183,7 +190,7 @@ Bland JM, Altman DG (1999). Measuring agreement in method comparison studies.
 }
 \seealso{
 \code{\link{print.ba}}, \code{\link{plot.ba}},
-\code{\link{ccc}},\code{\link{ccc_rm_ustat}},
+\code{\link{ccc}}, \code{\link{prob_agree}}, \code{\link{ccc_rm_ustat}},
 \code{\link{ccc_rm_reml}}
 }
 \author{

@@ -196,6 +196,14 @@ undefined and \code{NA} is returned for that pair (including the diagonal).
 
 Missing values are not allowed; inputs must be numeric with at least two
 distinct non-missing values per column.
+
+Probability of agreement, available through \code{\link{prob_agree}},
+answers a
+different question from CCC. CCC is a coefficient-based summary of
+concordance between paired measurements. \code{prob_agree()} follows Stevens and
+Anderson-Cook (2017) and estimates the probability that two estimated
+quantities or curves differ by no more than a user-specified practical
+tolerance.
 }
 \examples{
 # Example with multivariate normal data
@@ -228,7 +236,7 @@ between two methods of clinical measurement. The Lancet 327: 307-310.
 }
 \seealso{
 \code{\link{print.ccc}}, \code{\link{plot.ccc}},
-\code{\link{ba}}
+\code{\link{ba}}, \code{\link{prob_agree}}
 
 For repeated measurements look at \code{\link{ccc_rm_reml}},
 \code{\link{ccc_rm_ustat}} or \code{\link{ba_rm}}

@@ -145,6 +145,10 @@ pearson_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95
     .Call(`_matrixCorr_pearson_matrix_pairwise_cpp`, X_, return_ci, conf_level)
 }
 
+prob_agree_fit_cpp <- function(response, predictor, group, eval_predictor, link_code, lower, upper, ci, ci_method, conf_level, max_iter, tol) {
+    .Call(`_matrixCorr_prob_agree_fit_cpp`, response, predictor, group, eval_predictor, link_code, lower, upper, ci, ci_method, conf_level, max_iter, tol)
+}
+
 rmcorr_pair_cpp <- function(x, y, subject, conf_level = 0.95) {
     .Call(`_matrixCorr_rmcorr_pair_cpp`, x, y, subject, conf_level)
 }

@@ -47,6 +47,14 @@
 #' Missing values are not allowed; inputs must be numeric with at least two
 #' distinct non-missing values per column.
 #'
+#' Probability of agreement, available through \code{\link{prob_agree}},
+#' answers a
+#' different question from CCC. CCC is a coefficient-based summary of
+#' concordance between paired measurements. `prob_agree()` follows Stevens and
+#' Anderson-Cook (2017) and estimates the probability that two estimated
+#' quantities or curves differ by no more than a user-specified practical
+#' tolerance.
+#'
 #' @param data A numeric matrix or data frame with at least two numeric columns.
 #' Non-numeric columns will be ignored.
 #' @param ci Logical; if TRUE, return lower and upper confidence bounds
@@ -83,7 +91,7 @@
 #'         \code{lwr.ci}, \code{upr.ci}.
 #'
 #' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}},
-#' \code{\link{ba}}
+#' \code{\link{ba}}, \code{\link{prob_agree}}
 #'
 #' @seealso For repeated measurements look at \code{\link{ccc_rm_reml}},
 #' \code{\link{ccc_rm_ustat}} or \code{\link{ba_rm}}

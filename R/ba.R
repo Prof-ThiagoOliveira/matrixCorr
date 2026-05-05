@@ -33,6 +33,13 @@
 #' removed pairwise (rows with an \code{NA} in either input are dropped before
 #' calling the C++ backend).
 #'
+#' Probability of agreement, available through \code{\link{prob_agree}}, is a
+#' tolerance-based companion to Bland-Altman analysis. Bland-Altman reports bias
+#' and limits of agreement for paired differences. `prob_agree()` instead uses
+#' the sampling distribution of estimated differences to quantify the
+#' probability that two estimated quantities or curves agree within a
+#' user-specified practical tolerance.
+#'
 #' @param group1,group2 Numeric vectors of equal length.
 #' @param loa_multiplier Positive scalar; the multiple of the standard deviation used to
 #'   define the LoA (default 1.96 for nominal 95\% agreement). The confidence
@@ -56,7 +63,7 @@
 #' }
 #'
 #' @seealso \code{\link{print.ba}}, \code{\link{plot.ba}},
-#'  \code{\link{ccc}},\code{\link{ccc_rm_ustat}},
+#'  \code{\link{ccc}}, \code{\link{prob_agree}}, \code{\link{ccc_rm_ustat}},
 #'  \code{\link{ccc_rm_reml}}
 #'
 #' @examples
