@@ -1715,10 +1715,14 @@ inline BySubject group_by_subject(const std::vector<int>& subj_idx,
     if (static_cast<int>(method.size()) > 0) {
       const int v = method[i];
       S.met[j].push_back(v == NA_INTEGER ? -1 : (v - 1));
+    } else {
+      S.met[j].push_back(-1);
     }
     if (static_cast<int>(time.size()) > 0) {
       const int v = time[i];
       S.tim[j].push_back(v == NA_INTEGER ? -1 : (v - 1));
+    } else {
+      S.tim[j].push_back(-1);
     }
   }
   return S;

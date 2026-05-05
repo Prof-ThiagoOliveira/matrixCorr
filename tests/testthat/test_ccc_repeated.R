@@ -117,6 +117,49 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
   expect_true(any(grepl("^Variance components$", out)))
 })
 
+test_that("ccc_vc_cpp handles absent optional method/time vectors safely", {
+  set.seed(125)
+  n_subj <- 20L
+  id <- rep(seq_len(n_subj), each = 2L)
+  y <- rnorm(length(id))
+  X <- matrix(1, nrow = length(y), ncol = 1L)
+
+  expect_error(
+    fit <- matrixCorr:::ccc_vc_cpp(
+      Xr = X,
+      yr = y,
+      subject = id,
+      method = integer(0),
+      time = integer(0),
+      nm = 0L,
+      nt = 0L,
+      max_iter = 20L,
+      tol = 1e-6,
+      conf_level = 0.95,
+      ci_mode = 2L,
+      Lr = NULL,
+      auxDr = NULL,
+      Zr = NULL,
+      use_ar1 = FALSE,
+      ar1_rho = 0,
+      include_subj_method = FALSE,
+      include_subj_time = FALSE,
+      sb_zero_tol = 1e-10,
+      eval_single_visit = FALSE,
+      time_weights = NULL,
+      metric_mode = 0L,
+      ll_only = FALSE,
+      need_loglik = TRUE
+    ),
+    NA
+  )
+  expect_type(fit, "list")
+  expect_true("ccc" %in% names(fit))
+  expect_true(is.finite(as.numeric(fit$ccc)))
+  expect_true("sigma2_subject" %in% names(fit))
+  expect_true(is.finite(as.numeric(fit$sigma2_subject)))
+})
+
 # helper to center time within subject
 center_by_id <- function(x, id) ave(x, id, FUN = function(v) v - mean(v))
 

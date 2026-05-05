@@ -287,7 +287,9 @@ Rcpp::List ccc_vc_cpp(
 #endif
 
   const int n = yr.size();
+  if (n <= 0) stop("ccc_vc_cpp requires at least one observation.");
   if (Xr.nrow() != n) stop("nrow(X) must match length(y)");
+  if (Xr.ncol() <= 0) stop("ccc_vc_cpp requires at least one fixed-effect column.");
   if (subject.size() != n) stop("length(subject) mismatch");
   if (method.size()  && method.size()!=n)  stop("length(method) mismatch");
   if (time.size()    && time.size()!=n)    stop("length(time) mismatch");
@@ -324,10 +326,12 @@ Rcpp::List ccc_vc_cpp(
   arma::mat Z; int qZ = 0; bool has_extra = false;
   if (Zr.isNotNull()) {
     Rcpp::NumericMatrix Zrm = Zr.get();
-    Z = arma::mat(Zrm.begin(), Zrm.nrow(), Zrm.ncol(), false);
-    if ((int)Z.n_rows != n) stop("Zr must have n rows");
-    qZ = (int)Z.n_cols;
-    has_extra = (qZ > 0);
+    if (Zrm.nrow() > 0 || Zrm.ncol() > 0) {
+      Z = arma::mat(Zrm.begin(), Zrm.nrow(), Zrm.ncol(), false);
+      if ((int)Z.n_rows != n) stop("Zr must have n rows");
+      qZ = (int)Z.n_cols;
+      has_extra = (qZ > 0);
+    }
   }
 
   if (use_ar1) {
@@ -1077,6 +1081,11 @@ Rcpp::List ccc_vc_cpp(
   if (nm > 0 && Lr.isNotNull() && auxDr.isNotNull()) {
     Rcpp::NumericMatrix Lrm = Rcpp::as<Rcpp::NumericMatrix>(Lr);
     Rcpp::NumericMatrix Drm = Rcpp::as<Rcpp::NumericMatrix>(auxDr);
+    if (Lrm.nrow() != X.n_cols) stop("Lr row count must match ncol(X).");
+    if (Lrm.ncol() <= 0) stop("Lr must have at least one column when method effects are present.");
+    if (Drm.nrow() != Lrm.ncol() || Drm.ncol() != Lrm.ncol()) {
+      stop("auxDr must be a square matrix with dimension ncol(Lr).");
+    }
     arma::mat L(Lrm.begin(), X.n_cols, Lrm.ncol(), false);
     arma::mat auxD(Drm.begin(), Drm.nrow(), Drm.ncol(), false);
     const double den = (double)nm * (double)(nm-1) * (double)std::max(nt,1);

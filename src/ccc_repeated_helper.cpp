@@ -29,11 +29,16 @@ Rcpp::List build_L_Dm_cpp(
     bool has_interaction,
     Rcpp::Nullable<Rcpp::NumericMatrix> Dmat_global
 ) {
-  const bool have_met  = rmet_name.isNotNull()  && method_levels.size() >= 1;
-  const bool have_time = rtime_name.isNotNull() && time_levels.size()  >= 1;
+  Rcpp::CharacterVector rmet_vec =
+    rmet_name.isNotNull() ? Rcpp::as<Rcpp::CharacterVector>(rmet_name) : Rcpp::CharacterVector();
+  Rcpp::CharacterVector rtime_vec =
+    rtime_name.isNotNull() ? Rcpp::as<Rcpp::CharacterVector>(rtime_name) : Rcpp::CharacterVector();
 
-  const std::string rmet  = have_met  ? as<std::string>(as<CharacterVector>(rmet_name)[0])  : std::string();
-  const std::string rtime = have_time ? as<std::string>(as<CharacterVector>(rtime_name)[0]) : std::string();
+  const bool have_met  = rmet_vec.size()  > 0 && method_levels.size() >= 1;
+  const bool have_time = rtime_vec.size() > 0 && time_levels.size()  >= 1;
+
+  const std::string rmet  = have_met  ? as<std::string>(rmet_vec[0])  : std::string();
+  const std::string rtime = have_time ? as<std::string>(rtime_vec[0]) : std::string();
 
   const int nm = have_met  ? (int)method_levels.size() : 0;
   const int nt = have_time ? (int)time_levels.size()   : 0;
