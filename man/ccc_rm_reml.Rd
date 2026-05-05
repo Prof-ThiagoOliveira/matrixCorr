@@ -77,10 +77,8 @@ fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.}
 \item{digits}{Integer \eqn{(\ge 0)}. Number of decimal places to use in the
 printed summary when \code{verbose = TRUE}. Default \code{4}.}
 
-\item{use_message}{Logical. When \code{verbose = TRUE}, choose the printing
-mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
-easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
-uses \code{cat()} to \code{stdout}. Default \code{TRUE}.}
+\item{use_message}{Logical. When \code{verbose = TRUE}, verbose summaries
+are emitted with \pkg{cli} messages.}
 
 \item{interaction}{Logical. Include \code{method:time} interaction?
 (default \code{FALSE}).}

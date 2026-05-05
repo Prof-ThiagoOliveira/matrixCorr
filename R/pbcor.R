@@ -37,7 +37,9 @@
 .mc_pbcor_matrix_exact <- function(X, beta = 0.2) {
   n <- nrow(X)
   p <- ncol(X)
-  if (p < 2L) stop("At least two numeric columns are required.", call. = FALSE)
+  if (p < 2L) {
+    abort_bad_arg("X", message = "must contain at least two numeric columns.")
+  }
   scores <- matrix(0, nrow = n, ncol = p)
   valid <- rep(FALSE, p)
 
@@ -70,7 +72,9 @@
 
 .mc_pbcor_matrix_pairwise_exact <- function(X, beta = 0.2, min_n = 5L) {
   p <- ncol(X)
-  if (p < 2L) stop("At least two numeric columns are required.", call. = FALSE)
+  if (p < 2L) {
+    abort_bad_arg("X", message = "must contain at least two numeric columns.")
+  }
   out <- matrix(NA_real_, nrow = p, ncol = p)
   dimnames(out) <- list(colnames(X), colnames(X))
 

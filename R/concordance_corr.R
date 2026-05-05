@@ -159,7 +159,10 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
 
-  if (verbose) cat("Using", openmp_threads(), "OpenMP threads\n")
+  inform_if_verbose(
+    "Using {openmp_threads()} OpenMP thread{?s}.",
+    .verbose = verbose
+  )
 
   if (!isTRUE(ci) && .mc_supports_direct_threshold_path(
     method = "ccc",

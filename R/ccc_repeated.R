@@ -249,7 +249,10 @@ ccc_rm_ustat <- function(data,
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
   }
-  if (verbose) cat("Using", get_omp_threads(), "OpenMP threads\n")
+  inform_if_verbose(
+    "Using {get_omp_threads()} OpenMP thread{?s}.",
+    .verbose = verbose
+  )
 
   # Loop over all method pairs
   for (i in 1:(L - 1)) {
@@ -427,10 +430,8 @@ ccc_rm_ustat <- function(data,
 #'   fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.
 #' @param digits Integer \eqn{(\ge 0)}. Number of decimal places to use in the
 #'   printed summary when \code{verbose = TRUE}. Default \code{4}.
-#' @param use_message Logical. When \code{verbose = TRUE}, choose the printing
-#'   mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
-#'   easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
-#'   uses \code{cat()} to \code{stdout}. Default \code{TRUE}.
+#' @param use_message Logical. When \code{verbose = TRUE}, verbose summaries
+#'   are emitted with \pkg{cli} messages.
 #'
 #' @param ar Character. Residual correlation structure: \code{"none"} (iid) or
 #'   \code{"ar1"} for subject-level AR(1) correlation within contiguous time
@@ -1385,11 +1386,7 @@ num_or_na_vec <- function(x) {
   out <- c(out,
            "--------------------------------------------------------------------------")
 
-  if (use_message) {
-    cli::cli_inform(paste(out, collapse = "\n"))
-  } else {
-    cat(paste(out, collapse = "\n"), "\n")
-  }
+  cli::cli_inform(paste(out, collapse = "\n"))
 }
 
 #' @title build_LDZ

@@ -856,7 +856,8 @@ plot.partial_corr <- function(
             if (grepl("non-square matrix", conditionMessage(w), fixed = TRUE)) {
               return(NULL)
             }
-            warning(w)
+            msg <- conditionMessage(w)
+            cli::cli_warn("{msg}", msg = msg)
             NULL
           }
         )

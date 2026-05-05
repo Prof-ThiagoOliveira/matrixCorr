@@ -639,7 +639,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   }
 
   if (isTRUE(verbose)) {
-    cat("Using", n_threads, "OpenMP threads\n")
+    cli::cli_inform("Using {n_threads} OpenMP thread{?s}.")
   }
 
   # ---- two-method path -------------------------------------------------------
@@ -660,8 +660,9 @@ ba_rm <- function(data = NULL, response, subject, method, time,
 
   # ---- N-method pairwise path ------------------------------------------------
   if (isTRUE(verbose)) {
-    cat("Repeated BA (pairwise):", length(mlev), "methods ->",
-        choose(length(mlev), 2L), "pairs\n")
+    cli::cli_inform(
+      "Repeated BA (pairwise): {length(mlev)} methods -> {choose(length(mlev), 2L)} pairs."
+    )
   }
 
   methods <- mlev
@@ -745,7 +746,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
       n_pair <- .count_ba_rm_complete_pairs(pair_y, pair_s, pair_m12, pair_t)
       n_mat[j,k] <- n_mat[k,j] <- n_pair
       if (n_pair >= 2L) {
-        stop(fit_info)
+        .mc_abort_condition(fit_info)
       }
       bias[j,k]      <- bias[k,j]      <- NA_real_
       sd_loa[j,k]    <- sd_loa[k,j]    <- NA_real_
@@ -849,8 +850,9 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     }
 
     if (isTRUE(verbose)) {
-      cat(sprintf(" pair %s - %s: n=%d, bias=%.4f, sd=%.4f\n",
-                  lev_j, lev_k, as.integer(fit$n_pairs), comp$md, comp$sd))
+      cli::cli_inform(
+        "Pair {.val {lev_j}} - {.val {lev_k}}: n={as.integer(fit$n_pairs)}, bias={format(round(comp$md, 4), nsmall = 4)}, sd={format(round(comp$sd, 4), nsmall = 4)}."
+      )
     }
   }
 
@@ -913,12 +915,8 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     " for this fit"
   }
 
-  warning(
-    sprintf(
-      "Requested AR(1) residual structure could not be fit%s; using iid residuals instead.",
-      where
-    ),
-    call. = FALSE
+  cli::cli_warn(
+    "Requested AR(1) residual structure could not be fit{where}; using iid residuals instead."
   )
 }
 
@@ -962,7 +960,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
   }
 
   if (!.ba_rm_is_ar1_convergence_failure(fit_ar1)) {
-    stop(fit_ar1)
+    .mc_abort_condition(fit_ar1)
   }
 
   fit_iid <- tryCatch(
@@ -970,7 +968,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
     error = identity
   )
   if (inherits(fit_iid, "error")) {
-    stop(fit_iid)
+    .mc_abort_condition(fit_iid)
   }
 
   list(
@@ -1006,7 +1004,7 @@ ba_rm <- function(data = NULL, response, subject, method, time,
         n_pairs = n_pairs
       )
     }
-    stop(fit_info)
+    .mc_abort_condition(fit_info)
   }
   fit <- fit_info$fit
   n_pairs <- as.integer(fit$n_pairs)

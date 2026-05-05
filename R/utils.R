@@ -21,6 +21,19 @@ abort_internal <- function(message, ...,
   )
 }
 
+#' Rethrow a caught condition as a cli error
+#' @keywords internal
+.mc_abort_condition <- function(cnd,
+                                .class = character()) {
+  msg <- conditionMessage(cnd)
+  cli::cli_abort(
+    "{msg}",
+    msg = msg,
+    parent = cnd,
+    class = c(.class, "matrixCorr_error", "matrixCorr_backend_error")
+  )
+}
+
 #' Abort with a standardised argument error
 #' @keywords internal
 abort_bad_arg <- function(arg,
@@ -1497,9 +1510,10 @@ resolve_na_args <- function(na_method = "error",
 #' Inform only when verbose
 #' @keywords internal
 inform_if_verbose <- function(...,
-                              .verbose = getOption("matrixCorr.verbose", TRUE)) {
+                              .verbose = getOption("matrixCorr.verbose", TRUE),
+                              .envir = parent.frame()) {
   if (isTRUE(.verbose)) {
-    cli::cli_inform(...)
+    cli::cli_inform(..., .envir = .envir)
   }
   invisible(NULL)
 }

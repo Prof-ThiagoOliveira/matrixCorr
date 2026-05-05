@@ -4,7 +4,11 @@
 \alias{inform_if_verbose}
 \title{Inform only when verbose}
 \usage{
-inform_if_verbose(..., .verbose = getOption("matrixCorr.verbose", TRUE))
+inform_if_verbose(
+  ...,
+  .verbose = getOption("matrixCorr.verbose", TRUE),
+  .envir = parent.frame()
+)
 }
 \description{
 Inform only when verbose

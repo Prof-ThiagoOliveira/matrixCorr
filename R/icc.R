@@ -206,7 +206,10 @@ icc <- function(data,
   mat <- as.matrix(numeric_data)
   colnames_data <- colnames(numeric_data)
 
-  if (verbose) cat("Using", n_threads, "OpenMP threads\n")
+  inform_if_verbose(
+    "Using {n_threads} OpenMP thread{?s}.",
+    .verbose = verbose
+  )
 
   form_code <- .mc_icc_form_code(model, type)
   average_unit <- identical(unit, "average")
@@ -227,7 +230,10 @@ icc <- function(data,
     }
 
     mat <- as.matrix(overall_data)
-    if (verbose) cat("Using native ANOVA backend\n")
+    inform_if_verbose(
+      "Using native ANOVA backend.",
+      .verbose = verbose
+    )
 
     fit <- icc_overall_cpp(
       mat,
@@ -913,10 +919,8 @@ print.summary.icc_overall <- function(x,
 #'   fitted variance components and \eqn{S_B} for each fit. Default \code{FALSE}.
 #' @param digits Integer \eqn{(\ge 0)}. Number of decimal places to use in the
 #'   printed summary when \code{verbose = TRUE}. Default \code{4}.
-#' @param use_message Logical. When \code{verbose = TRUE}, choose the printing
-#'   mechanism, where \code{TRUE} uses \code{message()} (respects \code{sink()},
-#'   easily suppressible via \code{suppressMessages()}), whereas \code{FALSE}
-#'   uses \code{cat()} to \code{stdout}. Default \code{TRUE}.
+#' @param use_message Logical. When \code{verbose = TRUE}, verbose summaries
+#'   are emitted with \pkg{cli} messages.
 #'
 #' @param ar Character. Residual correlation structure: \code{"none"} (iid) or
 #'   \code{"ar1"} for subject-level AR(1) correlation within contiguous time

@@ -418,7 +418,7 @@ rmcorr <- function(data = NULL, response, subject,
   }
 
   if (verbose) {
-    cat("Using", n_threads, "OpenMP threads\n")
+    cli::cli_inform("Using {n_threads} OpenMP thread{?s}.")
   }
 
   prev_threads <- .mc_prepare_omp_threads(

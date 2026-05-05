@@ -557,12 +557,12 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
 
 .mc_parse_rmcorr_object <- function(obj, label) {
   if (!inherits(obj, "rmcorr_matrix")) {
-    stop("Unsupported object class", call. = FALSE)
+    cli::cli_abort("Unsupported object class.")
   }
 
   mat <- as.matrix(obj)
   if (!is.matrix(mat) || nrow(mat) != ncol(mat)) {
-    stop("Repeated-measures correlation matrices must be square.", call. = FALSE)
+    cli::cli_abort("Repeated-measures correlation matrices must be square.")
   }
   if (is.null(colnames(mat))) {
     colnames(mat) <- rownames(mat) <- paste0("V", seq_len(ncol(mat)))
@@ -570,25 +570,24 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
 
   source_data <- attr(obj, "source_data", exact = TRUE)
   if (!is.list(source_data)) {
-    stop(
-      "rmcorr_matrix objects need embedded source_data for pair plots. Refit with keep_data = TRUE.",
-      call. = FALSE
+    cli::cli_abort(
+      "{.cls rmcorr_matrix} objects need embedded {.field source_data} for pair plots. Refit with {.code keep_data = TRUE}."
     )
   }
   if (is.null(source_data$response) ||
       is.null(source_data$response_names) ||
       is.null(source_data$subject_code) ||
       is.null(source_data$subject_levels)) {
-    stop("source_data is incomplete for rebuilding pair plots.", call. = FALSE)
+    cli::cli_abort("{.field source_data} is incomplete for rebuilding pair plots.")
   }
 
   response <- as.matrix(source_data$response)
   colnames(response) <- source_data$response_names
   if (!identical(colnames(response), colnames(mat))) {
-    stop("source_data response columns do not match the matrix variables.", call. = FALSE)
+    cli::cli_abort("{.field source_data} response columns do not match the matrix variables.")
   }
   if (nrow(response) != length(source_data$subject_code)) {
-    stop("source_data subject length does not match the stored responses.", call. = FALSE)
+    cli::cli_abort("{.field source_data} subject length does not match the stored responses.")
   }
 
   list(
@@ -604,7 +603,7 @@ view_rmcorr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
 
 .mc_rmcorr_default_pair <- function(vars) {
   if (length(vars) < 2L) {
-    stop("Repeated-measures correlation viewers require at least two variables.", call. = FALSE)
+    cli::cli_abort("Repeated-measures correlation viewers require at least two variables.")
   }
   vars[1:2]
 }

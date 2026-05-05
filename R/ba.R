@@ -120,7 +120,10 @@ ba <- function(group1,
       n_pairs = n_pairs
     )
   }
-  if (isTRUE(verbose)) cat("Using", n_threads, "OpenMP threads\n")
+  inform_if_verbose(
+    "Using {n_threads} OpenMP thread{?s}.",
+    .verbose = verbose
+  )
 
   # -- compute in C++ ---------------------------------------------------------
   prev_threads <- get_omp_threads()
