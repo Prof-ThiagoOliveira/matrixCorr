@@ -88,7 +88,10 @@ test_that("pearson_corr print/plot methods cover optional arguments", {
 
 test_that("pearson_corr rejects missing values by default", {
   X <- cbind(a = c(1, 2, NA, 4), b = c(1, 2, 3, 4))
-  expect_error(pearson_corr(X), "Missing values are not allowed.")
+  expect_error(
+    pearson_corr(X),
+    "Missing values are not allowed.*na_method = \"pairwise\".*na_method = \"complete\""
+  )
 })
 
 test_that("pearson_corr pairwise mode uses complete-case overlap per pair", {

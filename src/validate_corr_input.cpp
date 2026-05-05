@@ -7,6 +7,13 @@
 #include <algorithm>
 using namespace Rcpp;
 
+namespace {
+const char* missing_values_message =
+   "Missing values are not allowed when na_method = \"error\". "
+   "Use na_method = \"pairwise\" to use pairwise complete observations, "
+   "or na_method = \"complete\" to drop rows with missing values before computing correlations.";
+}
+
 // ---- helpers (single-thread safe) ----
 inline bool any_na_int_vec(const int* pi, int n){
    for (int i = 0; i < n; ++i) if (pi[i] == NA_INTEGER) return true;
@@ -56,7 +63,7 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
        // double matrix: shallow wrap; optional parallel NA scan
        if (t == REALSXP){
           if (check_na && any_na_real_matrix_parallel(data, nr, nc))
-             Rcpp::stop("Missing values are not allowed.");
+             Rcpp::stop(missing_values_message);
           return Rcpp::NumericMatrix(data); // shallow, no copy
        }
 
@@ -82,7 +89,7 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
                for (int i = 0; i < nr; ++i) dst[i] = static_cast<double>(src[i]);
              }
           }
-          if (bad.load(std::memory_order_relaxed)) Rcpp::stop("Missing values are not allowed.");
+          if (bad.load(std::memory_order_relaxed)) Rcpp::stop(missing_values_message);
 
           // preserve colnames
           Rcpp::List dn = Mi.attr("dimnames");
@@ -184,7 +191,7 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
        }
     }
 
-    if (bad.load(std::memory_order_relaxed)) Rcpp::stop("Missing values are not allowed.");
+    if (bad.load(std::memory_order_relaxed)) Rcpp::stop(missing_values_message);
 
     // set column names (serial; safe)
     std::vector<std::string> colnames;
