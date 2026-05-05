@@ -30,8 +30,6 @@ This is a new release of `matrixCorr`.
   before creating Armadillo views. A regression test covers the absent
   method/time-vector path.
 
-
-
 ## Test environments
 
 Local checks and tests were run on Windows with R 4.5.x. A source build and
