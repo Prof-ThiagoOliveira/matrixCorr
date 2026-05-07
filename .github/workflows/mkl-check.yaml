@@ -122,8 +122,10 @@ jobs:
           Rscript -e 'cat(R.version.string, "\n", sep = "");
           print(sessionInfo());
           cat("R.home(): ", R.home(), "\n", sep = "");
-          cat("extSoftVersion()[\"BLAS\"]: ", extSoftVersion()[["BLAS"]], "\n", sep = "");
-          cat("extSoftVersion()[\"LAPACK\"]: ", extSoftVersion()[["LAPACK"]], "\n", sep = "");
+          esv <- extSoftVersion();
+          cat("extSoftVersion()[\"BLAS\"]: ", unname(esv["BLAS"]), "\n", sep = "");
+          cat("extSoftVersion()[\"LAPACK\"]: ", unname(esv["LAPACK"]), "\n", sep = "");
+          print(esv);
           print(Sys.getenv(c("MKLROOT", "MKL_INTERFACE_LAYER", "MKL_THREADING_LAYER", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "LD_LIBRARY_PATH")));'
           R_HOME="$(R RHOME)"
           if [ -e "${R_HOME}/lib/libRblas.so" ]; then
