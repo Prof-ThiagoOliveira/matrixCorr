@@ -69,18 +69,33 @@ jobs:
           R_HOME="$(R RHOME)"
           MKL_LIB="${MKLROOT}/lib/libmkl_rt.so"
           test -f "${MKL_LIB}"
+          if [ -e "${R_HOME}/lib/libRblas.so" ]; then
+            for lib in libRblas.so libRlapack.so; do
+              if [ -e "${R_HOME}/lib/${lib}" ]; then
+                sudo cp -a "${R_HOME}/lib/${lib}" "${R_HOME}/lib/${lib}.pre-mkl"
+                sudo rm -f "${R_HOME}/lib/${lib}"
+                sudo ln -s "${MKL_LIB}" "${R_HOME}/lib/${lib}"
+              fi
+            done
 
-          for lib in libRblas.so libRlapack.so; do
-            if [ -e "${R_HOME}/lib/${lib}" ]; then
-              sudo cp -a "${R_HOME}/lib/${lib}" "${R_HOME}/lib/${lib}.pre-mkl"
-              sudo rm -f "${R_HOME}/lib/${lib}"
-              sudo ln -s "${MKL_LIB}" "${R_HOME}/lib/${lib}"
+            ls -l "${R_HOME}/lib/libRblas.so"
+            if [ -e "${R_HOME}/lib/libRlapack.so" ]; then
+              ls -l "${R_HOME}/lib/libRlapack.so"
             fi
-          done
+          else
+            BLAS_ALT_NAME="libblas.so.3-x86_64-linux-gnu"
+            LAPACK_ALT_NAME="liblapack.so.3-x86_64-linux-gnu"
+            BLAS_ALT="$(update-alternatives --list "${BLAS_ALT_NAME}" | grep 'mkl' | head -n 1 || true)"
+            LAPACK_ALT="$(update-alternatives --list "${LAPACK_ALT_NAME}" | grep 'mkl' | head -n 1 || true)"
 
-          ls -l "${R_HOME}/lib/libRblas.so"
-          if [ -e "${R_HOME}/lib/libRlapack.so" ]; then
-            ls -l "${R_HOME}/lib/libRlapack.so"
+            test -n "${BLAS_ALT}"
+            test -n "${LAPACK_ALT}"
+
+            sudo update-alternatives --set "${BLAS_ALT_NAME}" "${BLAS_ALT}"
+            sudo update-alternatives --set "${LAPACK_ALT_NAME}" "${LAPACK_ALT}"
+
+            update-alternatives --display "${BLAS_ALT_NAME}"
+            update-alternatives --display "${LAPACK_ALT_NAME}"
           fi
 
       - uses: r-lib/actions/setup-r-dependencies@v2
@@ -114,14 +129,22 @@ jobs:
           cat("extSoftVersion()[\"LAPACK\"]: ", extSoftVersion()[["LAPACK"]], "\n", sep = "");
           print(Sys.getenv(c("MKLROOT", "MKL_INTERFACE_LAYER", "MKL_THREADING_LAYER", "OMP_NUM_THREADS", "MKL_NUM_THREADS")));'
           R_HOME="$(R RHOME)"
-          readlink -f "${R_HOME}/lib/libRblas.so" || true
-          if [ -e "${R_HOME}/lib/libRlapack.so" ]; then
-            readlink -f "${R_HOME}/lib/libRlapack.so" || true
-          fi
-          if command -v ldd >/dev/null 2>&1; then
-            ldd "${R_HOME}/lib/libRblas.so"
+          if [ -e "${R_HOME}/lib/libRblas.so" ]; then
+            readlink -f "${R_HOME}/lib/libRblas.so" || true
             if [ -e "${R_HOME}/lib/libRlapack.so" ]; then
-              ldd "${R_HOME}/lib/libRlapack.so"
+              readlink -f "${R_HOME}/lib/libRlapack.so" || true
+            fi
+            if command -v ldd >/dev/null 2>&1; then
+              ldd "${R_HOME}/lib/libRblas.so"
+              if [ -e "${R_HOME}/lib/libRlapack.so" ]; then
+                ldd "${R_HOME}/lib/libRlapack.so"
+              fi
+            fi
+          else
+            update-alternatives --display libblas.so.3-x86_64-linux-gnu || true
+            update-alternatives --display liblapack.so.3-x86_64-linux-gnu || true
+            if command -v ldconfig >/dev/null 2>&1; then
+              ldconfig -p | grep -E 'libblas\.so\.3|liblapack\.so\.3|libmkl_rt\.so' || true
             fi
           fi
 
