@@ -83,19 +83,16 @@ jobs:
               ls -l "${R_HOME}/lib/libRlapack.so"
             fi
           else
-            BLAS_ALT_NAME="libblas.so.3-x86_64-linux-gnu"
-            LAPACK_ALT_NAME="liblapack.so.3-x86_64-linux-gnu"
-            BLAS_ALT="$(update-alternatives --list "${BLAS_ALT_NAME}" | grep 'mkl' | head -n 1 || true)"
-            LAPACK_ALT="$(update-alternatives --list "${LAPACK_ALT_NAME}" | grep 'mkl' | head -n 1 || true)"
+            MKL_SHIM_DIR="${RUNNER_TEMP}/mkl-shims"
+            mkdir -p "${MKL_SHIM_DIR}"
+            ln -sf "${MKL_LIB}" "${MKL_SHIM_DIR}/libblas.so.3"
+            ln -sf "${MKL_LIB}" "${MKL_SHIM_DIR}/liblapack.so.3"
+            {
+              echo "LD_LIBRARY_PATH=${MKL_SHIM_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+            } >> "${GITHUB_ENV}"
 
-            test -n "${BLAS_ALT}"
-            test -n "${LAPACK_ALT}"
-
-            sudo update-alternatives --set "${BLAS_ALT_NAME}" "${BLAS_ALT}"
-            sudo update-alternatives --set "${LAPACK_ALT_NAME}" "${LAPACK_ALT}"
-
-            update-alternatives --display "${BLAS_ALT_NAME}"
-            update-alternatives --display "${LAPACK_ALT_NAME}"
+            ls -l "${MKL_SHIM_DIR}/libblas.so.3"
+            ls -l "${MKL_SHIM_DIR}/liblapack.so.3"
           fi
 
       - uses: r-lib/actions/setup-r-dependencies@v2
@@ -127,7 +124,7 @@ jobs:
           cat("R.home(): ", R.home(), "\n", sep = "");
           cat("extSoftVersion()[\"BLAS\"]: ", extSoftVersion()[["BLAS"]], "\n", sep = "");
           cat("extSoftVersion()[\"LAPACK\"]: ", extSoftVersion()[["LAPACK"]], "\n", sep = "");
-          print(Sys.getenv(c("MKLROOT", "MKL_INTERFACE_LAYER", "MKL_THREADING_LAYER", "OMP_NUM_THREADS", "MKL_NUM_THREADS")));'
+          print(Sys.getenv(c("MKLROOT", "MKL_INTERFACE_LAYER", "MKL_THREADING_LAYER", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "LD_LIBRARY_PATH")));'
           R_HOME="$(R RHOME)"
           if [ -e "${R_HOME}/lib/libRblas.so" ]; then
             readlink -f "${R_HOME}/lib/libRblas.so" || true
@@ -141,8 +138,8 @@ jobs:
               fi
             fi
           else
-            update-alternatives --display libblas.so.3-x86_64-linux-gnu || true
-            update-alternatives --display liblapack.so.3-x86_64-linux-gnu || true
+            ls -l "${RUNNER_TEMP}/mkl-shims/libblas.so.3" || true
+            ls -l "${RUNNER_TEMP}/mkl-shims/liblapack.so.3" || true
             if command -v ldconfig >/dev/null 2>&1; then
               ldconfig -p | grep -E 'libblas\.so\.3|liblapack\.so\.3|libmkl_rt\.so' || true
             fi
