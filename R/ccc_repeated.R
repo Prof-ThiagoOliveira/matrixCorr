@@ -1077,6 +1077,69 @@ ccc_rm_ustat <- function(data,
 #' D-matrix options (`Dmat_type`, `Dmat`, `Dmat_weights`) control how time
 #' averaging operates when translating variance components into CCC summaries.
 #'
+#' @keywords internal
+.validate_rm_wrapper_inputs <- function(df, response, subject, method = NULL, time = NULL,
+                                        slope = c("none", "subject", "method", "custom"),
+                                        slope_var = NULL, slope_Z = NULL,
+                                        include_subj_time = NULL,
+                                        vc_select = c("auto", "none")) {
+  slope <- match.arg(slope)
+  vc_select <- match.arg(vc_select)
+
+  if (!is.numeric(df[[response]]) || any(!is.finite(df[[response]]))) {
+    abort_bad_arg("response",
+      message = "must reference a finite numeric column in {.arg data}."
+    )
+  }
+
+  for (arg in c(subject, method, time)) {
+    if (is.null(arg)) next
+    if (anyNA(df[[arg]])) {
+      abort_bad_arg(arg,
+        message = "must not contain missing values for repeated-measures REML fits."
+      )
+    }
+  }
+
+  if (isTRUE(include_subj_time) && is.null(time)) {
+    abort_bad_arg("include_subj_time",
+      message = "cannot be TRUE when {.arg time} is NULL."
+    )
+  }
+
+  if (identical(slope, "subject") || identical(slope, "method")) {
+    if (is.null(slope_var)) {
+      abort_bad_arg("slope_var",
+        message = "must be supplied when {.arg slope} is {.val {slope}}."
+      )
+    }
+    if (!is.numeric(df[[slope_var]]) || any(!is.finite(df[[slope_var]]))) {
+      abort_bad_arg("slope_var",
+        message = "must reference a finite numeric column in {.arg data}."
+      )
+    }
+  }
+
+  if (identical(slope, "custom")) {
+    if (is.null(slope_Z)) {
+      abort_bad_arg("slope_Z",
+        message = "must be supplied when {.arg slope} is {.val custom}."
+      )
+    }
+    slope_Z <- as.matrix(slope_Z)
+    check_matrix_dims(slope_Z, nrow = nrow(df), arg = "slope_Z")
+    if (!is.numeric(slope_Z) || ncol(slope_Z) <= 0L || any(!is.finite(slope_Z))) {
+      abort_bad_arg("slope_Z",
+        message = "must be a finite numeric matrix with at least one column."
+      )
+    }
+  } else {
+    slope_Z <- NULL
+  }
+
+  slope_Z
+}
+
 #' @export
 ccc_rm_reml <- function(data, response, subject,
                          method = NULL, time = NULL,
@@ -1148,14 +1211,21 @@ ccc_rm_reml <- function(data, response, subject,
   check_required_cols(df, req_cols, df_arg = "data")
 
   df[[response]] <- as.numeric(df[[response]])
-  if (anyNA(df[[response]])) {
-    abort_bad_arg("response",
-      message = "must reference a numeric column in {.arg data}."
-    )
-  }
   df[[subject]] <- factor(df[[subject]])
   if (!is.null(method))  df[[method]]  <- factor(df[[method]])
   if (!is.null(time)) df[[time]] <- factor(df[[time]])
+  slope_Z <- .validate_rm_wrapper_inputs(
+    df = df,
+    response = response,
+    subject = subject,
+    method = method,
+    time = time,
+    slope = slope,
+    slope_var = slope_var,
+    slope_Z = slope_Z,
+    include_subj_time = include_subj_time,
+    vc_select = vc_select
+  )
   all_time_lvls <- if (!is.null(time)) levels(df[[time]]) else character(0)
 
   terms_rhs <- "1"
@@ -1426,6 +1496,139 @@ build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub,
 #' @title run_cpp
 #' @description Wrapper for calling 'C++' backend for CCC estimation.
 #' @keywords internal
+.validate_vc_index_codes <- function(x, arg, expected_max = NULL, allow_empty = FALSE) {
+  if (!is.integer(x)) {
+    cli::cli_abort("{.arg {arg}} must be an integer vector before calling {.fn ccc_vc_cpp}.")
+  }
+  if (!length(x)) {
+    if (allow_empty) return(invisible(NULL))
+    cli::cli_abort("{.arg {arg}} must not be empty before calling {.fn ccc_vc_cpp}.")
+  }
+  if (anyNA(x)) {
+    cli::cli_abort("{.arg {arg}} must not contain missing values before calling {.fn ccc_vc_cpp}.")
+  }
+  if (any(!is.finite(as.numeric(x))) || any(x <= 0L)) {
+    cli::cli_abort("{.arg {arg}} must contain only positive finite integer codes before calling {.fn ccc_vc_cpp}.")
+  }
+
+  u <- sort.int(unique(x), method = "quick")
+  if (!identical(u, seq_len(max(x)))) {
+    cli::cli_abort("{.arg {arg}} must use contiguous 1..K integer codes before calling {.fn ccc_vc_cpp}.")
+  }
+  if (!is.null(expected_max) && max(x) != expected_max) {
+    cli::cli_abort("{.arg {arg}} codes must have maximum {.val {expected_max}} before calling {.fn ccc_vc_cpp}.")
+  }
+}
+
+.validate_run_cpp_inputs <- function(Xr, yr, subject, method_int, time_int, nm, nt,
+                                     Lr = NULL, auxDr = NULL, Zr = NULL,
+                                     include_subj_method = TRUE,
+                                     include_subj_time = TRUE,
+                                     time_weights = NULL) {
+  if (!is.matrix(Xr) || !is.numeric(Xr)) {
+    cli::cli_abort("{.arg Xr} must be a numeric matrix before calling {.fn ccc_vc_cpp}.")
+  }
+  if (!is.numeric(yr) || is.matrix(yr)) {
+    cli::cli_abort("{.arg yr} must be a numeric vector before calling {.fn ccc_vc_cpp}.")
+  }
+  if (any(!is.finite(Xr))) {
+    cli::cli_abort("{.arg Xr} must contain only finite numeric values before calling {.fn ccc_vc_cpp}.")
+  }
+  if (any(!is.finite(yr))) {
+    cli::cli_abort("{.arg yr} must contain only finite numeric values before calling {.fn ccc_vc_cpp}.")
+  }
+  if (nrow(Xr) != length(yr)) {
+    cli::cli_abort("{.arg Xr} row count must match {.arg yr} length before calling {.fn ccc_vc_cpp}.")
+  }
+
+  .validate_vc_index_codes(subject, "subject")
+  .validate_vc_index_codes(method_int, "method", expected_max = nm)
+  if (length(subject) != length(yr)) {
+    cli::cli_abort("{.arg subject} length must match {.arg yr} before calling {.fn ccc_vc_cpp}.")
+  }
+  if (length(method_int) != length(yr)) {
+    cli::cli_abort("{.arg method} length must match {.arg yr} before calling {.fn ccc_vc_cpp}.")
+  }
+
+  has_time <- length(time_int) > 0L
+  if (has_time) {
+    .validate_vc_index_codes(time_int, "time", expected_max = nt)
+    if (length(time_int) != length(yr)) {
+      cli::cli_abort("{.arg time} length must match {.arg yr} before calling {.fn ccc_vc_cpp}.")
+    }
+  } else {
+    if (isTRUE(include_subj_time)) {
+      cli::cli_abort("A subject-time random component requires a non-empty {.arg time} vector.")
+    }
+    if (!(nt %in% c(0L, 1L))) {
+      cli::cli_abort("When {.arg time} is absent, {.arg nt} must be 0 or 1.")
+    }
+  }
+
+  if (!is.null(Lr)) {
+    if (!is.matrix(Lr) || !is.numeric(Lr)) {
+      cli::cli_abort("{.arg Lr} must be a numeric matrix or {.code NULL}.")
+    }
+    if (any(!is.finite(Lr))) {
+      cli::cli_abort("{.arg Lr} must contain only finite numeric values.")
+    }
+    if (nrow(Lr) != ncol(Xr)) {
+      cli::cli_abort("{.arg Lr} must have {.val {ncol(Xr)}} rows.")
+    }
+    if (ncol(Lr) <= 0L) {
+      cli::cli_abort("{.arg Lr} must have at least one column when supplied.")
+    }
+  } else if (nm > 0L) {
+    cli::cli_abort("{.arg Lr} must be present when method contrasts are used.")
+  }
+
+  if (!is.null(auxDr)) {
+    if (!is.matrix(auxDr) || !is.numeric(auxDr)) {
+      cli::cli_abort("{.arg auxDr} must be a numeric matrix or {.code NULL}.")
+    }
+    if (any(!is.finite(auxDr))) {
+      cli::cli_abort("{.arg auxDr} must contain only finite numeric values.")
+    }
+    if (is.null(Lr)) {
+      cli::cli_abort("{.arg auxDr} cannot be supplied without {.arg Lr}.")
+    }
+    if (!identical(dim(auxDr), c(ncol(Lr), ncol(Lr)))) {
+      cli::cli_abort("{.arg auxDr} must be a square matrix with dimension {.val {ncol(Lr)}}.")
+    }
+  } else if (!is.null(Lr)) {
+    cli::cli_abort("{.arg auxDr} must be present when {.arg Lr} is supplied.")
+  }
+
+  if (!is.null(Zr)) {
+    if (!is.matrix(Zr) || !is.numeric(Zr)) {
+      cli::cli_abort("{.arg Zr} must be a numeric matrix or {.code NULL}.")
+    }
+    if (any(!is.finite(Zr))) {
+      cli::cli_abort("{.arg Zr} must contain only finite numeric values.")
+    }
+    if (nrow(Zr) != nrow(Xr)) {
+      cli::cli_abort("{.arg Zr} must have {.val {nrow(Xr)}} rows.")
+    }
+    if (ncol(Zr) == 0L) {
+      Zr <- NULL
+    }
+  }
+
+  if (!is.null(time_weights)) {
+    if (!has_time) {
+      cli::cli_abort("{.arg time_weights} requires a non-empty {.arg time} vector.")
+    }
+    if (!is.numeric(time_weights) || anyNA(time_weights) || any(!is.finite(time_weights)) || any(time_weights < 0)) {
+      cli::cli_abort("{.arg time_weights} must contain only finite non-negative values.")
+    }
+    if (length(time_weights) != nt) {
+      cli::cli_abort("{.arg time_weights} length must match {.arg nt}.")
+    }
+  }
+
+  invisible(NULL)
+}
+
 run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                     use_ar1, ar1_rho, max_iter, tol, conf_level, ci_mode_int,
                     include_subj_method = TRUE, include_subj_time = TRUE,
@@ -1439,26 +1642,51 @@ run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
   include_subj_method <- isTRUE(include_subj_method) && isTRUE(Laux$nm > 0)
   include_subj_time   <- isTRUE(include_subj_time)   && isTRUE(Laux$nt > 0)
 
+  Lr <- if (is.null(Laux$L)) NULL else unname(as.matrix(Laux$L))
+  auxDr <- if (is.null(Laux$Dm)) NULL else unname(as.matrix(Laux$Dm))
+  Zr <- if (is.null(Z)) NULL else unname(as.matrix(Z))
+  if (!is.null(Zr) && ncol(Zr) == 0L) {
+    Zr <- NULL
+  }
+  time_arg <- if (length(time_int)) as.integer(time_int) else integer(0)
+  time_weights_arg <- if (is.null(time_weights)) NULL else as.numeric(time_weights)
+
+  .validate_run_cpp_inputs(
+    Xr = Xr,
+    yr = yr,
+    subject = as.integer(subject),
+    method_int = as.integer(method_int),
+    time_int = time_arg,
+    nm = as.integer(Laux$nm),
+    nt = as.integer(Laux$nt),
+    Lr = Lr,
+    auxDr = auxDr,
+    Zr = Zr,
+    include_subj_method = include_subj_method,
+    include_subj_time = include_subj_time,
+    time_weights = time_weights_arg
+  )
+
   ccc_vc_cpp(
     Xr = unname(Xr),
     yr = yr,
     subject = subject,
     method  = method_int,
-    time    = time_int,
+    time    = time_arg,
     nm = Laux$nm, nt = Laux$nt,
     max_iter = max_iter, tol = tol,
     conf_level = conf_level,
     ci_mode = ci_mode_int,
-    Lr    = if (is.null(Laux$L))  NULL else unname(Laux$L),
-    auxDr = if (is.null(Laux$Dm)) NULL else unname(Laux$Dm),
-    Zr    = if (is.null(Z))       NULL else unname(Z),
+    Lr    = Lr,
+    auxDr = auxDr,
+    Zr    = Zr,
     use_ar1 = use_ar1,
     ar1_rho = as.numeric(ar1_rho),
     include_subj_method = include_subj_method,
     include_subj_time   = include_subj_time,
     sb_zero_tol = as.numeric(sb_zero_tol),
     eval_single_visit = eval_single_visit,
-    time_weights = if (is.null(time_weights)) NULL else as.numeric(time_weights),
+    time_weights = time_weights_arg,
     metric_mode = as.integer(metric_mode),
     ll_only = isTRUE(loglik_only),
     need_loglik = isTRUE(need_reml_loglik)
@@ -1710,6 +1938,8 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
                                   summary_title = "Repeated-measures concordance matrix",
                                   vc_engine_name = "ccc_rm_reml",
                                   vc_se_label = "SE(CCC)") {
+  interaction_requested <- !is.null(time) &&
+    grepl(":", paste(deparse(fml), collapse = ""), fixed = TRUE)
 
   Dmat_type <- match.arg(Dmat_type)
   eval_single_visit <- Dmat_type %in% c("typical-visit","weighted-sq")
@@ -1753,20 +1983,31 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       m1 <- method_levels[i]; m2 <- method_levels[j]
 
       idx       <- sort.int(c(idx_by_method[[i]], idx_by_method[[j]]), method = "quick")
-      subj_int  <- as.integer(df[[rind]][idx])
+      subj_fac  <- droplevels(df[[rind]][idx])
+      subj_int  <- as.integer(subj_fac)
       y_sub     <- df[[response]][idx]
       met_fac   <- droplevels(df[[method]][idx])        # exactly 2 levels
       time_fac  <- if (!is.null(time)) droplevels(df[[time]][idx]) else NULL
-      df_sub    <- df[idx, , drop = FALSE]              # moved up
+      df_sub    <- df[idx, , drop = FALSE]
+      df_sub[[rind]] <- subj_fac
+      df_sub[[method]] <- met_fac
+      if (!is.null(time)) df_sub[[time]] <- time_fac
       n_obs_mat[i, j] <- n_obs_mat[j, i] <- as.integer(length(y_sub))
       n_subjects_mat[i, j] <- n_subjects_mat[j, i] <- as.integer(length(unique(subj_int)))
 
-      Xp <- model.matrix(fml, data = df_sub)
+      has_time_levels <- !is.null(time_fac) && nlevels(time_fac) >= 2L
+      pair_terms_rhs <- c("1", method)
+      if (has_time_levels) pair_terms_rhs <- c(pair_terms_rhs, time)
+      if (has_time_levels && isTRUE(interaction_requested)) {
+        pair_terms_rhs <- c(pair_terms_rhs, sprintf("%s:%s", method, time))
+      }
+      pair_fml <- as.formula(paste("~", paste(pair_terms_rhs, collapse = " + ")))
+      Xp <- model.matrix(pair_fml, data = df_sub)
 
-      lev_time_sub <- if (!is.null(time_fac)) levels(time_fac) else character(0)
+      lev_time_sub <- if (has_time_levels) levels(time_fac) else character(0)
 
       # -------- Build/subset Dmat for this pair (only if >= 2 time levels) --------
-      if (!is.null(time) && length(lev_time_sub) >= 2L) {
+      if (has_time_levels) {
         if (!is.null(Dmat)) {
           Dfull <- Dfull_input
           if (!is.null(all_time_lvls) &&
@@ -1799,7 +2040,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
 
       # --- per-pair time weights for kappa (only for weighted-avg target) ---
       time_weights_kappa <- NULL
-      if (!is.null(time) && length(lev_time_sub) >= 2L && identical(Dmat_type, "weighted-avg")) {
+      if (has_time_levels && identical(Dmat_type, "weighted-avg")) {
         w_sub <- .align_weights_to_levels(Dmat_weights, lev_time_sub, all_time_lvls)
         if (is.null(w_sub)) w_sub <- rep(1 / length(lev_time_sub), length(lev_time_sub))
         sw <- sum(w_sub, na.rm = TRUE)
@@ -1811,7 +2052,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         time_weights_kappa <- as.numeric(w_sub / sw)
       }
 
-      has_interaction <- any(grepl(":", colnames(Xp), fixed = TRUE))
+      has_interaction <- isTRUE(interaction_requested) && has_time_levels
 
       Laux <- build_LDZ(
         colnames_X      = colnames(Xp),
@@ -1830,26 +2071,21 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
       method_int <- if (nlevels(met_fac) >= 2L) as.integer(met_fac) else integer(0)
 
       # --------- NORMALISE TIME VECTOR (avoids 0-length in C++) ---------
-      time_int <- if (is.null(time)) rep(NA_integer_, nrow(df_sub)) else as.integer(df_sub[[time]])
-      time_int[is.na(time_int)] <- -1L
+      time_int <- if (has_time_levels) as.integer(time_fac) else integer(0)
 
       # ----------------------- LENGTH CHECKS -----------------------------
       n <- length(y_sub)
       check_same_length(subj_int,  y_sub,      arg_x = "subject", arg_y = "response")
       check_same_length(method_int, y_sub,     arg_x = "method",  arg_y = "response")
-      check_same_length(time_int,   y_sub,     arg_x = "time",    arg_y = "response")
+      if (length(time_int)) {
+        check_same_length(time_int, y_sub, arg_x = "time", arg_y = "response")
+      }
 
       # ------------- Decide if AR(1) is actually identifiable ------------
       has_ar1_info <- {
-        if (all(time_int < 0L)) {
-          FALSE
-        } else {
-          t_nonneg <- time_int[time_int >= 0L]
-          s_nonneg <- subj_int[time_int >= 0L]
-          if (!length(t_nonneg)) FALSE else
-            any(vapply(split(t_nonneg, s_nonneg),
-                       function(v) length(unique(v)) >= 2L, logical(1)))
-        }
+        if (!length(time_int)) FALSE else
+          any(vapply(split(time_int, subj_int),
+                     function(v) length(unique(v)) >= 2L, logical(1)))
       }
       use_ar1_eff <- identical(ar, "ar1") && isTRUE(has_ar1_info)
       ar_used_mat[i, j] <- ar_used_mat[j, i] <- isTRUE(use_ar1_eff)

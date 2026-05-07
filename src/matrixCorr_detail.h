@@ -1573,6 +1573,12 @@ inline void make_Cinv_by_method(const std::vector<int>& tim_ord,
                                 const std::vector<int>& met_ord,
                                 int nm_levels, double rho,
                                 arma::mat& Cinv) {
+  if (tim_ord.size() != met_ord.size()) {
+    Rcpp::stop("make_Cinv_by_method(): time/method vectors must have the same length.");
+  }
+  if (nm_levels <= 0) {
+    Rcpp::stop("make_Cinv_by_method(): method level count must be positive.");
+  }
   Cinv.zeros(tim_ord.size(), tim_ord.size());
   const double r2 = rho * rho;
   const double denom = std::max(1.0 - r2, 1e-12);
@@ -1582,6 +1588,9 @@ inline void make_Cinv_by_method(const std::vector<int>& tim_ord,
     std::vector<int> idx;
     idx.reserve(tim_ord.size());
     for (int k = 0; k < (int)tim_ord.size(); ++k) {
+      if (met_ord[k] < -1 || met_ord[k] >= nm_levels) {
+        Rcpp::stop("make_Cinv_by_method(): method code out of bounds.");
+      }
       if (met_ord[k] == l && tim_ord[k] >= 0) idx.push_back(k);
     }
 
@@ -1739,6 +1748,9 @@ inline void build_U_base(const std::vector<int>& met_i,   // size n_i, −1 allo
                          int nt,                          // #time   levels used in U
                          arma::mat& U)                    // n_i x r_base
 {
+  if (met_i.size() != tim_i.size()) {
+    Rcpp::stop("build_U_base(): method/time vectors must have the same length.");
+  }
   const int n_i   = static_cast<int>(tim_i.size());
   const int rbase = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
   U.zeros(n_i, rbase);
@@ -1747,11 +1759,19 @@ inline void build_U_base(const std::vector<int>& met_i,   // size n_i, −1 allo
 
   int col = 1;
   if (nm > 0) {
-    for (int t = 0; t < n_i; ++t) { const int l = met_i[t]; if (l >= 0) U(t, col + l) = 1.0; }
+    for (int t = 0; t < n_i; ++t) {
+      const int l = met_i[t];
+      if (l >= nm) Rcpp::stop("build_U_base(): method code out of bounds.");
+      if (l >= 0) U(t, col + l) = 1.0;
+    }
     col += nm;
   }
   if (nt > 0) {
-    for (int t = 0; t < n_i; ++t) { const int tt = tim_i[t]; if (tt >= 0) U(t, col + tt) = 1.0; }
+    for (int t = 0; t < n_i; ++t) {
+      const int tt = tim_i[t];
+      if (tt >= nt) Rcpp::stop("build_U_base(): time code out of bounds.");
+      if (tt >= 0) U(t, col + tt) = 1.0;
+    }
   }
 }
 
@@ -1761,20 +1781,29 @@ inline void gram_UtU(const std::vector<int>& met_i,
                      int n_i, int nm, int nt,
                      arma::mat& UtU)                      // r x r
 {
+  if ((int)met_i.size() != n_i || (int)tim_i.size() != n_i) {
+    Rcpp::stop("gram_UtU(): input vectors must match n_i.");
+  }
   const int r = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
   UtU.zeros(r, r);
   UtU(0, 0) = n_i;
 
   if (nm > 0) {
     arma::vec cm(nm, arma::fill::zeros);
-    for (int v : met_i) if (v >= 0) cm[v] += 1.0;
+    for (int v : met_i) {
+      if (v >= nm) Rcpp::stop("gram_UtU(): method code out of bounds.");
+      if (v >= 0) cm[v] += 1.0;
+    }
     for (int l = 0; l < nm; ++l) {
       UtU(0, 1 + l) = UtU(1 + l, 0) = cm[l];
       UtU(1 + l, 1 + l) = cm[l];
     }
     if (nt > 0) {
       arma::vec ct(nt, arma::fill::zeros);
-      for (int v : tim_i) if (v >= 0) ct[v] += 1.0;
+      for (int v : tim_i) {
+        if (v >= nt) Rcpp::stop("gram_UtU(): time code out of bounds.");
+        if (v >= 0) ct[v] += 1.0;
+      }
       for (int t = 0; t < nt; ++t) {
         const int jt = 1 + nm + t;
         UtU(0, jt) = UtU(jt, 0) = ct[t];
@@ -1783,6 +1812,8 @@ inline void gram_UtU(const std::vector<int>& met_i,
       arma::mat cmt(nm, nt, arma::fill::zeros);
       for (int k = 0; k < n_i; ++k) {
         const int l = met_i[k], t = tim_i[k];
+        if (l >= nm) Rcpp::stop("gram_UtU(): method code out of bounds.");
+        if (t >= nt) Rcpp::stop("gram_UtU(): time code out of bounds.");
         if (l >= 0 && t >= 0) cmt(l, t) += 1.0;
       }
       for (int l = 0; l < nm; ++l)
@@ -1794,7 +1825,10 @@ inline void gram_UtU(const std::vector<int>& met_i,
     }
   } else if (nt > 0) {
     arma::vec ct(nt, arma::fill::zeros);
-    for (int v : tim_i) if (v >= 0) ct[v] += 1.0;
+    for (int v : tim_i) {
+      if (v >= nt) Rcpp::stop("gram_UtU(): time code out of bounds.");
+      if (v >= 0) ct[v] += 1.0;
+    }
     for (int t = 0; t < nt; ++t) {
       const int jt = 1 + t;
       UtU(0, jt) = UtU(jt, 0) = ct[t];
@@ -1812,6 +1846,9 @@ inline void accumulate_Ut_vec(const std::vector<int>& rows_i,
                               Accessor v, arma::vec& Utv)         // length r
 {
   const int n_i = static_cast<int>(rows_i.size());
+  if ((int)met_i.size() != n_i || (int)tim_i.size() != n_i) {
+    Rcpp::stop("accumulate_Ut_vec(): input vectors must match rows_i.");
+  }
   const int r_expected = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
   Utv.zeros(r_expected);
 
@@ -1822,7 +1859,10 @@ inline void accumulate_Ut_vec(const std::vector<int>& rows_i,
   if (nm > 0) {
     for (int l = 0; l < nm; ++l) {
       double sm = 0.0;
-      for (int k = 0; k < n_i; ++k) if (met_i[k] == l) sm += v(rows_i[k]);
+      for (int k = 0; k < n_i; ++k) {
+        if (met_i[k] >= nm) Rcpp::stop("accumulate_Ut_vec(): method code out of bounds.");
+        if (met_i[k] == l) sm += v(rows_i[k]);
+      }
       Utv[1 + l] = sm;
     }
   }
@@ -1830,7 +1870,10 @@ inline void accumulate_Ut_vec(const std::vector<int>& rows_i,
     const int off = 1 + (nm > 0 ? nm : 0);
     for (int t = 0; t < nt; ++t) {
       double st = 0.0;
-      for (int k = 0; k < n_i; ++k) if (tim_i[k] == t) st += v(rows_i[k]);
+      for (int k = 0; k < n_i; ++k) {
+        if (tim_i[k] >= nt) Rcpp::stop("accumulate_Ut_vec(): time code out of bounds.");
+        if (tim_i[k] == t) st += v(rows_i[k]);
+      }
       Utv[off + t] = st;
     }
   }
@@ -1844,6 +1887,13 @@ inline void add_U_times(const std::vector<int>& rows_i,
                         const arma::vec& a, arma::vec& out)        // out length n_i
 {
   const int n_i = static_cast<int>(rows_i.size());
+  if ((int)met_i.size() != n_i || (int)tim_i.size() != n_i) {
+    Rcpp::stop("add_U_times(): input vectors must match rows_i.");
+  }
+  const int a_expected = 1 + (nm > 0 ? nm : 0) + (nt > 0 ? nt : 0);
+  if ((int)a.n_elem != a_expected) {
+    Rcpp::stop("add_U_times(): coefficient vector has unexpected length.");
+  }
   const double a0 = a[0];
 
   std::vector<double> am(nm > 0 ? nm : 0), at(nt > 0 ? nt : 0);
@@ -1852,6 +1902,8 @@ inline void add_U_times(const std::vector<int>& rows_i,
 
   for (int k = 0; k < n_i; ++k) {
     double val = a0;
+    if (nm > 0 && met_i[k] >= nm) Rcpp::stop("add_U_times(): method code out of bounds.");
+    if (nt > 0 && tim_i[k] >= nt) Rcpp::stop("add_U_times(): time code out of bounds.");
     if (nm > 0 && met_i[k] >= 0) val += am[ met_i[k] ];
     if (nt > 0 && tim_i[k] >= 0) val += at[ tim_i[k] ];
     out[k] += val;

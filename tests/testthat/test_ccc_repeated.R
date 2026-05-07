@@ -121,24 +121,25 @@ test_that("ccc_vc_cpp handles absent optional method/time vectors safely", {
   set.seed(125)
   n_subj <- 20L
   id <- rep(seq_len(n_subj), each = 2L)
+  method <- rep(c(1L, 2L), times = n_subj)
   y <- rnorm(length(id))
-  X <- matrix(1, nrow = length(y), ncol = 1L)
+  X <- cbind("(Intercept)" = 1, method_b = as.numeric(method == 2L))
 
   expect_error(
     fit <- matrixCorr:::ccc_vc_cpp(
       Xr = X,
       yr = y,
       subject = id,
-      method = integer(0),
+      method = method,
       time = integer(0),
-      nm = 0L,
+      nm = 2L,
       nt = 0L,
       max_iter = 20L,
       tol = 1e-6,
       conf_level = 0.95,
       ci_mode = 2L,
-      Lr = NULL,
-      auxDr = NULL,
+      Lr = matrix(c(0, 1), nrow = 2L),
+      auxDr = matrix(1, nrow = 1L, ncol = 1L),
       Zr = NULL,
       use_ar1 = FALSE,
       ar1_rho = 0,
@@ -158,6 +159,391 @@ test_that("ccc_vc_cpp handles absent optional method/time vectors safely", {
   expect_true(is.finite(as.numeric(fit$ccc)))
   expect_true("sigma2_subject" %in% names(fit))
   expect_true(is.finite(as.numeric(fit$sigma2_subject)))
+})
+
+test_that("ccc_vc_cpp rejects malformed time and optional design inputs before native indexing", {
+  set.seed(126)
+  n_subj <- 12L
+  id <- rep(seq_len(n_subj), each = 2L)
+  method <- rep(c(1L, 2L), times = n_subj)
+  y <- rnorm(length(id))
+  X <- cbind("(Intercept)" = 1, method_b = as.numeric(method == 2L))
+
+  expect_error(
+    matrixCorr:::ccc_vc_cpp(
+      Xr = X,
+      yr = y,
+      subject = id,
+      method = method,
+      time = c(rep(1L, length(id) - 1L), 3L),
+      nm = 2L,
+      nt = 2L,
+      max_iter = 20L,
+      tol = 1e-6,
+      conf_level = 0.95,
+      ci_mode = 2L,
+      Lr = matrix(c(0, 1), nrow = 2L),
+      auxDr = matrix(1, nrow = 1L, ncol = 1L),
+      Zr = NULL,
+      use_ar1 = FALSE,
+      ar1_rho = 0,
+      include_subj_method = TRUE,
+      include_subj_time = FALSE,
+      sb_zero_tol = 1e-10,
+      eval_single_visit = FALSE,
+      time_weights = NULL,
+      metric_mode = 0L,
+      ll_only = FALSE,
+      need_loglik = TRUE
+    ),
+    "contiguous 1..K integer codes|maximum"
+  )
+
+  expect_error(
+    matrixCorr:::ccc_vc_cpp(
+      Xr = X,
+      yr = y,
+      subject = id,
+      method = method,
+      time = integer(0),
+      nm = 2L,
+      nt = 0L,
+      max_iter = 20L,
+      tol = 1e-6,
+      conf_level = 0.95,
+      ci_mode = 2L,
+      Lr = matrix(c(0, 1), nrow = 2L),
+      auxDr = matrix(1, nrow = 1L, ncol = 1L),
+      Zr = matrix(numeric(0), nrow = length(id), ncol = 0L),
+      use_ar1 = FALSE,
+      ar1_rho = 0,
+      include_subj_method = TRUE,
+      include_subj_time = TRUE,
+      sb_zero_tol = 1e-10,
+      eval_single_visit = FALSE,
+      time_weights = NULL,
+      metric_mode = 0L,
+      ll_only = FALSE,
+      need_loglik = TRUE
+    ),
+    "include_subj_time=TRUE"
+  )
+
+  expect_error(
+    matrixCorr:::ccc_vc_cpp(
+      Xr = X,
+      yr = y,
+      subject = id,
+      method = method,
+      time = rep(1L, length(id)),
+      nm = 2L,
+      nt = 1L,
+      max_iter = 20L,
+      tol = 1e-6,
+      conf_level = 0.95,
+      ci_mode = 2L,
+      Lr = matrix(c(0, 1), nrow = 2L),
+      auxDr = matrix(1, nrow = 1L, ncol = 1L),
+      Zr = NULL,
+      use_ar1 = FALSE,
+      ar1_rho = 0,
+      include_subj_method = TRUE,
+      include_subj_time = FALSE,
+      sb_zero_tol = 1e-10,
+      eval_single_visit = FALSE,
+      time_weights = c(0.5, 0.5),
+      metric_mode = 0L,
+      ll_only = FALSE,
+      need_loglik = TRUE
+    ),
+    "time_weights length"
+  )
+})
+
+test_that("repeated-measures REML wrappers reject malformed optional design state cleanly", {
+  bad <- data.frame(
+    y = rnorm(6),
+    id = factor(rep(1:3, each = 2L)),
+    method = factor(rep(c("A", "B"), times = 3L)),
+    time = factor(c("1", "1", "1", NA, "1", "1"))
+  )
+  expect_error(
+    ccc_rm_reml(bad, "y", "id", method = "method", time = "time"),
+    "must not contain missing values"
+  )
+
+  dat <- data.frame(
+    y = rnorm(8),
+    id = factor(rep(1:4, each = 2L)),
+    method = factor(rep(c("A", "B"), times = 4L))
+  )
+  expect_error(
+    ccc_rm_reml(
+      dat,
+      "y",
+      "id",
+      method = "method",
+      include_subj_time = TRUE,
+      vc_select = "none"
+    ),
+    "cannot be TRUE when"
+  )
+
+  expect_error(
+    ccc_rm_reml(dat, "y", "id", method = "method", time = "time"),
+    "missing required column"
+  )
+})
+
+test_that("pairwise repeated-measures REML rebuilds pair-specific time/design state", {
+  set.seed(130)
+  ids <- factor(rep(seq_len(18L), each = 6L))
+  dat <- data.frame(
+    id = ids,
+    method = factor(rep(c("A", "A", "B", "B", "C", "C"), times = 18L),
+                    levels = c("A", "B", "C")),
+    time = factor(rep(c("1", "2", "1", "3", "2", "3"), times = 18L),
+                  levels = c("1", "2", "3"))
+  )
+  subj_eff <- rnorm(nlevels(dat$id), sd = 0.6)[dat$id]
+  method_eff <- c(A = 0, B = 0.25, C = -0.15)[as.character(dat$method)]
+  time_eff <- c("1" = 0.0, "2" = 0.2, "3" = -0.1)[as.character(dat$time)]
+  dat$y <- subj_eff + method_eff + time_eff + rnorm(nrow(dat), sd = 0.35)
+
+  fit <- ccc_rm_reml(
+    dat,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "auto",
+    ci = FALSE
+  )
+
+  expect_true(all(is.finite(fit[upper.tri(fit)])))
+})
+
+test_that("single-level time variables are handled as no-time repeated-measures fits", {
+  set.seed(131)
+  n_subj <- 30L
+  dat <- data.frame(
+    y = rnorm(n_subj * 2L),
+    id = factor(rep(seq_len(n_subj), each = 2L)),
+    method = factor(rep(c("A", "B"), times = n_subj)),
+    time = factor(rep("visit1", n_subj * 2L))
+  )
+
+  fit <- ccc_rm_reml(
+    dat,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "auto",
+    ci = FALSE
+  )
+
+  expect_true(is.finite(unname(fit["A", "B"])))
+  expect_equal(unname(attr(fit, "sigma2_subject_time")["A", "B"]), 0, tolerance = 1e-8)
+})
+
+test_that("native slope builders reject malformed slope state before use", {
+  expect_error(
+    matrixCorr:::build_L_Dm_Z_cpp(
+      colnames_X = c("(Intercept)", "methodB"),
+      rmet_name = "method",
+      rtime_name = NULL,
+      method_levels = c("A", "B"),
+      time_levels = character(0),
+      has_interaction = FALSE,
+      Dmat_global = NULL,
+      slope_mode = "method",
+      slope_var = c(1, Inf),
+      method_codes = c(1L, 2L),
+      drop_zero_cols = TRUE
+    ),
+    "slope_var"
+  )
+
+  expect_error(
+    matrixCorr:::build_L_Dm_Z_cpp(
+      colnames_X = c("(Intercept)", "methodB"),
+      rmet_name = "method",
+      rtime_name = NULL,
+      method_levels = c("A", "B"),
+      time_levels = character(0),
+      has_interaction = FALSE,
+      Dmat_global = NULL,
+      slope_mode = "method",
+      slope_var = c(1, 2),
+      method_codes = c(1L, 3L),
+      drop_zero_cols = TRUE
+    ),
+    "method_codes"
+  )
+})
+
+test_that("randomized repeated-measures REML stress cases never crash", {
+  simulate_case <- function(seed) {
+    set.seed(seed)
+    n_subj <- sample(2:7, 1)
+    n_methods <- sample(2:4, 1)
+    has_time <- sample(c(TRUE, FALSE), 1)
+    n_time <- if (has_time) sample(1:4, 1) else 1L
+    methods <- LETTERS[seq_len(n_methods)]
+    rows <- vector("list", n_subj * n_methods)
+    kk <- 0L
+    subj_eff <- rnorm(n_subj, sd = runif(1, 0, 0.8))
+    for (s in seq_len(n_subj)) {
+      for (m in seq_len(n_methods)) {
+        keep_t <- if (has_time) sort(sample(seq_len(n_time), sample(seq_len(n_time), 1))) else 1L
+        y <- subj_eff[s] + (m - 1) * runif(1, -0.3, 0.3) + rnorm(length(keep_t), sd = runif(1, 0, 0.6))
+        if (runif(1) < 0.1) y[] <- y[1]
+        kk <- kk + 1L
+        rows[[kk]] <- data.frame(
+          y = y,
+          id = factor(s),
+          method = factor(methods[m], levels = methods),
+          time = factor(keep_t, levels = seq_len(n_time))
+        )
+      }
+    }
+    dat <- do.call(rbind, rows)
+    if (!has_time) dat$time <- NULL
+    dat
+  }
+
+  for (seed in 1:20) {
+    dat <- simulate_case(900 + seed)
+    fit <- tryCatch(
+      ccc_rm_reml(
+        dat,
+        "y",
+        "id",
+        method = "method",
+        time = if ("time" %in% names(dat)) "time" else NULL,
+        ci = (seed %% 2L) == 0L,
+        vc_select = if ((seed %% 3L) == 0L) "auto" else "none",
+        include_subj_time = if (!("time" %in% names(dat)) && (seed %% 5L) == 0L) TRUE else NULL
+      ),
+      error = identity
+    )
+    if (inherits(fit, "error")) {
+      expect_s3_class(fit, "error")
+    } else {
+      est <- if (is.list(fit)) fit$est else fit
+      expect_true(all(is.finite(est[upper.tri(est)])))
+    }
+  }
+})
+
+test_that("ccc_rm_reml handles CRAN REML branch combinations without crashing", {
+  set.seed(102)
+  n_subj <- 60L
+  n_time <- 8L
+
+  id <- factor(rep(seq_len(n_subj), each = 2L * n_time))
+  time <- factor(rep(rep(seq_len(n_time), times = 2L), times = n_subj))
+  method <- factor(rep(rep(c("A", "B"), each = n_time), times = n_subj))
+
+  sigA <- 0.6
+  sigAM <- 0.3
+  sigAT <- 0.5
+  sigE <- 0.4
+  biasB <- 0.2
+
+  u_i <- rnorm(n_subj, 0, sqrt(sigA))
+  u <- u_i[as.integer(id)]
+  sm <- interaction(id, method, drop = TRUE)
+  w_im_lv <- rnorm(nlevels(sm), 0, sqrt(sigAM))
+  w_im <- w_im_lv[as.integer(sm)]
+  st <- interaction(id, time, drop = TRUE)
+  g_it_lv <- rnorm(nlevels(st), 0, sqrt(sigAT))
+  g_it <- g_it_lv[as.integer(st)]
+  e <- rnorm(length(id), 0, sqrt(sigE))
+  y <- (method == "B") * biasB + u + w_im + g_it + e
+  dat_both <- data.frame(y, id, method, time)
+
+  fit_auto <- ccc_rm_reml(
+    dat_both,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "auto",
+    ci = FALSE,
+    verbose = TRUE
+  )
+  fit_no_st <- ccc_rm_reml(
+    dat_both,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "none",
+    include_subj_time = FALSE,
+    ci = TRUE
+  )
+  fit_no_sm <- ccc_rm_reml(
+    dat_both,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "none",
+    include_subj_method = FALSE,
+    ci = FALSE
+  )
+  fit_none <- ccc_rm_reml(
+    dat_both,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "none",
+    include_subj_method = FALSE,
+    include_subj_time = FALSE,
+    ci = FALSE
+  )
+
+  for (fit in list(fit_auto, fit_no_st, fit_no_sm, fit_none)) {
+    est <- if (is.list(fit)) fit$est["A", "B"] else fit["A", "B"]
+    expect_true(is.finite(unname(est)))
+  }
+
+  set.seed(11)
+  ids <- seq_len(24L)
+  methods <- c("A", "B", "C")
+  rows <- vector("list", length(ids) * length(methods))
+  kk <- 0L
+  subj_eff <- rnorm(length(ids), 0, 0.5)
+  subj_time_eff <- matrix(rnorm(length(ids) * 5L, 0, 0.7), length(ids), 5L)
+  for (s in ids) {
+    for (m in seq_along(methods)) {
+      keep_t <- sort(sample(seq_len(5L), size = max(2L, ceiling((1 - 0.4) * 5L))))
+      eps <- as.numeric(stats::arima.sim(list(ar = 0.1), n = length(keep_t), sd = 0.8))
+      y_keep <- subj_eff[s] + subj_time_eff[s, keep_t] +
+        (m - 1) * 0.5 + eps
+      kk <- kk + 1L
+      rows[[kk]] <- data.frame(
+        y = y_keep,
+        id = factor(s),
+        method = factor(methods[m], levels = methods),
+        time = factor(keep_t, levels = seq_len(5L))
+      )
+    }
+  }
+  dat_unbalanced <- do.call(rbind, rows)
+  fit_unbalanced <- ccc_rm_reml(
+    dat_unbalanced,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "auto",
+    ci = FALSE
+  )
+  expect_true(is.finite(unname(fit_unbalanced["A", "B"])))
 })
 
 # helper to center time within subject

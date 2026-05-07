@@ -1113,14 +1113,21 @@ icc_rm_reml <- function(data, response, subject,
   check_required_cols(df, req_cols, df_arg = "data")
 
   df[[response]] <- as.numeric(df[[response]])
-  if (anyNA(df[[response]])) {
-    abort_bad_arg("response",
-      message = "must reference a numeric column in {.arg data}."
-    )
-  }
   df[[subject]] <- factor(df[[subject]])
   if (!is.null(method)) df[[method]] <- factor(df[[method]])
   if (!is.null(time)) df[[time]] <- factor(df[[time]])
+  slope_Z <- .validate_rm_wrapper_inputs(
+    df = df,
+    response = response,
+    subject = subject,
+    method = method,
+    time = time,
+    slope = slope,
+    slope_var = slope_var,
+    slope_Z = slope_Z,
+    include_subj_time = include_subj_time,
+    vc_select = vc_select
+  )
   all_time_lvls <- if (!is.null(time)) levels(df[[time]]) else character(0)
 
   terms_rhs <- "1"

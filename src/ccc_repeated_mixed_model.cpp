@@ -293,6 +293,69 @@ Rcpp::List ccc_vc_cpp(
   if (subject.size() != n) stop("length(subject) mismatch");
   if (method.size()  && method.size()!=n)  stop("length(method) mismatch");
   if (time.size()    && time.size()!=n)    stop("length(time) mismatch");
+  for (int i = 0; i < n; ++i) {
+    if (!std::isfinite(yr[i])) stop("yr must contain only finite values.");
+  }
+  for (int j = 0; j < Xr.ncol(); ++j) {
+    for (int i = 0; i < n; ++i) {
+      if (!std::isfinite(Xr(i, j))) stop("Xr must contain only finite values.");
+    }
+  }
+  if (nm < 0) stop("nm must be nonnegative.");
+  if (nt < 0) stop("nt must be nonnegative.");
+
+  const bool has_time = time.size() > 0;
+  if (!has_time && include_subj_time) {
+    stop("include_subj_time=TRUE requires a non-empty time vector.");
+  }
+  if (!has_time && !(nt == 0 || nt == 1)) {
+    stop("When time is absent, nt must be 0 or 1.");
+  }
+  if (has_time && nt <= 0) {
+    stop("A non-empty time vector requires nt >= 1.");
+  }
+
+  auto validate_codes = [&](const Rcpp::IntegerVector& x,
+                            const char* name,
+                            int expected_max,
+                            bool allow_empty) {
+    const int len = x.size();
+    if (len == 0) {
+      if (!allow_empty) stop("%s must not be empty.", name);
+      return;
+    }
+    int max_code = 0;
+    for (int i = 0; i < len; ++i) {
+      const int v = x[i];
+      if (v == NA_INTEGER || v <= 0) {
+        stop("%s must contain positive non-missing integer codes.", name);
+      }
+      if (v > max_code) max_code = v;
+    }
+    std::vector<unsigned char> seen(static_cast<size_t>(max_code + 1), 0);
+    for (int i = 0; i < len; ++i) {
+      seen[static_cast<size_t>(x[i])] = 1;
+    }
+    for (int code = 1; code <= max_code; ++code) {
+      if (!seen[static_cast<size_t>(code)]) {
+        stop("%s must use contiguous 1..K integer codes.", name);
+      }
+    }
+    if (expected_max >= 0 && max_code != expected_max) {
+      stop("%s maximum (%d) must equal expected level count (%d).",
+           name, max_code, expected_max);
+    }
+  };
+
+  validate_codes(subject, "subject", -1, false);
+  validate_codes(method, "method", nm, false);
+  if (has_time) {
+    validate_codes(time, "time", nt, false);
+  }
+  if (!has_time) {
+    nt = 0;
+    use_ar1 = false;
+  }
 
   arma::mat X(Xr.begin(), Xr.nrow(), Xr.ncol(), false);
   arma::vec y(yr.begin(), yr.size(), false);
@@ -302,11 +365,13 @@ Rcpp::List ccc_vc_cpp(
   std::vector<double> w_time;
   bool has_w_time = false;
   if (time_weights.isNotNull()) {
+    if (!has_time) {
+      Rcpp::stop("time_weights requires a non-empty time vector.");
+    }
     Rcpp::NumericVector wR(time_weights.get());
     if (wR.size() > 0) {
       w_time.assign(wR.begin(), wR.end());
-      // basic sanity: length must match nt when nt>=2 (we only use when >=2)
-      if (nt >= 2 && static_cast<int>(w_time.size()) != nt) {
+      if (static_cast<int>(w_time.size()) != nt) {
         Rcpp::stop("time_weights length (%d) must equal nt (%d) for this pair.",
                    static_cast<int>(w_time.size()), nt);
       }
@@ -326,11 +391,18 @@ Rcpp::List ccc_vc_cpp(
   arma::mat Z; int qZ = 0; bool has_extra = false;
   if (Zr.isNotNull()) {
     Rcpp::NumericMatrix Zrm = Zr.get();
-    if (Zrm.nrow() > 0 || Zrm.ncol() > 0) {
+    if (Zrm.ncol() > 0) {
+      for (int j = 0; j < Zrm.ncol(); ++j) {
+        for (int i = 0; i < Zrm.nrow(); ++i) {
+          if (!std::isfinite(Zrm(i, j))) stop("Zr must contain only finite values.");
+        }
+      }
       Z = arma::mat(Zrm.begin(), Zrm.nrow(), Zrm.ncol(), false);
       if ((int)Z.n_rows != n) stop("Zr must have n rows");
       qZ = (int)Z.n_cols;
       has_extra = (qZ > 0);
+    } else if (Zrm.nrow() > 0 && (int)Zrm.nrow() != n) {
+      stop("Zr with zero columns must still have n rows.");
     }
   }
 
@@ -348,6 +420,9 @@ Rcpp::List ccc_vc_cpp(
   // Included random blocks
   const int nm_re = include_subj_method ? nm : 0;
   const int nt_re = include_subj_time ? nt : 0;
+  if (nt_re > 0 && !has_time) {
+    stop("Subject-time random effects require a non-empty time vector.");
+  }
 
   // EM init
   double sa  = 1.0;
@@ -1085,6 +1160,16 @@ Rcpp::List ccc_vc_cpp(
     if (Lrm.ncol() <= 0) stop("Lr must have at least one column when method effects are present.");
     if (Drm.nrow() != Lrm.ncol() || Drm.ncol() != Lrm.ncol()) {
       stop("auxDr must be a square matrix with dimension ncol(Lr).");
+    }
+    for (int j = 0; j < Lrm.ncol(); ++j) {
+      for (int i = 0; i < Lrm.nrow(); ++i) {
+        if (!std::isfinite(Lrm(i, j))) stop("Lr must contain only finite values.");
+      }
+    }
+    for (int j = 0; j < Drm.ncol(); ++j) {
+      for (int i = 0; i < Drm.nrow(); ++i) {
+        if (!std::isfinite(Drm(i, j))) stop("auxDr must contain only finite values.");
+      }
     }
     arma::mat L(Lrm.begin(), X.n_cols, Lrm.ncol(), false);
     arma::mat auxD(Drm.begin(), Drm.nrow(), Drm.ncol(), false);

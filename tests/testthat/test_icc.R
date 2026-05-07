@@ -559,6 +559,90 @@ test_that("repeated-measures ICC summaries expose the native REML payload", {
   expect_true(any(grepl("^Variance components$", txt_sm)))
 })
 
+test_that("icc_rm_reml consistency covers vignette and vc-select branches", {
+  set.seed(50)
+  n_id <- 14L
+  n_time <- 4L
+
+  dat <- expand.grid(
+    id = factor(seq_len(n_id)),
+    time = factor(seq_len(n_time)),
+    method = factor(c("A", "B"))
+  )
+  dat$time_index <- as.integer(dat$time)
+
+  subj <- rnorm(n_id, sd = 1.0)[dat$id]
+  subject_method <- rnorm(n_id * 2L, sd = 0.25)
+  sm <- subject_method[(as.integer(dat$id) - 1L) * 2L + as.integer(dat$method)]
+  subject_time <- rnorm(n_id * n_time, sd = 0.75)
+  st <- subject_time[(as.integer(dat$id) - 1L) * n_time + as.integer(dat$time)]
+  dat$y <- subj + sm + st + 0.35 * (dat$method == "B") + rnorm(nrow(dat), sd = 0.35)
+
+  fit_cons <- icc_rm_reml(
+    dat,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time_index",
+    type = "consistency",
+    ci = TRUE,
+    vc_select = "auto"
+  )
+  fit_cons_no_st <- icc_rm_reml(
+    dat,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time_index",
+    type = "consistency",
+    ci = FALSE,
+    vc_select = "none",
+    include_subj_time = FALSE
+  )
+
+  expect_s3_class(fit_cons, "icc_rm_reml")
+  expect_true(is.finite(unname(fit_cons$est["A", "B"])))
+  expect_true(is.finite(unname(fit_cons_no_st["A", "B"])))
+})
+
+test_that("icc_rm_reml rejects invalid no-time subject-time requests and handles single-level time", {
+  set.seed(61)
+  dat_notime <- data.frame(
+    y = rnorm(16),
+    id = factor(rep(seq_len(8L), each = 2L)),
+    method = factor(rep(c("A", "B"), times = 8L))
+  )
+  expect_error(
+    icc_rm_reml(
+      dat_notime,
+      "y",
+      "id",
+      method = "method",
+      include_subj_time = TRUE,
+      vc_select = "none"
+    ),
+    "cannot be TRUE when"
+  )
+
+  dat_onetime <- data.frame(
+    y = rnorm(20),
+    id = factor(rep(seq_len(10L), each = 2L)),
+    method = factor(rep(c("A", "B"), times = 10L)),
+    time = factor(rep("visit1", 20L))
+  )
+  fit_onetime <- icc_rm_reml(
+    dat_onetime,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    type = "consistency",
+    vc_select = "auto",
+    ci = FALSE
+  )
+  expect_true(is.finite(unname(fit_onetime["A", "B"])))
+})
+
 test_that("repeated-measures ICC carries AR(1) diagnostics consistently", {
   dat <- sim_icc_rm_long(seed = 5, sig_subject = 1.1, sig_method = 0.1, sig_error = 0.35, n_time = 5L)
   fit <- icc_rm_reml(
