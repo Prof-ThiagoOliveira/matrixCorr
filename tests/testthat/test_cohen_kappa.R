@@ -27,6 +27,7 @@ test_that("cohen_kappa reproduces the manual 2x2 example", {
   )
 
   fit <- cohen_kappa(x, y)
+  expect_s3_class(fit, "cohen_kappa")
   expect_equal(as.numeric(fit), 0.4, tolerance = 1e-12)
   expect_equal(attr(fit, "diagnostics")$observed_agreement, 0.7, tolerance = 1e-12)
   expect_equal(attr(fit, "diagnostics")$expected_agreement, 0.5, tolerance = 1e-12)
@@ -179,6 +180,25 @@ test_that("cohen_kappa uses corr_result S3 summary and plotting", {
   expect_true(length(capture.output(print(fit))) > 0L)
   expect_s3_class(summary(fit), "summary.corr_result")
   expect_s3_class(plot(fit, show_value = FALSE), "ggplot")
+})
+
+test_that("cohen_kappa scalar mode has dedicated print, summary, and plot methods", {
+  skip_if_not_installed("ggplot2")
+
+  x <- factor(c("A", "A", "B", "B", "A", "B"))
+  y <- factor(c("A", "B", "B", "B", "A", "A"))
+  fit <- cohen_kappa(x, y, ci = TRUE, p_value = TRUE)
+
+  txt <- capture.output(print(fit))
+  expect_true(any(grepl("Cohen's kappa agreement summary", txt, fixed = TRUE)))
+
+  sm <- summary(fit)
+  expect_s3_class(sm, "summary.cohen_kappa")
+  expect_true(all(c("estimate", "n_complete", "observed_agreement", "expected_agreement") %in% names(sm)))
+  expect_true(all(c("lwr", "upr", "se", "statistic", "p_value") %in% names(sm)))
+
+  p <- plot(fit, show_value = FALSE)
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("cohen_kappa attaches CI and inference metadata", {

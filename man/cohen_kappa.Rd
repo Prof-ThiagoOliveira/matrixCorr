@@ -2,6 +2,10 @@
 % Please edit documentation in R/cohen_kappa.R
 \name{cohen_kappa}
 \alias{cohen_kappa}
+\alias{summary.cohen_kappa}
+\alias{print.summary.cohen_kappa}
+\alias{print.cohen_kappa}
+\alias{plot.cohen_kappa}
 \title{Pairwise Cohen's Kappa for Nominal Ratings}
 \usage{
 cohen_kappa(
@@ -15,6 +19,42 @@ cohen_kappa(
   output = c("matrix", "sparse", "edge_list"),
   threshold = 0,
   diag = TRUE,
+  ...
+)
+
+\method{summary}{cohen_kappa}(object, digits = 4, ci_digits = 3, p_digits = 4, ...)
+
+\method{print}{summary.cohen_kappa}(
+  x,
+  digits = NULL,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
+
+\method{print}{cohen_kappa}(
+  x,
+  digits = 4,
+  n = NULL,
+  topn = NULL,
+  max_vars = NULL,
+  width = NULL,
+  show_ci = NULL,
+  ...
+)
+
+\method{plot}{cohen_kappa}(
+  x,
+  title = NULL,
+  low_color = "indianred1",
+  high_color = "steelblue1",
+  mid_color = "white",
+  value_text_size = 4,
+  ci_text_size = 3,
+  show_value = TRUE,
   ...
 )
 }
@@ -61,16 +101,47 @@ retain entries with \code{abs(value) >= threshold}. Must be \code{0} when
 \item{diag}{Logical; whether to include diagonal entries in sparse and
 edge-list outputs.}
 
-\item{...}{Reserved for future extensions. Unsupported extra arguments are
-rejected.}
+\item{...}{Additional theme arguments.}
+
+\item{object}{A scalar or matrix-style \code{cohen_kappa} object.}
+
+\item{digits}{Integer; number of decimal places for displayed values.}
+
+\item{ci_digits}{Integer; number of decimal places for confidence limits.}
+
+\item{p_digits}{Integer; number of decimal places for p-values.}
+
+\item{x}{A scalar or matrix-style \code{cohen_kappa} object.}
+
+\item{n}{Optional preview row threshold.}
+
+\item{topn}{Optional number of leading/trailing rows to show when truncated.}
+
+\item{max_vars}{Optional maximum number of visible columns.}
+
+\item{width}{Optional display width.}
+
+\item{show_ci}{One of \code{"yes"} or \code{"no"}.}
+
+\item{title}{Optional plot title.}
+
+\item{low_color}{Fill/color used for negative agreement.}
+
+\item{high_color}{Fill/color used for positive agreement.}
+
+\item{mid_color}{Unused placeholder for API consistency with matrix heatmaps.}
+
+\item{value_text_size}{Text size for the estimate label.}
+
+\item{ci_text_size}{Text size for the CI label.}
+
+\item{show_value}{Logical; whether to print the estimate and CI labels.}
 }
 \value{
-If \code{y} is supplied, a numeric scalar with attributes
-\code{diagnostics}, and optionally \code{ci}, \code{inference}, and
-\code{conf.level}. Otherwise a symmetric correlation-style result with
-estimator class \code{cohen_kappa}. Matrix outputs are created with
-\code{.mc_new_corr_matrix()}; sparse and edge-list outputs dispatch through
-the shared matrixCorr output-routing helpers.
+If \code{y} is supplied, a scalar S3 object of class \code{"cohen_kappa"}
+backed by a numeric value, with attributes \code{diagnostics}, and
+optionally \code{ci}, \code{inference}, and \code{conf.level}. Otherwise a
+symmetric matrix-style result with estimator class \code{cohen_kappa}.
 }
 \description{
 Computes unweighted Cohen's kappa for either a pair of nominal rating

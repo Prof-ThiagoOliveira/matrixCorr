@@ -72,12 +72,10 @@
 #' unweighted kappa estimator.
 #'
 #' @return
-#' If \code{y} is supplied, a numeric scalar with attributes
-#' \code{diagnostics}, and optionally \code{ci}, \code{inference}, and
-#' \code{conf.level}. Otherwise a symmetric correlation-style result with
-#' estimator class \code{cohen_kappa}. Matrix outputs are created with
-#' \code{.mc_new_corr_matrix()}; sparse and edge-list outputs dispatch through
-#' the shared matrixCorr output-routing helpers.
+#' If \code{y} is supplied, a scalar S3 object of class \code{"cohen_kappa"}
+#' backed by a numeric value, with attributes \code{diagnostics}, and
+#' optionally \code{ci}, \code{inference}, and \code{conf.level}. Otherwise a
+#' symmetric matrix-style result with estimator class \code{cohen_kappa}.
 #'
 #' @references
 #' Cohen, J. (1960). A coefficient of agreement for nominal scales.
@@ -451,10 +449,11 @@ cohen_kappa <- function(data,
                                    p_value = FALSE,
                                    conf_level = 0.95) {
   est <- as.numeric(fit$est)
-  out <- est
+  out <- structure(est, class = c("cohen_kappa", "numeric"))
   attr(out, "method") <- "cohen_kappa"
   attr(out, "description") <- "Pairwise Cohen's kappa agreement"
   attr(out, "package") <- "matrixCorr"
+  attr(out, "estimate") <- est
   attr(out, "diagnostics") <- list(
     n_complete = as.integer(fit$n_complete),
     observed_agreement = as.numeric(fit$po),
@@ -484,11 +483,170 @@ cohen_kappa <- function(data,
   out
 }
 
+#' @rdname cohen_kappa
+#' @method summary cohen_kappa
+#' @param object A scalar or matrix-style \code{cohen_kappa} object.
+#' @param digits Integer; number of decimal places for displayed values.
+#' @param ci_digits Integer; number of decimal places for confidence limits.
+#' @param p_digits Integer; number of decimal places for p-values.
+#' @param ... Unused.
+#' @export
+summary.cohen_kappa <- function(object,
+                                digits = 4,
+                                ci_digits = 3,
+                                p_digits = 4,
+                                ...) {
+  if (inherits(object, "corr_result")) {
+    return(summary.corr_matrix(object, ...))
+  }
+  check_inherits(object, "cohen_kappa")
+
+  diag_attr <- attr(object, "diagnostics", exact = TRUE)
+  ci_attr <- attr(object, "ci", exact = TRUE)
+  inf_attr <- attr(object, "inference", exact = TRUE)
+
+  df <- data.frame(
+    estimate = as.numeric(object),
+    n_complete = as.integer(diag_attr$n_complete %||% NA_integer_),
+    observed_agreement = as.numeric(diag_attr$observed_agreement %||% NA_real_),
+    expected_agreement = as.numeric(diag_attr$expected_agreement %||% NA_real_),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  if (is.list(ci_attr)) {
+    df$lwr <- as.numeric(ci_attr$lwr.ci %||% NA_real_)
+    df$upr <- as.numeric(ci_attr$upr.ci %||% NA_real_)
+  }
+  if (is.list(inf_attr)) {
+    df$se <- as.numeric(inf_attr$se %||% NA_real_)
+    df$statistic <- as.numeric(inf_attr$statistic %||% NA_real_)
+    df$p_value <- as.numeric(inf_attr$p_value %||% NA_real_)
+  }
+
+  out <- .mc_finalize_summary_df(df, class_name = "summary.cohen_kappa")
+  attr(out, "digits") <- digits
+  attr(out, "ci_digits") <- ci_digits
+  attr(out, "p_digits") <- p_digits
+  attr(out, "has_ci") <- is.list(ci_attr)
+  attr(out, "has_p") <- is.list(inf_attr)
+  attr(out, "conf.level") <- attr(object, "conf.level", exact = TRUE) %||%
+    attr(object, "conf_level", exact = TRUE) %||%
+    NA_real_
+  attr(out, "ci_method") <- if (is.list(ci_attr)) ci_attr$ci.method %||% NA_character_ else NA_character_
+  attr(out, "inference_method") <- if (is.list(inf_attr)) inf_attr$method %||% NA_character_ else NA_character_
+  out
+}
+
+#' @rdname cohen_kappa
+#' @method print summary.cohen_kappa
+#' @param x A \code{summary.cohen_kappa} object.
+#' @param n Optional preview row threshold.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns.
+#' @param width Optional display width.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
+#' @export
+print.summary.cohen_kappa <- function(x,
+                                      digits = NULL,
+                                      n = NULL,
+                                      topn = NULL,
+                                      max_vars = NULL,
+                                      width = NULL,
+                                      show_ci = NULL,
+                                      ...) {
+  show_ci <- .mc_validate_yes_no(
+    show_ci,
+    arg = "show_ci",
+    default = .mc_display_option("summary_show_ci", "yes")
+  )
+  digits <- .mc_coalesce(digits, .mc_coalesce(attr(x, "digits", exact = TRUE), 4L))
+  ci_digits <- .mc_coalesce(attr(x, "ci_digits", exact = TRUE), digits)
+  p_digits <- .mc_coalesce(attr(x, "p_digits", exact = TRUE), digits)
+
+  digest <- c(
+    method = "cohen_kappa",
+    estimate = formatC(as.numeric(x$estimate[[1L]]), format = "f", digits = digits),
+    n_complete = .mc_count_fmt(x$n_complete[[1L]]),
+    observed_agreement = formatC(as.numeric(x$observed_agreement[[1L]]), format = "f", digits = digits),
+    expected_agreement = formatC(as.numeric(x$expected_agreement[[1L]]), format = "f", digits = digits)
+  )
+  if (isTRUE(attr(x, "has_ci", exact = TRUE))) {
+    digest <- c(
+      digest,
+      ci = sprintf("%g%%", 100 * suppressWarnings(as.numeric(attr(x, "conf.level", exact = TRUE)))),
+      ci_method = attr(x, "ci_method", exact = TRUE) %||% NA_character_
+    )
+  }
+  if (isTRUE(attr(x, "has_p", exact = TRUE))) {
+    digest <- c(
+      digest,
+      inference = attr(x, "inference_method", exact = TRUE) %||% NA_character_
+    )
+  }
+  digest <- digest[!is.na(digest) & nzchar(digest)]
+  .mc_print_named_digest(digest, header = "Cohen's kappa agreement summary")
+  cat("\n")
+
+  preview <- as.data.frame(x, stringsAsFactors = FALSE, check.names = FALSE)
+  if (identical(show_ci, "no")) {
+    preview <- preview[, setdiff(names(preview), c("lwr", "upr")), drop = FALSE]
+  }
+  if ("estimate" %in% names(preview)) preview$estimate <- round(preview$estimate, digits)
+  if ("observed_agreement" %in% names(preview)) preview$observed_agreement <- round(preview$observed_agreement, digits)
+  if ("expected_agreement" %in% names(preview)) preview$expected_agreement <- round(preview$expected_agreement, digits)
+  if ("lwr" %in% names(preview)) preview$lwr <- round(preview$lwr, ci_digits)
+  if ("upr" %in% names(preview)) preview$upr <- round(preview$upr, ci_digits)
+  if ("se" %in% names(preview)) preview$se <- round(preview$se, digits)
+  if ("statistic" %in% names(preview)) preview$statistic <- round(preview$statistic, digits)
+  if ("p_value" %in% names(preview)) preview$p_value <- round(preview$p_value, p_digits)
+
+  cfg <- .mc_resolve_display_args(
+    context = "summary",
+    n = n,
+    topn = topn,
+    max_vars = max_vars,
+    width = width,
+    show_ci = show_ci
+  )
+  .mc_print_preview_table(
+    preview,
+    n = cfg$n,
+    topn = cfg$topn,
+    max_vars = cfg$max_vars,
+    width = cfg$width,
+    context = "summary",
+    full_hint = FALSE,
+    summary_hint = FALSE
+  )
+  invisible(x)
+}
+
+#' @rdname cohen_kappa
 #' @method print cohen_kappa
+#' @param x A scalar or matrix-style \code{cohen_kappa} object.
+#' @param digits Integer; number of decimal places for displayed values.
+#' @param n Optional preview row threshold.
+#' @param topn Optional number of leading/trailing rows to show when truncated.
+#' @param max_vars Optional maximum number of visible columns.
+#' @param width Optional display width.
+#' @param show_ci One of \code{"yes"} or \code{"no"}.
+#' @param ... Additional arguments passed to downstream print helpers.
 #' @export
 print.cohen_kappa <- function(x, digits = 4, n = NULL, topn = NULL,
                               max_vars = NULL, width = NULL,
                               show_ci = NULL, ...) {
+  if (!inherits(x, "corr_result")) {
+    return(invisible(print.summary.cohen_kappa(
+      summary.cohen_kappa(x),
+      digits = digits,
+      n = n,
+      topn = topn,
+      max_vars = max_vars,
+      width = width,
+      show_ci = show_ci,
+      ...
+    )))
+  }
   .mc_print_corr_matrix(
     x,
     header = "Cohen's kappa agreement matrix",
@@ -501,4 +659,108 @@ print.cohen_kappa <- function(x, digits = 4, n = NULL, topn = NULL,
     ...
   )
   invisible(x)
+}
+
+#' @rdname cohen_kappa
+#' @method plot cohen_kappa
+#' @param x A scalar or matrix-style \code{cohen_kappa} object.
+#' @param title Optional plot title.
+#' @param low_color Fill/color used for negative agreement.
+#' @param high_color Fill/color used for positive agreement.
+#' @param mid_color Unused placeholder for API consistency with matrix heatmaps.
+#' @param value_text_size Text size for the estimate label.
+#' @param ci_text_size Text size for the CI label.
+#' @param show_value Logical; whether to print the estimate and CI labels.
+#' @param ... Additional theme arguments.
+#' @export
+plot.cohen_kappa <- function(x,
+                             title = NULL,
+                             low_color = "indianred1",
+                             high_color = "steelblue1",
+                             mid_color = "white",
+                             value_text_size = 4,
+                             ci_text_size = 3,
+                             show_value = TRUE,
+                             ...) {
+  if (inherits(x, "corr_result")) {
+    return(.mc_plot_corr_result(
+      x,
+      title = title %||% "Cohen's kappa agreement heatmap",
+      low_color = low_color,
+      high_color = high_color,
+      mid_color = mid_color,
+      value_text_size = value_text_size,
+      ci_text_size = ci_text_size,
+      show_value = show_value,
+      ...
+    ))
+  }
+  check_inherits(x, "cohen_kappa")
+  check_bool(show_value, arg = "show_value")
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    cli::cli_abort("Package {.pkg ggplot2} is required for plotting.")
+  }
+
+  ci_attr <- attr(x, "ci", exact = TRUE)
+  est <- as.numeric(x)
+  df <- data.frame(
+    label = "Cohen's kappa",
+    estimate = est,
+    lwr = if (is.list(ci_attr)) as.numeric(ci_attr$lwr.ci %||% NA_real_) else NA_real_,
+    upr = if (is.list(ci_attr)) as.numeric(ci_attr$upr.ci %||% NA_real_) else NA_real_,
+    stringsAsFactors = FALSE
+  )
+  df$label_y <- 1
+  df$estimate_label <- sprintf("%.2f", df$estimate)
+  df$ci_label <- ifelse(
+    is.finite(df$lwr) & is.finite(df$upr),
+    sprintf("[%.2f, %.2f]", df$lwr, df$upr),
+    NA_character_
+  )
+  point_color <- if (is.finite(est) && est < 0) low_color else high_color
+
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$estimate, y = .data$label_y)) +
+    ggplot2::geom_vline(xintercept = 0, color = "gray85", linewidth = 0.4) +
+    ggplot2::geom_vline(xintercept = 1, color = "gray90", linewidth = 0.4, linetype = "dashed")
+  if (is.finite(df$lwr[[1L]]) && is.finite(df$upr[[1L]])) {
+    p <- p + ggplot2::geom_segment(
+      ggplot2::aes(x = .data$lwr, xend = .data$upr, y = .data$label_y, yend = .data$label_y),
+      linewidth = 1,
+      color = point_color
+    )
+  }
+  p <- p +
+    ggplot2::geom_point(size = 3, color = point_color) +
+    ggplot2::scale_x_continuous(limits = c(-1, 1)) +
+    ggplot2::scale_y_continuous(breaks = 1, labels = "Cohen's kappa") +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      panel.grid.major.y = ggplot2::element_blank(),
+      panel.grid.minor = ggplot2::element_blank(),
+      axis.title.y = ggplot2::element_blank(),
+      ...
+    ) +
+    ggplot2::labs(
+      title = title %||% "Cohen's kappa agreement",
+      x = "Kappa"
+    )
+
+  if (isTRUE(show_value)) {
+    p <- p + ggplot2::geom_text(
+      ggplot2::aes(label = .data$estimate_label),
+      nudge_y = 0.12,
+      size = value_text_size,
+      color = "black"
+    )
+    if (any(!is.na(df$ci_label))) {
+      p <- p + ggplot2::geom_text(
+        ggplot2::aes(label = .data$ci_label),
+        nudge_y = -0.12,
+        size = ci_text_size,
+        color = "gray30",
+        na.rm = TRUE
+      )
+    }
+  }
+  p
 }
