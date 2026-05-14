@@ -627,10 +627,14 @@ resolve_na_args <- function(na_method = "error",
                                                weighted = FALSE,
                                                ...) {
   method <- tolower(as.character(method %||% ""))
-  if (!method %in% c("pearson", "spearman", "ccc", "bicor", "pbcor", "wincor")) {
+  if (!method %in% c("pearson", "spearman", "ccc", "bicor", "pbcor", "wincor", "cohen_kappa")) {
     return(FALSE)
   }
-  if (!identical(na_method, "error")) {
+  if (identical(method, "cohen_kappa")) {
+    if (!na_method %in% c("error", "complete")) {
+      return(FALSE)
+    }
+  } else if (!identical(na_method, "error")) {
     return(FALSE)
   }
   if (!identical(output, "sparse") && !identical(output, "edge_list")) {

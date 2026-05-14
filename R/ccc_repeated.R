@@ -1077,7 +1077,12 @@ ccc_rm_ustat <- function(data,
 #' D-matrix options (`Dmat_type`, `Dmat`, `Dmat_weights`) control how time
 #' averaging operates when translating variance components into CCC summaries.
 #'
+#' @name ccc_rm_reml
+NULL
+
+#' Internal input checks for repeated-measures REML wrappers.
 #' @keywords internal
+#' @noRd
 .validate_rm_wrapper_inputs <- function(df, response, subject, method = NULL, time = NULL,
                                         slope = c("none", "subject", "method", "custom"),
                                         slope_var = NULL, slope_Z = NULL,
@@ -1140,6 +1145,7 @@ ccc_rm_ustat <- function(data,
   slope_Z
 }
 
+#' @rdname ccc_rm_reml
 #' @export
 ccc_rm_reml <- function(data, response, subject,
                          method = NULL, time = NULL,
@@ -1496,6 +1502,12 @@ build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub,
 #' @title run_cpp
 #' @description Wrapper for calling 'C++' backend for CCC estimation.
 #' @keywords internal
+#' @name run_cpp
+NULL
+
+#' Internal validation for variance-component index codes.
+#' @keywords internal
+#' @noRd
 .validate_vc_index_codes <- function(x, arg, expected_max = NULL, allow_empty = FALSE) {
   if (!is.integer(x)) {
     cli::cli_abort("{.arg {arg}} must be an integer vector before calling {.fn ccc_vc_cpp}.")
@@ -1629,6 +1641,7 @@ build_LDZ <- function(colnames_X, method_levels, time_levels, Dsub, df_sub,
   invisible(NULL)
 }
 
+#' @rdname run_cpp
 run_cpp <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                     use_ar1, ar1_rho, max_iter, tol, conf_level, ci_mode_int,
                     include_subj_method = TRUE, include_subj_time = TRUE,

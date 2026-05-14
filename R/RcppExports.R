@@ -69,6 +69,18 @@ ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, t
     .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, ci_mode, Lr, auxDr, Zr, use_ar1, ar1_rho, include_subj_method, include_subj_time, sb_zero_tol, eval_single_visit, time_weights, metric_mode, ll_only, need_loglik)
 }
 
+cohen_kappa_pair_cpp <- function(x, y, n_levels, return_inference = FALSE, conf_level = 0.95) {
+    .Call(`_matrixCorr_cohen_kappa_pair_cpp`, x, y, n_levels, return_inference, conf_level)
+}
+
+cohen_kappa_matrix_cpp <- function(X, n_levels, pairwise_complete = FALSE, return_inference = FALSE, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_cohen_kappa_matrix_cpp`, X, n_levels, pairwise_complete, return_inference, conf_level, n_threads)
+}
+
+cohen_kappa_threshold_triplets_cpp <- function(X, n_levels, threshold = 0.0, diag = TRUE, block_size = 256L, n_threads = 1L) {
+    .Call(`_matrixCorr_cohen_kappa_threshold_triplets_cpp`, X, n_levels, threshold, diag, block_size, n_threads)
+}
+
 ccc_cpp <- function(X) {
     .Call(`_matrixCorr_ccc_cpp`, X)
 }

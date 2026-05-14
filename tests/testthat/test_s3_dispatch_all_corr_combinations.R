@@ -52,6 +52,13 @@ test_that("S3 dispatch works across all core correlation estimators and output c
     o3 = ordered(cut(Z[, 3], breaks = c(-Inf, -0.2, 0.5, Inf), labels = c("A", "B", "C"))),
     o4 = ordered(cut(Z[, 4], breaks = c(-Inf, -0.3, 0.2, Inf), labels = c("Q", "R", "S")))
   )
+  X_nom <- data.frame(
+    k1 = c("A", "A", "B", "B", "C", "A", "B", "C"),
+    k2 = c("A", "B", "B", "B", "C", "A", "B", "C"),
+    k3 = c("A", "A", "B", "C", "C", "A", "B", "B"),
+    k4 = c("A", "B", "A", "B", "C", "C", "B", "C"),
+    stringsAsFactors = FALSE
+  )
 
   outputs <- c("matrix", "sparse", "edge_list")
 
@@ -96,6 +103,12 @@ test_that("S3 dispatch works across all core correlation estimators and output c
       do.call(
         polychoric,
         c(list(data = X_ord, ci = ci, p_value = ci), case_output_args(output, threshold_non_matrix = 0.1))
+      )
+    },
+    cohen_kappa = function(output, ci) {
+      do.call(
+        cohen_kappa,
+        c(list(data = X_nom, na_method = "error", ci = ci, p_value = ci), case_output_args(output, threshold_non_matrix = 0.1))
       )
     }
   )

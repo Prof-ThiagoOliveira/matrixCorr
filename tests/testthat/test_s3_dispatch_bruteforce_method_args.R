@@ -457,6 +457,48 @@ test_that("bruteforce dispatch: ccc/shrinkage/schafer and latent methods", {
       dispatch_expectations(obj, lbl, out$output[[1]])
     }
   }
+
+  X_nom <- data.frame(
+    k1 = c("A", "A", "B", "B", "C", "A", "B", "C"),
+    k2 = c("A", "B", "B", "B", "C", "A", "B", "C"),
+    k3 = c("A", "A", "B", "C", "C", "A", "B", "B"),
+    k4 = c("A", "B", "A", "B", "C", "C", "B", "C"),
+    stringsAsFactors = FALSE
+  )
+  X_nom_na <- X_nom
+  X_nom_na[sample.int(nrow(X_nom_na), 2), 1] <- NA
+  X_nom_na[sample.int(nrow(X_nom_na), 2), 2] <- NA
+
+  kappa_grid <- grid_df(
+    na_method = c("error", "pairwise", "complete"),
+    ci = c(FALSE, TRUE),
+    p_value = c(FALSE, TRUE)
+  )
+
+  for (i in seq_len(nrow(kappa_grid))) {
+    row <- kappa_grid[i, , drop = FALSE]
+    x_nom_use <- if (identical(row$na_method[[1]], "error")) X_nom else X_nom_na
+    for (j in seq_len(nrow(out_grid))) {
+      out <- out_grid[j, , drop = FALSE]
+      lbl <- sprintf(
+        "cohen_kappa na=%s ci=%s p=%s thr=%.2f diag=%s out=%s",
+        row$na_method[[1]], row$ci[[1]], row$p_value[[1]],
+        out$threshold[[1]], out$diag[[1]], out$output[[1]]
+      )
+      obj <- cohen_kappa(
+        x_nom_use,
+        na_method = row$na_method[[1]],
+        ci = row$ci[[1]],
+        p_value = row$p_value[[1]],
+        conf_level = 0.95,
+        n_threads = 1L,
+        output = out$output[[1]],
+        threshold = out$threshold[[1]],
+        diag = out$diag[[1]]
+      )
+      dispatch_expectations(obj, lbl, out$output[[1]])
+    }
+  }
 })
 
 test_that("bruteforce dispatch: pcorr method combinations and constraints", {

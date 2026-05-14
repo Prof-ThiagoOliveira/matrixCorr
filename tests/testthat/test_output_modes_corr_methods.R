@@ -270,6 +270,61 @@ test_that("latent symmetric methods support matrix/sparse/edge outputs", {
   }
 })
 
+test_that("cohen_kappa supports matrix/sparse/edge outputs", {
+  X_nom <- data.frame(
+    k1 = c("A", "A", "B", "B", "C", "A", "B", "C"),
+    k2 = c("A", "B", "B", "B", "C", "A", "B", "C"),
+    k3 = c("A", "A", "B", "C", "C", "A", "B", "B"),
+    k4 = c("A", "B", "A", "B", "C", "C", "B", "C"),
+    stringsAsFactors = FALSE
+  )
+
+  base <- cohen_kappa(X_nom, na_method = "error", ci = FALSE, p_value = FALSE)
+  mat <- as.matrix(base)
+
+  expect_error(
+    cohen_kappa(X_nom, output = "matrix", threshold = 0.2),
+    "must be 0 when"
+  )
+
+  edge <- cohen_kappa(
+    X_nom,
+    na_method = "error",
+    ci = FALSE,
+    p_value = FALSE,
+    output = "edge_list",
+    threshold = 0.2,
+    diag = FALSE
+  )
+  edge_df <- .mc_corr_as_edge_df(edge)
+  edge_df <- edge_df[order(edge_df$col, edge_df$row), , drop = FALSE]
+  expected <- expected_edge_df(mat, threshold = 0.2, diag = FALSE)
+  expected <- expected[order(expected$col, expected$row), , drop = FALSE]
+  rownames(edge_df) <- NULL
+  rownames(expected) <- NULL
+  expect_equal(
+    edge_df,
+    expected,
+    tolerance = 1e-12
+  )
+
+  sparse <- cohen_kappa(
+    X_nom,
+    na_method = "error",
+    ci = FALSE,
+    p_value = FALSE,
+    output = "sparse",
+    threshold = 0.2,
+    diag = FALSE
+  )
+  expect_s4_class(sparse, "sparseMatrix")
+  expect_equal(
+    as.matrix(sparse),
+    expected_sparse_dense(mat, threshold = 0.2, diag = FALSE),
+    tolerance = 1e-12
+  )
+})
+
 test_that("rectangular latent methods keep legacy interface without output arguments", {
   set.seed(5252)
   Z <- matrix(rnorm(400 * 4), nrow = 400, ncol = 4)

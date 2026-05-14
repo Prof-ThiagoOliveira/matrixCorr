@@ -296,6 +296,53 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cohen_kappa_pair_cpp
+Rcpp::List cohen_kappa_pair_cpp(Rcpp::IntegerVector x, Rcpp::IntegerVector y, int n_levels, bool return_inference, double conf_level);
+RcppExport SEXP _matrixCorr_cohen_kappa_pair_cpp(SEXP xSEXP, SEXP ySEXP, SEXP n_levelsSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n_levels(n_levelsSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_inference(return_inferenceSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(cohen_kappa_pair_cpp(x, y, n_levels, return_inference, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cohen_kappa_matrix_cpp
+Rcpp::List cohen_kappa_matrix_cpp(Rcpp::IntegerMatrix X, int n_levels, bool pairwise_complete, bool return_inference, double conf_level, int n_threads);
+RcppExport SEXP _matrixCorr_cohen_kappa_matrix_cpp(SEXP XSEXP, SEXP n_levelsSEXP, SEXP pairwise_completeSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< int >::type n_levels(n_levelsSEXP);
+    Rcpp::traits::input_parameter< bool >::type pairwise_complete(pairwise_completeSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_inference(return_inferenceSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cohen_kappa_matrix_cpp(X, n_levels, pairwise_complete, return_inference, conf_level, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cohen_kappa_threshold_triplets_cpp
+Rcpp::List cohen_kappa_threshold_triplets_cpp(Rcpp::IntegerMatrix X, int n_levels, double threshold, bool diag, int block_size, int n_threads);
+RcppExport SEXP _matrixCorr_cohen_kappa_threshold_triplets_cpp(SEXP XSEXP, SEXP n_levelsSEXP, SEXP thresholdSEXP, SEXP diagSEXP, SEXP block_sizeSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< int >::type n_levels(n_levelsSEXP);
+    Rcpp::traits::input_parameter< double >::type threshold(thresholdSEXP);
+    Rcpp::traits::input_parameter< bool >::type diag(diagSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cohen_kappa_threshold_triplets_cpp(X, n_levels, threshold, diag, block_size, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ccc_cpp
 arma::mat ccc_cpp(const arma::mat& X);
 RcppExport SEXP _matrixCorr_ccc_cpp(SEXP XSEXP) {
@@ -981,6 +1028,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_build_L_Dm_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_cpp, 7},
     {"_matrixCorr_build_L_Dm_Z_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_Z_cpp, 11},
     {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 24},
+    {"_matrixCorr_cohen_kappa_pair_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_pair_cpp, 5},
+    {"_matrixCorr_cohen_kappa_matrix_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_matrix_cpp, 6},
+    {"_matrixCorr_cohen_kappa_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_threshold_triplets_cpp, 6},
     {"_matrixCorr_ccc_cpp", (DL_FUNC) &_matrixCorr_ccc_cpp, 1},
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},

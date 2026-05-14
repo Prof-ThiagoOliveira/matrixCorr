@@ -10,22 +10,25 @@ This is a new release of `matrixCorr`.
   `Strongest pairs by |estimate|` section now consistently respects the
   user-requested `digits` (and `ci_digits` for CI bounds)
 * added regression tests covering the `summary()`/`print()` digits behavior
+* added `cohen_kappa()`, an exported implementation of pairwise unweighted
+  Cohen's kappa for nominal ratings, supporting both two-vector and matrix
+  workflows
 * added `prob_agree()`, an exported implementation of the Stevens and
   Anderson-Cook (2017) probability of agreement for binomial reliability
   curves.
 
 ## Bug
 
-* A dedicated GitHub Actions workflow has been added to test the MKL-related 
+* A dedicated GitHub Actions workflow has been added to test the MKL-related
   segmentation fault reported by CRAN. The workflow is available here:
   https://github.com/Prof-ThiagoOliveira/matrixCorr/blob/main/.github/workflows/mkl-check.yaml
-  This workflow runs matrixCorr under R-devel on Ubuntu with Intel oneMKL 
-  configured as the BLAS/LAPACK backend. It specifically runs the 
-  repeated-measures CCC/ICC REML reproducer and the corresponding 
-  repeated-measures CCC and ICC test files. The workflow is tested under 
-  two threading configurations: OMP_NUM_THREADS = 1, MKL_NUM_THREADS = 1, 
-  and OMP_NUM_THREADS = 2, MKL_NUM_THREADS = 2. The package passed this 
-  MKL-specific check without any segmentation fault.
+  This workflow runs matrixCorr under R-devel on Ubuntu with Intel oneMKL
+  configured as the BLAS/LAPACK backend. It runs the repeated-measures
+  CCC/ICC REML reproducer and the repeated-measures CCC and ICC test files.
+  The package passes these Ubuntu + MKL checks in both a single-threaded
+  configuration (OMP_NUM_THREADS = 1, MKL_NUM_THREADS = 1) and a
+  multi-threaded configuration (OMP_NUM_THREADS = 2, MKL_NUM_THREADS = 2),
+  without any segmentation fault.
 * addressed an MKL-specific segfault reported on the CRAN MKL checks for
   `ccc_rm_reml()`/`icc_rm_reml()`. The REML C++ backend now enforces the
   documented single-thread OpenMP default when `n_threads` is omitted, and the
