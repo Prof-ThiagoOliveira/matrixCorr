@@ -81,7 +81,7 @@ test_that("robust_dcor uses shared S3 methods", {
 
   expect_s3_class(summary(R), "summary.corr_result")
   expect_s3_class(plot(R), "ggplot")
-  expect_output(print(R))
+  expect_true(length(capture.output(print(R))) > 0L)
 })
 
 test_that("robust_dcor supports permutation p-values", {

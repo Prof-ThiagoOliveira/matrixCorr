@@ -1462,7 +1462,12 @@ num_or_na_vec <- function(x) {
   out <- c(out,
            "--------------------------------------------------------------------------")
 
-  cli::cli_inform(paste(out, collapse = "\n"))
+  msg <- paste(out, collapse = "\n")
+  if (isTRUE(use_message)) {
+    cli::cli_inform(msg)
+  } else {
+    message(msg)
+  }
 }
 
 #' @title build_LDZ
@@ -2239,7 +2244,7 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
     if (any(ar1_reco_mat == TRUE, na.rm = TRUE)) {
       inform_if_verbose(
         "Positive lag-1 residual correlation detected in at least one pair. Consider `ar = \"ar1\"` to model within-subject serial correlation.",
-        .verbose = TRUE
+        .verbose = verbose
       )
     }
   }

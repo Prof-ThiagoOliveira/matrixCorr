@@ -32,10 +32,12 @@ correlation, partial correlation, robust biweight mid-correlation,
 percentage bend, Winsorized, skipped correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
 and biserial), plus repeated-measures correlation (`rmcorr()`);
-agreement tools cover Cohen’s kappa for nominal ratings, Bland-Altman
-(two-method and repeated-measures), Lin’s concordance correlation
-coefficient (including repeated-measures LMM/REML extensions), and
-intraclass correlation for both wide and repeated-measures designs.
+agreement tools cover Cohen’s kappa for nominal ratings, weighted
+Cohen’s kappa for ordered two-rater agreement, multi-rater kappa for
+nominal panel agreement, Bland-Altman (two-method and
+repeated-measures), Lin’s concordance correlation coefficient (including
+repeated-measures LMM/REML extensions), and intraclass correlation for
+both wide and repeated-measures designs.
 
 ## Features
 
@@ -49,7 +51,8 @@ intraclass correlation for both wide and repeated-measures designs.
 | Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
 | Repeated-measures correlation | `rmcorr()` |
 | Shrinkage for $p >> n$ | `shrinkage_corr()` |
-| Agreement: nominal ratings | `cohen_kappa()` |
+| Agreement: two-rater categorical ratings | `cohen_kappa()` for nominal categories, `weighted_kappa()` for ordered categories |
+| Agreement: multi-rater nominal ratings | `multirater_kappa()` |
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
 | Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
@@ -202,9 +205,10 @@ summary(fit_ccc_rm)
 
 Agreement and reliability methods use the same general inspection
 pattern, but they target different quantities. The package includes
-Cohen’s kappa for nominal ratings, Bland-Altman analysis, concordance
-correlation, and intraclass correlation for both wide and
-repeated-measures designs.
+Cohen’s kappa for nominal two-rater ratings, weighted kappa for ordered
+two-rater ratings, multi-rater kappa for nominal panel agreement,
+Bland-Altman analysis, concordance correlation, and intraclass
+correlation for both wide and repeated-measures designs.
 
 ## Vignettes
 

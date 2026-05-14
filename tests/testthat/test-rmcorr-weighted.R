@@ -463,7 +463,7 @@ test_that("weighted outputs remain compatible with rmcorr/rmcorr_matrix methods"
   expect_s3_class(fit_pair, "rmcorr")
   expect_equal(fit_pair$r, fit_pair$estimate, tolerance = 1e-12)
   expect_equal(fit_pair$conf_int, c(lower = fit_pair$lwr, upper = fit_pair$upr), tolerance = 1e-12)
-  expect_no_error(print(fit_pair))
+  expect_true(length(capture.output(print(fit_pair))) > 0L)
   expect_no_error(summary(fit_pair))
   expect_s3_class(plot(fit_pair), "ggplot")
 

@@ -158,7 +158,7 @@ test_that("prob_agree S3 methods work", {
     ci = TRUE
   )
 
-  expect_invisible(print(fit))
+  expect_true(length(capture.output(print(fit))) > 0L)
   sm <- summary(fit)
   expect_s3_class(sm, "summary.prob_agree")
   expect_true(all(c(

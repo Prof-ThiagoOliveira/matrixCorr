@@ -325,6 +325,57 @@ test_that("cohen_kappa supports matrix/sparse/edge outputs", {
   )
 })
 
+test_that("weighted_kappa supports matrix/sparse/edge outputs", {
+  lev <- c("low", "mid", "high")
+  X_ord <- data.frame(
+    k1 = ordered(c("low", "low", "mid", "mid", "high", "high", "low", "high"), levels = lev),
+    k2 = ordered(c("low", "mid", "mid", "high", "high", "mid", "low", "high"), levels = lev),
+    k3 = ordered(c("low", "low", "mid", "high", "high", "high", "low", "mid"), levels = lev),
+    k4 = ordered(c("mid", "mid", "mid", "high", "high", "high", "low", "mid"), levels = lev)
+  )
+
+  base <- weighted_kappa(X_ord, na_method = "error", ci = FALSE, p_value = FALSE)
+  mat <- as.matrix(base)
+
+  expect_error(
+    weighted_kappa(X_ord, output = "matrix", threshold = 0.2),
+    "must be 0 when"
+  )
+
+  edge <- weighted_kappa(
+    X_ord,
+    na_method = "error",
+    ci = FALSE,
+    p_value = FALSE,
+    output = "edge_list",
+    threshold = 0.2,
+    diag = FALSE
+  )
+  edge_df <- .mc_corr_as_edge_df(edge)
+  edge_df <- edge_df[order(edge_df$col, edge_df$row), , drop = FALSE]
+  expected <- expected_edge_df(mat, threshold = 0.2, diag = FALSE)
+  expected <- expected[order(expected$col, expected$row), , drop = FALSE]
+  rownames(edge_df) <- NULL
+  rownames(expected) <- NULL
+  expect_equal(edge_df, expected, tolerance = 1e-12)
+
+  sparse <- weighted_kappa(
+    X_ord,
+    na_method = "error",
+    ci = FALSE,
+    p_value = FALSE,
+    output = "sparse",
+    threshold = 0.2,
+    diag = FALSE
+  )
+  expect_s4_class(sparse, "sparseMatrix")
+  expect_equal(
+    as.matrix(sparse),
+    expected_sparse_dense(mat, threshold = 0.2, diag = FALSE),
+    tolerance = 1e-12
+  )
+})
+
 test_that("rectangular latent methods keep legacy interface without output arguments", {
   set.seed(5252)
   Z <- matrix(rnorm(400 * 4), nrow = 400, ncol = 4)

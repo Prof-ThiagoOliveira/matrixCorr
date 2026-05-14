@@ -97,8 +97,8 @@ test_that("display helpers reject auto and invalid display arguments", {
   expect_error(print(obj, topn = 0), class = "matrixCorr_arg_error")
   expect_error(print(obj, max_vars = 0), class = "matrixCorr_arg_error")
   expect_error(print(obj, width = 0), class = "matrixCorr_arg_error")
-  expect_warning(print(obj, n = 6, topn = 4), class = "matrixCorr_display_warning")
-  expect_no_warning(print(obj, n = 6))
+  expect_warning(capture.output(print(obj, n = 6, topn = 4)), class = "matrixCorr_display_warning")
+  expect_no_warning(capture.output(print(obj, n = 6)))
 })
 
 test_that("package display options control defaults", {

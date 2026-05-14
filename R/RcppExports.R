@@ -141,6 +141,14 @@ kendall_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95
     .Call(`_matrixCorr_kendall_matrix_pairwise_cpp`, X_, return_ci, conf_level, ci_method)
 }
 
+multirater_kappa_counts_cpp <- function(counts, method_code = 1L, by_category = FALSE, inference_code = 0L, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_multirater_kappa_counts_cpp`, counts, method_code, by_category, inference_code, conf_level, n_threads)
+}
+
+multirater_kappa_ratings_cpp <- function(ratings, n_levels, method_code = 1L, na_code = 1L, min_raters = 2L, by_category = FALSE, inference_code = 0L, conf_level = 0.95, n_threads = 1L, exact = FALSE) {
+    .Call(`_matrixCorr_multirater_kappa_ratings_cpp`, ratings, n_levels, method_code, na_code, min_raters, by_category, inference_code, conf_level, n_threads, exact)
+}
+
 partial_correlation_cpp <- function(X_, method = "sample", lambda = 1e-3, return_cov_precision = TRUE, return_p_value = FALSE) {
     .Call(`_matrixCorr_partial_correlation_cpp`, X_, method, lambda, return_cov_precision, return_p_value)
 }
@@ -275,5 +283,17 @@ matrixCorr_polydi_mle_cpp <- function(tab, correct = 0.5) {
 
 validate_corr_input_cpp <- function(data, check_na = TRUE) {
     .Call(`_matrixCorr_validate_corr_input_cpp`, data, check_na)
+}
+
+weighted_kappa_pair_cpp <- function(x, y, weights, return_inference = FALSE, conf_level = 0.95) {
+    .Call(`_matrixCorr_weighted_kappa_pair_cpp`, x, y, weights, return_inference, conf_level)
+}
+
+weighted_kappa_matrix_cpp <- function(X, weights, pairwise_complete = FALSE, return_inference = FALSE, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_weighted_kappa_matrix_cpp`, X, weights, pairwise_complete, return_inference, conf_level, n_threads)
+}
+
+weighted_kappa_threshold_triplets_cpp <- function(X, weights, threshold = 0.0, diag = TRUE, block_size = 256L, n_threads = 1L) {
+    .Call(`_matrixCorr_weighted_kappa_threshold_triplets_cpp`, X, weights, threshold, diag, block_size, n_threads)
 }
 

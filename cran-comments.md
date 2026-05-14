@@ -13,6 +13,14 @@ This is a new release of `matrixCorr`.
 * added `cohen_kappa()`, an exported implementation of pairwise unweighted
   Cohen's kappa for nominal ratings, supporting both two-vector and matrix
   workflows
+* added `weighted_kappa()`, an exported implementation of pairwise weighted
+  Cohen's kappa for ordered categorical ratings, supporting two-vector and
+  matrix workflows with unweighted, linear, quadratic, and custom symmetric
+  agreement weights
+* added `multirater_kappa()`, an exported implementation of panel-level
+  multi-rater nominal kappa for three or more raters, including Fleiss'
+  fixed-marginal kappa and Randolph's free-marginal kappa, with optional
+  exact Fleiss estimation and asymptotic or jackknife inference
 * added `prob_agree()`, an exported implementation of the Stevens and
   Anderson-Cook (2017) probability of agreement for binomial reliability
   curves.

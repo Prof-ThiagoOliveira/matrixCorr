@@ -62,8 +62,10 @@ cohen_kappa(
 \item{data}{In matrix mode, a matrix or data frame whose rows are
 observational units and whose columns are raters or classifiers. Supported
 column types are factor, ordered factor, character, logical, integer, and
-numeric, all treated as nominal categories. In two-vector mode, the first
-nominal rating vector.}
+numeric, all treated as nominal categories here. If the ratings are truly
+ordinal and disagreements should be weighted by distance, use
+\code{\link[=weighted_kappa]{weighted_kappa()}} instead. In two-vector mode, the first nominal rating
+vector.}
 
 \item{y}{Optional second nominal rating vector. When supplied, the function
 returns a single Cohen's kappa estimate for \code{data} and \code{y}.}
@@ -160,7 +162,8 @@ where \eqn{p_o = \sum_i p_{ii}} is the observed agreement and
 marginal category proportions.
 
 This implementation is strictly the original unweighted nominal-scale Cohen's
-kappa. Weighted kappa is intentionally not included here.
+kappa. If the categories are ordinal and near disagreements should count as
+less severe than distant disagreements, use \code{\link[=weighted_kappa]{weighted_kappa()}} instead.
 
 In matrix mode, columns are treated as raters/classifiers and rows as shared
 observational units. All pairwise Cohen's kappas between columns are
@@ -199,6 +202,11 @@ plot(ck)
 Cohen, J. (1960). A coefficient of agreement for nominal scales.
 \emph{Educational and Psychological Measurement}, 20(1), 37-46.
 \doi{10.1177/001316446002000104}
+}
+\seealso{
+\code{\link[=weighted_kappa]{weighted_kappa()}} for two-rater ordered-category agreement with
+distance-sensitive disagreement weights; \code{\link[=multirater_kappa]{multirater_kappa()}} for
+panel-level nominal agreement among three or more raters.
 }
 \author{
 Thiago de Paula Oliveira

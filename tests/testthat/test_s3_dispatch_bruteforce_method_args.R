@@ -499,6 +499,42 @@ test_that("bruteforce dispatch: ccc/shrinkage/schafer and latent methods", {
       dispatch_expectations(obj, lbl, out$output[[1]])
     }
   }
+
+  lev <- c("low", "mid", "high")
+  X_wk <- data.frame(
+    w1 = ordered(c("low", "low", "mid", "mid", "high", "high", "low", "high"), levels = lev),
+    w2 = ordered(c("low", "mid", "mid", "high", "high", "mid", "low", "high"), levels = lev),
+    w3 = ordered(c("low", "low", "mid", "high", "high", "high", "low", "mid"), levels = lev),
+    w4 = ordered(c("mid", "mid", "mid", "high", "high", "high", "low", "mid"), levels = lev)
+  )
+  X_wk_na <- X_wk
+  X_wk_na[sample.int(nrow(X_wk_na), 2), 1] <- NA
+  X_wk_na[sample.int(nrow(X_wk_na), 2), 2] <- NA
+
+  for (i in seq_len(nrow(kappa_grid))) {
+    row <- kappa_grid[i, , drop = FALSE]
+    x_wk_use <- if (identical(row$na_method[[1]], "error")) X_wk else X_wk_na
+    for (j in seq_len(nrow(out_grid))) {
+      out <- out_grid[j, , drop = FALSE]
+      lbl <- sprintf(
+        "weighted_kappa na=%s ci=%s p=%s thr=%.2f diag=%s out=%s",
+        row$na_method[[1]], row$ci[[1]], row$p_value[[1]],
+        out$threshold[[1]], out$diag[[1]], out$output[[1]]
+      )
+      obj <- weighted_kappa(
+        x_wk_use,
+        na_method = row$na_method[[1]],
+        ci = row$ci[[1]],
+        p_value = row$p_value[[1]],
+        conf_level = 0.95,
+        n_threads = 1L,
+        output = out$output[[1]],
+        threshold = out$threshold[[1]],
+        diag = out$diag[[1]]
+      )
+      dispatch_expectations(obj, lbl, out$output[[1]])
+    }
+  }
 })
 
 test_that("bruteforce dispatch: pcorr method combinations and constraints", {

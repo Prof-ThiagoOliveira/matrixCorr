@@ -627,11 +627,15 @@ resolve_na_args <- function(na_method = "error",
                                                weighted = FALSE,
                                                ...) {
   method <- tolower(as.character(method %||% ""))
-  if (!method %in% c("pearson", "spearman", "ccc", "bicor", "pbcor", "wincor", "cohen_kappa")) {
+  if (!method %in% c("pearson", "spearman", "ccc", "bicor", "pbcor", "wincor", "cohen_kappa", "weighted_kappa")) {
     return(FALSE)
   }
   if (identical(method, "cohen_kappa")) {
     if (!na_method %in% c("error", "complete")) {
+      return(FALSE)
+    }
+  } else if (identical(method, "weighted_kappa")) {
+    if (!identical(na_method, "error")) {
       return(FALSE)
     }
   } else if (!identical(na_method, "error")) {

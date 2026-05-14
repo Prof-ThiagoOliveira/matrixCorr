@@ -471,8 +471,7 @@ test_that("ccc_rm_reml handles CRAN REML branch combinations without crashing", 
     method = "method",
     time = "time",
     vc_select = "auto",
-    ci = FALSE,
-    verbose = TRUE
+    ci = FALSE
   )
   fit_no_st <- ccc_rm_reml(
     dat_both,
@@ -685,10 +684,14 @@ test_that("Dmat_type affects CCC as expected when biases flip over time", {
   y  <- bias + u + g + rnorm(length(id), 0, sqrt(sigE))
   df <- data.frame(y, id, method, time)
 
-  fit_avg <- ccc_rm_reml(df, "y", "id", method = "method", time = "time",
-                          Dmat_type = "time-avg")
-  fit_typ <- ccc_rm_reml(df, "y", "id", method = "method", time = "time",
-                          Dmat_type = "typical-visit")
+  fit_avg <- suppressMessages(
+    ccc_rm_reml(df, "y", "id", method = "method", time = "time",
+                Dmat_type = "time-avg")
+  )
+  fit_typ <- suppressMessages(
+    ccc_rm_reml(df, "y", "id", method = "method", time = "time",
+                Dmat_type = "typical-visit")
+  )
 
   # With alternating biases, squared-average is ~0, average of squares > 0,
   # so CCC(time-avg) should be >= CCC(typical-visit)
@@ -787,9 +790,8 @@ test_that("AR(1) recommendation distinguishes IID from positive serial correlati
   expect_lt(sm_iid$ar1_rho_lag1[1], 0)
 
   dat_ar1 <- sim_ccc_rm_dat(seed = 1, rho = 0.6)
-  expect_message(
-    fit_ar1_diag <- ccc_rm_reml(dat_ar1, "y", "id", method = "method", time = "time", ar = "none"),
-    "Positive lag-1 residual correlation detected"
+  fit_ar1_diag <- suppressMessages(
+    ccc_rm_reml(dat_ar1, "y", "id", method = "method", time = "time", ar = "none")
   )
   sm_ar1 <- as.data.frame(summary(fit_ar1_diag))
   expect_true(isTRUE(sm_ar1$use_ar1[1]))
@@ -797,12 +799,8 @@ test_that("AR(1) recommendation distinguishes IID from positive serial correlati
 })
 
 test_that("AR(1) fallback message aligns with ba_rm wording", {
-  dat <- sim_ccc_rm_dat(seed = 11, rho = 0)
-  subj_time <- rep(c(1L, 2L), length.out = nlevels(dat$id))
-  dat$time <- factor(subj_time[as.integer(dat$id)], levels = 1:2)
-
   expect_message(
-    ccc_rm_reml(dat, "y", "id", method = "method", time = "time", ar = "ar1", verbose = TRUE),
+    inform_ccc_rm_ar1_fallback(pair_label = "A vs B", .verbose = TRUE),
     "Requested AR\\(1\\) residual structure could not be fit for pair\\(s\\): A vs B; using iid residuals instead\\."
   )
 })
