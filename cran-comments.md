@@ -29,6 +29,10 @@ This is a new release of `matrixCorr`.
 * added `prob_agree()`, an exported implementation of the Stevens and
   Anderson-Cook (2017) probability of agreement for binomial reliability
   curves.
+* added `cia()`, an exported implementation of the original Barnhart,
+  Kosinski and Haber coefficient of individual agreement for replicated
+  long-format method-comparison data, supporting both no-reference and
+  reference-method formulations plus subject-bootstrap confidence intervals.
 
 ## Bug
 

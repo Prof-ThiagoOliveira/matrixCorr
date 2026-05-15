@@ -91,7 +91,12 @@
 #'         \code{lwr.ci}, \code{upr.ci}.
 #'
 #' @seealso \code{\link{print.ccc}}, \code{\link{plot.ccc}},
-#' \code{\link{ba}}, \code{\link{prob_agree}}
+#' \code{\link{ba}}, \code{\link{prob_agree}}, and \code{\link{cia}}.
+#' \code{ccc()} answers the question "How well do two paired measurements
+#' agree overall, accounting for both correlation and mean/scale bias?".
+#' In contrast, \code{cia()} answers "Are two or more methods
+#' interchangeable at the individual level relative to within-method
+#' replicate disagreement?".
 #'
 #' @seealso For repeated measurements look at \code{\link{ccc_rm_reml}},
 #' \code{\link{ccc_rm_ustat}} or \code{\link{ba_rm}}
