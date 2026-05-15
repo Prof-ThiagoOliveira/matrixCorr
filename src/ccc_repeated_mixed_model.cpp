@@ -141,6 +141,14 @@ inline bool guard_disabled() {
   return env_flag_true("MATRIXCORR_DISABLE_BLAS_GUARD");
 }
 
+inline bool vc_blas_guard_enabled() {
+  // This engine already forces its OpenMP region to a single thread. The
+  // additional BLAS-runtime probing done by BLASThreadGuard has shown
+  // platform-specific instability on Linux/FlexiBLAS builds, so keep it
+  // opt-in here instead of on by default.
+  return env_flag_true("MATRIXCORR_ENABLE_VC_BLAS_GUARD");
+}
+
 inline bool vc_parallel_disabled() {
   return !env_flag_true("MATRIXCORR_ENABLE_PARALLEL_VC_CPP");
 }
@@ -308,7 +316,7 @@ Rcpp::List ccc_vc_cpp(
 #ifndef MATRIXCORR_NO_BLAS_GUARD
   detail_blas_guard::harden_omp_runtime_once();
   detail_blas_guard::BLASThreadGuard _guard_one_thread_blas(
-    1, !detail_blas_guard::guard_disabled());
+    1, detail_blas_guard::vc_blas_guard_enabled() && !detail_blas_guard::guard_disabled());
 #endif
   detail_blas_guard::OMPThreadGuard _guard_one_thread_omp(
     1, detail_blas_guard::vc_parallel_disabled());
