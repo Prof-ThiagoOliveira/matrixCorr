@@ -1742,7 +1742,8 @@ estimate_rho <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                    eval_single_visit = eval_single_visit,
                    time_weights = time_weights,
                    metric_mode = metric_mode,
-                   loglik_only = TRUE)
+                   loglik_only = FALSE,
+                   need_reml_loglik = TRUE)
     ll <- suppressWarnings(as.numeric(fit[["reml_loglik"]]))
     if (!is.finite(ll)) return(Inf)
     -ll
@@ -1872,7 +1873,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                          eval_single_visit = eval_single_visit,
                          time_weights = time_weights,
                          metric_mode = metric_mode,
-                         loglik_only = TRUE)
+                         loglik_only = FALSE,
+                         need_reml_loglik = TRUE)
       lrt <- 2 * (as.numeric(fit_full$reml_loglik) - as.numeric(fit0_ll$reml_loglik))
       p   <- p_half_chisq1(max(lrt, 0))
       if (is.finite(p) && p > alpha) {
@@ -1903,7 +1905,8 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
                          eval_single_visit = eval_single_visit,
                          time_weights = time_weights,
                          metric_mode = metric_mode,
-                         loglik_only = TRUE)
+                         loglik_only = FALSE,
+                         need_reml_loglik = TRUE)
       lrt <- 2 * (as.numeric(fit_full$reml_loglik) - as.numeric(fit0_ll$reml_loglik))
       p   <- p_half_chisq1(max(lrt, 0))
       if (is.finite(p) && p > alpha) {
