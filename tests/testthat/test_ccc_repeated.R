@@ -117,6 +117,42 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
   expect_true(any(grepl("^Variance components$", out)))
 })
 
+test_that("ccc_rm_reml no-time auto path matches direct no-selection fit", {
+  set.seed(123)
+  n_subj <- 200L
+  id <- factor(rep(seq_len(n_subj), each = 2L))
+  method <- factor(rep(c("A", "B"), times = n_subj))
+
+  sigA <- 1.0
+  sigE <- 0.5
+  biasB <- 0.2
+  u <- rnorm(n_subj, 0, sqrt(sigA))[as.integer(id)]
+  e <- rnorm(n_subj * 2L, 0, sqrt(sigE))
+  y <- (method == "B") * biasB + u + e
+  df <- data.frame(y, id, method)
+
+  fit_auto <- ccc_rm_reml(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    ci = TRUE,
+    vc_select = "auto"
+  )
+  fit_none <- ccc_rm_reml(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    ci = TRUE,
+    vc_select = "none"
+  )
+
+  expect_equal(fit_auto$est, fit_none$est, tolerance = 1e-8)
+  expect_equal(fit_auto$lwr.ci, fit_none$lwr.ci, tolerance = 1e-8)
+  expect_equal(fit_auto$upr.ci, fit_none$upr.ci, tolerance = 1e-8)
+})
+
 test_that("ccc_vc_cpp handles absent optional method/time vectors safely", {
   set.seed(125)
   n_subj <- 20L

@@ -2128,6 +2128,13 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
           subj_method = if (!is.null(include_subj_method)) isTRUE(include_subj_method) else Laux$nm > 0,
           subj_time   = if (!is.null(include_subj_time))   isTRUE(include_subj_time)   else Laux$nt > 0
         )
+      } else if (identical(vc_select, "auto") && !length(time_int)) {
+        # No-time pairs have no subject-time random component and do not need
+        # the REML LRT/refit cycle used for richer repeated-time designs.
+        list(
+          subj_method = if (!is.null(include_subj_method)) isTRUE(include_subj_method) else Laux$nm > 0,
+          subj_time   = FALSE
+        )
       } else NULL
 
       if (is.null(inc_pair) && (Laux$nm > 0 || Laux$nt > 0) && identical(vc_select, "auto")) {
