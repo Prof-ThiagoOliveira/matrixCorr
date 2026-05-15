@@ -2255,6 +2255,31 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
         list(
           subj_method = if (!is.null(include_subj_method)) isTRUE(include_subj_method) else Laux$nm > 0,
           subj_time   = if (!is.null(include_subj_time))   isTRUE(include_subj_time)   else Laux$nt > 0
+<<<<<<< HEAD
+=======
+        )
+      } else if (identical(vc_select, "auto") && !length(time_int)) {
+        # No-time pairs have no subject-time random component and do not need
+        # the REML LRT/refit cycle used for richer repeated-time designs.
+        list(
+          subj_method = if (!is.null(include_subj_method)) isTRUE(include_subj_method) else Laux$nm > 0,
+          subj_time   = FALSE
+        )
+      } else NULL
+
+      if (is.null(inc_pair) && (Laux$nm > 0 || Laux$nt > 0) && identical(vc_select, "auto")) {
+        sel <- reml_lrt_select(
+          Xp, y_sub, subj_int, method_int, time_int, Laux, Zp,
+          ar = if (use_ar1_eff) "ar1" else "none",
+          ar_rho = ar_rho,
+          max_iter = max_iter, tol = tol, conf_level = conf_level,
+          ci_mode_int = ci_mode_int,
+          alpha = vc_alpha, test_order = vc_test_order,
+          sb_zero_tol = sb_zero_tol,
+          eval_single_visit = eval_single_visit,
+          time_weights = time_weights_kappa,
+          metric_mode = metric_mode
+>>>>>>> 76efaedc917c34601c128ede029ae6f798f11e07
         )
       } else if (identical(vc_select, "auto")) {
         # Use the stable full-model fit path for automatic selection. The
