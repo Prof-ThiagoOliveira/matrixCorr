@@ -1,0 +1,219 @@
+name: alt-blas-check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions: read-all
+
+concurrency:
+  group: alt-blas-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  alt-blas-check:
+    # Mirrors the CRAN-style Fedora R-devel alternative BLAS/LAPACK checks as
+    # closely as GitHub Actions allows. ATLAS and MKL use the published R-hub
+    # Fedora 42 containers; OpenBLAS re-points the same R-devel build at the
+    # Fedora shared library inside the container.
+    runs-on: ubuntu-latest
+    name: ${{ matrix.config.label }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - label: Fedora 42 R-devel (ATLAS)
+            container: ghcr.io/r-hub/containers/atlas:latest
+            variant: atlas
+          - label: Fedora 42 R-devel (MKL)
+            container: ghcr.io/r-hub/containers/mkl:latest
+            variant: mkl
+          - label: Fedora 42 R-devel (OpenBLAS)
+            container: ghcr.io/r-hub/containers/atlas:latest
+            variant: openblas
+
+    container:
+      image: ${{ matrix.config.container }}
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      NOT_CRAN: true
+      _R_CHECK_MBCS_CONVERSION_FAILURE_: true
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Remove stale pak lockfile
+        run: rm -f .github/pkg.lock
+        shell: bash
+
+      - name: Install OpenBLAS system libraries
+        if: ${{ matrix.config.variant == 'openblas' }}
+        run: |
+          set -euxo pipefail
+          dnf install -y openblas-devel openblas-serial
+          ldconfig -p | grep -i openblas
+        shell: bash
+
+      - name: Point R BLAS/LAPACK to OpenBLAS
+        if: ${{ matrix.config.variant == 'openblas' }}
+        run: |
+          set -euxo pipefail
+          OPENBLAS_LIB="/usr/lib64/libopenblas.so"
+          if [ ! -e "${OPENBLAS_LIB}" ]; then
+            OPENBLAS_LIB="$(ldconfig -p | awk '/libopenblas\.so$/{print $NF; exit}')"
+          fi
+          test -n "${OPENBLAS_LIB}"
+          test -e "${OPENBLAS_LIB}"
+
+          R_HOME="$(R RHOME)"
+          if [ -e "${R_HOME}/lib/libRblas.so" ]; then
+            for lib in libRblas.so libRlapack.so; do
+              if [ -e "${R_HOME}/lib/${lib}" ]; then
+                cp -a "${R_HOME}/lib/${lib}" "${R_HOME}/lib/${lib}.pre-openblas"
+                rm -f "${R_HOME}/lib/${lib}"
+                ln -s "${OPENBLAS_LIB}" "${R_HOME}/lib/${lib}"
+              fi
+            done
+          else
+            OPENBLAS_SHIM_DIR="${RUNNER_TEMP}/openblas-shims"
+            mkdir -p "${OPENBLAS_SHIM_DIR}"
+            ln -sf "${OPENBLAS_LIB}" "${OPENBLAS_SHIM_DIR}/libblas.so.3"
+            ln -sf "${OPENBLAS_LIB}" "${OPENBLAS_SHIM_DIR}/liblapack.so.3"
+            {
+              echo "LD_LIBRARY_PATH=${OPENBLAS_SHIM_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+            } >> "${GITHUB_ENV}"
+          fi
+        shell: bash
+
+      - name: Install R dependencies
+        run: |
+          options(repos = c(CRAN = "https://cloud.r-project.org"))
+          install.packages("pak", type = "source")
+          pak::pkg_install(c("deps::.", "any::rcmdcheck"), dependencies = TRUE)
+        shell: Rscript {0}
+
+      - name: Reinstall rlang to avoid mixed-R binary issues on devel
+        run: |
+          install.packages("rlang", type = "source", repos = "https://cloud.r-project.org")
+        shell: Rscript {0}
+
+      - name: Refresh packages built under older R
+        run: >
+          Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org"));
+          ip <- installed.packages();
+          cur <- paste0(R.version$major, ".", strsplit(R.version$minor, ".", fixed = TRUE)[[1]][1]);
+          built <- ip[, "Built"];
+          priority <- ip[, "Priority"];
+          pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)];
+          if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))'
+        shell: bash
+
+      - name: Print BLAS/LAPACK diagnostics
+        run: |
+          set -euxo pipefail
+          Rscript -e 'cat(R.version.string, "\n", sep = "");
+          print(sessionInfo());
+          cat("R.home(): ", R.home(), "\n", sep = "");
+          esv <- extSoftVersion();
+          cat("extSoftVersion()[\"BLAS\"]: ", unname(esv["BLAS"]), "\n", sep = "");
+          cat("extSoftVersion()[\"LAPACK\"]: ", unname(esv["LAPACK"]), "\n", sep = "");
+          print(esv);
+          print(Sys.getenv(c("_R_CHECK_MBCS_CONVERSION_FAILURE_", "LD_LIBRARY_PATH")));'
+          R_HOME="$(R RHOME)"
+          if [ -e "${R_HOME}/lib/libRblas.so" ]; then
+            ls -l "${R_HOME}/lib/libRblas.so"
+            readlink -f "${R_HOME}/lib/libRblas.so" || true
+            if [ -e "${R_HOME}/lib/libRlapack.so" ]; then
+              ls -l "${R_HOME}/lib/libRlapack.so"
+              readlink -f "${R_HOME}/lib/libRlapack.so" || true
+            fi
+            if command -v ldd >/dev/null 2>&1; then
+              ldd "${R_HOME}/lib/libRblas.so"
+              if [ -e "${R_HOME}/lib/libRlapack.so" ]; then
+                ldd "${R_HOME}/lib/libRlapack.so"
+              fi
+            fi
+          else
+            ldconfig -p | grep -E 'libblas\.so\.3|liblapack\.so\.3|libopenblas\.so|libmkl' || true
+          fi
+        shell: bash
+
+      - name: Install matrixCorr
+        run: R CMD INSTALL .
+        shell: bash
+
+      - name: Run REML reproducer
+        run: Rscript inst/repro/repro-ccc-vc-segfault.R
+        shell: bash
+
+      - name: Run repeated-measures CCC tests
+        run: Rscript -e 'library(matrixCorr); testthat::test_file("tests/testthat/test_ccc_repeated.R")'
+        shell: bash
+
+      - name: Run repeated-measures ICC tests
+        run: Rscript -e 'library(matrixCorr); testthat::test_file("tests/testthat/test_icc.R")'
+        shell: bash
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          args: 'c("--no-manual", "--ignore-vignettes")'
+          build_args: 'c("--no-build-vignettes")'
+
+  use-fc-len-t-check:
+    # R-devel made USE_FC_LEN_T the default on 2026-05-07. This dedicated job
+    # keeps a focused compile/install signal for any future direct BLAS/LAPACK
+    # Fortran calls added in src/.
+    runs-on: ubuntu-latest
+    name: Fedora 42 R-devel (USE_FC_LEN_T)
+
+    container:
+      image: ghcr.io/r-hub/containers/atlas:latest
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      NOT_CRAN: true
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Remove stale pak lockfile
+        run: rm -f .github/pkg.lock
+        shell: bash
+
+      - name: Force USE_FC_LEN_T during compilation
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/.R
+          cat <<'EOF' >> ~/.R/Makevars
+          DEFS += -DUSE_FC_LEN_T
+          EOF
+          cat ~/.R/Makevars
+        shell: bash
+
+      - name: Install R dependencies
+        run: |
+          options(repos = c(CRAN = "https://cloud.r-project.org"))
+          install.packages("pak", type = "source")
+          pak::pkg_install("deps::.", dependencies = TRUE)
+        shell: Rscript {0}
+
+      - name: Print compiler diagnostics
+        run: |
+          set -euxo pipefail
+          Rscript -e 'cat(R.version.string, "\n", sep = ""); print(sessionInfo())'
+          R CMD config BLAS_LIBS
+          R CMD config LAPACK_LIBS
+          R CMD config FLIBS
+        shell: bash
+
+      - name: Compile and install matrixCorr
+        run: R CMD INSTALL --preclean .
+        shell: bash

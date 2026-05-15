@@ -907,6 +907,14 @@ plot.dgCMatrix <- function(x,
                                  ci_text_size,
                                  show_value,
                                  ...) {
+  dots <- list(...)
+  if ("type" %in% names(dots)) {
+    abort_bad_arg(
+      "type",
+      message = "is not used for matrix-style correlation heatmaps.",
+      .hint = "For estimator-specific plot modes such as {.arg type} = {.val estimate}, use a non-matrix result object."
+    )
+  }
   check_bool(show_value, arg = "show_value")
   df <- .mc_corr_plot_grid(x)
   if (!"ci_label" %in% names(df)) {

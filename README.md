@@ -51,8 +51,8 @@ both wide and repeated-measures designs.
 | Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
 | Repeated-measures correlation | `rmcorr()` |
 | Shrinkage for $p >> n$ | `shrinkage_corr()` |
-| Agreement: two-rater categorical ratings | `cohen_kappa()` for nominal categories, `weighted_kappa()` for ordered categories |
-| Agreement: multi-rater nominal ratings | `multirater_kappa()` |
+| Agreement: two-rater categorical ratings | `cohen_kappa()` and `gwet_ac()` for nominal AC1/AC2 agreement, `weighted_kappa()` for ordered categories |
+| Agreement: multi-rater nominal ratings | `multirater_kappa()`, `gwet_ac()` for panel AC1/AC2 agreement |
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
 | Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |

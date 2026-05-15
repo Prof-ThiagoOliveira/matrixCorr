@@ -117,6 +117,26 @@ robust_dcor_matrix_pairwise_cpp <- function(X, c_const = 4.0, return_inference =
     .Call(`_matrixCorr_robust_dcor_matrix_pairwise_cpp`, X, c_const, return_inference, n_perm, seed, n_threads)
 }
 
+gwet_ac_pair_cpp <- function(x, y, weights, drop_unused_levels = FALSE, return_inference = FALSE, conf_level = 0.95) {
+    .Call(`_matrixCorr_gwet_ac_pair_cpp`, x, y, weights, drop_unused_levels, return_inference, conf_level)
+}
+
+gwet_ac_matrix_cpp <- function(X, weights, drop_unused_levels = FALSE, pairwise_complete = FALSE, return_inference = FALSE, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_gwet_ac_matrix_cpp`, X, weights, drop_unused_levels, pairwise_complete, return_inference, conf_level, n_threads)
+}
+
+gwet_ac_threshold_triplets_cpp <- function(X, weights, drop_unused_levels = FALSE, threshold = 0.0, diag = TRUE, block_size = 256L, n_threads = 1L) {
+    .Call(`_matrixCorr_gwet_ac_threshold_triplets_cpp`, X, weights, drop_unused_levels, threshold, diag, block_size, n_threads)
+}
+
+gwet_ac_counts_cpp <- function(counts, weights, by_category = FALSE, inference_code = 0L, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_gwet_ac_counts_cpp`, counts, weights, by_category, inference_code, conf_level, n_threads)
+}
+
+gwet_ac_ratings_cpp <- function(ratings, n_levels, weights, na_code = 1L, min_raters = 2L, by_category = FALSE, inference_code = 0L, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_gwet_ac_ratings_cpp`, ratings, n_levels, weights, na_code, min_raters, by_category, inference_code, conf_level, n_threads)
+}
+
 icc_matrix_cpp <- function(X, form_code = 0L, average_unit = FALSE, pairwise_complete = FALSE, return_ci = FALSE, conf_level = 0.95, n_threads = 1L) {
     .Call(`_matrixCorr_icc_matrix_cpp`, X, form_code, average_unit, pairwise_complete, return_ci, conf_level, n_threads)
 }

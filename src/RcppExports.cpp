@@ -454,6 +454,91 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// gwet_ac_pair_cpp
+Rcpp::List gwet_ac_pair_cpp(Rcpp::IntegerVector x, Rcpp::IntegerVector y, Rcpp::NumericMatrix weights, bool drop_unused_levels, bool return_inference, double conf_level);
+RcppExport SEXP _matrixCorr_gwet_ac_pair_cpp(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP drop_unused_levelsSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< bool >::type drop_unused_levels(drop_unused_levelsSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_inference(return_inferenceSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    rcpp_result_gen = Rcpp::wrap(gwet_ac_pair_cpp(x, y, weights, drop_unused_levels, return_inference, conf_level));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gwet_ac_matrix_cpp
+Rcpp::List gwet_ac_matrix_cpp(Rcpp::IntegerMatrix X, Rcpp::NumericMatrix weights, bool drop_unused_levels, bool pairwise_complete, bool return_inference, double conf_level, int n_threads);
+RcppExport SEXP _matrixCorr_gwet_ac_matrix_cpp(SEXP XSEXP, SEXP weightsSEXP, SEXP drop_unused_levelsSEXP, SEXP pairwise_completeSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< bool >::type drop_unused_levels(drop_unused_levelsSEXP);
+    Rcpp::traits::input_parameter< bool >::type pairwise_complete(pairwise_completeSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_inference(return_inferenceSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(gwet_ac_matrix_cpp(X, weights, drop_unused_levels, pairwise_complete, return_inference, conf_level, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gwet_ac_threshold_triplets_cpp
+Rcpp::List gwet_ac_threshold_triplets_cpp(Rcpp::IntegerMatrix X, Rcpp::NumericMatrix weights, bool drop_unused_levels, double threshold, bool diag, int block_size, int n_threads);
+RcppExport SEXP _matrixCorr_gwet_ac_threshold_triplets_cpp(SEXP XSEXP, SEXP weightsSEXP, SEXP drop_unused_levelsSEXP, SEXP thresholdSEXP, SEXP diagSEXP, SEXP block_sizeSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< bool >::type drop_unused_levels(drop_unused_levelsSEXP);
+    Rcpp::traits::input_parameter< double >::type threshold(thresholdSEXP);
+    Rcpp::traits::input_parameter< bool >::type diag(diagSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(gwet_ac_threshold_triplets_cpp(X, weights, drop_unused_levels, threshold, diag, block_size, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gwet_ac_counts_cpp
+Rcpp::List gwet_ac_counts_cpp(Rcpp::IntegerMatrix counts, Rcpp::NumericMatrix weights, bool by_category, int inference_code, double conf_level, int n_threads);
+RcppExport SEXP _matrixCorr_gwet_ac_counts_cpp(SEXP countsSEXP, SEXP weightsSEXP, SEXP by_categorySEXP, SEXP inference_codeSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< bool >::type by_category(by_categorySEXP);
+    Rcpp::traits::input_parameter< int >::type inference_code(inference_codeSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(gwet_ac_counts_cpp(counts, weights, by_category, inference_code, conf_level, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gwet_ac_ratings_cpp
+Rcpp::List gwet_ac_ratings_cpp(Rcpp::IntegerMatrix ratings, int n_levels, Rcpp::NumericMatrix weights, int na_code, int min_raters, bool by_category, int inference_code, double conf_level, int n_threads);
+RcppExport SEXP _matrixCorr_gwet_ac_ratings_cpp(SEXP ratingsSEXP, SEXP n_levelsSEXP, SEXP weightsSEXP, SEXP na_codeSEXP, SEXP min_ratersSEXP, SEXP by_categorySEXP, SEXP inference_codeSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type ratings(ratingsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_levels(n_levelsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< int >::type na_code(na_codeSEXP);
+    Rcpp::traits::input_parameter< int >::type min_raters(min_ratersSEXP);
+    Rcpp::traits::input_parameter< bool >::type by_category(by_categorySEXP);
+    Rcpp::traits::input_parameter< int >::type inference_code(inference_codeSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(gwet_ac_ratings_cpp(ratings, n_levels, weights, na_code, min_raters, by_category, inference_code, conf_level, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // icc_matrix_cpp
 Rcpp::List icc_matrix_cpp(const arma::mat& X, const int form_code, const bool average_unit, const bool pairwise_complete, const bool return_ci, const double conf_level, const int n_threads);
 RcppExport SEXP _matrixCorr_icc_matrix_cpp(SEXP XSEXP, SEXP form_codeSEXP, SEXP average_unitSEXP, SEXP pairwise_completeSEXP, SEXP return_ciSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
@@ -1123,6 +1208,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_ustat_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_pairwise_cpp, 2},
     {"_matrixCorr_robust_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_robust_dcor_matrix_cpp, 3},
     {"_matrixCorr_robust_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_robust_dcor_matrix_pairwise_cpp, 6},
+    {"_matrixCorr_gwet_ac_pair_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_pair_cpp, 6},
+    {"_matrixCorr_gwet_ac_matrix_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_matrix_cpp, 7},
+    {"_matrixCorr_gwet_ac_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_threshold_triplets_cpp, 7},
+    {"_matrixCorr_gwet_ac_counts_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_counts_cpp, 6},
+    {"_matrixCorr_gwet_ac_ratings_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_ratings_cpp, 9},
     {"_matrixCorr_icc_matrix_cpp", (DL_FUNC) &_matrixCorr_icc_matrix_cpp, 7},
     {"_matrixCorr_icc_overall_cpp", (DL_FUNC) &_matrixCorr_icc_overall_cpp, 3},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},

@@ -1,3 +1,5 @@
+// Thiago de Paula Oliveira
+// src-cohen_kappa.cpp
 #include <RcppArmadillo.h>
 #include <algorithm>
 #include <cmath>
