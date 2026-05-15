@@ -161,6 +161,10 @@ kendall_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95
     .Call(`_matrixCorr_kendall_matrix_pairwise_cpp`, X_, return_ci, conf_level, ci_method)
 }
 
+krippendorff_alpha_core_cpp <- function(counts, delta2, method_code = 1L, return_matrices = FALSE, n_threads = 1L) {
+    .Call(`_matrixCorr_krippendorff_alpha_core_cpp`, counts, delta2, method_code, return_matrices, n_threads)
+}
+
 multirater_kappa_counts_cpp <- function(counts, method_code = 1L, by_category = FALSE, inference_code = 0L, conf_level = 0.95, n_threads = 1L) {
     .Call(`_matrixCorr_multirater_kappa_counts_cpp`, counts, method_code, by_category, inference_code, conf_level, n_threads)
 }

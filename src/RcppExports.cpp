@@ -617,6 +617,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// krippendorff_alpha_core_cpp
+Rcpp::List krippendorff_alpha_core_cpp(Rcpp::IntegerMatrix counts, Rcpp::NumericMatrix delta2, int method_code, bool return_matrices, int n_threads);
+RcppExport SEXP _matrixCorr_krippendorff_alpha_core_cpp(SEXP countsSEXP, SEXP delta2SEXP, SEXP method_codeSEXP, SEXP return_matricesSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type delta2(delta2SEXP);
+    Rcpp::traits::input_parameter< int >::type method_code(method_codeSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_matrices(return_matricesSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(krippendorff_alpha_core_cpp(counts, delta2, method_code, return_matrices, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // multirater_kappa_counts_cpp
 Rcpp::List multirater_kappa_counts_cpp(Rcpp::IntegerMatrix counts, int method_code, bool by_category, int inference_code, double conf_level, int n_threads);
 RcppExport SEXP _matrixCorr_multirater_kappa_counts_cpp(SEXP countsSEXP, SEXP method_codeSEXP, SEXP by_categorySEXP, SEXP inference_codeSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
@@ -1219,6 +1234,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_kendall_tau2_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_cpp, 2},
     {"_matrixCorr_kendall_tau2_from_mat_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_from_mat_cpp, 1},
     {"_matrixCorr_kendall_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_pairwise_cpp, 4},
+    {"_matrixCorr_krippendorff_alpha_core_cpp", (DL_FUNC) &_matrixCorr_krippendorff_alpha_core_cpp, 5},
     {"_matrixCorr_multirater_kappa_counts_cpp", (DL_FUNC) &_matrixCorr_multirater_kappa_counts_cpp, 6},
     {"_matrixCorr_multirater_kappa_ratings_cpp", (DL_FUNC) &_matrixCorr_multirater_kappa_ratings_cpp, 10},
     {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 5},

@@ -33,8 +33,9 @@ percentage bend, Winsorized, skipped correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
 and biserial), plus repeated-measures correlation (`rmcorr()`);
 agreement tools cover Cohen’s kappa for nominal ratings, weighted
-Cohen’s kappa for ordered two-rater agreement, multi-rater kappa for
-nominal panel agreement, Bland-Altman (two-method and
+Cohen’s kappa for ordered two-rater agreement, Gwet’s AC1/AC2,
+multi-rater kappa for nominal panel agreement, Krippendorff’s alpha for
+panel-level reliability, Bland-Altman (two-method and
 repeated-measures), Lin’s concordance correlation coefficient (including
 repeated-measures LMM/REML extensions), and intraclass correlation for
 both wide and repeated-measures designs.
@@ -52,7 +53,7 @@ both wide and repeated-measures designs.
 | Repeated-measures correlation | `rmcorr()` |
 | Shrinkage for $p >> n$ | `shrinkage_corr()` |
 | Agreement: two-rater categorical ratings | `cohen_kappa()` and `gwet_ac()` for nominal AC1/AC2 agreement, `weighted_kappa()` for ordered categories |
-| Agreement: multi-rater nominal ratings | `multirater_kappa()`, `gwet_ac()` for panel AC1/AC2 agreement |
+| Agreement: multi-rater and panel reliability | `multirater_kappa()`, `gwet_ac()` for panel AC1/AC2 agreement, `krippendorff_alpha()` |
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
 | Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
@@ -206,7 +207,8 @@ summary(fit_ccc_rm)
 Agreement and reliability methods use the same general inspection
 pattern, but they target different quantities. The package includes
 Cohen’s kappa for nominal two-rater ratings, weighted kappa for ordered
-two-rater ratings, multi-rater kappa for nominal panel agreement,
+two-rater ratings, Gwet’s AC1/AC2, multi-rater kappa for nominal panel
+agreement, Krippendorff’s alpha for panel-level reliability,
 Bland-Altman analysis, concordance correlation, and intraclass
 correlation for both wide and repeated-measures designs.
 
