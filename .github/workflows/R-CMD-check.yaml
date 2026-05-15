@@ -67,6 +67,11 @@ jobs:
           if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))'
         shell: bash
 
+      - name: Run REML reproducer
+        if: ${{ startsWith(matrix.config.os, 'ubuntu') }}
+        run: Rscript inst/repro/repro-ccc-vc-segfault.R
+        shell: bash
+
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true

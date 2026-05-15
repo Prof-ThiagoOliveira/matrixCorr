@@ -144,8 +144,11 @@ inline bool guard_disabled() {
 inline bool vc_blas_guard_enabled() {
   // This engine already forces its OpenMP region to a single thread. The
   // additional BLAS-runtime probing done by BLASThreadGuard has shown
-  // platform-specific instability on Linux/FlexiBLAS builds, so keep it
-  // opt-in here instead of on by default.
+  // platform-specific instability on Linux/FlexiBLAS builds, including the
+  // repeated-measures REML segfault reproduced by inst/repro/
+  // repro-ccc-vc-segfault.R. Keep the BLAS guard opt-in here instead of on by
+  // default; other engines can continue to use the broader package-level
+  // behavior.
   return env_flag_true("MATRIXCORR_ENABLE_VC_BLAS_GUARD");
 }
 
