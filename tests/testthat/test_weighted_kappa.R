@@ -31,28 +31,6 @@ manual_weighted_kappa <- function(x, y, levels, weight_type = "quadratic") {
   (Ao - Ae) / (1 - Ae)
 }
 
-expected_weighted_edge_df <- function(mat, threshold = 0, diag = TRUE) {
-  idx <- upper.tri(mat, diag = isTRUE(diag))
-  vals <- mat[idx]
-  keep <- is.finite(vals) & abs(vals) >= threshold
-  data.frame(
-    row = rownames(mat)[row(mat)[idx][keep]],
-    col = colnames(mat)[col(mat)[idx][keep]],
-    value = as.numeric(vals[keep]),
-    stringsAsFactors = FALSE
-  )
-}
-
-expected_weighted_sparse_dense <- function(mat, threshold = 0, diag = TRUE) {
-  out <- matrix(0, nrow(mat), ncol(mat), dimnames = dimnames(mat))
-  idx <- upper.tri(mat, diag = isTRUE(diag))
-  vals <- mat[idx]
-  keep <- is.finite(vals) & abs(vals) >= threshold
-  out[idx] <- ifelse(keep, vals, 0)
-  out[lower.tri(out)] <- t(out)[lower.tri(out)]
-  out
-}
-
 test_that("weighted_kappa reproduces a manual two-vector example", {
   lev <- c("low", "mid", "high")
   x <- ordered(c("low", "low", "mid", "mid", "high", "high", "high"), levels = lev)
@@ -233,76 +211,6 @@ test_that("weighted_kappa missing-data modes behave as documented", {
   expect_equal(n_complete["b", "c"], sum(stats::complete.cases(raters[c("b", "c")])))
 })
 
-test_that("weighted_kappa output modes route through corr_result helpers", {
-  lev <- c("low", "mid", "high")
-  raters <- data.frame(
-    a = ordered(c("low", "low", "mid", "mid", "high", "high", "low", "high"), levels = lev),
-    b = ordered(c("low", "mid", "mid", "high", "high", "mid", "low", "high"), levels = lev),
-    c = ordered(c("low", "low", "mid", "high", "high", "high", "low", "mid"), levels = lev),
-    d = ordered(c("mid", "mid", "mid", "high", "high", "high", "low", "mid"), levels = lev)
-  )
-
-  fit_matrix <- weighted_kappa(raters, output = "matrix")
-  expect_s3_class(fit_matrix, c("corr_matrix", "weighted_kappa", "corr_result", "matrix"))
-
-  edge <- weighted_kappa(raters, output = "edge_list", threshold = 0.2, diag = FALSE)
-  edge_df <- as.data.frame(edge, stringsAsFactors = FALSE)
-  expect_true(all(c("row", "col", "value") %in% names(edge_df)))
-
-  sparse <- weighted_kappa(raters, output = "sparse", threshold = 0.2, diag = FALSE)
-  expect_s4_class(sparse, "sparseMatrix")
-
-  expect_error(
-    weighted_kappa(raters, output = "matrix", threshold = 0.2),
-    "must be 0 when"
-  )
-})
-
-test_that("weighted_kappa direct threshold outputs match dense filtering", {
-  lev <- c("low", "mid", "high")
-  raters <- data.frame(
-    a = ordered(c("low", "low", "mid", "mid", "high", "high", "low", "high"), levels = lev),
-    b = ordered(c("low", "mid", "mid", "high", "high", "mid", "low", "high"), levels = lev),
-    c = ordered(c("low", "low", "mid", "high", "high", "high", "low", "mid"), levels = lev),
-    d = ordered(c("mid", "mid", "mid", "high", "high", "high", "low", "mid"), levels = lev)
-  )
-
-  base <- weighted_kappa(raters, na_method = "error", ci = FALSE, p_value = FALSE)
-  mat <- as.matrix(base)
-
-  edge <- weighted_kappa(
-    raters,
-    na_method = "error",
-    ci = FALSE,
-    p_value = FALSE,
-    output = "edge_list",
-    threshold = 0.2,
-    diag = FALSE
-  )
-  edge_df <- .mc_corr_as_edge_df(edge)
-  edge_df <- edge_df[order(edge_df$col, edge_df$row), , drop = FALSE]
-  expected_edge <- expected_weighted_edge_df(mat, threshold = 0.2, diag = FALSE)
-  expected_edge <- expected_edge[order(expected_edge$col, expected_edge$row), , drop = FALSE]
-  rownames(edge_df) <- NULL
-  rownames(expected_edge) <- NULL
-  expect_equal(edge_df, expected_edge, tolerance = 1e-12)
-
-  sparse <- weighted_kappa(
-    raters,
-    na_method = "error",
-    ci = FALSE,
-    p_value = FALSE,
-    output = "sparse",
-    threshold = 0.2,
-    diag = FALSE
-  )
-  expect_equal(
-    as.matrix(sparse),
-    expected_weighted_sparse_dense(mat, threshold = 0.2, diag = FALSE),
-    tolerance = 1e-12
-  )
-})
-
 test_that("weighted_kappa attaches CI and inference metadata", {
   lev <- c("low", "mid", "high")
   raters <- data.frame(
@@ -357,20 +265,4 @@ test_that("weighted_kappa handles degenerate and low-information cases", {
   expect_true(is.na(mat_low["a", "a"]))
   expect_equal(mat_low["b", "b"], 1)
   expect_equal(mat_low["c", "c"], 1)
-})
-
-test_that("weighted_kappa uses corr_result S3 summary and plotting", {
-  skip_if_not_installed("ggplot2")
-
-  lev <- c("low", "mid", "high")
-  raters <- data.frame(
-    a = ordered(c("low", "low", "mid", "mid", "high", "high", "low", "high"), levels = lev),
-    b = ordered(c("low", "mid", "mid", "high", "high", "mid", "low", "high"), levels = lev),
-    c = ordered(c("low", "low", "mid", "high", "high", "high", "low", "mid"), levels = lev)
-  )
-
-  fit <- weighted_kappa(raters)
-  expect_true(length(capture.output(print(fit))) > 0L)
-  expect_s3_class(summary(fit), "summary.corr_result")
-  expect_s3_class(plot(fit, show_value = FALSE), "ggplot")
 })

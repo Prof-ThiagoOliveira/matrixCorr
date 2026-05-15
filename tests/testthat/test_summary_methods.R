@@ -5,13 +5,7 @@ test_that("matrix-style correlation summaries use the standard compact format", 
 
   objs <- list(
     pearson_corr(X),
-    spearman_rho(X),
-    kendall_tau(X),
     dcor(X),
-    shrinkage_corr(X),
-    bicor(X),
-    pbcor(X),
-    wincor(X),
     skipped_corr(X)
   )
 

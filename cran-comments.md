@@ -21,6 +21,11 @@ This is a new release of `matrixCorr`.
   multi-rater nominal kappa for three or more raters, including Fleiss'
   fixed-marginal kappa and Randolph's free-marginal kappa, with optional
   exact Fleiss estimation and asymptotic or jackknife inference
+* added `krippendorff_alpha()`, an exported implementation of
+  Krippendorff's alpha for panel-level reliability/agreement with nominal,
+  ordinal, interval, and ratio disagreement, supporting ratings and
+  counts input, missing ratings, customary bootstrap CI, and analytical
+  jackknife inference
 * added `prob_agree()`, an exported implementation of the Stevens and
   Anderson-Cook (2017) probability of agreement for binomial reliability
   curves.

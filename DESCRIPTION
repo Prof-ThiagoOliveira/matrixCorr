@@ -1,6 +1,6 @@
 Package: matrixCorr
 Type: Package
-Title: Collection of Correlation and Association Estimators
+Title: Collection of Correlation, Agreement, and Reliability Estimators
 Version: 0.11.2
 Authors@R: c(
     person(
@@ -18,20 +18,23 @@ Description: Compute correlation, association, agreement, and reliability
     matrix-oriented interface. Supports classical correlations (Pearson,
     Spearman, Kendall), distance correlation, partial correlation with
     regularised estimators, shrinkage correlation for p >= n settings, robust
-    correlations including biweight mid-correlation, percentage-bend, and
-    skipped correlation, latent-variable methods for binary and ordinal data,
-    pairwise and overall intraclass correlation for wide data,
-    repeated-measures correlation, and agreement analyses based on
-    Bland-Altman methods, Lin's concordance correlation coefficient, and
-    repeated-measures intraclass correlation. Implemented with optimized C++
-    backends using BLAS/OpenMP and memory-aware symmetric updates, and returns
-    standard R objects with print/summary/plot methods plus optional Shiny
-    viewers for matrix inspection. Methods based on Ledoit and Wolf (2004)
-    <doi:10.1016/S0047-259X(03)00096-4>; high-dimensional shrinkage covariance
-    estimation <doi:10.2202/1544-6115.1175>; Lin (1989)
-    <doi:10.2307/2532051>; Wilcox (1994) <doi:10.1007/BF02294395>; Wilcox
-    (2004) <doi:10.1080/0266476032000148821>; weighted repeated-measures
-    correlation by Kondo et al. (2025) <doi:10.1002/sim.70046>.
+    correlations including biweight mid-correlation, percentage-bend,
+    Winsorized, and skipped correlation, latent-variable methods for binary
+    and ordinal data, pairwise and overall intraclass correlation for wide
+    data, repeated-measures correlation, and agreement/reliability analyses
+    based on Cohen's kappa, weighted kappa, multi-rater kappa, Gwet's AC1/AC2,
+    Krippendorff's alpha, Bland-Altman methods, Lin's concordance correlation
+    coefficient, and repeated-measures intraclass/concordance correlation.
+    Implemented with optimized C++ backends using BLAS/OpenMP and memory-aware
+    symmetric updates, and returns standard R objects with print/summary/plot
+    methods plus optional Shiny viewers for matrix inspection. Methods based
+    on Ledoit and Wolf (2004) <doi:10.1016/S0047-259X(03)00096-4>;
+    high-dimensional shrinkage covariance estimation
+    <doi:10.2202/1544-6115.1175>; Lin (1989) <doi:10.2307/2532051>; Wilcox
+    (1994) <doi:10.1007/BF02294395>; Wilcox (2004)
+    <doi:10.1080/0266476032000148821>; Hayes and Krippendorff (2007)
+    <doi:10.1080/19312450709336664>; weighted repeated-measures correlation by
+    Kondo et al. (2025) <doi:10.1002/sim.70046>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LinkingTo:

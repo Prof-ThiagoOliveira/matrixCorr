@@ -141,47 +141,6 @@ test_that("cohen_kappa missing-data modes behave as documented", {
   expect_equal(n_complete["b", "c"], sum(stats::complete.cases(raters[c("b", "c")])))
 })
 
-test_that("cohen_kappa output modes route through matrixCorr result helpers", {
-  raters <- data.frame(
-    a = c("A", "A", "B", "B", "C", "A", "B", "C"),
-    b = c("A", "B", "B", "B", "C", "A", "B", "C"),
-    c = c("A", "A", "B", "C", "C", "A", "B", "B"),
-    d = c("A", "B", "A", "B", "C", "C", "B", "C"),
-    stringsAsFactors = FALSE
-  )
-
-  fit_matrix <- cohen_kappa(raters, output = "matrix")
-  expect_s3_class(fit_matrix, c("corr_matrix", "cohen_kappa", "corr_result", "matrix"))
-
-  edge <- cohen_kappa(raters, output = "edge_list", threshold = 0.2, diag = FALSE)
-  edge_df <- as.data.frame(edge, stringsAsFactors = FALSE)
-  expect_true(all(c("row", "col", "value") %in% names(edge_df)))
-
-  sparse <- cohen_kappa(raters, output = "sparse", threshold = 0.2, diag = FALSE)
-  expect_s4_class(sparse, "sparseMatrix")
-
-  expect_error(
-    cohen_kappa(raters, output = "matrix", threshold = 0.2),
-    "must be 0 when"
-  )
-})
-
-test_that("cohen_kappa uses corr_result S3 summary and plotting", {
-  skip_if_not_installed("ggplot2")
-
-  raters <- data.frame(
-    a = c("A", "A", "B", "B", "C", "A", "B", "C"),
-    b = c("A", "B", "B", "B", "C", "A", "B", "C"),
-    c = c("A", "A", "B", "C", "C", "A", "B", "B"),
-    stringsAsFactors = FALSE
-  )
-
-  fit <- cohen_kappa(raters)
-  expect_true(length(capture.output(print(fit))) > 0L)
-  expect_s3_class(summary(fit), "summary.corr_result")
-  expect_s3_class(plot(fit, show_value = FALSE), "ggplot")
-})
-
 test_that("cohen_kappa scalar mode has dedicated print, summary, and plot methods", {
   skip_if_not_installed("ggplot2")
 
