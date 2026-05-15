@@ -70,9 +70,27 @@
 #' pair uses its own complete observations. Pairwise complete counts are stored
 #' in \code{attr(x, "diagnostics")$n_complete}.
 #'
-#' When \code{ci = TRUE} or \code{p_value = TRUE}, inferential quantities are
-#' based on a large-sample multinomial delta-method approximation for the
-#' unweighted kappa estimator.
+#' \strong{Confidence intervals and standard errors.}
+#' The implementation uses the exact large-sample formula. Let \eqn{p_{ab}}
+#' be the empirical cell proportions,
+#' \eqn{q_a = \sum_b p_{ab}} the row margins, \eqn{r_b = \sum_a p_{ab}} the
+#' column margins, and \eqn{D = 1 - p_e}. For each cell \eqn{(a,b)}, define
+#' the influence contribution
+#' \deqn{ g_{ab}
+#'       \;=\;
+#'       \frac{\mathbf{1}(a=b)\,D + (p_o - 1)\,(r_a + q_b)}{D^2}. }
+#' The variance estimator used by the code is
+#' \deqn{ \widehat{\mathrm{Var}}(\hat\kappa)
+#'       \;=\;
+#'       \frac{1}{n}\left(
+#'       \sum_{a,b} p_{ab} g_{ab}^2 -
+#'       \Big(\sum_{a,b} p_{ab} g_{ab}\Big)^2
+#'       \right), }
+#' with \eqn{n} the number of complete paired ratings and
+#' \eqn{\widehat{\mathrm{se}}(\hat\kappa)=\sqrt{\widehat{\mathrm{Var}}(\hat\kappa)}}.
+#' The confidence interval is the Wald interval
+#' \deqn{ \hat\kappa \pm z_{1-\alpha/2}\,\widehat{\mathrm{se}}(\hat\kappa), }
+#' truncated to \eqn{[-1, 1]} in the returned result.
 #'
 #' @return
 #' If \code{y} is supplied, a scalar S3 object of class \code{"cohen_kappa"}

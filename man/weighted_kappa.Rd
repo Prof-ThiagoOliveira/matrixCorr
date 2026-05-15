@@ -130,9 +130,30 @@ computation is performed in C++. Missing-data handling follows the usual
 \pkg{matrixCorr} \code{na_method} conventions. Pairwise complete counts are
 stored in \code{attr(x, "diagnostics")$n_complete}.
 
-Confidence intervals and p-values use a large-sample multinomial
-delta-method approximation. Use \code{\link[=cohen_kappa]{cohen_kappa()}} for unordered nominal
-categories where all disagreements are equally serious.
+\strong{Confidence intervals and standard errors.}
+Confidence intervals and p-values use the exact large-sample multinomial
+delta-method formula. Let
+\eqn{A_w = \sum_{a,b} w_{ab} p_{ab}} be the observed weighted agreement,
+\eqn{E_w = \sum_{a,b} w_{ab} q_a r_b} the expected weighted agreement,
+and \eqn{D = 1 - E_w}. Define the weighted margin summaries
+\deqn{ u_a = \sum_b w_{ab} r_b, \qquad v_b = \sum_a w_{ab} q_a. }
+For each cell \eqn{(a,b)}, the backend uses
+\deqn{ g_{ab}
+      \;=\;
+      \frac{D\,w_{ab} + (A_w - 1)\,(u_a + v_b)}{D^2}. }
+The variance estimator is
+\deqn{ \widehat{\mathrm{Var}}(\hat\kappa_w)
+      \;=\;
+      \frac{1}{n}\left(
+      \sum_{a,b} p_{ab} g_{ab}^2 -
+      \Big(\sum_{a,b} p_{ab} g_{ab}\Big)^2
+      \right), }
+where \eqn{n} is the number of complete paired ratings. The standard error
+is \eqn{\widehat{\mathrm{se}}(\hat\kappa_w)=
+\sqrt{\widehat{\mathrm{Var}}(\hat\kappa_w)}} and the CI is the Wald interval
+\deqn{ \hat\kappa_w \pm z_{1-\alpha/2}\,\widehat{\mathrm{se}}(\hat\kappa_w), }
+truncated to \eqn{[-1, 1]} in the returned result. Use \code{\link[=cohen_kappa]{cohen_kappa()}} for
+unordered nominal categories where all disagreements are equally serious.
 }
 \examples{
 raters <- data.frame(

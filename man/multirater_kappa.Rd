@@ -168,9 +168,38 @@ implementation supports unbalanced item-specific numbers of raters as a
 generalisation beyond the strict equal-rater Fleiss setting. The returned
 diagnostics record the observed per-item rater counts.
 
-By default, confidence intervals and p-values use the closed-form asymptotic
-standard error when that form is available. Jackknife inference remains
-available as an option.
+\strong{Confidence intervals and standard errors.}
+Two inference paths are implemented.
+
+If \code{se_method = "jackknife"}, the method computes leave-one-item-out
+estimates \eqn{\hat\kappa_{(-1)},\ldots,\hat\kappa_{(-m)}} over the
+\eqn{m} retained items and forms
+\deqn{ \bar\kappa_{(.)} = \frac{1}{m}\sum_{i=1}^m \hat\kappa_{(-i)}, }
+\deqn{ \widehat{\mathrm{Var}}_{\mathrm{JK}}(\hat\kappa)
+      \;=\;
+      \frac{m-1}{m}\sum_{i=1}^m
+      \left(\hat\kappa_{(-i)} - \bar\kappa_{(.)}\right)^2. }
+The standard error is
+\eqn{\widehat{\mathrm{se}}(\hat\kappa)=
+\sqrt{\widehat{\mathrm{Var}}_{\mathrm{JK}}(\hat\kappa)}} and the CI is
+\deqn{ \hat\kappa \pm z_{1-\alpha/2}\,\widehat{\mathrm{se}}(\hat\kappa), }
+truncated to \eqn{[-1, 1]}.
+
+If \code{se_method = "asymptotic"}, the closed-form variance is available
+only for the standard non-exact Fleiss estimator
+with a common number of raters per item. Let \eqn{m} be the number of items,
+\eqn{n} the common number of raters, \eqn{p_j} the pooled category
+proportions, and define
+\deqn{ S = \sum_j p_j(1-p_j), \qquad
+       C = \sum_j p_j(1-p_j)(1-2p_j). }
+Then the variance estimator is
+\deqn{ \widehat{\mathrm{Var}}(\hat\kappa)
+      \;=\;
+      \frac{2\,(S^2 - C)}{S^2\,m\,n\,(n-1)}. }
+The standard error and CI are then obtained from the same Wald form
+above and truncated to \eqn{[-1, 1]}. When asymptotic inference is
+unavailable and inferential output is requested with the default setting,
+\code{multirater_kappa()} automatically falls back to the jackknife path.
 }
 \examples{
 raters <- data.frame(

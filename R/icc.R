@@ -813,14 +813,64 @@ print.summary.icc_overall <- function(x,
 #' backend but are not included in the ICC denominator.
 #'
 #' \strong{CIs / SEs (delta method for ICC).}
-#' Confidence intervals are built from the same REML fit by a large-sample delta
-#' method. If `ci_mode = "raw"`, a Wald interval is formed on the ICC scale,
+#' Let \eqn{I_A = 1} for \code{type = "agreement"} and \eqn{I_A = 0} for
+#' \code{type = "consistency"}, and define
+#' \deqn{ \theta \;=\; \big(\sigma_S^2,\ \sigma_{S\times M,\mathrm{eff}}^2,\ 
+#' \sigma_{S\times T,\mathrm{eff}}^2,\ \sigma_E^2,\ S_B\big)^\top. }
+#' Write \eqn{\mathrm{ICC}(\theta)=N/D} with
+#' \deqn{ N = \sigma_S^2, \qquad
+#'        D = \sigma_S^2 + \sigma_{S\times M,\mathrm{eff}}^2 +
+#'            \bar{\kappa}_g\,\sigma_{S\times T,\mathrm{eff}}^2 +
+#'            \bar{\kappa}_e\,\sigma_E^2 + I_A S_B. }
+#' The gradient used in the delta method is
+#' \deqn{ \frac{\partial\,\mathrm{ICC}}{\partial \sigma_S^2}
+#'       \;=\; \frac{
+#'       \sigma_{S\times M,\mathrm{eff}}^2 +
+#'       \bar{\kappa}_g\,\sigma_{S\times T,\mathrm{eff}}^2 +
+#'       \bar{\kappa}_e\,\sigma_E^2 + I_A S_B}{D^2}, }
+#' \deqn{ \frac{\partial\,\mathrm{ICC}}{\partial \sigma_{S\times M,\mathrm{eff}}^2}
+#'       \;=\; -\,\frac{N}{D^2}, \qquad
+#'        \frac{\partial\,\mathrm{ICC}}{\partial \sigma_{S\times T,\mathrm{eff}}^2}
+#'       \;=\; -\,\frac{\bar{\kappa}_g\,N}{D^2}, }
+#' \deqn{ \frac{\partial\,\mathrm{ICC}}{\partial \sigma_E^2}
+#'       \;=\; -\,\frac{\bar{\kappa}_e\,N}{D^2}, \qquad
+#'        \frac{\partial\,\mathrm{ICC}}{\partial S_B}
+#'       \;=\; -\,\frac{I_A\,N}{D^2}. }
+#'
+#' The covariance matrix \eqn{\widehat{\mathrm{Var}}(\hat\theta)} is assembled
+#' from the same REML fit:
+#' \itemize{
+#'   \item the
+#'   \eqn{(\sigma_S^2,\sigma_{S\times M,\mathrm{eff}}^2,
+#'   \sigma_{S\times T,\mathrm{eff}}^2)} block comes from the empirical
+#'   subject-level covariance of the per-subject REML component updates;
+#'   \item \eqn{\widehat{\mathrm{Var}}(\hat\sigma_E^2)} is approximated as the
+#'   variance of the weighted mean of subject-level residual quadratic forms;
+#'   \item \eqn{\widehat{\mathrm{Var}}(S_B)} uses the fixed-effect quadratic-form
+#'   delta method already computed in the backend.
+#' }
+#' Cross-covariances across these blocks are ignored as a large-sample
+#' simplification, so
+#' \deqn{ \widehat{\mathrm{se}}\{\widehat{\mathrm{ICC}}\}
+#'       \;=\; \sqrt{\,\nabla \mathrm{ICC}(\hat\theta)^\top\,
+#'                     \widehat{\mathrm{Var}}(\hat\theta)\,
+#'                     \nabla \mathrm{ICC}(\hat\theta)\,}. }
+#'
+#' If `ci_mode = "raw"`, a Wald interval is formed on the ICC scale,
 #' \deqn{ \widehat{\mathrm{ICC}} \;\pm\; z_{1-\alpha/2}\,
 #'       \widehat{\mathrm{se}}\{\widehat{\mathrm{ICC}}\}, }
-#' and truncated to \eqn{[0,1]}. If `ci_mode = "logit"`, the same Wald
-#' construction is applied on the logit scale and then back-transformed. If
-#' `ci_mode = "auto"`, the backend selects between the raw-scale and logit-scale
-#' interval per estimate.
+#' and truncated to \eqn{[0,1]}. If `ci_mode = "logit"`, the backend applies
+#' the same Wald construction after the transform
+#' \eqn{\phi = \mathrm{logit}(\mathrm{ICC})}, with
+#' \deqn{ \widehat{\mathrm{se}}(\hat\phi)
+#'       \;\approx\; \frac{\widehat{\mathrm{se}}\{\widehat{\mathrm{ICC}}\}}
+#'       {\widehat{\mathrm{ICC}}\,(1-\widehat{\mathrm{ICC}})}, }
+#' and then back-transforms
+#' \deqn{ \mathrm{logit}^{-1}\!\Big(
+#'       \hat\phi \pm z_{1-\alpha/2}\,\widehat{\mathrm{se}}(\hat\phi)\Big). }
+#' If `ci_mode = "auto"`, the backend selects between the raw-scale and
+#' logit-scale interval per estimate, typically preferring the logit form near
+#' the boundaries.
 #'
 #' \strong{Choosing \eqn{\rho} for AR(1).}
 #' When \code{ar="ar1"} and \code{ar_rho = NA}, \eqn{\rho} is estimated by
