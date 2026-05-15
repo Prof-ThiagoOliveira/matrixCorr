@@ -11,14 +11,11 @@
 
 #if defined(R_VERSION) && (R_VERSION >= R_Version(4, 6, 0))
 
-// Prevent legacy R remap macros (e.g. length/isNull) from leaking into C++
-// headers when this compatibility header is force-included.
-#ifndef R_NO_REMAP
-#define R_NO_REMAP
-#define MATRIXCORR_UNDEF_R_NO_REMAP
-#endif
-
-#include <Rinternals.h>
+// This header is force-included before any Rcpp headers, so it must not pull
+// in Rinternals.h directly. Forward-declaring SEXP keeps the shim compatible
+// with Rcpp's own include order and avoids UB-prone header interleaving.
+struct SEXPREC;
+typedef struct SEXPREC* SEXP;
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,11 +24,6 @@ extern SEXP R_NamespaceRegistry;
 extern SEXP R_UnboundValue;
 #ifdef __cplusplus
 }
-#endif
-
-#ifdef MATRIXCORR_UNDEF_R_NO_REMAP
-#undef MATRIXCORR_UNDEF_R_NO_REMAP
-#undef R_NO_REMAP
 #endif
 
 #endif

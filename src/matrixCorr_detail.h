@@ -1594,12 +1594,13 @@ inline void make_Cinv_by_method(const std::vector<int>& tim_ord,
       if (met_ord[k] == l && tim_ord[k] >= 0) idx.push_back(k);
     }
 
-      // walk contiguous runs in this idx (consecutive entries in 'idx' are consecutive in the subject ordering)
+      // Walk contiguous runs in subject order. A method can appear in multiple
+      // separated time segments, especially in irregular panels; each segment
+      // needs its own AR(1) block.
       int s = 0;
       while (s < (int)idx.size()) {
         int e = s;
-        // same method by construction; runs are contiguous in 'idx'
-        while (e + 1 < (int)idx.size()) ++e;
+        while (e + 1 < (int)idx.size() && idx[e + 1] == idx[e] + 1) ++e;
         const int L = e - s + 1;
         if (L == 1) {
           Cinv(idx[s], idx[s]) += 1.0;

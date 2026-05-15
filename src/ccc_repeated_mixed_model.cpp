@@ -115,8 +115,34 @@ struct BLASThreadGuard {
   }
 };
 
+struct OMPThreadGuard {
+  int saved_threads = 1;
+  bool active = false;
+
+  explicit OMPThreadGuard(int target = 1, bool enable = true) : active(enable) {
+#ifdef _OPENMP
+    if (!active) return;
+    saved_threads = omp_get_max_threads();
+    if (saved_threads != target) omp_set_num_threads(std::max(1, target));
+#else
+    (void)target;
+#endif
+  }
+
+  ~OMPThreadGuard() {
+#ifdef _OPENMP
+    if (!active) return;
+    omp_set_num_threads(std::max(1, saved_threads));
+#endif
+  }
+};
+
 inline bool guard_disabled() {
   return env_flag_true("MATRIXCORR_DISABLE_BLAS_GUARD");
+}
+
+inline bool vc_parallel_disabled() {
+  return !env_flag_true("MATRIXCORR_ENABLE_PARALLEL_VC_CPP");
 }
 
 inline void harden_omp_runtime_once() {
@@ -284,6 +310,8 @@ Rcpp::List ccc_vc_cpp(
   detail_blas_guard::BLASThreadGuard _guard_one_thread_blas(
     1, !detail_blas_guard::guard_disabled());
 #endif
+  detail_blas_guard::OMPThreadGuard _guard_one_thread_omp(
+    1, detail_blas_guard::vc_parallel_disabled());
 #endif
 
   const int n = yr.size();
@@ -357,8 +385,8 @@ Rcpp::List ccc_vc_cpp(
     use_ar1 = false;
   }
 
-  arma::mat X(Xr.begin(), Xr.nrow(), Xr.ncol(), false);
-  arma::vec y(yr.begin(), yr.size(), false);
+  arma::mat X(Xr.begin(), Xr.nrow(), Xr.ncol(), true);
+  arma::vec y(yr.begin(), yr.size(), true);
   const int p = X.n_cols;
 
   // ---- parse time_weights
@@ -397,7 +425,7 @@ Rcpp::List ccc_vc_cpp(
           if (!std::isfinite(Zrm(i, j))) stop("Zr must contain only finite values.");
         }
       }
-      Z = arma::mat(Zrm.begin(), Zrm.nrow(), Zrm.ncol(), false);
+      Z = arma::mat(Zrm.begin(), Zrm.nrow(), Zrm.ncol(), true);
       if ((int)Z.n_rows != n) stop("Zr must have n rows");
       qZ = (int)Z.n_cols;
       has_extra = (qZ > 0);
@@ -1171,8 +1199,8 @@ Rcpp::List ccc_vc_cpp(
         if (!std::isfinite(Drm(i, j))) stop("auxDr must contain only finite values.");
       }
     }
-    arma::mat L(Lrm.begin(), X.n_cols, Lrm.ncol(), false);
-    arma::mat auxD(Drm.begin(), Drm.nrow(), Drm.ncol(), false);
+    arma::mat L(Lrm.begin(), X.n_cols, Lrm.ncol(), true);
+    arma::mat auxD(Drm.begin(), Drm.nrow(), Drm.ncol(), true);
     const double den = (double)nm * (double)(nm-1) * (double)std::max(nt,1);
 
     arma::vec difmed = L.t() * beta;
