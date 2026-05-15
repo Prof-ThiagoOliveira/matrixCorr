@@ -1257,6 +1257,20 @@ ccc_rm_reml <- function(data, response, subject,
     )
   }
 
+  if (is.null(time)) {
+    return(.ccc_rm_reml_no_time_fallback(
+      df = df,
+      response = response,
+      rind = subject,
+      method = method,
+      ci = ci,
+      conf_level = conf_level,
+      out_class = "ccc_rm_reml",
+      out_method = "Variance Components REML - pairwise",
+      out_description = "Lin's CCC per method pair from random-effects LMM"
+    ))
+  }
+
   # Only pairwise path remains
   prev_threads <- .mc_prepare_omp_threads(
     n_threads,
@@ -1933,6 +1947,105 @@ reml_lrt_select <- function(Xr, yr, subject, method_int, time_int, Laux, Z,
        fit = fit_full)
 }
 
+#' @keywords internal
+.ccc_rm_reml_no_time_fallback <- function(df,
+                                          response,
+                                          rind,
+                                          method,
+                                          ci,
+                                          conf_level,
+                                          out_class,
+                                          out_method,
+                                          out_description) {
+  fit <- ccc_rm_ustat(
+    df,
+    response = response,
+    subject = rind,
+    method = method,
+    ci = ci,
+    conf_level = conf_level
+  )
+
+  method_levels <- levels(droplevels(df[[method]]))
+  Lm <- length(method_levels)
+  dn <- list(method_levels, method_levels)
+
+  n_obs_mat <- matrix(NA_integer_, Lm, Lm, dimnames = dn)
+  n_subjects_mat <- matrix(NA_integer_, Lm, Lm, dimnames = dn)
+  method_code_all <- as.integer(df[[method]])
+  idx_by_method <- lapply(seq_len(Lm), function(k) which(method_code_all == k))
+  subject_all <- df[[rind]]
+
+  for (i in seq_len(Lm - 1L)) {
+    for (j in (i + 1L):Lm) {
+      idx <- sort.int(c(idx_by_method[[i]], idx_by_method[[j]]), method = "quick")
+      subj_pair <- droplevels(factor(subject_all[idx]))
+      met_pair <- droplevels(factor(df[[method]][idx]))
+      complete_mask <- stats::complete.cases(df[idx, c(response, rind, method), drop = FALSE])
+      subj_pair <- subj_pair[complete_mask]
+      met_pair <- met_pair[complete_mask]
+
+      sid <- as.integer(subj_pair)
+      mid <- as.integer(met_pair)
+      rows_by_subj <- tabulate(sid, nbins = nlevels(subj_pair))
+      combo_code <- sid + nlevels(subj_pair) * mid
+      uniq_combo <- !duplicated(combo_code)
+      uniq_by_subj <- tabulate(sid[uniq_combo], nbins = nlevels(subj_pair))
+      complete_subj <- (rows_by_subj == 2L) & (uniq_by_subj == 2L)
+      n_subjects_pair <- sum(complete_subj)
+      n_obs_pair <- 2L * n_subjects_pair
+
+      n_subjects_mat[i, j] <- n_subjects_mat[j, i] <- as.integer(n_subjects_pair)
+      n_obs_mat[i, j] <- n_obs_mat[j, i] <- as.integer(n_obs_pair)
+    }
+  }
+
+  diag(n_subjects_mat) <- NA_integer_
+  diag(n_obs_mat) <- NA_integer_
+
+  empty_vc <- matrix(NA_real_, Lm, Lm, dimnames = dn)
+  empty_extra <- matrix(vector("list", Lm * Lm), Lm, Lm, dimnames = dn)
+  ar1_na <- matrix(NA_real_, Lm, Lm, dimnames = dn)
+  ar1_pairs <- matrix(NA_integer_, Lm, Lm, dimnames = dn)
+  ar1_use <- matrix(FALSE, Lm, Lm, dimnames = dn)
+
+  if (isTRUE(ci)) {
+    out <- structure(
+      list(
+        est = as.matrix(fit$est),
+        lwr.ci = as.matrix(fit$lwr.ci),
+        upr.ci = as.matrix(fit$upr.ci)
+      ),
+      class = c("ccc_rm_reml", "matrixCorr_ccc_ci", "matrixCorr_ccc", "ccc")
+    )
+    attr(out, "conf.level") <- conf_level
+  } else {
+    out <- structure(
+      as.matrix(fit),
+      class = c("ccc_rm_reml", "matrixCorr_ccc", "ccc", "matrix")
+    )
+  }
+
+  attr(out, "method") <- paste0(out_method, " (no-time fallback)")
+  attr(out, "description") <- paste0(out_description, " [fallback via ccc_rm_ustat]")
+  attr(out, "package") <- "matrixCorr"
+  attr(out, "residual_model") <- "iid"
+  attr(out, "sigma2_subject") <- empty_vc
+  attr(out, "sigma2_subject_method") <- empty_vc
+  attr(out, "sigma2_subject_time") <- empty_vc
+  attr(out, "sigma2_error") <- empty_vc
+  attr(out, "sigma2_extra") <- empty_extra
+  attr(out, "SB") <- empty_vc
+  attr(out, "se_ccc") <- empty_vc
+  attr(out, "n_obs") <- n_obs_mat
+  attr(out, "n_subjects") <- n_subjects_mat
+  attr(out, "ar1_rho_lag1") <- ar1_na
+  attr(out, "ar1_pairs") <- ar1_pairs
+  attr(out, "ar1_pval") <- ar1_na
+  attr(out, "use_ar1") <- ar1_use
+  out
+}
+
 #' @title ccc_lmm_reml_pairwise
 #' @description Internal function to handle pairwise CCC estimation for each method pair.
 #' @keywords internal
@@ -1970,6 +2083,21 @@ ccc_lmm_reml_pairwise <- function(df, fml, response, rind, method, time,
   df[[method]] <- droplevels(df[[method]])
   method_levels <- levels(df[[method]])
   Lm <- length(method_levels)
+
+  if (is.null(time) && identical(out_class, "ccc_rm_reml")) {
+    return(.ccc_rm_reml_no_time_fallback(
+      df = df,
+      response = response,
+      rind = rind,
+      method = method,
+      ci = ci,
+      conf_level = conf_level,
+      out_class = out_class,
+      out_method = out_method,
+      out_description = out_description
+    ))
+  }
+
   method_code_all <- as.integer(df[[method]])
   idx_by_method <- lapply(seq_len(Lm), function(k) which(method_code_all == k))
   Dfull_input <- if (!is.null(Dmat)) as.matrix(Dmat) else NULL

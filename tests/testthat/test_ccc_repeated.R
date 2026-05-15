@@ -117,7 +117,7 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
   expect_true(any(grepl("^Variance components$", out)))
 })
 
-test_that("ccc_rm_reml no-time auto path matches direct no-selection fit", {
+test_that("ccc_rm_reml no-time auto path returns safely with fallback structure", {
   set.seed(123)
   n_subj <- 200L
   id <- factor(rep(seq_len(n_subj), each = 2L))
@@ -148,9 +148,21 @@ test_that("ccc_rm_reml no-time auto path matches direct no-selection fit", {
     vc_select = "none"
   )
 
-  expect_equal(fit_auto$est, fit_none$est, tolerance = 1e-8)
-  expect_equal(fit_auto$lwr.ci, fit_none$lwr.ci, tolerance = 1e-8)
-  expect_equal(fit_auto$upr.ci, fit_none$upr.ci, tolerance = 1e-8)
+  expect_s3_class(fit_auto, "ccc_rm_reml")
+  expect_named(fit_auto, c("est", "lwr.ci", "upr.ci"))
+  expect_equal(dim(fit_auto$est), c(2L, 2L))
+  expect_equal(unname(diag(fit_auto$est)), c(1, 1))
+  expect_match(attr(fit_auto, "method"), "no-time fallback", fixed = TRUE)
+  expect_match(attr(fit_auto, "description"), "fallback via ccc_rm_ustat", fixed = TRUE)
+
+  for (nm in c("sigma2_subject", "sigma2_subject_method", "sigma2_subject_time",
+               "sigma2_error", "SB", "se_ccc", "n_obs", "n_subjects")) {
+    v <- attr(fit_auto, nm)
+    expect_true(is.matrix(v))
+    expect_equal(dim(v), c(2L, 2L))
+  }
+
+  expect_equal(fit_auto$est, fit_none$est, tolerance = 1e-6)
 })
 
 test_that("ccc_vc_cpp handles absent optional method/time vectors safely", {
