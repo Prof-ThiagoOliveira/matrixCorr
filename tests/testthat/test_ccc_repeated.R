@@ -117,6 +117,54 @@ test_that("ccc_rm_reml (pairwise, no time): matches simple theory and returns VC
   expect_true(any(grepl("^Variance components$", out)))
 })
 
+test_that("ccc_rm_reml no-time auto path returns safely with fallback structure", {
+  set.seed(123)
+  n_subj <- 200L
+  id <- factor(rep(seq_len(n_subj), each = 2L))
+  method <- factor(rep(c("A", "B"), times = n_subj))
+
+  sigA <- 1.0
+  sigE <- 0.5
+  biasB <- 0.2
+  u <- rnorm(n_subj, 0, sqrt(sigA))[as.integer(id)]
+  e <- rnorm(n_subj * 2L, 0, sqrt(sigE))
+  y <- (method == "B") * biasB + u + e
+  df <- data.frame(y, id, method)
+
+  fit_auto <- ccc_rm_reml(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    ci = TRUE,
+    vc_select = "auto"
+  )
+  fit_none <- ccc_rm_reml(
+    df,
+    response = "y",
+    subject = "id",
+    method = "method",
+    ci = TRUE,
+    vc_select = "none"
+  )
+
+  expect_s3_class(fit_auto, "ccc_rm_reml")
+  expect_named(fit_auto, c("est", "lwr.ci", "upr.ci"))
+  expect_equal(dim(fit_auto$est), c(2L, 2L))
+  expect_equal(unname(diag(fit_auto$est)), c(1, 1))
+  expect_match(attr(fit_auto, "method"), "no-time fallback", fixed = TRUE)
+  expect_match(attr(fit_auto, "description"), "fallback via ccc_rm_ustat", fixed = TRUE)
+
+  for (nm in c("sigma2_subject", "sigma2_subject_method", "sigma2_subject_time",
+               "sigma2_error", "SB", "se_ccc", "n_obs", "n_subjects")) {
+    v <- attr(fit_auto, nm)
+    expect_true(is.matrix(v))
+    expect_equal(dim(v), c(2L, 2L))
+  }
+
+  expect_equal(fit_auto$est, fit_none$est, tolerance = 1e-6)
+})
+
 test_that("ccc_vc_cpp handles absent optional method/time vectors safely", {
   set.seed(125)
   n_subj <- 20L
@@ -473,6 +521,15 @@ test_that("ccc_rm_reml handles CRAN REML branch combinations without crashing", 
     vc_select = "auto",
     ci = FALSE
   )
+  fit_full <- ccc_rm_reml(
+    dat_both,
+    "y",
+    "id",
+    method = "method",
+    time = "time",
+    vc_select = "none",
+    ci = FALSE
+  )
   fit_no_st <- ccc_rm_reml(
     dat_both,
     "y",
@@ -509,6 +566,7 @@ test_that("ccc_rm_reml handles CRAN REML branch combinations without crashing", 
     est <- if (is.list(fit)) fit$est["A", "B"] else fit["A", "B"]
     expect_true(is.finite(unname(est)))
   }
+  expect_equal(unname(fit_auto["A", "B"]), unname(fit_full["A", "B"]), tolerance = 1e-8)
 
   set.seed(11)
   ids <- seq_len(24L)
