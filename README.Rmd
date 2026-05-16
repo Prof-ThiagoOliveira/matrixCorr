@@ -66,7 +66,7 @@ designs.
 | Agreement: two-rater categorical ratings | `cohen_kappa()` and `gwet_ac()` for nominal AC1/AC2 agreement, `weighted_kappa()` for ordered categories |
 | Agreement: multi-rater and panel reliability | `multirater_kappa()`, `gwet_ac()` for panel AC1/AC2 agreement, `krippendorff_alpha()` |
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
-| Agreement: individual agreement | `cia()` for replicated long-format method-comparison data, with pairwise subject-level CIA, balanced overall CIA, and delta or bootstrap confidence intervals depending on scope/estimator |
+| Agreement: individual agreement | `cia()` for replicated long-format method-comparison data |
 | Agreement: probability of agreement | `prob_agree()` |
 | Agreement: concordance | Pairwise Lin's CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
 | Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |
