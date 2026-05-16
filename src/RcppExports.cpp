@@ -351,6 +351,47 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cia_rm_anova_cpp
+Rcpp::List cia_rm_anova_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int n_subjects, int n_methods, int n_times, bool homogeneous, bool constrain_vc, int n_threads);
+RcppExport SEXP _matrixCorr_cia_rm_anova_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP n_subjectsSEXP, SEXP n_methodsSEXP, SEXP n_timesSEXP, SEXP homogeneousSEXP, SEXP constrain_vcSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< int >::type n_subjects(n_subjectsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_methods(n_methodsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
+    Rcpp::traits::input_parameter< bool >::type homogeneous(homogeneousSEXP);
+    Rcpp::traits::input_parameter< bool >::type constrain_vc(constrain_vcSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cia_rm_anova_cpp(y, subject, method, time, n_subjects, n_methods, n_times, homogeneous, constrain_vc, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cia_rm_delta_cpp
+Rcpp::List cia_rm_delta_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector time, int n_subjects, int n_methods, int n_times, bool homogeneous, bool constrain_vc, double conf_level, int n_threads);
+RcppExport SEXP _matrixCorr_cia_rm_delta_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP timeSEXP, SEXP n_subjectsSEXP, SEXP n_methodsSEXP, SEXP n_timesSEXP, SEXP homogeneousSEXP, SEXP constrain_vcSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< int >::type n_subjects(n_subjectsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_methods(n_methodsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
+    Rcpp::traits::input_parameter< bool >::type homogeneous(homogeneousSEXP);
+    Rcpp::traits::input_parameter< bool >::type constrain_vc(constrain_vcSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cia_rm_delta_cpp(y, subject, method, time, n_subjects, n_methods, n_times, homogeneous, constrain_vc, conf_level, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cohen_kappa_pair_cpp
 Rcpp::List cohen_kappa_pair_cpp(Rcpp::IntegerVector x, Rcpp::IntegerVector y, int n_levels, bool return_inference, double conf_level);
 RcppExport SEXP _matrixCorr_cohen_kappa_pair_cpp(SEXP xSEXP, SEXP ySEXP, SEXP n_levelsSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP) {
@@ -1269,6 +1310,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_cia_moments_cpp", (DL_FUNC) &_matrixCorr_cia_moments_cpp, 9},
     {"_matrixCorr_cia_pairwise_stats_cpp", (DL_FUNC) &_matrixCorr_cia_pairwise_stats_cpp, 8},
     {"_matrixCorr_cia_overall_balanced_cpp", (DL_FUNC) &_matrixCorr_cia_overall_balanced_cpp, 8},
+    {"_matrixCorr_cia_rm_anova_cpp", (DL_FUNC) &_matrixCorr_cia_rm_anova_cpp, 10},
+    {"_matrixCorr_cia_rm_delta_cpp", (DL_FUNC) &_matrixCorr_cia_rm_delta_cpp, 11},
     {"_matrixCorr_cohen_kappa_pair_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_pair_cpp, 5},
     {"_matrixCorr_cohen_kappa_matrix_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_matrix_cpp, 6},
     {"_matrixCorr_cohen_kappa_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_threshold_triplets_cpp, 6},

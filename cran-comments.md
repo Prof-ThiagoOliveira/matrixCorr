@@ -33,6 +33,11 @@ This is a new release of `matrixCorr`.
   Kosinski and Haber coefficient of individual agreement for replicated
   long-format method-comparison data, supporting both no-reference and
   reference-method formulations plus subject-bootstrap confidence intervals.
+* added `cia_rm()`, an exported implementation of the Haber, Gao and
+  Barnhart repeated-measures coefficient of individual agreement for balanced
+  subject-method-time designs, with categorical-condition ANOVA estimation,
+  pairwise condition-specific CIA, homogeneity diagnostics, optional common
+  estimates, and subject-bootstrap confidence intervals.
 
 ## Bug
 

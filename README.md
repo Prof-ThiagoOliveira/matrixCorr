@@ -32,18 +32,15 @@ correlation, partial correlation, robust biweight mid-correlation,
 percentage bend, Winsorized, skipped correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
 and biserial), plus repeated-measures correlation (`rmcorr()`);
-agreement tools cover Cohen’s kappa for nominal ratings, weighted
-Cohen’s kappa for ordered two-rater agreement, Gwet’s AC1/AC2,
-multi-rater kappa for nominal panel agreement, Krippendorff’s alpha for
+agreement tools cover Cohen's kappa for nominal ratings, weighted
+Cohen's kappa for ordered two-rater agreement, Gwet's AC1/AC2,
+multi-rater kappa for nominal panel agreement, Krippendorff's alpha for
 panel-level reliability, Bland-Altman (two-method and
-repeated-measures), Lin’s concordance correlation coefficient (including
-repeated-measures LMM/REML extensions), and intraclass correlation for
-both wide and repeated-measures designs.
-
-For replicated method-comparison studies, `matrixCorr` also includes
-`cia()` for long-format data with subject, method, replicate, and
-response columns, with subject-level pairwise estimation and
-balanced-replication overall estimation.
+repeated-measures), the coefficient of individual agreement for
+replicated and repeated-measures designs (`cia()`, `cia_rm()`), Lin's
+concordance correlation coefficient (including repeated-measures
+LMM/REML extensions), and intraclass correlation for both wide and
+repeated-measures designs.
 
 ## Features
 
@@ -60,7 +57,7 @@ balanced-replication overall estimation.
 | Agreement: two-rater categorical ratings | `cohen_kappa()` and `gwet_ac()` for nominal AC1/AC2 agreement, `weighted_kappa()` for ordered categories |
 | Agreement: multi-rater and panel reliability | `multirater_kappa()`, `gwet_ac()` for panel AC1/AC2 agreement, `krippendorff_alpha()` |
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
-| Agreement: individual agreement | `cia()` for replicated long-format method-comparison data |
+| Agreement: individual agreement | Replicated long-format `cia()`, repeated-measures `cia_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
 | Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
 | Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |

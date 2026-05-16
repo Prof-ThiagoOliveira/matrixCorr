@@ -81,6 +81,14 @@ cia_overall_balanced_cpp <- function(y, subject, method, replicate, n_methods, r
     .Call(`_matrixCorr_cia_overall_balanced_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads)
 }
 
+cia_rm_anova_cpp <- function(y, subject, method, time, n_subjects, n_methods, n_times, homogeneous, constrain_vc, n_threads = 1L) {
+    .Call(`_matrixCorr_cia_rm_anova_cpp`, y, subject, method, time, n_subjects, n_methods, n_times, homogeneous, constrain_vc, n_threads)
+}
+
+cia_rm_delta_cpp <- function(y, subject, method, time, n_subjects, n_methods, n_times, homogeneous, constrain_vc, conf_level, n_threads = 1L) {
+    .Call(`_matrixCorr_cia_rm_delta_cpp`, y, subject, method, time, n_subjects, n_methods, n_times, homogeneous, constrain_vc, conf_level, n_threads)
+}
+
 cohen_kappa_pair_cpp <- function(x, y, n_levels, return_inference = FALSE, conf_level = 0.95) {
     .Call(`_matrixCorr_cohen_kappa_pair_cpp`, x, y, n_levels, return_inference, conf_level)
 }

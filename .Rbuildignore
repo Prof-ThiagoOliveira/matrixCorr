@@ -12,9 +12,11 @@
 ^codemeta\.json$
 ^\.local-lib$
 ^\.tmp_build$
+^\.tmp-lib$
 ^\.tmp_lib$
 ^\.tmp_R_lib$
 ^\.tmp_install_lib$
+^_problems$
 ^.*\.Rcheck$
 ^artifact\.zip$
 ^matrixCorr_[0-9.-]+\.tar\.gz$
