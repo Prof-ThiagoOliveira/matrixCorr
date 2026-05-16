@@ -14,14 +14,15 @@ test_that("cia matches a simple two-method hand calculation", {
     replicate = "replicate",
     scope = "overall"
   )
-  pairwise <- cia(
+  pairwise <- suppressWarnings(cia(
     dat,
     response = "value",
     subject = "subject",
     method = "method",
     replicate = "replicate",
-    scope = "pairwise"
-  )
+    scope = "pairwise",
+    estimator = "vc_constrained"
+  ))
 
   expect_s3_class(overall, "cia_overall")
   expect_equal(overall$cia[[1]], 1)
@@ -52,24 +53,33 @@ test_that("no-reference cia retains raw ratios and reports constrained defaults"
     replicate = "replicate",
     scope = "overall"
   )
-  pairwise <- cia(
+  pairwise <- suppressWarnings(cia(
     dat,
     response = "value",
     subject = "subject",
     method = "method",
     replicate = "replicate",
     scope = "pairwise"
-  )
+  ))
+  pairwise_constrained <- suppressWarnings(cia(
+    dat,
+    response = "value",
+    subject = "subject",
+    method = "method",
+    replicate = "replicate",
+    scope = "pairwise",
+    estimator = "vc_constrained"
+  ))
 
   expect_equal(overall$cia[[1]], 1, tolerance = 1e-12)
   expect_equal(overall$cia_raw[[1]], 1, tolerance = 1e-12)
   expect_equal(unname(pairwise["A", "B"]), 1, tolerance = 1e-12)
-  expect_equal(unname(pairwise["A", "C"]), 1, tolerance = 1e-12)
+  expect_equal(unname(pairwise["A", "C"]), 2, tolerance = 1e-12)
   expect_equal(unname(pairwise["B", "C"]), 0, tolerance = 1e-12)
   expect_equal(unname(attr(pairwise, "cia_raw")["A", "C"]), 2, tolerance = 1e-12)
   expect_equal(unname(attr(pairwise, "tau2_raw")["A", "C"]), -1, tolerance = 1e-12)
   expect_true(isTRUE(attr(pairwise, "boundary")["A", "C"]))
-  expect_true(all(pairwise[upper.tri(pairwise)] <= 1))
+  expect_equal(unname(pairwise_constrained["A", "C"]), 1, tolerance = 1e-12)
 })
 
 test_that("cia supports raw and constrained reference-scaled estimation", {
@@ -102,7 +112,7 @@ test_that("cia supports raw and constrained reference-scaled estimation", {
     scope = "overall",
     estimator = "mom_unconstrained"
   )
-  pairwise <- cia(
+  pairwise <- suppressWarnings(cia(
     dat,
     response = "value",
     subject = "subject",
@@ -110,8 +120,8 @@ test_that("cia supports raw and constrained reference-scaled estimation", {
     replicate = "replicate",
     reference = "A",
     scope = "pairwise"
-  )
-  pairwise_raw <- cia(
+  ))
+  pairwise_raw <- suppressWarnings(cia(
     dat,
     response = "value",
     subject = "subject",
@@ -120,14 +130,16 @@ test_that("cia supports raw and constrained reference-scaled estimation", {
     reference = "A",
     scope = "pairwise",
     estimator = "mom_unconstrained"
-  )
+  ))
 
-  expect_equal(overall$cia[[1]], 1, tolerance = 1e-12)
-  expect_equal(overall$cia_raw[[1]], 4 / 3.5, tolerance = 1e-12)
-  expect_equal(overall$tau2_raw[[1]], -0.5, tolerance = 1e-12)
+  expect_equal(overall$cia[[1]], 8 / 7, tolerance = 1e-12)
+  expect_equal(overall$cia_raw[[1]], 8 / 7, tolerance = 1e-12)
+  expect_equal(overall$tau2_raw[[1]], -0.25, tolerance = 1e-12)
   expect_true(isTRUE(overall$boundary[[1]]))
-  expect_equal(overall_raw$cia[[1]], 4 / 3.5, tolerance = 1e-12)
-  expect_equal(unname(pairwise["A", "B"]), 1, tolerance = 1e-12)
+  expect_equal(overall$numerator_term[[1]], 4, tolerance = 1e-12)
+  expect_equal(overall$denominator_term[[1]], 3.5, tolerance = 1e-12)
+  expect_equal(overall_raw$cia[[1]], 8 / 7, tolerance = 1e-12)
+  expect_equal(unname(pairwise["A", "B"]), 4, tolerance = 1e-12)
   expect_equal(unname(pairwise["A", "C"]), 4 / 6, tolerance = 1e-12)
   expect_equal(unname(attr(pairwise, "cia_raw")["A", "B"]), 4, tolerance = 1e-12)
   expect_true(isTRUE(attr(pairwise, "boundary")["A", "B"]))
@@ -146,15 +158,16 @@ test_that("cia summaries and printing expose raw boundary diagnostics", {
     )
   )
 
-  fit <- cia(
+  fit <- suppressWarnings(cia(
     dat,
     response = "value",
     subject = "subject",
     method = "method",
     replicate = "replicate",
     reference = "A",
-    scope = "pairwise"
-  )
+    scope = "pairwise",
+    estimator = "vc_constrained"
+  ))
   smry <- summary(fit)
 
   expect_true(all(c("cia_raw", "tau2_raw", "tau2", "boundary") %in% names(smry)))
@@ -186,6 +199,6 @@ test_that("cia requires within-method replication", {
       replicate = "replicate",
       scope = "overall"
     ),
-    "replicated readings"
+    "balanced-replication|replicated readings"
   )
 })

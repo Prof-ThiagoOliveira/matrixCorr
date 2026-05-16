@@ -16,11 +16,11 @@ cia(
   method,
   replicate,
   reference = NULL,
-  scope = c("overall", "pairwise"),
-  estimator = c("vc_constrained", "mom_unconstrained"),
+  scope = c("pairwise", "overall"),
+  estimator = c("mom_unconstrained", "vc_constrained"),
   ci = FALSE,
   conf_level = 0.95,
-  inference = c("bootstrap", "none"),
+  inference = c("delta", "bootstrap", "none"),
   B = 1000L,
   seed = NULL,
   n_threads = getOption("matrixCorr.threads", 1L),
@@ -80,22 +80,29 @@ subject-method cell.}
 \item{reference}{Optional character scalar naming the reference method. When
 \code{NULL} (default), the no-reference CIA is estimated.}
 
-\item{scope}{One of \code{"overall"} or \code{"pairwise"}. \code{"overall"} returns one CIA
-coefficient across all retained methods. \code{"pairwise"} returns the two-method
+\item{scope}{One of \code{"pairwise"} or \code{"overall"}. \code{"pairwise"} returns the
+two-method
 CIA for each method pair, or the reference-scaled CIA for each
-method-versus-reference comparison when \code{reference} is supplied.}
+method-versus-reference comparison when \code{reference} is supplied.
+\code{"overall"} returns one CIA coefficient across all retained methods.}
 
-\item{estimator}{One of \code{"vc_constrained"} or \code{"mom_unconstrained"}.
-\code{"vc_constrained"} (default) reports CIA after constraining the estimated
-inter-method variance component to be non-negative. \code{"mom_unconstrained"}
-reports the raw method-of-moments ratio and may exceed 1.}
+\item{estimator}{One of \code{"mom_unconstrained"} or \code{"vc_constrained"}.
+\code{"mom_unconstrained"} is the literal raw method-of-moments CIA ratio and
+may exceed 1. \code{"vc_constrained"} is a bounded package-level
+variance-component variant that constrains the estimated inter-method
+variance component to be non-negative before converting it back to CIA.}
 
-\item{ci}{Logical; if \code{TRUE}, attach subject-bootstrap percentile confidence
-intervals.}
+\item{ci}{Logical; if \code{TRUE}, attach confidence intervals using the selected
+\code{inference} method.}
 
 \item{conf_level}{Confidence level used when \code{ci = TRUE}. Default is \code{0.95}.}
 
-\item{inference}{One of \code{"bootstrap"} or \code{"none"}.}
+\item{inference}{One of \code{"delta"}, \code{"bootstrap"}, or \code{"none"}. When
+confidence intervals are requested, pairwise CIA uses a delta-method normal
+interval by default and also supports subject-bootstrap percentile
+intervals. For overall CIA, delta-method normal intervals are available for
+the unconstrained moment estimator, and subject-bootstrap percentile
+intervals are also available.}
 
 \item{B}{Number of subject-bootstrap resamples when \code{ci = TRUE} and
 \code{inference = "bootstrap"}.}
@@ -151,11 +158,10 @@ a list with elements \code{est}, \code{lwr.ci}, and \code{upr.ci}, classed as
 \code{c("cia", "cia_ci")}.
 }
 \description{
-\code{cia()} estimates the coefficient of individual agreement proposed by
-Barnhart, Kosinski, and Haber. CIA assesses individual-level
-interchangeability by comparing between-method disagreement with
-within-method replicate disagreement. Unlike CCC, CIA is not intended to be
-driven by between-subject heterogeneity.
+\code{cia()} estimates the coefficient of individual agreement. CIA assesses
+individual-level interchangeability by comparing between-method disagreement
+with within-method replicate disagreement. Unlike CCC, CIA is not intended
+to be driven by between-subject heterogeneity.
 
 The estimator requires replicated readings within method. A data set with
 one observation per subject per method is insufficient for CIA because the
@@ -178,50 +184,105 @@ With a reference method \code{J}, CIA is defined by
      {\sum_{j=1}^{J-1} E\{(Y_{ij} - Y_{iJ})^2\} / (J - 1)}.
 }
 
-This implementation estimates the required expectations by method of moments:
-the within-method terms are averages of squared differences across all
-distinct replicate pairs within each subject-method cell, and the
-between-method terms are averages of squared differences across all
-cross-method replicate combinations within subject.
+This implementation uses method-of-moments estimators built from
+subject-level disagreement functions.
 
-Two estimators are available. The raw method-of-moments estimator keeps
-\eqn{\hat{\tau}^2_{\mathrm{raw}} = \widehat{D} - \widehat{\sigma}^2_W}
-unchanged and may therefore exceed 1 when \eqn{\hat{\tau}^2_{\mathrm{raw}} <
-0}. The default variance-component-constrained estimator sets
-\eqn{\hat{\tau}^2 = \max(\hat{\tau}^2_{\mathrm{raw}}, 0)} and reports
-\eqn{\widehat{\mathrm{CIA}} = \widehat{\sigma}^2_W / (\hat{\tau}^2 +
-\widehat{\sigma}^2_W)}. This applies the boundary on the implied
-inter-method variance component rather than clamping CIA directly.
-
-For \code{scope = "pairwise"} and \code{reference = NULL}, each off-diagonal entry is
-based on the two-method special case. For methods \code{j} and \verb{j'}, let
+For pairwise CIA, consider two methods \code{X} and \code{Y}. For each eligible
+subject \code{i}, define
 \deqn{
-\hat{\sigma}_{jj'}^2 = \frac{W_j + W_{j'}}{2}
+G_{1i} = \mathrm{mean}\{(X_{ik} - X_{ik'})^2\},
+}
+\deqn{
+G_{2i} = \mathrm{mean}\{(Y_{il} - Y_{il'})^2\},
+}
+\deqn{
+G_{3i} = \mathrm{mean}\{(X_{ik} - Y_{il})^2\},
+}
+where the first two means are over all distinct within-method replicate
+pairs and the third mean is over all cross-method replicate combinations.
+Let \eqn{\bar G_1}, \eqn{\bar G_2}, and \eqn{\bar G_3} denote the averages
+of these subject-level quantities across eligible subjects. Then the
+no-reference pairwise estimator is
+\deqn{
+\widehat{\mathrm{CIA}}_{XY}^{\mathrm{raw}} =
+\frac{(\bar G_1 + \bar G_2)/2}{\bar G_3},
+}
+and the reference pairwise estimator is
+\deqn{
+\widehat{\mathrm{CIA}}_{XR}^{\mathrm{raw}} = \frac{\bar G_1}{\bar G_3},
+}
+where \code{X} is the reference method.
+
+For overall CIA, the current implementation follows the balanced replicated
+formulas in the cited papers. This requires \code{n} common subjects, \code{J}
+retained methods, and the same replicate count \code{K >= 2} in every retained
+subject-method cell. If the data are not balanced in this sense,
+\code{scope = "overall"} returns an informative error rather than using an
+approximation.
+
+Write \eqn{\bar Y_{ij}} for the mean of the \code{K} replicates on subject \code{i}
+and method \code{j}. Define the within-method mean square
+\deqn{
+A_{ij} = \frac{\sum_{k=1}^{K} (Y_{ijk} - \bar Y_{ij})^2}{K - 1}.
+}
+
+For the no-reference overall estimator, define the subject-level within term
+\deqn{
+A_{i\cdot} = \frac{1}{J} \sum_{j=1}^{J} A_{ij},
+}
+the subject-wide mean
+\deqn{
+\bar Y_{i\cdot\cdot} = \frac{1}{J} \sum_{j=1}^{J} \bar Y_{ij},
+}
+and the subject-level denominator
+\deqn{
+B_{Ni} =
+\frac{\sum_{j=1}^{J} (\bar Y_{ij} - \bar Y_{i\cdot\cdot})^2}{J - 1}
++ \left(1 - \frac{1}{K}\right) A_{i\cdot}.
+}
+With \eqn{\bar A = n^{-1}\sum_i A_{i\cdot}} and
+\eqn{\bar B = n^{-1}\sum_i B_{Ni}}, the overall no-reference estimator is
+\deqn{
+\widehat{\mathrm{CIA}}_{N}^{\mathrm{raw}} = \frac{\bar A}{\bar B}.
+}
+
+For the reference overall estimator, let method \code{R} be the retained
+reference method. Define
+\deqn{
+A_{iR} = A_{i,R}
 }
 and
 \deqn{
-\hat{\tau}_{jj',\mathrm{raw}}^2 = D_{jj'} - \hat{\sigma}_{jj'}^2.
+B_{Ri} =
+\frac{\sum_{j \ne R} (\bar Y_{ij} - \bar Y_{iR})^2}{J - 1}
++ \left(1 - \frac{1}{K}\right)
+  \frac{\sum_{j \ne R} A_{ij}}{J - 1}
++ \left(1 - \frac{1}{K}\right) A_{iR}.
 }
-The raw pairwise method-of-moments estimator is
+With \eqn{\bar A_R = n^{-1}\sum_i A_{iR}} and
+\eqn{\bar B_R = n^{-1}\sum_i B_{Ri}}, the overall reference estimator is
 \deqn{
-\mathrm{CIA}^{\mathrm{raw}}_{jj'} =
-\frac{\hat{\sigma}_{jj'}^2}{D_{jj'}}.
+\widehat{\mathrm{CIA}}_{R}^{\mathrm{raw}} = \frac{2 \bar A_R}{\bar B_R}.
 }
-Under \code{estimator = "vc_constrained"}, the reported pairwise CIA is
-\deqn{
-\mathrm{CIA}_{jj'} = \frac{\hat{\sigma}_{jj'}^2}
-{\hat{\sigma}_{jj'}^2 + \max(\hat{\tau}_{jj',\mathrm{raw}}^2, 0)},
-}
-while \code{estimator = "mom_unconstrained"} reports
-\eqn{\mathrm{CIA}^{\mathrm{raw}}_{jj'}} directly. \code{W_j} is the within-method
-mean squared replicate disagreement for method \code{j}, and \verb{D_\{jj'\}} is the
-between-method mean squared disagreement for methods \code{j} and \verb{j'}.
 
-For \code{scope = "pairwise"} with a reference method \code{R}, each estimable
-method-versus-reference entry is
-\deqn{
-\mathrm{CIA}_{jR} = \frac{W_R}{D_{jR}}.
-}
+Two estimators are available. \code{estimator = "mom_unconstrained"} reports the
+raw ratio estimator directly. \code{estimator = "vc_constrained"} applies the
+non-negative variance-component boundary from the cited papers. In the
+no-reference setting this uses
+\eqn{\hat\tau^2_{\mathrm{raw}} = \bar B - \bar A}, and in the reference
+setting it uses \eqn{\hat\tau^2_{\mathrm{raw}} = \bar B_R/2 - \bar A_R}.
+The constrained estimator then sets
+\eqn{\hat\tau^2 = \max(\hat\tau^2_{\mathrm{raw}}, 0)} and reports
+\eqn{\widehat{\mathrm{CIA}} = \widehat{\sigma}_W^2 /
+(\widehat{\sigma}_W^2 + \hat\tau^2)} on the corresponding scale. This
+applies the boundary on the implied inter-method variance component rather
+than clamping CIA directly.
+
+When confidence intervals are requested, pairwise CIA uses a large-sample
+delta-method normal interval by default and also supports subject-bootstrap
+percentile intervals. For overall CIA, delta-method normal intervals are
+available for the unconstrained moment estimator, and subject-bootstrap
+percentile intervals are also available.
 
 High CIA indicates stronger individual agreement. The FDA individual
 bioequivalence boundary \code{IEC <= 2.4948} corresponds to \code{CIA >= 0.445}, and

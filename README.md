@@ -41,9 +41,9 @@ repeated-measures LMM/REML extensions), and intraclass correlation for
 both wide and repeated-measures designs.
 
 For replicated method-comparison studies, `matrixCorr` also includes
-`cia()`, the original Barnhart-Kosinski-Haber coefficient of individual
-agreement for long-format data with subject, method, replicate, and
-response columns.
+`cia()` for long-format data with subject, method, replicate, and
+response columns, with subject-level pairwise estimation and
+balanced-replication overall estimation.
 
 ## Features
 
@@ -60,7 +60,7 @@ response columns.
 | Agreement: two-rater categorical ratings | `cohen_kappa()` and `gwet_ac()` for nominal AC1/AC2 agreement, `weighted_kappa()` for ordered categories |
 | Agreement: multi-rater and panel reliability | `multirater_kappa()`, `gwet_ac()` for panel AC1/AC2 agreement, `krippendorff_alpha()` |
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
-| Agreement: individual agreement | `cia()` for the original Barnhart-Kosinski-Haber coefficient of individual agreement from replicated long-format data, with no-reference or reference-method estimation |
+| Agreement: individual agreement | `cia()` for replicated long-format method-comparison data, with pairwise subject-level CIA, balanced overall CIA, and delta or bootstrap confidence intervals depending on scope/estimator |
 | Agreement: probability of agreement | `prob_agree()` |
 | Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
 | Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |

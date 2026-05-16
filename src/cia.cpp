@@ -1,7 +1,46 @@
+// Thiago de Paula Oliveira
+// cia.cpp
 #include <Rcpp.h>
 #include <algorithm>
 #include <cmath>
 #include <vector>
+
+namespace {
+
+double within_msd_subject(const std::vector<double>& x) {
+  const std::size_t n = x.size();
+  if (n < 2) {
+    return NA_REAL;
+  }
+  double sum = 0.0;
+  std::size_t count = 0;
+  for (std::size_t i = 0; i + 1 < n; ++i) {
+    for (std::size_t j = i + 1; j < n; ++j) {
+      const double d = x[i] - x[j];
+      sum += d * d;
+      count += 1;
+    }
+  }
+  return count > 0 ? sum / static_cast<double>(count) : NA_REAL;
+}
+
+double between_msd_subject(const std::vector<double>& x, const std::vector<double>& y) {
+  if (x.empty() || y.empty()) {
+    return NA_REAL;
+  }
+  double sum = 0.0;
+  std::size_t count = 0;
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    for (std::size_t j = 0; j < y.size(); ++j) {
+      const double d = x[i] - y[j];
+      sum += d * d;
+      count += 1;
+    }
+  }
+  return count > 0 ? sum / static_cast<double>(count) : NA_REAL;
+}
+
+}  // namespace
 
 // [[Rcpp::export]]
 Rcpp::List cia_moments_cpp(Rcpp::NumericVector y,
@@ -145,29 +184,73 @@ Rcpp::List cia_moments_cpp(Rcpp::NumericVector y,
 
     if (has_reference) {
       const int ref = reference_method - 1;
-      if (ref >= 0 && ref < n_methods && R_finite(within_msd[ref])) {
+      if (ref >= 0 && ref < n_methods) {
         for (int j = 0; j < n_methods; ++j) {
           if (j == ref) {
             continue;
           }
-          const double denom = between_msd(j, ref);
-          if (R_finite(denom) && denom != 0.0) {
-            est(j, ref) = within_msd[ref] / denom;
+          double g1_sum = 0.0;
+          double g3_sum = 0.0;
+          int eligible_n = 0;
+          for (int s = 0; s < n_subjects; ++s) {
+            const std::vector<double>& ref_vals = by_subject[static_cast<std::size_t>(s)][static_cast<std::size_t>(ref)];
+            const std::vector<double>& cmp_vals = by_subject[static_cast<std::size_t>(s)][static_cast<std::size_t>(j)];
+            if (ref_vals.size() < 2 || cmp_vals.empty()) {
+              continue;
+            }
+            const double g1 = within_msd_subject(ref_vals);
+            const double g3 = between_msd_subject(ref_vals, cmp_vals);
+            if (!R_finite(g1) || !R_finite(g3)) {
+              continue;
+            }
+            g1_sum += g1;
+            g3_sum += g3;
+            eligible_n += 1;
+          }
+          if (eligible_n > 0) {
+            const double denom = g3_sum / static_cast<double>(eligible_n);
+            if (denom != 0.0) {
+              est(j, ref) = (g1_sum / static_cast<double>(eligible_n)) / denom;
+            }
             est(ref, j) = est(j, ref);
           }
         }
       }
     } else {
       for (int j = 0; j < n_methods - 1; ++j) {
-        if (!R_finite(within_msd[j])) {
-          continue;
-        }
         for (int k = j + 1; k < n_methods; ++k) {
-          const double denom = between_msd(j, k);
-          if (!R_finite(within_msd[k]) || !R_finite(denom) || denom == 0.0) {
+          double g1_sum = 0.0;
+          double g2_sum = 0.0;
+          double g3_sum = 0.0;
+          int eligible_n = 0;
+          for (int s = 0; s < n_subjects; ++s) {
+            const std::vector<double>& lhs = by_subject[static_cast<std::size_t>(s)][static_cast<std::size_t>(j)];
+            const std::vector<double>& rhs = by_subject[static_cast<std::size_t>(s)][static_cast<std::size_t>(k)];
+            if (lhs.size() < 2 || rhs.size() < 2) {
+              continue;
+            }
+            const double g1 = within_msd_subject(lhs);
+            const double g2 = within_msd_subject(rhs);
+            const double g3 = between_msd_subject(lhs, rhs);
+            if (!R_finite(g1) || !R_finite(g2) || !R_finite(g3)) {
+              continue;
+            }
+            g1_sum += g1;
+            g2_sum += g2;
+            g3_sum += g3;
+            eligible_n += 1;
+          }
+          if (eligible_n <= 0) {
             continue;
           }
-          est(j, k) = ((within_msd[j] + within_msd[k]) / 2.0) / denom;
+          const double denom = g3_sum / static_cast<double>(eligible_n);
+          if (denom == 0.0) {
+            continue;
+          }
+          const double numer =
+            ((g1_sum / static_cast<double>(eligible_n)) +
+             (g2_sum / static_cast<double>(eligible_n))) / 2.0;
+          est(j, k) = numer / denom;
           est(k, j) = est(j, k);
         }
       }
@@ -177,7 +260,7 @@ Rcpp::List cia_moments_cpp(Rcpp::NumericVector y,
     double est = NA_REAL;
     if (has_reference) {
       const int ref = reference_method - 1;
-      if (ref >= 0 && ref < n_methods && R_finite(within_msd[ref])) {
+      if (ref >= 0 && ref < n_methods && R_finite(sigma_within[ref])) {
         double denom_sum = 0.0;
         int denom_n = 0;
         for (int j = 0; j < n_methods; ++j) {
@@ -190,7 +273,7 @@ Rcpp::List cia_moments_cpp(Rcpp::NumericVector y,
         if (denom_n > 0) {
           const double denom = denom_sum / static_cast<double>(denom_n);
           if (denom != 0.0) {
-            est = within_msd[ref] / denom;
+            est = sigma_within[ref] / denom;
           }
         }
       }

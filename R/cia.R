@@ -1,11 +1,10 @@
 #' @title Coefficient of Individual Agreement
 #'
 #' @description
-#' `cia()` estimates the coefficient of individual agreement proposed by
-#' Barnhart, Kosinski, and Haber. CIA assesses individual-level
-#' interchangeability by comparing between-method disagreement with
-#' within-method replicate disagreement. Unlike CCC, CIA is not intended to be
-#' driven by between-subject heterogeneity.
+#' `cia()` estimates the coefficient of individual agreement. CIA assesses
+#' individual-level interchangeability by comparing between-method disagreement
+#' with within-method replicate disagreement. Unlike CCC, CIA is not intended
+#' to be driven by between-subject heterogeneity.
 #'
 #' The estimator requires replicated readings within method. A data set with
 #' one observation per subject per method is insufficient for CIA because the
@@ -19,18 +18,25 @@
 #'   subject-method cell.
 #' @param reference Optional character scalar naming the reference method. When
 #'   `NULL` (default), the no-reference CIA is estimated.
-#' @param scope One of `"overall"` or `"pairwise"`. `"overall"` returns one CIA
-#'   coefficient across all retained methods. `"pairwise"` returns the two-method
+#' @param scope One of `"pairwise"` or `"overall"`. `"pairwise"` returns the
+#'   two-method
 #'   CIA for each method pair, or the reference-scaled CIA for each
 #'   method-versus-reference comparison when `reference` is supplied.
-#' @param estimator One of `"vc_constrained"` or `"mom_unconstrained"`.
-#'   `"vc_constrained"` (default) reports CIA after constraining the estimated
-#'   inter-method variance component to be non-negative. `"mom_unconstrained"`
-#'   reports the raw method-of-moments ratio and may exceed 1.
-#' @param ci Logical; if `TRUE`, attach subject-bootstrap percentile confidence
-#'   intervals.
+#'   `"overall"` returns one CIA coefficient across all retained methods.
+#' @param estimator One of `"mom_unconstrained"` or `"vc_constrained"`.
+#'   `"mom_unconstrained"` is the literal raw method-of-moments CIA ratio and
+#'   may exceed 1. `"vc_constrained"` is a bounded package-level
+#'   variance-component variant that constrains the estimated inter-method
+#'   variance component to be non-negative before converting it back to CIA.
+#' @param ci Logical; if `TRUE`, attach confidence intervals using the selected
+#'   `inference` method.
 #' @param conf_level Confidence level used when `ci = TRUE`. Default is `0.95`.
-#' @param inference One of `"bootstrap"` or `"none"`.
+#' @param inference One of `"delta"`, `"bootstrap"`, or `"none"`. When
+#'   confidence intervals are requested, pairwise CIA uses a delta-method normal
+#'   interval by default and also supports subject-bootstrap percentile
+#'   intervals. For overall CIA, delta-method normal intervals are available for
+#'   the unconstrained moment estimator, and subject-bootstrap percentile
+#'   intervals are also available.
 #' @param B Number of subject-bootstrap resamples when `ci = TRUE` and
 #'   `inference = "bootstrap"`.
 #' @param seed Optional positive integer seed for reproducible bootstrap
@@ -56,50 +62,105 @@
 #'      {\sum_{j=1}^{J-1} E\{(Y_{ij} - Y_{iJ})^2\} / (J - 1)}.
 #' }
 #'
-#' This implementation estimates the required expectations by method of moments:
-#' the within-method terms are averages of squared differences across all
-#' distinct replicate pairs within each subject-method cell, and the
-#' between-method terms are averages of squared differences across all
-#' cross-method replicate combinations within subject.
+#' This implementation uses method-of-moments estimators built from
+#' subject-level disagreement functions.
 #'
-#' Two estimators are available. The raw method-of-moments estimator keeps
-#' \eqn{\hat{\tau}^2_{\mathrm{raw}} = \widehat{D} - \widehat{\sigma}^2_W}
-#' unchanged and may therefore exceed 1 when \eqn{\hat{\tau}^2_{\mathrm{raw}} <
-#' 0}. The default variance-component-constrained estimator sets
-#' \eqn{\hat{\tau}^2 = \max(\hat{\tau}^2_{\mathrm{raw}}, 0)} and reports
-#' \eqn{\widehat{\mathrm{CIA}} = \widehat{\sigma}^2_W / (\hat{\tau}^2 +
-#' \widehat{\sigma}^2_W)}. This applies the boundary on the implied
-#' inter-method variance component rather than clamping CIA directly.
-#'
-#' For `scope = "pairwise"` and `reference = NULL`, each off-diagonal entry is
-#' based on the two-method special case. For methods `j` and `j'`, let
+#' For pairwise CIA, consider two methods `X` and `Y`. For each eligible
+#' subject `i`, define
 #' \deqn{
-#' \hat{\sigma}_{jj'}^2 = \frac{W_j + W_{j'}}{2}
+#' G_{1i} = \mathrm{mean}\{(X_{ik} - X_{ik'})^2\},
+#' }
+#' \deqn{
+#' G_{2i} = \mathrm{mean}\{(Y_{il} - Y_{il'})^2\},
+#' }
+#' \deqn{
+#' G_{3i} = \mathrm{mean}\{(X_{ik} - Y_{il})^2\},
+#' }
+#' where the first two means are over all distinct within-method replicate
+#' pairs and the third mean is over all cross-method replicate combinations.
+#' Let \eqn{\bar G_1}, \eqn{\bar G_2}, and \eqn{\bar G_3} denote the averages
+#' of these subject-level quantities across eligible subjects. Then the
+#' no-reference pairwise estimator is
+#' \deqn{
+#' \widehat{\mathrm{CIA}}_{XY}^{\mathrm{raw}} =
+#' \frac{(\bar G_1 + \bar G_2)/2}{\bar G_3},
+#' }
+#' and the reference pairwise estimator is
+#' \deqn{
+#' \widehat{\mathrm{CIA}}_{XR}^{\mathrm{raw}} = \frac{\bar G_1}{\bar G_3},
+#' }
+#' where `X` is the reference method.
+#'
+#' For overall CIA, the current implementation follows the balanced replicated
+#' formulas in the cited papers. This requires `n` common subjects, `J`
+#' retained methods, and the same replicate count `K >= 2` in every retained
+#' subject-method cell. If the data are not balanced in this sense,
+#' `scope = "overall"` returns an informative error rather than using an
+#' approximation.
+#'
+#' Write \eqn{\bar Y_{ij}} for the mean of the `K` replicates on subject `i`
+#' and method `j`. Define the within-method mean square
+#' \deqn{
+#' A_{ij} = \frac{\sum_{k=1}^{K} (Y_{ijk} - \bar Y_{ij})^2}{K - 1}.
+#' }
+#'
+#' For the no-reference overall estimator, define the subject-level within term
+#' \deqn{
+#' A_{i\cdot} = \frac{1}{J} \sum_{j=1}^{J} A_{ij},
+#' }
+#' the subject-wide mean
+#' \deqn{
+#' \bar Y_{i\cdot\cdot} = \frac{1}{J} \sum_{j=1}^{J} \bar Y_{ij},
+#' }
+#' and the subject-level denominator
+#' \deqn{
+#' B_{Ni} =
+#' \frac{\sum_{j=1}^{J} (\bar Y_{ij} - \bar Y_{i\cdot\cdot})^2}{J - 1}
+#' + \left(1 - \frac{1}{K}\right) A_{i\cdot}.
+#' }
+#' With \eqn{\bar A = n^{-1}\sum_i A_{i\cdot}} and
+#' \eqn{\bar B = n^{-1}\sum_i B_{Ni}}, the overall no-reference estimator is
+#' \deqn{
+#' \widehat{\mathrm{CIA}}_{N}^{\mathrm{raw}} = \frac{\bar A}{\bar B}.
+#' }
+#'
+#' For the reference overall estimator, let method `R` be the retained
+#' reference method. Define
+#' \deqn{
+#' A_{iR} = A_{i,R}
 #' }
 #' and
 #' \deqn{
-#' \hat{\tau}_{jj',\mathrm{raw}}^2 = D_{jj'} - \hat{\sigma}_{jj'}^2.
+#' B_{Ri} =
+#' \frac{\sum_{j \ne R} (\bar Y_{ij} - \bar Y_{iR})^2}{J - 1}
+#' + \left(1 - \frac{1}{K}\right)
+#'   \frac{\sum_{j \ne R} A_{ij}}{J - 1}
+#' + \left(1 - \frac{1}{K}\right) A_{iR}.
 #' }
-#' The raw pairwise method-of-moments estimator is
+#' With \eqn{\bar A_R = n^{-1}\sum_i A_{iR}} and
+#' \eqn{\bar B_R = n^{-1}\sum_i B_{Ri}}, the overall reference estimator is
 #' \deqn{
-#' \mathrm{CIA}^{\mathrm{raw}}_{jj'} =
-#' \frac{\hat{\sigma}_{jj'}^2}{D_{jj'}}.
+#' \widehat{\mathrm{CIA}}_{R}^{\mathrm{raw}} = \frac{2 \bar A_R}{\bar B_R}.
 #' }
-#' Under `estimator = "vc_constrained"`, the reported pairwise CIA is
-#' \deqn{
-#' \mathrm{CIA}_{jj'} = \frac{\hat{\sigma}_{jj'}^2}
-#' {\hat{\sigma}_{jj'}^2 + \max(\hat{\tau}_{jj',\mathrm{raw}}^2, 0)},
-#' }
-#' while `estimator = "mom_unconstrained"` reports
-#' \eqn{\mathrm{CIA}^{\mathrm{raw}}_{jj'}} directly. `W_j` is the within-method
-#' mean squared replicate disagreement for method `j`, and `D_{jj'}` is the
-#' between-method mean squared disagreement for methods `j` and `j'`.
 #'
-#' For `scope = "pairwise"` with a reference method `R`, each estimable
-#' method-versus-reference entry is
-#' \deqn{
-#' \mathrm{CIA}_{jR} = \frac{W_R}{D_{jR}}.
-#' }
+#' Two estimators are available. `estimator = "mom_unconstrained"` reports the
+#' raw ratio estimator directly. `estimator = "vc_constrained"` applies the
+#' non-negative variance-component boundary from the cited papers. In the
+#' no-reference setting this uses
+#' \eqn{\hat\tau^2_{\mathrm{raw}} = \bar B - \bar A}, and in the reference
+#' setting it uses \eqn{\hat\tau^2_{\mathrm{raw}} = \bar B_R/2 - \bar A_R}.
+#' The constrained estimator then sets
+#' \eqn{\hat\tau^2 = \max(\hat\tau^2_{\mathrm{raw}}, 0)} and reports
+#' \eqn{\widehat{\mathrm{CIA}} = \widehat{\sigma}_W^2 /
+#' (\widehat{\sigma}_W^2 + \hat\tau^2)} on the corresponding scale. This
+#' applies the boundary on the implied inter-method variance component rather
+#' than clamping CIA directly.
+#'
+#' When confidence intervals are requested, pairwise CIA uses a large-sample
+#' delta-method normal interval by default and also supports subject-bootstrap
+#' percentile intervals. For overall CIA, delta-method normal intervals are
+#' available for the unconstrained moment estimator, and subject-bootstrap
+#' percentile intervals are also available.
 #'
 #' High CIA indicates stronger individual agreement. The FDA individual
 #' bioequivalence boundary `IEC <= 2.4948` corresponds to `CIA >= 0.445`, and
@@ -189,22 +250,26 @@ cia <- function(data,
                 method,
                 replicate,
                 reference = NULL,
-                scope = c("overall", "pairwise"),
-                estimator = c("vc_constrained", "mom_unconstrained"),
+                scope = c("pairwise", "overall"),
+                estimator = c("mom_unconstrained", "vc_constrained"),
                 ci = FALSE,
                 conf_level = 0.95,
-                inference = c("bootstrap", "none"),
+                inference = c("delta", "bootstrap", "none"),
                 B = 1000L,
                 seed = NULL,
                 n_threads = getOption("matrixCorr.threads", 1L),
                 verbose = FALSE) {
-  scope <- match_arg(scope, c("overall", "pairwise"), arg_name = "scope")
+  scope <- match_arg(scope, c("pairwise", "overall"), arg_name = "scope")
   estimator <- match_arg(
     estimator,
-    c("vc_constrained", "mom_unconstrained"),
+    c("mom_unconstrained", "vc_constrained"),
     arg_name = "estimator"
   )
-  inference <- match_arg(inference, c("bootstrap", "none"), arg_name = "inference")
+  inference <- if (!missing(inference)) {
+    match_arg(inference, c("delta", "bootstrap", "none"), arg_name = "inference")
+  } else {
+    NULL
+  }
   check_bool(ci, arg = "ci")
   check_bool(verbose, arg = "verbose")
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
@@ -216,12 +281,13 @@ cia <- function(data,
   if (!is.null(seed)) {
     seed <- check_scalar_int_pos(seed, arg = "seed")
   }
-  if (isTRUE(ci) && identical(inference, "none")) {
-    abort_bad_arg(
-      "inference",
-      message = "must be {.val bootstrap} when {.arg ci} is TRUE."
-    )
-  }
+  inference <- .mc_cia_resolve_inference(
+    ci = ci,
+    scope = scope,
+    estimator = estimator,
+    inference = inference,
+    inference_missing = missing(inference)
+  )
 
   prep <- .mc_cia_prepare_long(
     data = data,
@@ -246,11 +312,34 @@ cia <- function(data,
   )
 
   diagnostics <- .mc_cia_build_diagnostics(prep, raw)
-  .mc_cia_assert_estimable(prep, diagnostics, scope = scope)
 
   if (identical(scope, "overall")) {
-    out <- .mc_cia_build_overall(prep, raw, diagnostics, estimator = estimator)
-    if (isTRUE(ci) && identical(inference, "bootstrap")) {
+    overall <- .mc_cia_overall_moments(prep, estimator = estimator)
+    out <- .mc_cia_build_overall_from_moments(
+      prep = prep,
+      diagnostics = diagnostics,
+      moments = overall,
+      estimator = estimator
+    )
+    if (isTRUE(ci) && identical(inference, "delta")) {
+      if (!identical(estimator, "mom_unconstrained")) {
+        abort_bad_arg(
+          "inference",
+          message = paste(
+            "Delta-method confidence intervals are implemented for the unconstrained moment estimator only;",
+            "use {.val bootstrap} for the constrained estimator."
+          )
+        )
+      }
+      ci_res <- .mc_cia_overall_delta_ci(overall, conf_level = conf_level)
+      out$lwr.ci <- ci_res$lwr
+      out$upr.ci <- ci_res$upr
+      out$se <- ci_res$se
+      if (!is.null(ci_res$diagnostic)) {
+        attr(out, "ci.diagnostic") <- ci_res$diagnostic
+      }
+      attr(out, "ci.method") <- "delta_normal"
+    } else if (isTRUE(ci) && identical(inference, "bootstrap")) {
       boot <- .mc_cia_bootstrap_overall(
         prep = prep,
         estimator = estimator,
@@ -262,28 +351,35 @@ cia <- function(data,
       out$lwr.ci <- boot$lwr
       out$upr.ci <- boot$upr
       attr(out, "bootstrap") <- boot[c("n_successful", "B")]
+      attr(out, "ci.method") <- "subject_bootstrap_percentile"
     }
     attr(out, "conf.level") <- if (isTRUE(ci)) conf_level else NULL
     return(out)
   }
 
+  .mc_cia_assert_estimable(prep, diagnostics, scope = scope)
+
   if (!isTRUE(ci)) {
     return(.mc_cia_build_pairwise_matrix(prep, raw, diagnostics, estimator = estimator))
   }
 
-  boot <- .mc_cia_bootstrap_pairwise(
-    prep = prep,
-    estimator = estimator,
-    B = B,
-    conf_level = conf_level,
-    seed = seed,
-    n_threads = n_threads
-  )
+  boot <- NULL
+  if (identical(inference, "bootstrap")) {
+    boot <- .mc_cia_bootstrap_pairwise(
+      prep = prep,
+      estimator = estimator,
+      B = B,
+      conf_level = conf_level,
+      seed = seed,
+      n_threads = n_threads
+    )
+  }
   .mc_cia_build_pairwise_ci(
     prep,
     raw,
     diagnostics,
     estimator = estimator,
+    inference = inference,
     boot = boot,
     conf_level = conf_level
   )
@@ -378,6 +474,7 @@ cia <- function(data,
   replicate_levels <- unique(rep_chr)
   replicate_code <- as.integer(factor(rep_chr, levels = replicate_levels))
   subject_rows <- split(seq_len(nrow(dat)), subject_code)
+  by_subject_method <- lapply(subject_rows, function(idx) split(y[idx], method_code[idx]))
 
   list(
     data = dat,
@@ -386,6 +483,7 @@ cia <- function(data,
     method_code = method_code,
     replicate_code = replicate_code,
     subject_rows = subject_rows,
+    by_subject_method = by_subject_method,
     method_levels = method_levels,
     subject_levels = subject_levels,
     replicate_levels = replicate_levels,
@@ -442,6 +540,262 @@ cia <- function(data,
   )
 }
 
+.mc_cia_resolve_inference <- function(ci, scope, estimator, inference, inference_missing = FALSE) {
+  if (!isTRUE(ci)) {
+    return("none")
+  }
+  if (isTRUE(inference_missing) || is.null(inference)) {
+    if (identical(scope, "pairwise")) {
+      return("delta")
+    }
+    return(if (identical(estimator, "mom_unconstrained")) "delta" else "bootstrap")
+  }
+  if (identical(inference, "none")) {
+    abort_bad_arg("inference", message = "must not be {.val none} when {.arg ci} is TRUE.")
+  }
+  if (identical(scope, "overall") &&
+      identical(inference, "delta") &&
+      !identical(estimator, "mom_unconstrained")) {
+    abort_bad_arg(
+      "inference",
+      message = paste(
+        "Delta-method confidence intervals are implemented for the unconstrained moment estimator only;",
+        "use {.val bootstrap} for the constrained estimator."
+      )
+    )
+  }
+  inference
+}
+
+.mc_cia_subject_within_msd <- function(x) {
+  n <- length(x)
+  if (n < 2L) {
+    return(NA_real_)
+  }
+  d2 <- outer(x, x, FUN = "-")^2
+  mean(d2[upper.tri(d2)])
+}
+
+.mc_cia_subject_between_msd <- function(x, y) {
+  if (!length(x) || !length(y)) {
+    return(NA_real_)
+  }
+  mean(outer(x, y, FUN = "-")^2)
+}
+
+.mc_cia_subject_values <- function(prep, subject_idx, method_idx) {
+  vals <- prep$by_subject_method[[subject_idx]][[as.character(method_idx)]]
+  if (is.null(vals)) numeric(0) else as.numeric(vals)
+}
+
+.mc_cia_overall_arrays <- function(prep) {
+  counts <- matrix(0L, prep$n_subjects, prep$n_methods)
+  for (s in seq_len(prep$n_subjects)) {
+    for (j in seq_len(prep$n_methods)) {
+      counts[s, j] <- length(.mc_cia_subject_values(prep, s, j))
+    }
+  }
+
+  if (any(counts <= 0L)) {
+    abort_bad_arg(
+      "data",
+      message = paste(
+        "Overall CIA currently implements the balanced-replication moment estimator",
+        "from the cited papers; use pairwise CIA for unequal replication."
+      )
+    )
+  }
+
+  K_vals <- unique(as.integer(counts))
+  if (length(K_vals) != 1L || K_vals[[1L]] < 2L) {
+    abort_bad_arg(
+      "data",
+      message = paste(
+        "Overall CIA currently implements the balanced-replication moment estimator",
+        "from the cited papers; use pairwise CIA for unequal replication."
+      )
+    )
+  }
+
+  K <- as.integer(K_vals[[1L]])
+  Ybar <- matrix(
+    NA_real_,
+    prep$n_subjects,
+    prep$n_methods,
+    dimnames = list(as.character(prep$subject_levels), prep$method_levels)
+  )
+  A <- Ybar
+  for (s in seq_len(prep$n_subjects)) {
+    for (j in seq_len(prep$n_methods)) {
+      vals <- .mc_cia_subject_values(prep, s, j)
+      if (length(vals) != K || any(!is.finite(vals))) {
+        abort_bad_arg(
+          "data",
+          message = paste(
+            "Overall CIA currently implements the balanced-replication moment estimator",
+            "from the cited papers; use pairwise CIA for unequal replication."
+          )
+        )
+      }
+      mean_ij <- mean(vals)
+      Ybar[s, j] <- mean_ij
+      A[s, j] <- sum((vals - mean_ij)^2) / (K - 1)
+    }
+  }
+
+  list(
+    Ybar = Ybar,
+    A = A,
+    n = prep$n_subjects,
+    J = prep$n_methods,
+    K = K,
+    ref_idx = if (isTRUE(prep$has_reference)) prep$reference_index else 0L
+  )
+}
+
+.mc_cia_overall_payload <- function(A_bar, B_bar, reference = FALSE, estimator) {
+  if (isTRUE(reference)) {
+    numerator_term <- 2 * A_bar
+    cia_raw <- suppressWarnings(numerator_term / B_bar)
+    if (isTRUE(is.nan(cia_raw))) {
+      cia_raw <- NA_real_
+    }
+    tau2_raw <- B_bar / 2 - A_bar
+    boundary <- is.finite(tau2_raw) && tau2_raw < 0
+    tau2 <- if (is.finite(tau2_raw)) max(tau2_raw, 0) else NA_real_
+    cia <- if (identical(estimator, "mom_unconstrained")) {
+      cia_raw
+    } else {
+      denom <- A_bar + tau2
+      if (!is.finite(denom) || denom == 0) NA_real_ else A_bar / denom
+    }
+  } else {
+    numerator_term <- A_bar
+    cia_raw <- suppressWarnings(A_bar / B_bar)
+    if (isTRUE(is.nan(cia_raw))) {
+      cia_raw <- NA_real_
+    }
+    tau2_raw <- B_bar - A_bar
+    boundary <- is.finite(tau2_raw) && tau2_raw < 0
+    tau2 <- if (is.finite(tau2_raw)) max(tau2_raw, 0) else NA_real_
+    cia <- if (identical(estimator, "mom_unconstrained")) {
+      cia_raw
+    } else {
+      denom <- A_bar + tau2
+      if (!is.finite(denom) || denom == 0) NA_real_ else A_bar / denom
+    }
+  }
+
+  list(
+    cia = as.numeric(cia),
+    cia_raw = as.numeric(cia_raw),
+    tau2 = as.numeric(tau2),
+    tau2_raw = as.numeric(tau2_raw),
+    boundary = isTRUE(boundary),
+    numerator_term = as.numeric(numerator_term),
+    denominator_term = as.numeric(B_bar),
+    A_bar = as.numeric(A_bar)
+  )
+}
+
+.mc_cia_overall_moments <- function(prep, estimator) {
+  arr <- .mc_cia_overall_arrays(prep)
+  Ybar <- arr$Ybar
+  A <- arr$A
+  n <- arr$n
+  J <- arr$J
+  K <- arr$K
+
+  if (isTRUE(prep$has_reference)) {
+    ref_idx <- arr$ref_idx
+    nonref_idx <- setdiff(seq_len(J), ref_idx)
+    A_i <- A[, ref_idx]
+    B_i <- rowSums((Ybar[, nonref_idx, drop = FALSE] - Ybar[, ref_idx])^2) / (J - 1) +
+      (1 - 1 / K) * rowSums(A[, nonref_idx, drop = FALSE]) / (J - 1) +
+      (1 - 1 / K) * A[, ref_idx]
+    A_bar <- mean(A_i)
+    B_bar <- mean(B_i)
+    payload <- .mc_cia_overall_payload(
+      A_bar = A_bar,
+      B_bar = B_bar,
+      reference = TRUE,
+      estimator = estimator
+    )
+  } else {
+    A_i <- rowMeans(A)
+    Y_i_dot_dot <- rowMeans(Ybar)
+    B_i <- rowSums((Ybar - Y_i_dot_dot)^2) / (J - 1) + (1 - 1 / K) * A_i
+    A_bar <- mean(A_i)
+    B_bar <- mean(B_i)
+    payload <- .mc_cia_overall_payload(
+      A_bar = A_bar,
+      B_bar = B_bar,
+      reference = FALSE,
+      estimator = estimator
+    )
+  }
+
+  c(
+    list(
+      Ybar = Ybar,
+      A = A,
+      A_i = as.numeric(A_i),
+      B_i = as.numeric(B_i),
+      n = n,
+      J = J,
+      K = K,
+      ref_idx = arr$ref_idx
+    ),
+    payload
+  )
+}
+
+.mc_cia_overall_delta_ci <- function(moments, conf_level = 0.95) {
+  A_i <- as.numeric(moments$A_i)
+  B_i <- as.numeric(moments$B_i)
+  n <- as.integer(moments$n)
+  if (n < 2L) {
+    return(list(lwr = NA_real_, upr = NA_real_, se = NA_real_, var = NA_real_, diagnostic = "At least two subjects are required for a delta-method CI."))
+  }
+
+  A_bar <- mean(A_i)
+  B_bar <- mean(B_i)
+  if (!is.finite(B_bar) || B_bar <= 0) {
+    return(list(lwr = NA_real_, upr = NA_real_, se = NA_real_, var = NA_real_, diagnostic = "The overall denominator term is non-finite or non-positive, so the delta-method CI is not available."))
+  }
+
+  var_A <- stats::var(A_i) / n
+  var_B <- stats::var(B_i) / n
+  cov_A_B <- stats::cov(A_i, B_i) / n
+  var_ratio <-
+    (1 / (B_bar^2)) * var_A +
+    ((A_bar^2) / (B_bar^4)) * var_B -
+    ((2 * A_bar) / (B_bar^3)) * cov_A_B
+  ratio_multiplier <- if (moments$ref_idx > 0L) 2 else 1
+  var_psi <- (ratio_multiplier^2) * var_ratio
+  if (!is.finite(var_psi)) {
+    return(list(lwr = NA_real_, upr = NA_real_, se = NA_real_, var = NA_real_, diagnostic = "The delta-method variance was non-finite."))
+  }
+  tol <- sqrt(.Machine$double.eps) * max(1, abs(var_psi))
+  if (var_psi < 0 && abs(var_psi) <= tol) {
+    var_psi <- 0
+  }
+  if (var_psi < 0) {
+    return(list(lwr = NA_real_, upr = NA_real_, se = NA_real_, var = var_psi, diagnostic = "The delta-method variance was negative beyond floating-point tolerance."))
+  }
+
+  psi <- as.numeric(moments$cia_raw)
+  se <- sqrt(var_psi)
+  z <- stats::qnorm(1 - (1 - conf_level) / 2)
+  list(
+    lwr = psi - z * se,
+    upr = psi + z * se,
+    se = se,
+    var = var_psi,
+    diagnostic = NULL
+  )
+}
+
 .mc_cia_component_payload <- function(sigma2_within, between_term, estimator) {
   cia_raw <- suppressWarnings(sigma2_within / between_term)
   if (isTRUE(is.nan(cia_raw))) {
@@ -467,26 +821,53 @@ cia <- function(data,
   )
 }
 
-.mc_cia_overall_components <- function(prep, diagnostics, estimator) {
-  if (isTRUE(prep$has_reference)) {
-    ref_idx <- prep$reference_index
-    comp_idx <- setdiff(seq_len(prep$n_methods), ref_idx)
-    sigma2_within <- as.numeric(diagnostics$within_msd[[ref_idx]])
-    between_term <- mean(diagnostics$between_msd[comp_idx, ref_idx], na.rm = FALSE)
-  } else {
-    sigma2_within <- sum(diagnostics$within_msd / 2)
-    between_term <- sum(diagnostics$between_msd[upper.tri(diagnostics$between_msd)]) / (prep$n_methods - 1L)
+.mc_cia_pairwise_delta_ci <- function(A, B, G1, G2 = NULL, G3, reference_pair = FALSE, conf_level = 0.95, center) {
+  N <- length(G3)
+  if (N < 2L || !is.finite(A) || !is.finite(B) || B == 0) {
+    return(list(lwr = NA_real_, upr = NA_real_, se = NA_real_, var = NA_real_))
   }
-  .mc_cia_component_payload(sigma2_within, between_term, estimator = estimator)
+
+  S11 <- stats::var(G1)
+  S33 <- stats::var(G3)
+  S13 <- stats::cov(G1, G3)
+
+  if (isTRUE(reference_pair)) {
+    var_A <- S11 / N
+    var_B <- S33 / N
+    cov_A_B <- S13 / N
+  } else {
+    S22 <- stats::var(G2)
+    S12 <- stats::cov(G1, G2)
+    S23 <- stats::cov(G2, G3)
+    var_A <- (S11 + S22 + 2 * S12) / (4 * N)
+    var_B <- S33 / N
+    cov_A_B <- (S13 + S23) / (2 * N)
+  }
+
+  var_cia <-
+    (1 / (B^2)) * var_A +
+    ((A^2) / (B^4)) * var_B -
+    ((2 * A) / (B^3)) * cov_A_B
+  se <- sqrt(max(var_cia, 0))
+  z <- stats::qnorm(1 - (1 - conf_level) / 2)
+  list(
+    lwr = center - z * se,
+    upr = center + z * se,
+    se = se,
+    var = var_cia
+  )
 }
 
-.mc_cia_pairwise_payload <- function(prep, diagnostics, estimator) {
+.mc_cia_pairwise_payload <- function(prep, diagnostics, estimator, conf_level = NULL, return_delta = FALSE) {
   nm <- prep$method_levels
   est <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(nm))
   cia_raw <- est
   tau2_raw <- est
   tau2 <- est
   sigma2_within <- est
+  lwr <- est
+  upr <- est
+  n_eligible <- matrix(0L, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(nm))
   boundary <- matrix(FALSE, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(nm))
 
   diag(est) <- 1
@@ -494,31 +875,65 @@ cia <- function(data,
   diag(tau2_raw) <- 0
   diag(tau2) <- 0
   diag(sigma2_within) <- 0
+  diag(lwr) <- 1
+  diag(upr) <- 1
+  diag(n_eligible) <- prep$n_subjects
 
   if (isTRUE(prep$has_reference)) {
     ref_idx <- prep$reference_index
-    if (diagnostics$n_replicate_pairs[[ref_idx]] > 0L) {
-      for (j in seq_len(prep$n_methods)) {
-        if (j == ref_idx || diagnostics$n_between_pairs[j, ref_idx] <= 0L) {
+    for (j in seq_len(prep$n_methods)) {
+      if (j == ref_idx) {
+        next
+      }
+      G1 <- numeric(0)
+      G3 <- numeric(0)
+      for (s in seq_len(prep$n_subjects)) {
+        ref_vals <- .mc_cia_subject_values(prep, s, ref_idx)
+        cmp_vals <- .mc_cia_subject_values(prep, s, j)
+        if (length(ref_vals) < 2L || length(cmp_vals) < 1L) {
           next
         }
-        payload <- .mc_cia_component_payload(
-          sigma2_within = diagnostics$within_msd[[ref_idx]],
-          between_term = diagnostics$between_msd[j, ref_idx],
-          estimator = estimator
+        G1 <- c(G1, .mc_cia_subject_within_msd(ref_vals))
+        G3 <- c(G3, .mc_cia_subject_between_msd(ref_vals, cmp_vals))
+      }
+      n_eligible[j, ref_idx] <- length(G3)
+      n_eligible[ref_idx, j] <- length(G3)
+      if (!length(G3)) {
+        next
+      }
+      A <- mean(G1)
+      B <- mean(G3)
+      payload <- .mc_cia_component_payload(
+        sigma2_within = A,
+        between_term = B,
+        estimator = estimator
+      )
+      est[j, ref_idx] <- payload$cia
+      est[ref_idx, j] <- payload$cia
+      cia_raw[j, ref_idx] <- payload$cia_raw
+      cia_raw[ref_idx, j] <- payload$cia_raw
+      tau2_raw[j, ref_idx] <- payload$tau2_raw
+      tau2_raw[ref_idx, j] <- payload$tau2_raw
+      tau2[j, ref_idx] <- payload$tau2
+      tau2[ref_idx, j] <- payload$tau2
+      sigma2_within[j, ref_idx] <- payload$sigma2_within
+      sigma2_within[ref_idx, j] <- payload$sigma2_within
+      boundary[j, ref_idx] <- payload$boundary
+      boundary[ref_idx, j] <- payload$boundary
+      if (isTRUE(return_delta)) {
+        ci <- .mc_cia_pairwise_delta_ci(
+          A = A,
+          B = B,
+          G1 = G1,
+          G3 = G3,
+          reference_pair = TRUE,
+          conf_level = conf_level,
+          center = payload$cia
         )
-        est[j, ref_idx] <- payload$cia
-        est[ref_idx, j] <- payload$cia
-        cia_raw[j, ref_idx] <- payload$cia_raw
-        cia_raw[ref_idx, j] <- payload$cia_raw
-        tau2_raw[j, ref_idx] <- payload$tau2_raw
-        tau2_raw[ref_idx, j] <- payload$tau2_raw
-        tau2[j, ref_idx] <- payload$tau2
-        tau2[ref_idx, j] <- payload$tau2
-        sigma2_within[j, ref_idx] <- payload$sigma2_within
-        sigma2_within[ref_idx, j] <- payload$sigma2_within
-        boundary[j, ref_idx] <- payload$boundary
-        boundary[ref_idx, j] <- payload$boundary
+        lwr[j, ref_idx] <- ci$lwr
+        lwr[ref_idx, j] <- ci$lwr
+        upr[j, ref_idx] <- ci$upr
+        upr[ref_idx, j] <- ci$upr
       }
     }
     return(list(
@@ -527,20 +942,38 @@ cia <- function(data,
       tau2_raw = tau2_raw,
       tau2 = tau2,
       sigma2_within = sigma2_within,
-      boundary = boundary
+      boundary = boundary,
+      n_eligible = n_eligible,
+      lwr = lwr,
+      upr = upr
     ))
   }
 
   for (j in seq_len(prep$n_methods - 1L)) {
     for (k in (j + 1L):prep$n_methods) {
-      if (diagnostics$n_replicate_pairs[[j]] <= 0L ||
-          diagnostics$n_replicate_pairs[[k]] <= 0L ||
-          diagnostics$n_between_pairs[j, k] <= 0L) {
+      G1 <- numeric(0)
+      G2 <- numeric(0)
+      G3 <- numeric(0)
+      for (s in seq_len(prep$n_subjects)) {
+        x_vals <- .mc_cia_subject_values(prep, s, j)
+        y_vals <- .mc_cia_subject_values(prep, s, k)
+        if (length(x_vals) < 2L || length(y_vals) < 2L) {
+          next
+        }
+        G1 <- c(G1, .mc_cia_subject_within_msd(x_vals))
+        G2 <- c(G2, .mc_cia_subject_within_msd(y_vals))
+        G3 <- c(G3, .mc_cia_subject_between_msd(x_vals, y_vals))
+      }
+      n_eligible[j, k] <- length(G3)
+      n_eligible[k, j] <- length(G3)
+      if (!length(G3)) {
         next
       }
+      A <- (mean(G1) + mean(G2)) / 2
+      B <- mean(G3)
       payload <- .mc_cia_component_payload(
-        sigma2_within = (diagnostics$within_msd[[j]] + diagnostics$within_msd[[k]]) / 2,
-        between_term = diagnostics$between_msd[j, k],
+        sigma2_within = A,
+        between_term = B,
         estimator = estimator
       )
       est[j, k] <- payload$cia
@@ -555,6 +988,22 @@ cia <- function(data,
       sigma2_within[k, j] <- payload$sigma2_within
       boundary[j, k] <- payload$boundary
       boundary[k, j] <- payload$boundary
+      if (isTRUE(return_delta)) {
+        ci <- .mc_cia_pairwise_delta_ci(
+          A = A,
+          B = B,
+          G1 = G1,
+          G2 = G2,
+          G3 = G3,
+          reference_pair = FALSE,
+          conf_level = conf_level,
+          center = payload$cia
+        )
+        lwr[j, k] <- ci$lwr
+        lwr[k, j] <- ci$lwr
+        upr[j, k] <- ci$upr
+        upr[k, j] <- ci$upr
+      }
     }
   }
   list(
@@ -563,7 +1012,10 @@ cia <- function(data,
     tau2_raw = tau2_raw,
     tau2 = tau2,
     sigma2_within = sigma2_within,
-    boundary = boundary
+    boundary = boundary,
+    n_eligible = n_eligible,
+    lwr = lwr,
+    upr = upr
   )
 }
 
@@ -577,43 +1029,7 @@ cia <- function(data,
     )
   }
 
-  if (identical(scope, "overall")) {
-    if (isTRUE(prep$has_reference)) {
-      ref_name <- prep$reference
-      ref_idx <- prep$reference_index
-      if (diagnostics$n_replicate_pairs[[ref_idx]] <= 0L) {
-        abort_bad_arg(
-          "reference",
-          message = "does not have any usable within-method replicate pairs."
-        )
-      }
-      missing_pairs <- prep$method_levels[-ref_idx][diagnostics$n_between_pairs[-ref_idx, ref_idx] <= 0L]
-      if (length(missing_pairs)) {
-        abort_bad_arg(
-          "data",
-          message = "does not contain any within-subject cross-method comparisons for {length(missing_pairs)} method(s) versus the reference.",
-          .hint = "Every non-reference method must overlap with the reference within subject."
-        )
-      }
-    } else {
-      missing_within <- prep$method_levels[diagnostics$n_replicate_pairs <= 0L]
-      if (length(missing_within)) {
-        abort_bad_arg(
-          "data",
-          message = "does not provide usable replicate pairs for all retained methods.",
-          .hint = "Every method must have at least one subject with two or more replicated readings."
-        )
-      }
-      upper_missing <- which(upper.tri(diagnostics$n_between_pairs) &
-        diagnostics$n_between_pairs <= 0L, arr.ind = TRUE)
-      if (nrow(upper_missing)) {
-        abort_bad_arg(
-          "data",
-          message = "does not contain any within-subject cross-method replicate combinations for all method pairs."
-        )
-      }
-    }
-  } else {
+  if (!identical(scope, "overall")) {
     est <- .mc_cia_pairwise_payload(prep, diagnostics, estimator = "vc_constrained")$est
     if (!any(is.finite(est[upper.tri(est, diag = FALSE)]))) {
       abort_bad_arg(
@@ -625,22 +1041,24 @@ cia <- function(data,
   invisible(NULL)
 }
 
-.mc_cia_build_overall <- function(prep, raw, diagnostics, estimator) {
-  comp <- .mc_cia_overall_components(prep, diagnostics, estimator = estimator)
+.mc_cia_build_overall_from_moments <- function(prep, diagnostics, moments, estimator) {
   out <- data.frame(
     coefficient = prep$coefficient,
     estimator = estimator,
-    cia = comp$cia,
-    cia_raw = comp$cia_raw,
-    tau2 = comp$tau2,
-    tau2_raw = comp$tau2_raw,
-    boundary = comp$boundary,
+    cia = moments$cia,
+    cia_raw = moments$cia_raw,
+    tau2 = moments$tau2,
+    tau2_raw = moments$tau2_raw,
+    boundary = moments$boundary,
     reference = if (isTRUE(prep$has_reference)) prep$reference else NA_character_,
     n_methods = prep$n_methods,
-    n_subjects = diagnostics$n_subjects,
+    n_subjects = moments$n,
     n_obs = diagnostics$n_obs,
-    within_msd = comp$sigma2_within,
-    between_msd = comp$between_term,
+    K = moments$K,
+    numerator_term = moments$numerator_term,
+    denominator_term = moments$denominator_term,
+    within_msd = moments$numerator_term,
+    between_msd = moments$denominator_term,
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
@@ -656,13 +1074,33 @@ cia <- function(data,
   attr(out, "reference") <- prep$reference
   attr(out, "coefficient") <- prep$coefficient
   attr(out, "estimator") <- estimator
-  attr(out, "boundary") <- comp$boundary
-  attr(out, "diagnostics") <- diagnostics
+  attr(out, "boundary") <- moments$boundary
+  attr(out, "diagnostics") <- c(diagnostics, list(K = moments$K))
+  attr(out, "overall_moments") <- moments
   out
+}
+
+.mc_cia_warn_small_pairwise_n <- function(payload) {
+  off_diag <- upper.tri(payload$n_eligible)
+  small <- payload$n_eligible[off_diag] > 0L & payload$n_eligible[off_diag] < 10L
+  if (any(small, na.rm = TRUE)) {
+    cli::cli_warn(
+      "Some pairwise CIA estimates use fewer than 10 eligible subjects.",
+      class = "matrixCorr_cia_small_n"
+    )
+  }
+}
+
+.mc_cia_pairwise_diagnostics <- function(diagnostics, payload) {
+  diagnostics$n_complete <- payload$n_eligible
+  diagnostics$n_eligible_subjects <- payload$n_eligible
+  diagnostics
 }
 
 .mc_cia_build_pairwise_matrix <- function(prep, raw, diagnostics, estimator) {
   payload <- .mc_cia_pairwise_payload(prep, diagnostics, estimator = estimator)
+  .mc_cia_warn_small_pairwise_n(payload)
+  pair_diag <- .mc_cia_pairwise_diagnostics(diagnostics, payload)
   out <- .mc_new_corr_matrix(
     mat = payload$est,
     estimator_class = "cia",
@@ -672,7 +1110,7 @@ cia <- function(data,
     } else {
       "Pairwise coefficient of individual agreement"
     },
-    diagnostics = diagnostics,
+    diagnostics = pair_diag,
     symmetric = TRUE,
     extra_attrs = list(
       scope = "pairwise",
@@ -690,12 +1128,25 @@ cia <- function(data,
   out
 }
 
-.mc_cia_build_pairwise_ci <- function(prep, raw, diagnostics, estimator, boot, conf_level) {
-  payload <- .mc_cia_pairwise_payload(prep, diagnostics, estimator = estimator)
+.mc_cia_build_pairwise_ci <- function(prep,
+                                      raw,
+                                      diagnostics,
+                                      estimator,
+                                      inference,
+                                      boot = NULL,
+                                      conf_level) {
+  payload <- .mc_cia_pairwise_payload(
+    prep,
+    diagnostics,
+    estimator = estimator,
+    conf_level = conf_level,
+    return_delta = identical(inference, "delta")
+  )
+  .mc_cia_warn_small_pairwise_n(payload)
   out <- list(
     est = payload$est,
-    lwr.ci = boot$lwr,
-    upr.ci = boot$upr
+    lwr.ci = if (identical(inference, "delta")) payload$lwr else boot$lwr,
+    upr.ci = if (identical(inference, "delta")) payload$upr else boot$upr
   )
   class(out) <- c("cia", "cia_ci")
   attr(out, "method") <- "Coefficient of individual agreement"
@@ -714,10 +1165,16 @@ cia <- function(data,
   attr(out, "tau2") <- payload$tau2
   attr(out, "sigma2_within") <- payload$sigma2_within
   attr(out, "boundary") <- payload$boundary
-  attr(out, "diagnostics") <- diagnostics
+  attr(out, "diagnostics") <- .mc_cia_pairwise_diagnostics(diagnostics, payload)
   attr(out, "conf.level") <- conf_level
-  attr(out, "ci.method") <- "subject_bootstrap_percentile"
-  attr(out, "bootstrap") <- boot[c("n_successful", "B")]
+  attr(out, "ci.method") <- if (identical(inference, "delta")) {
+    "delta_normal"
+  } else {
+    "subject_bootstrap_percentile"
+  }
+  if (!is.null(boot)) {
+    attr(out, "bootstrap") <- boot[c("n_successful", "B")]
+  }
   out
 }
 
@@ -741,6 +1198,31 @@ cia <- function(data,
   list(y = y, subject = subject, method = method, replicate = replicate)
 }
 
+.mc_cia_bootstrap_prep <- function(prep, boot_vec) {
+  subject_rows <- split(seq_along(boot_vec$y), boot_vec$subject)
+  by_subject_method <- lapply(subject_rows, function(idx) split(boot_vec$y[idx], boot_vec$method[idx]))
+  list(
+    y = boot_vec$y,
+    subject_code = boot_vec$subject,
+    method_code = boot_vec$method,
+    replicate_code = boot_vec$replicate,
+    subject_rows = subject_rows,
+    by_subject_method = by_subject_method,
+    method_levels = prep$method_levels,
+    subject_levels = seq_along(subject_rows),
+    replicate_levels = prep$replicate_levels,
+    n_methods = prep$n_methods,
+    n_subjects = length(subject_rows),
+    has_reference = prep$has_reference,
+    reference_index = prep$reference_index,
+    reference = prep$reference,
+    coefficient = prep$coefficient,
+    n_original_rows = length(boot_vec$y),
+    n_complete_rows = length(boot_vec$y),
+    na_rows_removed = 0L
+  )
+}
+
 .mc_cia_bootstrap_overall <- function(prep, estimator, B, conf_level, seed = NULL, n_threads = 1L) {
   if (!is.null(seed)) {
     set.seed(seed)
@@ -750,19 +1232,11 @@ cia <- function(data,
   for (b in seq_len(B)) {
     sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
     boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
-    raw <- cia_moments_cpp(
-      y = boot_vec$y,
-      subject = boot_vec$subject,
-      method = boot_vec$method,
-      replicate = boot_vec$replicate,
-      n_methods = prep$n_methods,
-      reference_method = prep$reference_index,
-      has_reference = prep$has_reference,
-      pairwise = FALSE,
-      n_threads = n_threads
+    boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
+    est[[b]] <- tryCatch(
+      .mc_cia_overall_moments(boot_prep, estimator = estimator)$cia,
+      error = function(...) NA_real_
     )
-    diagnostics <- .mc_cia_build_diagnostics(prep, raw)
-    est[[b]] <- .mc_cia_overall_components(prep, diagnostics, estimator = estimator)$cia
   }
   keep <- is.finite(est)
   ci <- if (sum(keep) >= 2L) {
@@ -798,8 +1272,9 @@ cia <- function(data,
       pairwise = TRUE,
       n_threads = n_threads
     )
-    diagnostics <- .mc_cia_build_diagnostics(prep, raw)
-    arr[, , b] <- .mc_cia_pairwise_payload(prep, diagnostics, estimator = estimator)$est
+    boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
+    diagnostics <- .mc_cia_build_diagnostics(boot_prep, raw)
+    arr[, , b] <- .mc_cia_pairwise_payload(boot_prep, diagnostics, estimator = estimator)$est
   }
 
   lwr <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(prep$method_levels))
@@ -1060,7 +1535,21 @@ print.summary.cia <- function(x,
   cat("\n")
 
   preview <- as.data.frame(x, stringsAsFactors = FALSE, check.names = FALSE)
-  num_cols <- intersect(c("cia", "cia_raw", "tau2", "tau2_raw", "within_msd", "between_msd"), names(preview))
+  num_cols <- intersect(
+    c(
+      "cia",
+      "cia_raw",
+      "tau2",
+      "tau2_raw",
+      "K",
+      "numerator_term",
+      "denominator_term",
+      "within_msd",
+      "between_msd",
+      "se"
+    ),
+    names(preview)
+  )
   for (nm in num_cols) preview[[nm]] <- round(preview[[nm]], digits)
   if ("lwr.ci" %in% names(preview)) preview$lwr.ci <- round(preview$lwr.ci, ci_digits)
   if ("upr.ci" %in% names(preview)) preview$upr.ci <- round(preview$upr.ci, ci_digits)
