@@ -315,6 +315,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cia_pairwise_stats_cpp
+Rcpp::List cia_pairwise_stats_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector replicate, int n_methods, int reference_method, bool has_reference, int n_threads);
+RcppExport SEXP _matrixCorr_cia_pairwise_stats_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP replicateSEXP, SEXP n_methodsSEXP, SEXP reference_methodSEXP, SEXP has_referenceSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type replicate(replicateSEXP);
+    Rcpp::traits::input_parameter< int >::type n_methods(n_methodsSEXP);
+    Rcpp::traits::input_parameter< int >::type reference_method(reference_methodSEXP);
+    Rcpp::traits::input_parameter< bool >::type has_reference(has_referenceSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cia_pairwise_stats_cpp(y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cia_overall_balanced_cpp
+Rcpp::List cia_overall_balanced_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector replicate, int n_methods, int reference_method, bool has_reference, int n_threads);
+RcppExport SEXP _matrixCorr_cia_overall_balanced_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP replicateSEXP, SEXP n_methodsSEXP, SEXP reference_methodSEXP, SEXP has_referenceSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type replicate(replicateSEXP);
+    Rcpp::traits::input_parameter< int >::type n_methods(n_methodsSEXP);
+    Rcpp::traits::input_parameter< int >::type reference_method(reference_methodSEXP);
+    Rcpp::traits::input_parameter< bool >::type has_reference(has_referenceSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cia_overall_balanced_cpp(y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cohen_kappa_pair_cpp
 Rcpp::List cohen_kappa_pair_cpp(Rcpp::IntegerVector x, Rcpp::IntegerVector y, int n_levels, bool return_inference, double conf_level);
 RcppExport SEXP _matrixCorr_cohen_kappa_pair_cpp(SEXP xSEXP, SEXP ySEXP, SEXP n_levelsSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP) {
@@ -1231,6 +1267,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_build_L_Dm_Z_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_Z_cpp, 11},
     {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 24},
     {"_matrixCorr_cia_moments_cpp", (DL_FUNC) &_matrixCorr_cia_moments_cpp, 9},
+    {"_matrixCorr_cia_pairwise_stats_cpp", (DL_FUNC) &_matrixCorr_cia_pairwise_stats_cpp, 8},
+    {"_matrixCorr_cia_overall_balanced_cpp", (DL_FUNC) &_matrixCorr_cia_overall_balanced_cpp, 8},
     {"_matrixCorr_cohen_kappa_pair_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_pair_cpp, 5},
     {"_matrixCorr_cohen_kappa_matrix_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_matrix_cpp, 6},
     {"_matrixCorr_cohen_kappa_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_cohen_kappa_threshold_triplets_cpp, 6},

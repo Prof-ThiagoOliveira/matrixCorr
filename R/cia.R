@@ -314,7 +314,11 @@ cia <- function(data,
   diagnostics <- .mc_cia_build_diagnostics(prep, raw)
 
   if (identical(scope, "overall")) {
-    overall <- .mc_cia_overall_moments(prep, estimator = estimator)
+    overall <- .mc_cia_overall_moments(
+      prep,
+      estimator = estimator,
+      n_threads = n_threads
+    )
     out <- .mc_cia_build_overall_from_moments(
       prep = prep,
       diagnostics = diagnostics,
@@ -357,10 +361,20 @@ cia <- function(data,
     return(out)
   }
 
-  .mc_cia_assert_estimable(prep, diagnostics, scope = scope)
+  .mc_cia_assert_estimable(
+    prep,
+    diagnostics,
+    scope = scope,
+    n_threads = n_threads
+  )
 
   if (!isTRUE(ci)) {
-    return(.mc_cia_build_pairwise_matrix(prep, raw, diagnostics, estimator = estimator))
+    return(.mc_cia_build_pairwise_matrix(
+      prep,
+      diagnostics,
+      estimator = estimator,
+      n_threads = n_threads
+    ))
   }
 
   boot <- NULL
@@ -376,12 +390,12 @@ cia <- function(data,
   }
   .mc_cia_build_pairwise_ci(
     prep,
-    raw,
     diagnostics,
     estimator = estimator,
     inference = inference,
     boot = boot,
-    conf_level = conf_level
+    conf_level = conf_level,
+    n_threads = n_threads
   )
 }
 
@@ -511,6 +525,12 @@ cia <- function(data,
   x
 }
 
+.mc_cia_named_rect_matrix <- function(x, row_nm, col_nm) {
+  x <- as.matrix(x)
+  dimnames(x) <- list(row_nm, col_nm)
+  x
+}
+
 .mc_cia_build_diagnostics <- function(prep, raw) {
   within_msd <- .mc_cia_named_vector(raw$within_msd, prep$method_levels)
   sigma_within <- .mc_cia_named_vector(raw$sigma_within, prep$method_levels)
@@ -588,68 +608,46 @@ cia <- function(data,
   if (is.null(vals)) numeric(0) else as.numeric(vals)
 }
 
-.mc_cia_overall_arrays <- function(prep) {
-  counts <- matrix(0L, prep$n_subjects, prep$n_methods)
-  for (s in seq_len(prep$n_subjects)) {
-    for (j in seq_len(prep$n_methods)) {
-      counts[s, j] <- length(.mc_cia_subject_values(prep, s, j))
+.mc_cia_overall_arrays <- function(prep, n_threads = 1L) {
+  raw <- tryCatch(
+    cia_overall_balanced_cpp(
+      y = prep$y,
+      subject = prep$subject_code,
+      method = prep$method_code,
+      replicate = prep$replicate_code,
+      n_methods = prep$n_methods,
+      reference_method = prep$reference_index,
+      has_reference = prep$has_reference,
+      n_threads = n_threads
+    ),
+    error = function(e) {
+      abort_bad_arg("data", message = conditionMessage(e))
     }
-  }
-
-  if (any(counts <= 0L)) {
-    abort_bad_arg(
-      "data",
-      message = paste(
-        "Overall CIA currently implements the balanced-replication moment estimator",
-        "from the cited papers; use pairwise CIA for unequal replication."
-      )
-    )
-  }
-
-  K_vals <- unique(as.integer(counts))
-  if (length(K_vals) != 1L || K_vals[[1L]] < 2L) {
-    abort_bad_arg(
-      "data",
-      message = paste(
-        "Overall CIA currently implements the balanced-replication moment estimator",
-        "from the cited papers; use pairwise CIA for unequal replication."
-      )
-    )
-  }
-
-  K <- as.integer(K_vals[[1L]])
-  Ybar <- matrix(
-    NA_real_,
-    prep$n_subjects,
-    prep$n_methods,
-    dimnames = list(as.character(prep$subject_levels), prep$method_levels)
   )
-  A <- Ybar
-  for (s in seq_len(prep$n_subjects)) {
-    for (j in seq_len(prep$n_methods)) {
-      vals <- .mc_cia_subject_values(prep, s, j)
-      if (length(vals) != K || any(!is.finite(vals))) {
-        abort_bad_arg(
-          "data",
-          message = paste(
-            "Overall CIA currently implements the balanced-replication moment estimator",
-            "from the cited papers; use pairwise CIA for unequal replication."
-          )
-        )
-      }
-      mean_ij <- mean(vals)
-      Ybar[s, j] <- mean_ij
-      A[s, j] <- sum((vals - mean_ij)^2) / (K - 1)
-    }
-  }
+
+  Ybar <- .mc_cia_named_rect_matrix(
+    raw$Ybar,
+    row_nm = as.character(prep$subject_levels),
+    col_nm = prep$method_levels
+  )
+  A <- .mc_cia_named_rect_matrix(
+    raw$A,
+    row_nm = as.character(prep$subject_levels),
+    col_nm = prep$method_levels
+  )
 
   list(
     Ybar = Ybar,
     A = A,
-    n = prep$n_subjects,
-    J = prep$n_methods,
-    K = K,
-    ref_idx = if (isTRUE(prep$has_reference)) prep$reference_index else 0L
+    n = as.integer(raw$n_subjects),
+    J = as.integer(raw$n_methods),
+    K = as.integer(raw$K),
+    ref_idx = as.integer(raw$ref_idx),
+    A_i = as.numeric(raw$A_i),
+    B_i = as.numeric(raw$B_i),
+    A_bar = as.numeric(raw$A_bar),
+    B_bar = as.numeric(raw$B_bar),
+    estimate_raw = as.numeric(raw$estimate_raw)
   )
 }
 
@@ -698,52 +696,24 @@ cia <- function(data,
   )
 }
 
-.mc_cia_overall_moments <- function(prep, estimator) {
-  arr <- .mc_cia_overall_arrays(prep)
-  Ybar <- arr$Ybar
-  A <- arr$A
-  n <- arr$n
-  J <- arr$J
-  K <- arr$K
-
-  if (isTRUE(prep$has_reference)) {
-    ref_idx <- arr$ref_idx
-    nonref_idx <- setdiff(seq_len(J), ref_idx)
-    A_i <- A[, ref_idx]
-    B_i <- rowSums((Ybar[, nonref_idx, drop = FALSE] - Ybar[, ref_idx])^2) / (J - 1) +
-      (1 - 1 / K) * rowSums(A[, nonref_idx, drop = FALSE]) / (J - 1) +
-      (1 - 1 / K) * A[, ref_idx]
-    A_bar <- mean(A_i)
-    B_bar <- mean(B_i)
-    payload <- .mc_cia_overall_payload(
-      A_bar = A_bar,
-      B_bar = B_bar,
-      reference = TRUE,
-      estimator = estimator
-    )
-  } else {
-    A_i <- rowMeans(A)
-    Y_i_dot_dot <- rowMeans(Ybar)
-    B_i <- rowSums((Ybar - Y_i_dot_dot)^2) / (J - 1) + (1 - 1 / K) * A_i
-    A_bar <- mean(A_i)
-    B_bar <- mean(B_i)
-    payload <- .mc_cia_overall_payload(
-      A_bar = A_bar,
-      B_bar = B_bar,
-      reference = FALSE,
-      estimator = estimator
-    )
-  }
+.mc_cia_overall_moments <- function(prep, estimator, n_threads = 1L) {
+  arr <- .mc_cia_overall_arrays(prep, n_threads = n_threads)
+  payload <- .mc_cia_overall_payload(
+    A_bar = arr$A_bar,
+    B_bar = arr$B_bar,
+    reference = isTRUE(prep$has_reference),
+    estimator = estimator
+  )
 
   c(
     list(
-      Ybar = Ybar,
-      A = A,
-      A_i = as.numeric(A_i),
-      B_i = as.numeric(B_i),
-      n = n,
-      J = J,
-      K = K,
+      Ybar = arr$Ybar,
+      A = arr$A,
+      A_i = arr$A_i,
+      B_i = arr$B_i,
+      n = arr$n,
+      J = arr$J,
+      K = arr$K,
       ref_idx = arr$ref_idx
     ),
     payload
@@ -821,24 +791,27 @@ cia <- function(data,
   )
 }
 
-.mc_cia_pairwise_delta_ci <- function(A, B, G1, G2 = NULL, G3, reference_pair = FALSE, conf_level = 0.95, center) {
-  N <- length(G3)
+.mc_cia_pairwise_delta_ci <- function(A,
+                                      B,
+                                      N,
+                                      S11,
+                                      S33,
+                                      S13,
+                                      S22 = NA_real_,
+                                      S12 = NA_real_,
+                                      S23 = NA_real_,
+                                      reference_pair = FALSE,
+                                      conf_level = 0.95,
+                                      center) {
   if (N < 2L || !is.finite(A) || !is.finite(B) || B == 0) {
     return(list(lwr = NA_real_, upr = NA_real_, se = NA_real_, var = NA_real_))
   }
-
-  S11 <- stats::var(G1)
-  S33 <- stats::var(G3)
-  S13 <- stats::cov(G1, G3)
 
   if (isTRUE(reference_pair)) {
     var_A <- S11 / N
     var_B <- S33 / N
     cov_A_B <- S13 / N
   } else {
-    S22 <- stats::var(G2)
-    S12 <- stats::cov(G1, G2)
-    S23 <- stats::cov(G2, G3)
     var_A <- (S11 + S22 + 2 * S12) / (4 * N)
     var_B <- S33 / N
     cov_A_B <- (S13 + S23) / (2 * N)
@@ -858,7 +831,22 @@ cia <- function(data,
   )
 }
 
-.mc_cia_pairwise_payload <- function(prep, diagnostics, estimator, conf_level = NULL, return_delta = FALSE) {
+.mc_cia_pairwise_payload <- function(prep,
+                                     diagnostics = NULL,
+                                     estimator,
+                                     conf_level = NULL,
+                                     return_delta = FALSE,
+                                     n_threads = 1L) {
+  raw <- cia_pairwise_stats_cpp(
+    y = prep$y,
+    subject = prep$subject_code,
+    method = prep$method_code,
+    replicate = prep$replicate_code,
+    n_methods = prep$n_methods,
+    reference_method = prep$reference_index,
+    has_reference = prep$has_reference,
+    n_threads = n_threads
+  )
   nm <- prep$method_levels
   est <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(nm))
   cia_raw <- est
@@ -885,24 +873,14 @@ cia <- function(data,
       if (j == ref_idx) {
         next
       }
-      G1 <- numeric(0)
-      G3 <- numeric(0)
-      for (s in seq_len(prep$n_subjects)) {
-        ref_vals <- .mc_cia_subject_values(prep, s, ref_idx)
-        cmp_vals <- .mc_cia_subject_values(prep, s, j)
-        if (length(ref_vals) < 2L || length(cmp_vals) < 1L) {
-          next
-        }
-        G1 <- c(G1, .mc_cia_subject_within_msd(ref_vals))
-        G3 <- c(G3, .mc_cia_subject_between_msd(ref_vals, cmp_vals))
-      }
-      n_eligible[j, ref_idx] <- length(G3)
-      n_eligible[ref_idx, j] <- length(G3)
-      if (!length(G3)) {
+      N <- as.integer(raw$n_eligible[j, ref_idx])
+      n_eligible[j, ref_idx] <- N
+      n_eligible[ref_idx, j] <- N
+      if (N <= 0L) {
         next
       }
-      A <- mean(G1)
-      B <- mean(G3)
+      A <- as.numeric(raw$A_bar[j, ref_idx])
+      B <- as.numeric(raw$B_bar[j, ref_idx])
       payload <- .mc_cia_component_payload(
         sigma2_within = A,
         between_term = B,
@@ -924,8 +902,10 @@ cia <- function(data,
         ci <- .mc_cia_pairwise_delta_ci(
           A = A,
           B = B,
-          G1 = G1,
-          G3 = G3,
+          N = N,
+          S11 = as.numeric(raw$S11[j, ref_idx]),
+          S33 = as.numeric(raw$S33[j, ref_idx]),
+          S13 = as.numeric(raw$S13[j, ref_idx]),
           reference_pair = TRUE,
           conf_level = conf_level,
           center = payload$cia
@@ -951,26 +931,14 @@ cia <- function(data,
 
   for (j in seq_len(prep$n_methods - 1L)) {
     for (k in (j + 1L):prep$n_methods) {
-      G1 <- numeric(0)
-      G2 <- numeric(0)
-      G3 <- numeric(0)
-      for (s in seq_len(prep$n_subjects)) {
-        x_vals <- .mc_cia_subject_values(prep, s, j)
-        y_vals <- .mc_cia_subject_values(prep, s, k)
-        if (length(x_vals) < 2L || length(y_vals) < 2L) {
-          next
-        }
-        G1 <- c(G1, .mc_cia_subject_within_msd(x_vals))
-        G2 <- c(G2, .mc_cia_subject_within_msd(y_vals))
-        G3 <- c(G3, .mc_cia_subject_between_msd(x_vals, y_vals))
-      }
-      n_eligible[j, k] <- length(G3)
-      n_eligible[k, j] <- length(G3)
-      if (!length(G3)) {
+      N <- as.integer(raw$n_eligible[j, k])
+      n_eligible[j, k] <- N
+      n_eligible[k, j] <- N
+      if (N <= 0L) {
         next
       }
-      A <- (mean(G1) + mean(G2)) / 2
-      B <- mean(G3)
+      A <- as.numeric(raw$A_bar[j, k])
+      B <- as.numeric(raw$B_bar[j, k])
       payload <- .mc_cia_component_payload(
         sigma2_within = A,
         between_term = B,
@@ -992,9 +960,13 @@ cia <- function(data,
         ci <- .mc_cia_pairwise_delta_ci(
           A = A,
           B = B,
-          G1 = G1,
-          G2 = G2,
-          G3 = G3,
+          N = N,
+          S11 = as.numeric(raw$S11[j, k]),
+          S22 = as.numeric(raw$S22[j, k]),
+          S33 = as.numeric(raw$S33[j, k]),
+          S12 = as.numeric(raw$S12[j, k]),
+          S13 = as.numeric(raw$S13[j, k]),
+          S23 = as.numeric(raw$S23[j, k]),
           reference_pair = FALSE,
           conf_level = conf_level,
           center = payload$cia
@@ -1019,7 +991,10 @@ cia <- function(data,
   )
 }
 
-.mc_cia_assert_estimable <- function(prep, diagnostics, scope = c("overall", "pairwise")) {
+.mc_cia_assert_estimable <- function(prep,
+                                     diagnostics,
+                                     scope = c("overall", "pairwise"),
+                                     n_threads = 1L) {
   scope <- match.arg(scope)
   if (!any(diagnostics$n_replicate_pairs > 0L)) {
     abort_bad_arg(
@@ -1030,7 +1005,12 @@ cia <- function(data,
   }
 
   if (!identical(scope, "overall")) {
-    est <- .mc_cia_pairwise_payload(prep, diagnostics, estimator = "vc_constrained")$est
+    est <- .mc_cia_pairwise_payload(
+      prep,
+      diagnostics = diagnostics,
+      estimator = "vc_constrained",
+      n_threads = n_threads
+    )$est
     if (!any(is.finite(est[upper.tri(est, diag = FALSE)]))) {
       abort_bad_arg(
         "data",
@@ -1097,8 +1077,13 @@ cia <- function(data,
   diagnostics
 }
 
-.mc_cia_build_pairwise_matrix <- function(prep, raw, diagnostics, estimator) {
-  payload <- .mc_cia_pairwise_payload(prep, diagnostics, estimator = estimator)
+.mc_cia_build_pairwise_matrix <- function(prep, diagnostics, estimator, n_threads = 1L) {
+  payload <- .mc_cia_pairwise_payload(
+    prep,
+    diagnostics = diagnostics,
+    estimator = estimator,
+    n_threads = n_threads
+  )
   .mc_cia_warn_small_pairwise_n(payload)
   pair_diag <- .mc_cia_pairwise_diagnostics(diagnostics, payload)
   out <- .mc_new_corr_matrix(
@@ -1129,18 +1114,19 @@ cia <- function(data,
 }
 
 .mc_cia_build_pairwise_ci <- function(prep,
-                                      raw,
                                       diagnostics,
                                       estimator,
                                       inference,
                                       boot = NULL,
-                                      conf_level) {
+                                      conf_level,
+                                      n_threads = 1L) {
   payload <- .mc_cia_pairwise_payload(
     prep,
-    diagnostics,
+    diagnostics = diagnostics,
     estimator = estimator,
     conf_level = conf_level,
-    return_delta = identical(inference, "delta")
+    return_delta = identical(inference, "delta"),
+    n_threads = n_threads
   )
   .mc_cia_warn_small_pairwise_n(payload)
   out <- list(
@@ -1234,7 +1220,11 @@ cia <- function(data,
     boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
     boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
     est[[b]] <- tryCatch(
-      .mc_cia_overall_moments(boot_prep, estimator = estimator)$cia,
+      .mc_cia_overall_moments(
+        boot_prep,
+        estimator = estimator,
+        n_threads = n_threads
+      )$cia,
       error = function(...) NA_real_
     )
   }
@@ -1261,20 +1251,12 @@ cia <- function(data,
   for (b in seq_len(B)) {
     sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
     boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
-    raw <- cia_moments_cpp(
-      y = boot_vec$y,
-      subject = boot_vec$subject,
-      method = boot_vec$method,
-      replicate = boot_vec$replicate,
-      n_methods = prep$n_methods,
-      reference_method = prep$reference_index,
-      has_reference = prep$has_reference,
-      pairwise = TRUE,
-      n_threads = n_threads
-    )
     boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
-    diagnostics <- .mc_cia_build_diagnostics(boot_prep, raw)
-    arr[, , b] <- .mc_cia_pairwise_payload(boot_prep, diagnostics, estimator = estimator)$est
+    arr[, , b] <- .mc_cia_pairwise_payload(
+      boot_prep,
+      estimator = estimator,
+      n_threads = n_threads
+    )$est
   }
 
   lwr <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(prep$method_levels))

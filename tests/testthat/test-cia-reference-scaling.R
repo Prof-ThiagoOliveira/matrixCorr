@@ -219,7 +219,7 @@ test_that("pairwise no-reference CIA uses the two-method subject-level estimator
 })
 
 test_that("C++ pairwise reference estimate uses the unhalved reference numerator", {
-  cpp_fun <- get("cia_moments_cpp", envir = asNamespace("matrixCorr"))
+  cpp_fun <- get("cia_pairwise_stats_cpp", envir = asNamespace("matrixCorr"))
 
   y <- c(
     0, 2, 0, 0, 4, 4,
@@ -246,16 +246,86 @@ test_that("C++ pairwise reference estimate uses the unhalved reference numerator
     n_methods = 3L,
     reference_method = 1L,
     has_reference = TRUE,
-    pairwise = TRUE,
     n_threads = 1L
   )
 
-  expect_equal(raw$within_msd[[1]], 4, tolerance = 1e-12)
-  expect_equal(raw$sigma_within[[1]], 2, tolerance = 1e-12)
-  expect_equal(raw$between_msd[2, 1], 2, tolerance = 1e-12)
-  expect_equal(raw$between_msd[3, 1], 10, tolerance = 1e-12)
-  expect_equal(raw$estimate[2, 1], 2, tolerance = 1e-12)
-  expect_equal(raw$estimate[3, 1], 0.4, tolerance = 1e-12)
+  expect_equal(raw$A_bar[2, 1], 4, tolerance = 1e-12)
+  expect_equal(raw$B_bar[2, 1], 2, tolerance = 1e-12)
+  expect_equal(raw$B_bar[3, 1], 10, tolerance = 1e-12)
+  expect_equal(raw$estimate_raw[2, 1], 2, tolerance = 1e-12)
+  expect_equal(raw$estimate_raw[3, 1], 0.4, tolerance = 1e-12)
+})
+
+test_that("C++ overall no-reference estimator matches the balanced moment formula", {
+  cpp_fun <- get("cia_overall_balanced_cpp", envir = asNamespace("matrixCorr"))
+  y <- dat_overall_bal$value
+  subject_code <- as.integer(factor(dat_overall_bal$subject))
+  method_code <- as.integer(factor(dat_overall_bal$method, levels = c("R", "A", "B")))
+  replicate_code <- as.integer(factor(dat_overall_bal$replicate))
+  manual <- manual_overall_cia(dat_overall_bal, reference = NULL)
+
+  raw <- cpp_fun(
+    y = y,
+    subject = subject_code,
+    method = method_code,
+    replicate = replicate_code,
+    n_methods = 3L,
+    reference_method = 0L,
+    has_reference = FALSE,
+    n_threads = 1L
+  )
+
+  expect_equal(raw$estimate_raw[[1]], manual$psi, tolerance = 1e-12)
+  expect_equal(raw$A_bar[[1]], manual$A_bar, tolerance = 1e-12)
+  expect_equal(raw$B_bar[[1]], manual$B_bar, tolerance = 1e-12)
+})
+
+test_that("C++ overall reference estimator matches 2 * A_bar / B_bar and not the old pooled ratio", {
+  cpp_fun <- get("cia_overall_balanced_cpp", envir = asNamespace("matrixCorr"))
+  y <- dat_overall_bal$value
+  subject_code <- as.integer(factor(dat_overall_bal$subject))
+  method_code <- as.integer(factor(dat_overall_bal$method, levels = c("R", "A", "B")))
+  replicate_code <- as.integer(factor(dat_overall_bal$replicate))
+  manual <- manual_overall_cia(dat_overall_bal, reference = "R")
+  wrong_old <- manual$A_bar / manual$B_bar
+
+  raw <- cpp_fun(
+    y = y,
+    subject = subject_code,
+    method = method_code,
+    replicate = replicate_code,
+    n_methods = 3L,
+    reference_method = 1L,
+    has_reference = TRUE,
+    n_threads = 1L
+  )
+
+  expect_equal(raw$estimate_raw[[1]], manual$psi, tolerance = 1e-12)
+  expect_equal(raw$A_bar[[1]], manual$A_bar, tolerance = 1e-12)
+  expect_equal(raw$B_bar[[1]], manual$B_bar, tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(raw$estimate_raw[[1]], wrong_old, tolerance = 1e-12)))
+})
+
+test_that("diagnostics backend no longer exposes the old pooled overall estimator", {
+  cpp_fun <- get("cia_moments_cpp", envir = asNamespace("matrixCorr"))
+  y <- dat_overall_bal$value
+  subject_code <- as.integer(factor(dat_overall_bal$subject))
+  method_code <- as.integer(factor(dat_overall_bal$method, levels = c("R", "A", "B")))
+  replicate_code <- as.integer(factor(dat_overall_bal$replicate))
+
+  raw <- cpp_fun(
+    y = y,
+    subject = subject_code,
+    method = method_code,
+    replicate = replicate_code,
+    n_methods = 3L,
+    reference_method = 1L,
+    has_reference = TRUE,
+    pairwise = FALSE,
+    n_threads = 1L
+  )
+
+  expect_null(raw$estimate)
 })
 
 test_that("unbalanced replication uses equal subject weighting in pairwise CIA", {

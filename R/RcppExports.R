@@ -73,6 +73,14 @@ cia_moments_cpp <- function(y, subject, method, replicate, n_methods, reference_
     .Call(`_matrixCorr_cia_moments_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, pairwise, n_threads)
 }
 
+cia_pairwise_stats_cpp <- function(y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads = 1L) {
+    .Call(`_matrixCorr_cia_pairwise_stats_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads)
+}
+
+cia_overall_balanced_cpp <- function(y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads = 1L) {
+    .Call(`_matrixCorr_cia_overall_balanced_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads)
+}
+
 cohen_kappa_pair_cpp <- function(x, y, n_levels, return_inference = FALSE, conf_level = 0.95) {
     .Call(`_matrixCorr_cohen_kappa_pair_cpp`, x, y, n_levels, return_inference, conf_level)
 }
