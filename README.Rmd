@@ -47,8 +47,8 @@ agreement, Krippendorff's alpha for panel-level reliability, Bland-Altman
 (two-method and repeated-measures), the coefficient of individual agreement
 for replicated and repeated-measures designs (`cia()`, `cia_rm()`), Lin's
 concordance correlation coefficient (including repeated-measures LMM/REML
-extensions), and intraclass correlation for both wide and repeated-measures
-designs.
+extensions and Poisson GLMM count-data CCC), and intraclass correlation for
+both wide and repeated-measures designs.
 
 ## Features
 
@@ -67,7 +67,7 @@ designs.
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
 | Agreement: individual agreement | Replicated long-format `cia()`, repeated-measures `cia_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
-| Agreement: concordance | Pairwise Lin's CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, non-parametric `ccc_rm_ustat()` |
+| Agreement: concordance | Pairwise Lin's CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, Poisson GLMM count-data CCC `ccc_glmm()`, non-parametric `ccc_rm_ustat()` |
 | Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |
 | Interactive viewers | Matrix-style Shiny viewers, including the repeated-measures correlation viewer `view_rmcorr_shiny()` |
 

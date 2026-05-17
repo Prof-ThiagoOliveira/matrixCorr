@@ -38,6 +38,10 @@ This is a new release of `matrixCorr`.
   subject-method-time designs, with categorical-condition ANOVA estimation,
   pairwise condition-specific CIA, homogeneity diagnostics, optional common
   estimates, and subject-bootstrap confidence intervals.
+* added `ccc_glmm()`, an exported Poisson-log GLMM concordance correlation
+  method for count-agreement data. It reports total CCC, inter-CCC for
+  replicate means, method-specific intra-CCC, variance-component diagnostics,
+  and delta-method confidence intervals.
 
 ## Bug
 

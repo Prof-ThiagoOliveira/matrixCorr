@@ -858,7 +858,7 @@ test_that("AR(1) recommendation distinguishes IID from positive serial correlati
 
 test_that("AR(1) fallback message aligns with ba_rm wording", {
   expect_message(
-    inform_ccc_rm_ar1_fallback(pair_label = "A vs B", .verbose = TRUE),
+    matrixCorr:::inform_ccc_rm_ar1_fallback(pair_label = "A vs B", .verbose = TRUE),
     "Requested AR\\(1\\) residual structure could not be fit for pair\\(s\\): A vs B; using iid residuals instead\\."
   )
 })

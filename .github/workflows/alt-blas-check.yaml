@@ -163,8 +163,7 @@ jobs:
 
       - uses: r-lib/actions/check-r-package@v2
         with:
-          args: 'c("--no-manual", "--ignore-vignettes")'
-          build_args: 'c("--no-build-vignettes")'
+          upload-snapshots: true
 
   use-fc-len-t-check:
     # R-devel made USE_FC_LEN_T the default on 2026-05-07. This dedicated job
