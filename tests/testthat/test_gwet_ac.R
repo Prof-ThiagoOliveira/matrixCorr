@@ -145,6 +145,52 @@ test_that("gwet_ac reproduces a manual weighted AC2 example", {
   expect_equal(attr(fit, "diagnostics")$expected_agreement, manual$expected, tolerance = 1e-12)
 })
 
+test_that("gwet_ac rejects ambiguous multi-value weight schemes", {
+  x <- c("A", "A", "B", "B")
+  y <- c("A", "B", "B", "A")
+
+  expect_error(
+    gwet_ac(x, y, weights = c("linear", "quadratic")),
+    class = "matrixCorr_arg_error"
+  )
+  expect_error(
+    .mc_resolve_gwet_weights(c("linear", "quadratic"), c("A", "B")),
+    class = "matrixCorr_arg_error"
+  )
+  expect_s3_class(gwet_ac(x, y), "gwet_ac")
+})
+
+test_that("gwet_ac ordinal weights respect explicit and implicit category ordering", {
+  x <- factor(c("low", "high", "mid", "low"), levels = c("high", "mid", "low"))
+  y <- factor(c("high", "high", "mid", "low"), levels = c("high", "mid", "low"))
+  fit_factor <- gwet_ac(x, y, weights = "linear")
+
+  expect_identical(attr(fit_factor, "levels"), c("high", "mid", "low"))
+  expect_identical(dimnames(attr(fit_factor, "weights"))[[1L]], c("high", "mid", "low"))
+  expect_equal(attr(fit_factor, "weights")["high", "low"], 0)
+  expect_equal(attr(fit_factor, "weights")["high", "mid"], 0.5)
+
+  fit_explicit <- gwet_ac(
+    as.character(x),
+    as.character(y),
+    weights = "linear",
+    levels = c("low", "mid", "high")
+  )
+  expect_identical(attr(fit_explicit, "levels"), c("low", "mid", "high"))
+  expect_identical(dimnames(attr(fit_explicit, "weights"))[[1L]], c("low", "mid", "high"))
+  expect_equal(attr(fit_explicit, "weights")["low", "high"], 0)
+
+  counts <- matrix(
+    c(2, 0, 1, 0, 1, 2),
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(NULL, c("high", "mid", "low"))
+  )
+  fit_counts <- gwet_ac(counts, input = "counts", weights = "linear")
+  expect_identical(attr(fit_counts, "categories"), c("high", "mid", "low"))
+  expect_identical(dimnames(attr(fit_counts, "weights"))[[1L]], c("high", "mid", "low"))
+})
+
 test_that("gwet_ac differs from Cohen's kappa in a high-prevalence example", {
   x <- c(rep("A", 90), rep("B", 10))
   y <- c(rep("A", 85), rep("B", 5), rep("A", 5), rep("B", 5))

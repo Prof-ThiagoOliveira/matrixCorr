@@ -104,9 +104,9 @@ rejected.}
 \item{show_ci}{One of \code{"yes"} or \code{"no"}.}
 }
 \value{
-If \code{y} is supplied and neither \code{ci} nor \code{p_value} is
-requested, a single numeric estimate. If \code{y} is supplied and inference
-is requested, a small named list is returned. Otherwise a symmetric
+If \code{y} is supplied, a scalar S3 object of class
+\code{c("weighted_kappa", "numeric")} is returned with diagnostics and
+optional \code{ci} and \code{inference} attributes. Otherwise a symmetric
 matrix-style result with estimator class \code{weighted_kappa}.
 }
 \description{

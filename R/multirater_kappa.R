@@ -12,7 +12,8 @@
 #' @param levels Optional explicit category labels. For nominal multi-rater
 #'   kappa, category order is not used in the estimator itself, but explicit
 #'   levels are useful when unobserved categories should be retained in the
-#'   output.
+#'   output. If factor columns are mixed with non-factor columns, \code{levels}
+#'   must be supplied to avoid ambiguous implicit ordering.
 #' @param input One of \code{"ratings"} or \code{"counts"}.
 #' @param method One of \code{"fleiss"} (fixed-marginal multi-rater kappa) or
 #'   \code{"randolph"} (free-marginal multi-rater kappa).
@@ -43,7 +44,9 @@
 #'   \code{p_value = TRUE}. When inferential quantities are requested and
 #'   \code{se_method} is left at its default, \code{multirater_kappa()}
 #'   automatically falls back to \code{"jackknife"} if asymptotic inference is
-#'   unavailable for the chosen estimator/data combination.
+#'   unavailable for the chosen estimator/data combination. \code{se_method}
+#'   and \code{conf_level} are validated only when \code{ci} or \code{p_value}
+#'   requests inferential output.
 #' @param n_threads Integer \eqn{\ge 1}. Number of OpenMP threads used by the
 #'   C++ backend.
 #' @param verbose Logical; if \code{TRUE}, emit short progress messages.
@@ -208,16 +211,22 @@ multirater_kappa <- function(data,
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
   check_bool(verbose, arg = "verbose")
-  check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
+  inference_requested <- isTRUE(ci) || isTRUE(p_value)
   se_method_missing <- missing(se_method)
-  se_method <- match_arg(se_method, c("asymptotic", "jackknife", "none"), arg_name = "se_method")
-  if ((isTRUE(ci) || isTRUE(p_value)) && identical(se_method, "none")) {
-    abort_bad_arg(
-      "se_method",
-      message = "must not be 'none' when ci or p_value is TRUE."
-    )
+  if (isTRUE(inference_requested)) {
+    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+    se_method <- match_arg(se_method, c("asymptotic", "jackknife", "none"), arg_name = "se_method")
+    if (identical(se_method, "none")) {
+      abort_bad_arg(
+        "se_method",
+        message = "must not be 'none' when ci or p_value is TRUE."
+      )
+    }
+  } else {
+    se_method <- "none"
+    conf_level <- 0.95
   }
 
   prep <- if (identical(input, "ratings")) {
@@ -236,7 +245,6 @@ multirater_kappa <- function(data,
   }
 
   method_code <- switch(method, fleiss = 1L, randolph = 2L)
-  inference_requested <- isTRUE(ci) || isTRUE(p_value)
   inference_code <- if (isTRUE(inference_requested)) {
     switch(se_method, none = 0L, asymptotic = 1L, jackknife = 2L)
   } else {
@@ -330,9 +338,6 @@ multirater_kappa <- function(data,
   }
 
   df <- if (is.data.frame(data)) data else as.data.frame(data, stringsAsFactors = FALSE)
-  if (!ncol(df)) {
-    abort_bad_arg("data", message = "must contain at least two rater columns.")
-  }
   if (ncol(df) < 2L) {
     abort_bad_arg("data", message = "must contain at least two rater columns.")
   }
@@ -501,10 +506,17 @@ multirater_kappa <- function(data,
   }
 
   all_factor <- all(vapply(cols, is.factor, logical(1)))
+  any_factor <- any(vapply(cols, is.factor, logical(1)))
   all_numericish <- all(vapply(cols, function(z) is.numeric(z) || is.integer(z) || is.logical(z), logical(1)))
 
   if (all_factor) {
     return(unique(unlist(lapply(cols, levels), use.names = FALSE)))
+  }
+  if (any_factor) {
+    abort_bad_arg(
+      "levels",
+      message = "must be supplied when factor and non-factor rating columns are mixed."
+    )
   }
   if (all_numericish) {
     observed <- unlist(lapply(cols, function(z) z[!is.na(z)]), use.names = FALSE)

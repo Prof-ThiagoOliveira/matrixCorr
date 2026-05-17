@@ -93,7 +93,10 @@
 #' freedom. The reported p-value uses the upper-tail probability
 #' \eqn{P(t_{M-1} \ge T)}. This inference payload is attached as metadata; the
 #' main returned matrix is unchanged unless \code{p_value} is explicitly
-#' requested.
+#' requested. The t reference is an asymptotic approximation. For small
+#' complete-case sample sizes, especially when \eqn{M - 1} is small, p-values
+#' can be unstable and should be interpreted cautiously; a permutation-based
+#' dependence test is preferable when exact small-sample calibration matters.
 #'
 #' @note Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance
 #' variance yield \code{NA} in their row/column. Typical per-pair cost uses
@@ -330,10 +333,11 @@ dcor <- function(data,
 
   out <- .mc_finalize_summary_df(df, class_name = "summary.dcor")
   attr(out, "overview") <- .mc_summary_corr_matrix(object)
-  attr(out, "has_p") <- TRUE
+  has_p <- is.list(inf) && is.matrix(inf$p_value)
+  attr(out, "has_p") <- has_p
   attr(out, "digits") <- digits
   attr(out, "p_digits") <- p_digits
-  attr(out, "inference_method") <- inf$method %||% NA_character_
+  attr(out, "inference_method") <- if (isTRUE(has_p)) inf$method %||% NA_character_ else NA_character_
   out
 }
 
@@ -438,7 +442,7 @@ summary.dcor <- function(object, n = NULL, topn = NULL,
                          show_ci = NULL, ...) {
   check_inherits(object, "dcor")
   inf <- .mc_dcor_inference_attr(object)
-  if (is.null(inf) || is.null(inf$p_value)) {
+  if (!is.list(inf) || !is.matrix(inf$p_value)) {
     return(.mc_summary_corr_matrix(object, topn = topn))
   }
   .mc_dcor_pairwise_summary(object)

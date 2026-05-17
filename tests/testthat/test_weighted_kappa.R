@@ -39,8 +39,11 @@ test_that("weighted_kappa reproduces a manual two-vector example", {
   expected <- manual_weighted_kappa(x, y, levels = lev, weight_type = "linear")
   fit <- weighted_kappa(x, y, weights = "linear")
 
+  expect_s3_class(fit, "weighted_kappa")
   expect_type(fit, "double")
-  expect_equal(fit, expected, tolerance = 1e-12)
+  expect_equal(as.numeric(fit), expected, tolerance = 1e-12)
+  expect_true(is.list(attr(fit, "diagnostics", exact = TRUE)))
+  expect_identical(attr(fit, "weight_type", exact = TRUE), "linear")
 })
 
 test_that("weighted_kappa two-rater regression example matches known estimate and SE", {
@@ -58,9 +61,27 @@ test_that("weighted_kappa two-rater regression example matches known estimate an
   fit_inf <- weighted_kappa(data.frame(a = x, b = y), weights = "quadratic", p_value = TRUE)
   inf <- attr(fit_inf, "inference")
 
-  expect_equal(fit, 0.6666666666666667, tolerance = 1e-12)
+  expect_equal(as.numeric(fit), 0.6666666666666667, tolerance = 1e-12)
   expect_equal(inf$se["a", "b"], 0.1385799032138497, tolerance = 1e-12)
   expect_equal(inf$statistic["a", "b"], 4.810702354423639, tolerance = 1e-12)
+})
+
+test_that("weighted_kappa scalar inference uses attributes, not list output", {
+  lev <- c("low", "mid", "high")
+  x <- ordered(c("low", "low", "mid", "mid", "high", "high", "high"), levels = lev)
+  y <- ordered(c("low", "mid", "mid", "high", "high", "mid", "high"), levels = lev)
+
+  fit <- weighted_kappa(x, y, weights = "linear", ci = TRUE, p_value = TRUE)
+
+  expect_s3_class(fit, "weighted_kappa")
+  expect_type(fit, "double")
+  expect_false(is.list(fit))
+  expect_true(is.list(attr(fit, "ci", exact = TRUE)))
+  expect_true(is.list(attr(fit, "inference", exact = TRUE)))
+  expect_true(all(c("n_complete", "observed_agreement", "expected_agreement") %in% names(attr(fit, "diagnostics", exact = TRUE))))
+  expect_identical(attr(fit, "ci", exact = TRUE)$ci.method, "delta")
+  expect_identical(attr(fit, "inference", exact = TRUE)$method, "delta_wald_weighted_kappa")
+  expect_true(length(capture.output(print(fit))) > 0L)
 })
 
 test_that("weighted_kappa resolves linear and quadratic weights and aliases", {
@@ -118,7 +139,7 @@ test_that("unweighted weighted_kappa matches cohen_kappa", {
   y <- factor(c("A", "B", "B", "B", "C", "A", "C"))
 
   expect_equal(
-    weighted_kappa(x, y, weights = "unweighted", levels = c("A", "B", "C")),
+    as.numeric(weighted_kappa(x, y, weights = "unweighted", levels = c("A", "B", "C"))),
     as.numeric(cohen_kappa(x, y)),
     tolerance = 1e-12
   )
@@ -163,7 +184,7 @@ test_that("weighted_kappa category order handling follows the documented rules",
   y_num <- c(2, 2, 3, 1, 1, 3)
   numeric_fit <- weighted_kappa(x_num, y_num, weights = "linear")
   expect_equal(
-    numeric_fit,
+    as.numeric(numeric_fit),
     manual_weighted_kappa(x_num, y_num, levels = sort(unique(c(x_num, y_num))), weight_type = "linear"),
     tolerance = 1e-12
   )
@@ -174,6 +195,7 @@ test_that("weighted_kappa category order handling follows the documented rules",
     stringsAsFactors = FALSE
   )
   expect_error(weighted_kappa(bad_nominal), "must be supplied")
+  expect_error(weighted_kappa(bad_nominal$a, bad_nominal$b), "must be supplied")
 
   fit_levels <- weighted_kappa(bad_nominal, levels = lev)
   diag_attr <- attr(fit_levels, "diagnostics")

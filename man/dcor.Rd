@@ -197,7 +197,10 @@ referenced to a Student \eqn{t}-distribution with \eqn{M - 1} degrees of
 freedom. The reported p-value uses the upper-tail probability
 \eqn{P(t_{M-1} \ge T)}. This inference payload is attached as metadata; the
 main returned matrix is unchanged unless \code{p_value} is explicitly
-requested.
+requested. The t reference is an asymptotic approximation. For small
+complete-case sample sizes, especially when \eqn{M - 1} is small, p-values
+can be unstable and should be interpreted cautiously; a permutation-based
+dependence test is preferable when exact small-sample calibration matters.
 }
 \note{
 Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance

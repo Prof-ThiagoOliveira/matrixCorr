@@ -17,7 +17,9 @@
 #' @param p_value Logical (default \code{FALSE}). If \code{TRUE}, attach
 #' permutation p-values for pairwise independence.
 #' @param inference Character scalar. Use \code{"none"} (default) for estimates
-#' only or \code{"permutation"} with \code{p_value = TRUE}.
+#' only or \code{"permutation"} to request permutation p-values. If
+#' \code{inference = "permutation"} is supplied with \code{p_value = FALSE},
+#' p-values are inferred and returned.
 #' @param n_perm Positive integer; number of permutations used when
 #' \code{p_value = TRUE}. Default \code{999}.
 #' @param seed Optional positive integer seed for permutation inference.
@@ -57,6 +59,11 @@
 #' signal is driven by tail observations or outliers.
 #'
 #' @details
+#' Permutation inference is computed for every unique column pair, so the
+#' workload grows as \eqn{p(p-1)n_\mathrm{perm}/2}. A warning is emitted for
+#' large requests; reduce \code{n_perm}, reduce the number of columns, or run
+#' estimates without permutation p-values when this cost is not intended.
+#'
 #' For each variable \eqn{x = (x_1,\ldots,x_n)}, the wrapper first robustly
 #' standardises values using the median
 #' \deqn{m_x = \mathrm{median}(x)}
@@ -196,6 +203,9 @@ robust_dcor <- function(data,
 
   check_bool(p_value, arg = "p_value")
   inference <- match.arg(inference)
+  if (identical(inference, "permutation")) {
+    p_value <- TRUE
+  }
   check_scalar_numeric(c_const, arg = "c_const", lower = 0, closed_lower = FALSE)
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
 
@@ -221,6 +231,13 @@ robust_dcor <- function(data,
   }
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
+
+  if (isTRUE(p_value)) {
+    .mc_warn_large_robust_dcor_permutation_request(
+      n_cols = ncol(numeric_data),
+      n_perm = n_perm
+    )
+  }
 
   prev_threads <- .mc_prepare_omp_threads(
     n_threads,
@@ -305,6 +322,26 @@ robust_dcor <- function(data,
     threshold = output_cfg$threshold,
     diag = output_cfg$diag
   )
+}
+
+.mc_warn_large_robust_dcor_permutation_request <- function(n_cols,
+                                                           n_perm,
+                                                           warn_at = 100000L) {
+  n_pairs <- choose(as.numeric(n_cols), 2)
+  n_tests <- n_pairs * as.numeric(n_perm)
+  if (!is.finite(n_tests) || n_tests <= warn_at) {
+    return(invisible(FALSE))
+  }
+
+  cli::cli_warn(
+    c(
+      "Permutation inference for {.fn robust_dcor} can be expensive.",
+      "i" = "This request runs {format(n_pairs, big.mark = ',')} pairwise permutation test{?s} x {format(n_perm, big.mark = ',')} permutation{?s} = {format(n_tests, big.mark = ',')} resampled pair evaluations.",
+      "i" = "Reduce {.arg n_perm}, reduce the number of columns, or set {.arg inference} = {.val none} and {.arg p_value} = {.val FALSE} if p-values are not needed."
+    ),
+    class = c("matrixCorr_warning", "matrixCorr_permutation_warning")
+  )
+  invisible(TRUE)
 }
 
 #' @rdname robust_dcor

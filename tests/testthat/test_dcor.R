@@ -193,6 +193,11 @@ test_that("dcor summary switches to pairwise inference view when requested", {
   X <- matrix(rnorm(120), nrow = 30, ncol = 4)
   colnames(X) <- paste0("D", seq_len(ncol(X)))
 
+  dc_no_p <- dcor(X)
+  sm_no_p <- summary(dc_no_p)
+  expect_false(isTRUE(attr(sm_no_p, "has_p", exact = TRUE)))
+  expect_false("p_value" %in% names(sm_no_p))
+
   dc <- dcor(X, p_value = TRUE)
   sm <- summary(dc)
 

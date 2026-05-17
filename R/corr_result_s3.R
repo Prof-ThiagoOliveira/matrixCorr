@@ -599,7 +599,7 @@ plot.dgCMatrix <- function(x,
     if (is.matrix(inf$p_value)) pairs$p_value <- as.numeric(add_from_matrix(inf$p_value))
   } else {
     needs_fallback <- estimator_class %in% c(
-      "bicor", "dcor", "pearson_corr", "spearman_rho",
+      "bicor", "pearson_corr", "spearman_rho",
       "kendall_matrix", "pbcor", "wincor", "skipped_corr",
       "partial_corr_matrix"
     )

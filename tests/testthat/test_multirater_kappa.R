@@ -203,6 +203,23 @@ test_that("multirater_kappa resolves categories for character, factor, and suppl
   )
 })
 
+test_that("multirater_kappa requires explicit levels for mixed factor and non-factor ratings", {
+  mixed <- data.frame(
+    r1 = factor(c("mid", "low", "high"), levels = c("low", "mid", "high")),
+    r2 = c("mid", "low", "high"),
+    r3 = c("low", "low", "high"),
+    stringsAsFactors = FALSE
+  )
+
+  expect_error(
+    multirater_kappa(mixed),
+    "factor and non-factor"
+  )
+
+  fit <- multirater_kappa(mixed, levels = c("low", "mid", "high"))
+  expect_identical(attr(fit, "categories"), c("low", "mid", "high"))
+})
+
 test_that("multirater_kappa missing-data modes follow the documented rules", {
   raters <- data.frame(
     r1 = c("A", "A", "B", NA, "C", "A"),
@@ -240,6 +257,64 @@ test_that("multirater_kappa missing-data modes follow the documented rules", {
   )
   fit_available_jk <- multirater_kappa(raters, na_method = "available", p_value = TRUE, se_method = "jackknife")
   expect_identical(attr(fit_available_jk, "se.method"), "jackknife")
+})
+
+test_that("multirater_kappa counts input validates counts and category labels explicitly", {
+  counts <- matrix(
+    c(
+      2, 1, 0,
+      0, 3, 0,
+      0, 0, 1,
+      1, 1, 1
+    ),
+    ncol = 3,
+    byrow = TRUE,
+    dimnames = list(NULL, c("A", "B", "C"))
+  )
+
+  fit <- multirater_kappa(counts, input = "counts", levels = c("low", "mid", "high"), min_raters = 2L)
+  expect_identical(attr(fit, "categories"), c("low", "mid", "high"))
+  expect_equal(fit$n_items[[1L]], 3L)
+  expect_equal(attr(fit, "diagnostics")$row_sums, c(3, 3, 1, 3))
+
+  expect_error(
+    multirater_kappa(counts, input = "counts", levels = c("A", "B")),
+    "length equal to ncol"
+  )
+  expect_error(
+    multirater_kappa(replace(counts, 1, NA), input = "counts"),
+    "missing counts"
+  )
+  expect_error(
+    multirater_kappa(replace(counts, 1, -1), input = "counts"),
+    "non-negative"
+  )
+  expect_error(
+    multirater_kappa(replace(counts, 1, 1.5), input = "counts"),
+    "integer-like"
+  )
+})
+
+test_that("multirater_kappa validates inference-only arguments only when inference is requested", {
+  raters <- data.frame(
+    r1 = c("A", "A", "B", "B"),
+    r2 = c("A", "B", "B", "B"),
+    r3 = c("A", "A", "B", "A"),
+    stringsAsFactors = FALSE
+  )
+
+  fit <- multirater_kappa(raters, exact = TRUE, se_method = "not-a-method", conf_level = NA_real_)
+  expect_true(isTRUE(attr(fit, "exact")))
+  expect_identical(attr(fit, "se.method"), "none")
+
+  expect_error(
+    multirater_kappa(raters, p_value = TRUE, se_method = "not-a-method"),
+    class = "rlang_error"
+  )
+  expect_error(
+    multirater_kappa(raters, p_value = TRUE, conf_level = NA_real_),
+    class = "matrixCorr_arg_error"
+  )
 })
 
 test_that("multirater_kappa records unbalanced available-rater data", {
@@ -356,6 +431,19 @@ test_that("multirater_kappa jackknife inference behaves as documented", {
       se_method = "asymptotic"
     ),
     "asymptotic"
+  )
+  expect_error(
+    multirater_kappa(counts, input = "counts", exact = TRUE, p_value = TRUE),
+    "must be FALSE when"
+  )
+  expect_error(
+    multirater_kappa(
+      data.frame(r1 = c("A", "A", "B"), r2 = c("A", "B", "B"), r3 = c("A", "A", "B")),
+      method = "randolph",
+      exact = TRUE,
+      p_value = TRUE
+    ),
+    "must be FALSE unless"
   )
 })
 

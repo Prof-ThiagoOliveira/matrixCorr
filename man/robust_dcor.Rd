@@ -63,7 +63,9 @@ estimator on the common complete sample.}
 permutation p-values for pairwise independence.}
 
 \item{inference}{Character scalar. Use \code{"none"} (default) for estimates
-only or \code{"permutation"} with \code{p_value = TRUE}.}
+only or \code{"permutation"} to request permutation p-values. If
+\code{inference = "permutation"} is supplied with \code{p_value = FALSE},
+p-values are inferred and returned.}
 
 \item{n_perm}{Positive integer; number of permutations used when
 \code{p_value = TRUE}. Default \code{999}.}
@@ -122,6 +124,11 @@ to each numeric variable and then computing unbiased distance correlation on
 the transformed variables.
 }
 \details{
+Permutation inference is computed for every unique column pair, so the
+workload grows as \eqn{p(p-1)n_\mathrm{perm}/2}. A warning is emitted for
+large requests; reduce \code{n_perm}, reduce the number of columns, or run
+estimates without permutation p-values when this cost is not intended.
+
 For each variable \eqn{x = (x_1,\ldots,x_n)}, the wrapper first robustly
 standardises values using the median
 \deqn{m_x = \mathrm{median}(x)}

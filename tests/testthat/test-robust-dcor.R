@@ -96,3 +96,23 @@ test_that("robust_dcor supports permutation p-values", {
   expect_true(is.matrix(inf$p_value))
   expect_true(is.finite(inf$p_value["x", "y"]))
 })
+
+test_that("robust_dcor infers p-values from permutation inference", {
+  set.seed(5)
+  x <- rnorm(24)
+  y <- x^2 + rnorm(24, sd = 0.3)
+
+  R <- robust_dcor(cbind(x = x, y = y), inference = "permutation", n_perm = 9L, seed = 2L)
+  inf <- attr(R, "inference", exact = TRUE)
+
+  expect_identical(inf$method, "permutation")
+  expect_true(is.matrix(inf$p_value))
+  expect_true(is.finite(inf$p_value["x", "y"]))
+})
+
+test_that("robust_dcor warns for large permutation workloads", {
+  expect_warning(
+    .mc_warn_large_robust_dcor_permutation_request(n_cols = 6L, n_perm = 10L, warn_at = 100L),
+    class = "matrixCorr_permutation_warning"
+  )
+})

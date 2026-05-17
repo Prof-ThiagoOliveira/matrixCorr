@@ -1210,78 +1210,76 @@ cia <- function(data,
 }
 
 .mc_cia_bootstrap_overall <- function(prep, estimator, B, conf_level, seed = NULL, n_threads = 1L) {
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-  alpha <- (1 - conf_level) / 2
-  est <- rep(NA_real_, B)
-  for (b in seq_len(B)) {
-    sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
-    boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
-    boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
-    est[[b]] <- tryCatch(
-      .mc_cia_overall_moments(
-        boot_prep,
-        estimator = estimator,
-        n_threads = n_threads
-      )$cia,
-      error = function(...) NA_real_
+  .mc_eval_with_seed(seed, {
+    alpha <- (1 - conf_level) / 2
+    est <- rep(NA_real_, B)
+    for (b in seq_len(B)) {
+      sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
+      boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
+      boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
+      est[[b]] <- tryCatch(
+        .mc_cia_overall_moments(
+          boot_prep,
+          estimator = estimator,
+          n_threads = n_threads
+        )$cia,
+        error = function(...) NA_real_
+      )
+    }
+    keep <- is.finite(est)
+    ci <- if (sum(keep) >= 2L) {
+      stats::quantile(est[keep], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
+    } else {
+      c(NA_real_, NA_real_)
+    }
+    list(
+      lwr = as.numeric(ci[[1L]]),
+      upr = as.numeric(ci[[2L]]),
+      n_successful = sum(keep),
+      B = B
     )
-  }
-  keep <- is.finite(est)
-  ci <- if (sum(keep) >= 2L) {
-    stats::quantile(est[keep], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
-  } else {
-    c(NA_real_, NA_real_)
-  }
-  list(
-    lwr = as.numeric(ci[[1L]]),
-    upr = as.numeric(ci[[2L]]),
-    n_successful = sum(keep),
-    B = B
-  )
+  })
 }
 
 .mc_cia_bootstrap_pairwise <- function(prep, estimator, B, conf_level, seed = NULL, n_threads = 1L) {
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-  alpha <- (1 - conf_level) / 2
-  arr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, B))
-  for (b in seq_len(B)) {
-    sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
-    boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
-    boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
-    arr[, , b] <- .mc_cia_pairwise_payload(
-      boot_prep,
-      estimator = estimator,
-      n_threads = n_threads
-    )$est
-  }
+  .mc_eval_with_seed(seed, {
+    alpha <- (1 - conf_level) / 2
+    arr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, B))
+    for (b in seq_len(B)) {
+      sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
+      boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
+      boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
+      arr[, , b] <- .mc_cia_pairwise_payload(
+        boot_prep,
+        estimator = estimator,
+        n_threads = n_threads
+      )$est
+    }
 
-  lwr <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(prep$method_levels))
-  upr <- lwr
-  keep_any <- 0L
-  for (i in seq_len(prep$n_methods)) {
-    for (j in seq_len(prep$n_methods)) {
-      vals <- arr[i, j, ]
-      ok <- is.finite(vals)
-      if (sum(ok) >= 2L) {
-        qs <- stats::quantile(vals[ok], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
-        lwr[i, j] <- as.numeric(qs[[1L]])
-        upr[i, j] <- as.numeric(qs[[2L]])
-        keep_any <- keep_any + 1L
+    lwr <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(prep$method_levels))
+    upr <- lwr
+    keep_any <- 0L
+    for (i in seq_len(prep$n_methods)) {
+      for (j in seq_len(prep$n_methods)) {
+        vals <- arr[i, j, ]
+        ok <- is.finite(vals)
+        if (sum(ok) >= 2L) {
+          qs <- stats::quantile(vals[ok], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
+          lwr[i, j] <- as.numeric(qs[[1L]])
+          upr[i, j] <- as.numeric(qs[[2L]])
+          keep_any <- keep_any + 1L
+        }
       }
     }
-  }
-  diag(lwr) <- 1
-  diag(upr) <- 1
-  list(
-    lwr = lwr,
-    upr = upr,
-    n_successful = sum(vapply(seq_len(B), function(b) any(is.finite(arr[, , b])), logical(1))),
-    B = B
-  )
+    diag(lwr) <- 1
+    diag(upr) <- 1
+    list(
+      lwr = lwr,
+      upr = upr,
+      n_successful = sum(vapply(seq_len(B), function(b) any(is.finite(arr[, , b])), logical(1))),
+      B = B
+    )
+  })
 }
 
 .mc_cia_as_corr_result <- function(x) {

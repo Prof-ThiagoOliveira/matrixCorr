@@ -59,7 +59,8 @@ category to that item.}
 \item{levels}{Optional explicit category labels. For nominal multi-rater
 kappa, category order is not used in the estimator itself, but explicit
 levels are useful when unobserved categories should be retained in the
-output.}
+output. If factor columns are mixed with non-factor columns, \code{levels}
+must be supplied to avoid ambiguous implicit ordering.}
 
 \item{input}{One of \code{"ratings"} or \code{"counts"}.}
 
@@ -100,7 +101,9 @@ inferential quantities and may not be combined with \code{ci = TRUE} or
 \code{p_value = TRUE}. When inferential quantities are requested and
 \code{se_method} is left at its default, \code{multirater_kappa()}
 automatically falls back to \code{"jackknife"} if asymptotic inference is
-unavailable for the chosen estimator/data combination.}
+unavailable for the chosen estimator/data combination. \code{se_method}
+and \code{conf_level} are validated only when \code{ci} or \code{p_value}
+requests inferential output.}
 
 \item{n_threads}{Integer \eqn{\ge 1}. Number of OpenMP threads used by the
 C++ backend.}

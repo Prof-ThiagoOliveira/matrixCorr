@@ -85,10 +85,11 @@ Weighted schemes yield AC2. Supported built-in schemes are
 \code{"linear"}, \code{"quadratic"}, \code{"ordinal"},
 \code{"radical"}, \code{"ratio"}, \code{"circular"}, and
 \code{"bipolar"}. A custom numeric agreement-weight matrix may also be
-supplied.}
+supplied. Character schemes must be supplied as a single value.}
 
 \item{levels}{Optional explicit category labels. This is mainly useful when
-unused categories should still be retained in the calculation.}
+unused categories should still be retained in the calculation, and is the
+recommended way to define ordering for ordinal AC2 weights.}
 
 \item{input}{One of \code{"pairwise"}, \code{"ratings"}, or \code{"counts"}.}
 
@@ -205,6 +206,15 @@ nominal-agreement coefficient. With non-identity agreement weights this is
 Gwet's AC2, which extends the same chance-correction idea to ordered or
 partially creditable disagreement by letting near disagreements receive
 larger agreement weights than distant disagreements.
+
+\strong{Category ordering for weighted AC2.} Built-in weighted schemes use
+the category order to define near and distant disagreements. If
+\code{levels} is supplied, that order is used. Otherwise, factor inputs use
+their factor levels, numeric/integer/logical inputs use sorted observed
+values, character inputs use first-observed order, and counts inputs use
+column order (or \code{levels}, when supplied). For ordinal analyses,
+supplying \code{levels} is recommended whenever first-observed character
+order is not the intended scale order.
 
 For panel-level counts, if \eqn{r_{ik}} is the number of raters assigning
 item \eqn{i} to category \eqn{k}, \eqn{r_i = \sum_k r_{ik}}, and

@@ -492,6 +492,25 @@ test_that("pbcor and wincor CI and p-value payloads are optional and well-formed
   expect_null(attr(fit_win_p, "ci", exact = TRUE))
 })
 
+test_that("pbcor validates bootstrap arguments only when CI is requested", {
+  X <- matrix(seq_len(30), nrow = 10, ncol = 3)
+  colnames(X) <- c("A", "B", "C")
+
+  fit <- pbcor(X, p_value = TRUE, ci = FALSE, n_boot = 0L, seed = "bad")
+  expect_s3_class(fit, "pbcor")
+  expect_true(is.list(attr(fit, "inference", exact = TRUE)))
+  expect_null(attr(fit, "ci", exact = TRUE))
+
+  expect_error(
+    pbcor(X, ci = TRUE, n_boot = 0L),
+    class = "matrixCorr_arg_error"
+  )
+  expect_error(
+    pbcor(X, ci = TRUE, seed = "bad"),
+    class = "matrixCorr_arg_error"
+  )
+})
+
 test_that("pbcor and wincor summaries switch to pairwise inference tables when requested", {
   set.seed(166)
   X <- matrix(rnorm(150), nrow = 50, ncol = 3)

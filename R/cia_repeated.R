@@ -1013,132 +1013,131 @@ cia_rm <- function(data,
 }
 
 .mc_cia_rm_bootstrap <- function(prep, homogeneous, B, conf_level, seed = NULL, n_threads = 1L, estimator = "vc_constrained") {
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-  alpha <- (1 - conf_level) / 2
-  est_arr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, prep$n_times, B))
-  common_arr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, B))
-  overall_arr <- if (prep$n_methods >= 3L) {
-    matrix(NA_real_, nrow = prep$n_times, ncol = B, dimnames = list(prep$time_levels, NULL))
-  } else {
-    NULL
-  }
-  overall_common_arr <- if (prep$n_methods >= 3L) rep(NA_real_, B) else NULL
+  .mc_eval_with_seed(seed, {
+    alpha <- (1 - conf_level) / 2
+    est_arr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, prep$n_times, B))
+    common_arr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, B))
+    overall_arr <- if (prep$n_methods >= 3L) {
+      matrix(NA_real_, nrow = prep$n_times, ncol = B, dimnames = list(prep$time_levels, NULL))
+    } else {
+      NULL
+    }
+    overall_common_arr <- if (prep$n_methods >= 3L) rep(NA_real_, B) else NULL
 
-  for (b in seq_len(B)) {
-    sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
-    boot_rows <- integer(prep$n_obs)
-    pos <- 1L
-    for (i in seq_along(sampled)) {
-      idx <- prep$subject_rows[[sampled[[i]]]]
-      rng <- pos:(pos + length(idx) - 1L)
-      boot_rows[rng] <- idx
-      pos <- pos + length(idx)
+    for (b in seq_len(B)) {
+      sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
+      boot_rows <- integer(prep$n_obs)
+      pos <- 1L
+      for (i in seq_along(sampled)) {
+        idx <- prep$subject_rows[[sampled[[i]]]]
+        rng <- pos:(pos + length(idx) - 1L)
+        boot_rows[rng] <- idx
+        pos <- pos + length(idx)
+      }
+
+      y <- prep$y[boot_rows]
+      method_code <- prep$method_code[boot_rows]
+      time_code <- prep$time_code[boot_rows]
+      subject_code <- rep(seq_len(prep$n_subjects), each = prep$rows_per_subject)
+
+      boot_raw <- tryCatch(
+        cia_rm_anova_cpp(
+          y = y,
+          subject = subject_code,
+          method = method_code,
+          time = time_code,
+          n_subjects = prep$n_subjects,
+          n_methods = prep$n_methods,
+          n_times = prep$n_times,
+          homogeneous = homogeneous,
+          constrain_vc = identical(estimator, "vc_constrained"),
+          n_threads = n_threads
+        ),
+        error = function(...) NULL
+      )
+      if (is.null(boot_raw)) {
+        next
+      }
+      est_arr[, , , b] <- .mc_cia_rm_array(boot_raw$est, prep$method_levels, prep$time_levels)
+      common_arr[, , b] <- .mc_cia_rm_matrix(boot_raw$common, prep$method_levels)
+      if (prep$n_methods >= 3L) {
+        overall_arr[, b] <- as.numeric(boot_raw$overall)
+        overall_common_arr[[b]] <- as.numeric(boot_raw$overall_common)
+      }
     }
 
-    y <- prep$y[boot_rows]
-    method_code <- prep$method_code[boot_rows]
-    time_code <- prep$time_code[boot_rows]
-    subject_code <- rep(seq_len(prep$n_subjects), each = prep$rows_per_subject)
-
-    boot_raw <- tryCatch(
-      cia_rm_anova_cpp(
-        y = y,
-        subject = subject_code,
-        method = method_code,
-        time = time_code,
-        n_subjects = prep$n_subjects,
-        n_methods = prep$n_methods,
-        n_times = prep$n_times,
-        homogeneous = homogeneous,
-        constrain_vc = identical(estimator, "vc_constrained"),
-        n_threads = n_threads
-      ),
-      error = function(...) NULL
-    )
-    if (is.null(boot_raw)) {
-      next
+    lwr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, prep$n_times), dimnames = list(prep$method_levels, prep$method_levels, prep$time_levels))
+    upr <- lwr
+    common_lwr <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(prep$method_levels))
+    common_upr <- common_lwr
+    overall_lwr <- if (prep$n_methods >= 3L) stats::setNames(rep(NA_real_, prep$n_times), prep$time_levels) else NULL
+    overall_upr <- if (prep$n_methods >= 3L) stats::setNames(rep(NA_real_, prep$n_times), prep$time_levels) else NULL
+    overall_common_lwr <- if (prep$n_methods >= 3L) NA_real_ else NULL
+    overall_common_upr <- if (prep$n_methods >= 3L) NA_real_ else NULL
+    for (k in seq_len(prep$n_times)) {
+      diag(lwr[, , k]) <- 1
+      diag(upr[, , k]) <- 1
     }
-    est_arr[, , , b] <- .mc_cia_rm_array(boot_raw$est, prep$method_levels, prep$time_levels)
-    common_arr[, , b] <- .mc_cia_rm_matrix(boot_raw$common, prep$method_levels)
+    diag(common_lwr) <- 1
+    diag(common_upr) <- 1
+
+    for (i in seq_len(prep$n_methods)) {
+      for (j in seq_len(prep$n_methods)) {
+        if (i == j) next
+        for (k in seq_len(prep$n_times)) {
+          vals <- est_arr[i, j, k, ]
+          ok <- is.finite(vals)
+          if (sum(ok) >= 2L) {
+            qs <- stats::quantile(vals[ok], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
+            bounded <- .mc_cia_rm_apply_bounds(as.numeric(qs[[1L]]), as.numeric(qs[[2L]]), estimator)
+            lwr[i, j, k] <- bounded$lwr
+            upr[i, j, k] <- bounded$upr
+          }
+        }
+        vals_common <- common_arr[i, j, ]
+        ok_common <- is.finite(vals_common)
+        if (sum(ok_common) >= 2L) {
+          qs <- stats::quantile(vals_common[ok_common], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
+          bounded_common <- .mc_cia_rm_apply_bounds(as.numeric(qs[[1L]]), as.numeric(qs[[2L]]), estimator)
+          common_lwr[i, j] <- bounded_common$lwr
+          common_upr[i, j] <- bounded_common$upr
+        }
+      }
+    }
+
     if (prep$n_methods >= 3L) {
-      overall_arr[, b] <- as.numeric(boot_raw$overall)
-      overall_common_arr[[b]] <- as.numeric(boot_raw$overall_common)
-    }
-  }
-
-  lwr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, prep$n_times), dimnames = list(prep$method_levels, prep$method_levels, prep$time_levels))
-  upr <- lwr
-  common_lwr <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(prep$method_levels))
-  common_upr <- common_lwr
-  overall_lwr <- if (prep$n_methods >= 3L) stats::setNames(rep(NA_real_, prep$n_times), prep$time_levels) else NULL
-  overall_upr <- if (prep$n_methods >= 3L) stats::setNames(rep(NA_real_, prep$n_times), prep$time_levels) else NULL
-  overall_common_lwr <- if (prep$n_methods >= 3L) NA_real_ else NULL
-  overall_common_upr <- if (prep$n_methods >= 3L) NA_real_ else NULL
-  for (k in seq_len(prep$n_times)) {
-    diag(lwr[, , k]) <- 1
-    diag(upr[, , k]) <- 1
-  }
-  diag(common_lwr) <- 1
-  diag(common_upr) <- 1
-
-  for (i in seq_len(prep$n_methods)) {
-    for (j in seq_len(prep$n_methods)) {
-      if (i == j) next
       for (k in seq_len(prep$n_times)) {
-        vals <- est_arr[i, j, k, ]
+        vals <- overall_arr[k, ]
         ok <- is.finite(vals)
         if (sum(ok) >= 2L) {
           qs <- stats::quantile(vals[ok], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
           bounded <- .mc_cia_rm_apply_bounds(as.numeric(qs[[1L]]), as.numeric(qs[[2L]]), estimator)
-          lwr[i, j, k] <- bounded$lwr
-          upr[i, j, k] <- bounded$upr
+          overall_lwr[[k]] <- bounded$lwr
+          overall_upr[[k]] <- bounded$upr
         }
       }
-      vals_common <- common_arr[i, j, ]
-      ok_common <- is.finite(vals_common)
+      ok_common <- is.finite(overall_common_arr)
       if (sum(ok_common) >= 2L) {
-        qs <- stats::quantile(vals_common[ok_common], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
+        qs <- stats::quantile(overall_common_arr[ok_common], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
         bounded_common <- .mc_cia_rm_apply_bounds(as.numeric(qs[[1L]]), as.numeric(qs[[2L]]), estimator)
-        common_lwr[i, j] <- bounded_common$lwr
-        common_upr[i, j] <- bounded_common$upr
+        overall_common_lwr <- bounded_common$lwr
+        overall_common_upr <- bounded_common$upr
       }
     }
-  }
 
-  if (prep$n_methods >= 3L) {
-    for (k in seq_len(prep$n_times)) {
-      vals <- overall_arr[k, ]
-      ok <- is.finite(vals)
-      if (sum(ok) >= 2L) {
-        qs <- stats::quantile(vals[ok], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
-        bounded <- .mc_cia_rm_apply_bounds(as.numeric(qs[[1L]]), as.numeric(qs[[2L]]), estimator)
-        overall_lwr[[k]] <- bounded$lwr
-        overall_upr[[k]] <- bounded$upr
-      }
-    }
-    ok_common <- is.finite(overall_common_arr)
-    if (sum(ok_common) >= 2L) {
-      qs <- stats::quantile(overall_common_arr[ok_common], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
-      bounded_common <- .mc_cia_rm_apply_bounds(as.numeric(qs[[1L]]), as.numeric(qs[[2L]]), estimator)
-      overall_common_lwr <- bounded_common$lwr
-      overall_common_upr <- bounded_common$upr
-    }
-  }
-
-  list(
-    lwr = lwr,
-    upr = upr,
-    common_lwr = common_lwr,
-    common_upr = common_upr,
-    overall_lwr = overall_lwr,
-    overall_upr = overall_upr,
-    overall_common_lwr = overall_common_lwr,
-    overall_common_upr = overall_common_upr,
-    n_successful = sum(vapply(seq_len(B), function(b) any(is.finite(est_arr[, , , b])), logical(1))),
-    B = B
-  )
+    list(
+      lwr = lwr,
+      upr = upr,
+      common_lwr = common_lwr,
+      common_upr = common_upr,
+      overall_lwr = overall_lwr,
+      overall_upr = overall_upr,
+      overall_common_lwr = overall_common_lwr,
+      overall_common_upr = overall_common_upr,
+      n_successful = sum(vapply(seq_len(B), function(b) any(is.finite(est_arr[, , , b])), logical(1))),
+      B = B
+    )
+  })
 }
 
 .mc_cia_rm_flatten <- function(object) {

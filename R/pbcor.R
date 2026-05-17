@@ -534,9 +534,11 @@ pbcor <- function(data,
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
   check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
-  n_boot <- check_scalar_int_pos(n_boot, arg = "n_boot")
-  if (!is.null(seed)) {
-    seed <- check_scalar_int_pos(seed, arg = "seed")
+  if (isTRUE(ci)) {
+    n_boot <- check_scalar_int_pos(n_boot, arg = "n_boot")
+    if (!is.null(seed)) {
+      seed <- check_scalar_int_pos(seed, arg = "seed")
+    }
   }
 
   numeric_data <- if (na_method == "error") {
@@ -612,8 +614,8 @@ pbcor <- function(data,
       ci = ci,
       p_value = p_value,
       conf_level = conf_level,
-      n_boot = n_boot,
-      seed = seed
+      n_boot = if (isTRUE(ci)) n_boot else 500L,
+      seed = if (isTRUE(ci)) seed else NULL
     )
   }
 

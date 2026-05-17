@@ -37,15 +37,27 @@
 #' location and scale differences; unlike Pearson's \eqn{r}, it is not invariant
 #' to affine transformations that change means or variances.
 #'
-#' When \code{ci = TRUE}, large-sample
-#' confidence intervals for \eqn{\rho_c} are returned for each pair (delta-method
-#' approximation). For speed, CIs are omitted when \code{ci = FALSE}.
+#' When \code{ci = TRUE}, large-sample confidence intervals for
+#' \eqn{\rho_c} are returned for each pair. The implementation uses Lin's
+#' delta-method standard error and then forms limits on a Fisher-z transformed
+#' CCC scale before mapping back to \eqn{[-1, 1]}. For speed, CIs are omitted
+#' when \code{ci = FALSE}.
 #'
 #'If either variable has zero variance, \eqn{\rho_c} is
 #' undefined and \code{NA} is returned for that pair (including the diagonal).
 #'
-#' Missing values are not allowed; inputs must be numeric with at least two
-#' distinct non-missing values per column.
+#' Missing-data handling follows the same contract as \code{\link{pearson_corr}}
+#' and \code{\link{spearman_rho}}. With \code{na_method = "error"} (default),
+#' missing and non-finite values are rejected. With \code{"complete"}, rows
+#' incomplete in any retained numeric column are removed once before all pairwise
+#' CCC estimates are computed. With \code{"pairwise"}, each method pair is
+#' computed on its own complete finite overlap, and \code{n_complete}
+#' diagnostics may vary by pair. Pairwise CIs require at least three complete
+#' observations for that pair.
+#'
+#' Negative CCC estimates are fully supported. Matrix output preserves the
+#' signed estimate, while thresholded \code{"sparse"} and \code{"edge_list"}
+#' outputs retain entries according to \code{abs(CCC) >= threshold}.
 #'
 #' Probability of agreement, available through \code{\link{prob_agree}},
 #' answers a
@@ -59,6 +71,11 @@
 #' Non-numeric columns will be ignored.
 #' @param ci Logical; if TRUE, return lower and upper confidence bounds
 #' @param conf_level Confidence level for CI, default = 0.95
+#' @param na_method Character scalar controlling missing-data handling.
+#'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
+#'   \code{"complete"} removes rows incomplete in any retained numeric column
+#'   before computing all CCC estimates. \code{"pairwise"} recomputes each
+#'   method pair on its own complete finite overlap.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param output Output representation for the computed estimates.
@@ -135,6 +152,7 @@
 #' between two methods of clinical measurement. The Lancet 327: 307-310.
 #' @export
 ccc <- function(data, ci = FALSE, conf_level = 0.95,
+                na_method = c("error", "complete", "pairwise"),
                 n_threads = getOption("matrixCorr.threads", 1L),
                 output = c("matrix", "sparse", "edge_list"),
                 threshold = 0,
@@ -150,19 +168,34 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   }
   check_bool(verbose, arg = "verbose")
+  na_method <- match_arg(na_method, c("error", "complete", "pairwise"), arg_name = "na_method")
 
-  numeric_data <- validate_corr_input(data)
+  numeric_data <- validate_corr_input(data, check_na = identical(na_method, "error"))
+  diagnostics_extra <- NULL
+  if (identical(na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(
+      numeric_data,
+      min_n = if (isTRUE(ci)) 3L else 2L,
+      arg = "data"
+    )
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
   mat <- numeric_data
   colnames_data <- colnames(numeric_data)
   dn <- .mc_square_dimnames(colnames_data)
-  diag_payload <- list(
+  if (!is.null(diagnostics_extra)) {
+    diagnostics_extra$n_complete_common <- diagnostics_extra$n_complete
+    diagnostics_extra$n_complete <- NULL
+  }
+  diag_payload <- .mc_merge_diagnostics(list(
     n_complete = matrix(
       as.integer(nrow(mat)),
       nrow = ncol(mat),
       ncol = ncol(mat),
       dimnames = dn
     )
-  )
+  ), diagnostics_extra)
 
   prev_threads <- .mc_prepare_omp_threads(
     n_threads,
@@ -179,7 +212,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
 
   if (!isTRUE(ci) && .mc_supports_direct_threshold_path(
     method = "ccc",
-    na_method = "error",
+    na_method = na_method,
     ci = FALSE,
     output = output_cfg$output,
     threshold = output_cfg$threshold,
@@ -206,6 +239,72 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
     ))
   }
 
+  if (identical(na_method, "pairwise")) {
+    ccc_lin <- .mc_ccc_pairwise(
+      mat = mat,
+      colnames_data = colnames_data,
+      conf_level = conf_level,
+      ci = ci
+    )
+    diag_payload <- ccc_lin$diagnostics
+    if (isTRUE(ci)) {
+      ccc_out <- structure(
+        list(est = ccc_lin$est, lwr.ci = ccc_lin$lwr.ci, upr.ci = ccc_lin$upr.ci),
+        class = c("ccc", "ccc_ci"),
+        method = "Lin's concordance",
+        description = "Pairwise Lin's concordance with confidence intervals",
+        package = "matrixCorr",
+        conf.level = conf_level,
+        ci.method = "lin_delta_fisher_z",
+        diagnostics = diag_payload
+      )
+      if (identical(output_cfg$output, "matrix")) {
+        return(ccc_out)
+      }
+      dense_obj <- .mc_structure_corr_matrix(
+        ccc_lin$est,
+        class_name = "ccc",
+        method = "Lin's concordance",
+        description = "Pairwise Lin's concordance with confidence intervals",
+        diagnostics = diag_payload,
+        dimnames = dn,
+        symmetric = TRUE,
+        classes = c("ccc", "matrix"),
+        extra_attrs = list(
+          ci = list(
+            est = ccc_lin$est,
+            lwr.ci = ccc_lin$lwr.ci,
+            upr.ci = ccc_lin$upr.ci,
+            conf.level = conf_level,
+            ci.method = "lin_delta_fisher_z"
+          ),
+          conf.level = conf_level,
+          ci.method = "lin_delta_fisher_z"
+        )
+      )
+      return(.mc_finalize_corr_output_fast(
+        dense_obj,
+        output = output_cfg$output,
+        threshold = output_cfg$threshold,
+        diag = output_cfg$diag
+      ))
+    }
+    dense_obj <- .mc_new_corr_matrix(
+      mat = ccc_lin$est,
+      estimator_class = "ccc",
+      method = "Lin's concordance",
+      description = "Pairwise Lin's concordance correlation matrix",
+      diagnostics = diag_payload,
+      symmetric = TRUE
+    )
+    return(.mc_finalize_corr_output_fast(
+      dense_obj,
+      output = output_cfg$output,
+      threshold = output_cfg$threshold,
+      diag = output_cfg$diag
+    ))
+  }
+
   if (ci) {
     if (nrow(mat) <= 2L) {
       abort_bad_arg("data",
@@ -228,6 +327,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
       description = "Pairwise Lin's concordance with confidence intervals",
       package = "matrixCorr",
       conf.level = conf_level,
+      ci.method = "lin_delta_fisher_z",
       diagnostics = diag_payload
     )
     if (!identical(output_cfg$output, "matrix")) {
@@ -235,7 +335,8 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
         est = .mc_set_matrix_dimnames(unclass(ccc_lin$est), colnames_data),
         lwr.ci = .mc_set_matrix_dimnames(unclass(ccc_lin$lwr.ci), colnames_data),
         upr.ci = .mc_set_matrix_dimnames(unclass(ccc_lin$upr.ci), colnames_data),
-        conf.level = conf_level
+        conf.level = conf_level,
+        ci.method = "lin_delta_fisher_z"
       )
       dense_obj <- .mc_structure_corr_matrix(
         ccc_lin$est,
@@ -246,7 +347,7 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
         dimnames = dn,
         symmetric = TRUE,
         classes = c("ccc", "matrix"),
-        extra_attrs = list(ci = ci_attr, conf.level = conf_level)
+        extra_attrs = list(ci = ci_attr, conf.level = conf_level, ci.method = "lin_delta_fisher_z")
       )
       return(.mc_finalize_corr_output_fast(
         dense_obj,
@@ -277,6 +378,66 @@ ccc <- function(data, ci = FALSE, conf_level = 0.95,
   }
 
   ccc_lin
+}
+
+.mc_ccc_pairwise <- function(mat, colnames_data = NULL, conf_level = 0.95, ci = FALSE) {
+  p <- ncol(mat)
+  dn <- .mc_square_dimnames(colnames_data)
+  est <- matrix(NA_real_, p, p, dimnames = dn)
+  lwr <- matrix(NA_real_, p, p, dimnames = dn)
+  upr <- matrix(NA_real_, p, p, dimnames = dn)
+  n_complete <- matrix(0L, p, p, dimnames = dn)
+  diag(est) <- 1
+  diag(lwr) <- 1
+  diag(upr) <- 1
+
+  for (i in seq_len(p)) {
+    xi <- mat[, i]
+    ok_i <- is.finite(xi)
+    n_complete[i, i] <- sum(ok_i)
+    if (sum(ok_i) < 2L || stats::var(xi[ok_i]) == 0) {
+      est[i, i] <- NA_real_
+      lwr[i, i] <- NA_real_
+      upr[i, i] <- NA_real_
+    }
+  }
+
+  if (p >= 2L) {
+    for (i in seq_len(p - 1L)) {
+      for (j in (i + 1L):p) {
+        keep <- is.finite(mat[, i]) & is.finite(mat[, j])
+        n_ij <- sum(keep)
+        n_complete[i, j] <- n_complete[j, i] <- as.integer(n_ij)
+        min_n <- if (isTRUE(ci)) 3L else 2L
+        if (n_ij < min_n) {
+          next
+        }
+        pair_mat <- mat[keep, c(i, j), drop = FALSE]
+        if (stats::var(pair_mat[, 1L]) == 0 || stats::var(pair_mat[, 2L]) == 0) {
+          next
+        }
+        if (isTRUE(ci)) {
+          pair_ci <- ccc_with_ci_cpp(pair_mat, conf_level)
+          est[i, j] <- est[j, i] <- pair_ci$est[1L, 2L]
+          lwr[i, j] <- lwr[j, i] <- pair_ci$lwr.ci[1L, 2L]
+          upr[i, j] <- upr[j, i] <- pair_ci$upr.ci[1L, 2L]
+        } else {
+          pair_est <- ccc_cpp(pair_mat)
+          est[i, j] <- est[j, i] <- pair_est[1L, 2L]
+        }
+      }
+    }
+  }
+
+  list(
+    est = est,
+    lwr.ci = lwr,
+    upr.ci = upr,
+    diagnostics = list(
+      n_complete = n_complete,
+      na_method = "pairwise"
+    )
+  )
 }
 
 
@@ -470,7 +631,7 @@ print.summary.ccc <- function(x, digits = NULL, n = NULL,
     max_vars = max_vars,
     width = width,
     show_ci = show_ci,
-    ci_method = "delta_method",
+    ci_method = "lin_delta_fisher_z",
     ...
   )
   invisible(x)

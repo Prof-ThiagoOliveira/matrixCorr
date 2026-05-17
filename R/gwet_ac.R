@@ -17,9 +17,10 @@
 #'   \code{"linear"}, \code{"quadratic"}, \code{"ordinal"},
 #'   \code{"radical"}, \code{"ratio"}, \code{"circular"}, and
 #'   \code{"bipolar"}. A custom numeric agreement-weight matrix may also be
-#'   supplied.
+#'   supplied. Character schemes must be supplied as a single value.
 #' @param levels Optional explicit category labels. This is mainly useful when
-#'   unused categories should still be retained in the calculation.
+#'   unused categories should still be retained in the calculation, and is the
+#'   recommended way to define ordering for ordinal AC2 weights.
 #' @param input One of \code{"pairwise"}, \code{"ratings"}, or \code{"counts"}.
 #' @param na_method Missing-data rule. For scalar two-rater and pairwise matrix
 #'   modes, \code{"error"} rejects missing values, \code{"complete"} applies
@@ -67,6 +68,15 @@
 #' Gwet's AC2, which extends the same chance-correction idea to ordered or
 #' partially creditable disagreement by letting near disagreements receive
 #' larger agreement weights than distant disagreements.
+#'
+#' \strong{Category ordering for weighted AC2.} Built-in weighted schemes use
+#' the category order to define near and distant disagreements. If
+#' \code{levels} is supplied, that order is used. Otherwise, factor inputs use
+#' their factor levels, numeric/integer/logical inputs use sorted observed
+#' values, character inputs use first-observed order, and counts inputs use
+#' column order (or \code{levels}, when supplied). For ordinal analyses,
+#' supplying \code{levels} is recommended whenever first-observed character
+#' order is not the intended scale order.
 #'
 #' For panel-level counts, if \eqn{r_{ik}} is the number of raters assigning
 #' item \eqn{i} to category \eqn{k}, \eqn{r_i = \sum_k r_{ik}}, and
@@ -247,7 +257,12 @@ gwet_ac <- function(data,
       y_labels <- y_labels[keep]
     }
 
-    enc <- .mc_encode_gwet_pair_labels(x_labels, y_labels, levels = levels)
+    analysis_levels <- .mc_resolve_gwet_category_levels(
+      cols = list(data, y),
+      labels = list(x_labels, y_labels),
+      levels = levels
+    )
+    enc <- .mc_encode_gwet_pair_labels(x_labels, y_labels, levels = analysis_levels)
     W <- .mc_resolve_gwet_weights(weights, enc$levels)
     fit <- gwet_ac_pair_cpp(
       enc$x,
@@ -384,24 +399,52 @@ gwet_ac <- function(data,
   out
 }
 
+.mc_resolve_gwet_category_levels <- function(cols, labels, levels = NULL) {
+  if (!is.atomic(levels) || length(levels) < 2L) {
+    if (!is.null(levels)) {
+      abort_bad_arg("levels", message = "must be an atomic vector with at least two categories.")
+    }
+  }
+
+  if (!is.null(levels)) {
+    if (anyNA(levels)) {
+      abort_bad_arg("levels", message = "must not contain missing values.")
+    }
+    level_keys <- as.character(levels)
+    if (anyDuplicated(level_keys)) {
+      abort_bad_arg("levels", message = "must not contain duplicate categories.")
+    }
+    observed <- unlist(lapply(labels, function(z) z[!is.na(z)]), use.names = FALSE)
+    if (length(observed) && any(!observed %in% level_keys)) {
+      abort_bad_arg("levels", message = "must contain every non-missing observed category.")
+    }
+    return(levels)
+  }
+
+  all_factor <- all(vapply(cols, is.factor, logical(1)))
+  all_numericish <- all(vapply(cols, function(z) is.numeric(z) || is.integer(z), logical(1)))
+  all_logical <- all(vapply(cols, is.logical, logical(1)))
+
+  if (all_factor) {
+    out <- unique(unlist(lapply(cols, levels), use.names = FALSE))
+  } else if (all_numericish || all_logical) {
+    observed <- unlist(lapply(cols, function(z) z[!is.na(z)]), use.names = FALSE)
+    out <- sort(unique(observed))
+  } else {
+    out <- unique(unlist(lapply(labels, function(z) z[!is.na(z)]), use.names = FALSE))
+  }
+
+  if (length(out) < 2L) {
+    abort_bad_arg("levels", message = "must define at least two categories.")
+  }
+  out
+}
+
 .mc_encode_gwet_pair_labels <- function(x_labels, y_labels, levels = NULL) {
   if (is.null(levels)) {
     return(.mc_encode_nominal_pair_labels(x_labels, y_labels))
   }
-  if (!is.atomic(levels) || length(levels) < 2L) {
-    abort_bad_arg("levels", message = "must be an atomic vector with at least two categories.")
-  }
-  if (anyNA(levels)) {
-    abort_bad_arg("levels", message = "must not contain missing values.")
-  }
   level_keys <- as.character(levels)
-  if (anyDuplicated(level_keys)) {
-    abort_bad_arg("levels", message = "must not contain duplicate categories.")
-  }
-  observed <- c(x_labels[!is.na(x_labels)], y_labels[!is.na(y_labels)])
-  if (length(observed) && any(!observed %in% level_keys)) {
-    abort_bad_arg("levels", message = "must contain every non-missing observed category.")
-  }
   list(
     x = .mc_match_nominal_levels(x_labels, level_keys),
     y = .mc_match_nominal_levels(y_labels, level_keys),
@@ -411,22 +454,8 @@ gwet_ac <- function(data,
 }
 
 .mc_extract_gwet_pairwise_columns <- function(data, levels = NULL) {
-  if (is.null(levels)) {
-    return(.mc_extract_nominal_columns(data, arg = "data", min_cols = 2L))
-  }
-
   if (!is.data.frame(data) && !is.matrix(data)) {
     abort_bad_arg("data", message = "must be a matrix or data frame in matrix mode.")
-  }
-  if (!is.atomic(levels) || length(levels) < 2L) {
-    abort_bad_arg("levels", message = "must be an atomic vector with at least two categories.")
-  }
-  if (anyNA(levels)) {
-    abort_bad_arg("levels", message = "must not contain missing values.")
-  }
-  level_keys <- as.character(levels)
-  if (anyDuplicated(level_keys)) {
-    abort_bad_arg("levels", message = "must not contain duplicate categories.")
   }
 
   cols <- if (is.data.frame(data)) unclass(data) else lapply(seq_len(ncol(data)), function(j) data[, j])
@@ -443,10 +472,8 @@ gwet_ac <- function(data,
     }
     labels[[j]] <- .mc_nominal_vector_labels(cols[[j]], arg = col_arg)
   }
-  observed <- unlist(lapply(labels, function(z) z[!is.na(z)]), use.names = FALSE)
-  if (length(observed) && any(!observed %in% level_keys)) {
-    abort_bad_arg("levels", message = "must contain every non-missing observed category.")
-  }
+  categories <- .mc_resolve_gwet_category_levels(cols = cols, labels = labels, levels = levels)
+  level_keys <- as.character(categories)
 
   X <- matrix(
     NA_integer_,
@@ -459,7 +486,7 @@ gwet_ac <- function(data,
   }
   list(
     matrix = X,
-    levels = levels,
+    levels = categories,
     n_levels = length(level_keys),
     names = col_names
   )
@@ -477,8 +504,16 @@ gwet_ac <- function(data,
   check_scalar_numeric(n_levels, arg = "categories", lower = 1, closed_lower = TRUE)
 
   if (is.character(weights)) {
+    choices <- c("unweighted", "linear", "quadratic", "ordinal", "radical", "ratio", "circular", "bipolar")
     if (length(weights) != 1L) {
-      weights <- weights[[1L]]
+      if (identical(weights, choices)) {
+        weights <- choices[[1L]]
+      } else {
+        abort_bad_arg("weights", message = "must be a single character weight scheme or a numeric square matrix.")
+      }
+    }
+    if (is.na(weights)) {
+      abort_bad_arg("weights", message = "must be a single character weight scheme or a numeric square matrix.")
     }
     key <- tolower(weights[[1L]])
     alias_map <- c(
@@ -571,6 +606,7 @@ gwet_ac <- function(data,
     diag(W) <- 1
     W[W < 0] <- 0
     W[W > 1] <- 1
+    dimnames(W) <- list(as.character(categories), as.character(categories))
     attr(W, "weight_type") <- resolved
     attr(W, "coefficient") <- if (identical(resolved, "unweighted")) "AC1" else "AC2"
     return(W)

@@ -12,6 +12,7 @@ ccc(
   data,
   ci = FALSE,
   conf_level = 0.95,
+  na_method = c("error", "complete", "pairwise"),
   n_threads = getOption("matrixCorr.threads", 1L),
   output = c("matrix", "sparse", "edge_list"),
   threshold = 0,
@@ -73,6 +74,12 @@ Non-numeric columns will be ignored.}
 \item{ci}{Logical; if TRUE, return lower and upper confidence bounds}
 
 \item{conf_level}{Confidence level for CI, default = 0.95}
+
+\item{na_method}{Character scalar controlling missing-data handling.
+\code{"error"} rejects missing, \code{NaN}, and infinite values.
+\code{"complete"} removes rows incomplete in any retained numeric column
+before computing all CCC estimates. \code{"pairwise"} recomputes each
+method pair on its own complete finite overlap.}
 
 \item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
@@ -187,15 +194,27 @@ addition, \eqn{r=1}. CCC is symmetric in \eqn{(X,Y)} and penalises both
 location and scale differences; unlike Pearson's \eqn{r}, it is not invariant
 to affine transformations that change means or variances.
 
-When \code{ci = TRUE}, large-sample
-confidence intervals for \eqn{\rho_c} are returned for each pair (delta-method
-approximation). For speed, CIs are omitted when \code{ci = FALSE}.
+When \code{ci = TRUE}, large-sample confidence intervals for
+\eqn{\rho_c} are returned for each pair. The implementation uses Lin's
+delta-method standard error and then forms limits on a Fisher-z transformed
+CCC scale before mapping back to \eqn{[-1, 1]}. For speed, CIs are omitted
+when \code{ci = FALSE}.
 
 If either variable has zero variance, \eqn{\rho_c} is
 undefined and \code{NA} is returned for that pair (including the diagonal).
 
-Missing values are not allowed; inputs must be numeric with at least two
-distinct non-missing values per column.
+Missing-data handling follows the same contract as \code{\link{pearson_corr}}
+and \code{\link{spearman_rho}}. With \code{na_method = "error"} (default),
+missing and non-finite values are rejected. With \code{"complete"}, rows
+incomplete in any retained numeric column are removed once before all pairwise
+CCC estimates are computed. With \code{"pairwise"}, each method pair is
+computed on its own complete finite overlap, and \code{n_complete}
+diagnostics may vary by pair. Pairwise CIs require at least three complete
+observations for that pair.
+
+Negative CCC estimates are fully supported. Matrix output preserves the
+signed estimate, while thresholded \code{"sparse"} and \code{"edge_list"}
+outputs retain entries according to \code{abs(CCC) >= threshold}.
 
 Probability of agreement, available through \code{\link{prob_agree}},
 answers a

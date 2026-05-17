@@ -91,9 +91,9 @@
 #' unordered nominal categories where all disagreements are equally serious.
 #'
 #' @return
-#' If \code{y} is supplied and neither \code{ci} nor \code{p_value} is
-#' requested, a single numeric estimate. If \code{y} is supplied and inference
-#' is requested, a small named list is returned. Otherwise a symmetric
+#' If \code{y} is supplied, a scalar S3 object of class
+#' \code{c("weighted_kappa", "numeric")} is returned with diagnostics and
+#' optional \code{ci} and \code{inference} attributes. Otherwise a symmetric
 #' matrix-style result with estimator class \code{weighted_kappa}.
 #'
 #' @references
@@ -195,31 +195,14 @@ weighted_kappa <- function(data,
       return_inference = isTRUE(ci) || isTRUE(p_value),
       conf_level = conf_level
     )
-    if (!isTRUE(ci) && !isTRUE(p_value)) {
-      return(as.numeric(fit$estimate))
-    }
-
-    out <- list(
-      estimate = as.numeric(fit$estimate),
-      n_complete = as.integer(fit$n_complete),
-      observed_agreement = as.numeric(fit$observed_agreement),
-      expected_agreement = as.numeric(fit$expected_agreement),
+    return(.mc_weighted_kappa_scalar(
+      fit,
       levels = enc$levels,
       weights = W,
-      weight_type = attr(W, "weight_type", exact = TRUE)
-    )
-    if (isTRUE(ci)) {
-      out$lwr <- as.numeric(fit$lwr)
-      out$upr <- as.numeric(fit$upr)
-      out$conf_level <- conf_level
-      out$ci_method <- "delta"
-    }
-    if (isTRUE(p_value)) {
-      out$se <- as.numeric(fit$se)
-      out$statistic <- as.numeric(fit$statistic)
-      out$p_value <- as.numeric(fit$p_value)
-    }
-    return(out)
+      ci = ci,
+      p_value = p_value,
+      conf_level = conf_level
+    ))
   }
 
   X <- enc$X
@@ -457,6 +440,53 @@ weighted_kappa <- function(data,
 .mc_weighted_kappa_weights_for_diagnostics <- function(weights, levels) {
   out <- unclass(weights)
   dimnames(out) <- list(as.character(levels), as.character(levels))
+  out
+}
+
+.mc_weighted_kappa_scalar <- function(fit,
+                                      levels,
+                                      weights,
+                                      ci = FALSE,
+                                      p_value = FALSE,
+                                      conf_level = 0.95) {
+  est <- as.numeric(fit$estimate)
+  out <- structure(est, class = c("weighted_kappa", "numeric"))
+  attr(out, "method") <- "weighted_kappa"
+  attr(out, "description") <- "Pairwise weighted Cohen's kappa agreement"
+  attr(out, "package") <- "matrixCorr"
+  attr(out, "estimate") <- est
+  attr(out, "levels") <- levels
+  attr(out, "weights") <- .mc_weighted_kappa_weights_for_diagnostics(weights, levels)
+  attr(out, "weight_type") <- attr(weights, "weight_type", exact = TRUE)
+  attr(out, "diagnostics") <- list(
+    n_complete = as.integer(fit$n_complete),
+    observed_agreement = as.numeric(fit$observed_agreement),
+    expected_agreement = as.numeric(fit$expected_agreement),
+    levels = levels,
+    weights = .mc_weighted_kappa_weights_for_diagnostics(weights, levels),
+    weight_type = attr(weights, "weight_type", exact = TRUE)
+  )
+  if (isTRUE(ci)) {
+    attr(out, "ci") <- list(
+      est = est,
+      lwr.ci = as.numeric(fit$lwr),
+      upr.ci = as.numeric(fit$upr),
+      conf.level = conf_level,
+      ci.method = "delta"
+    )
+    attr(out, "conf.level") <- conf_level
+    attr(out, "conf_level") <- conf_level
+  }
+  if (isTRUE(p_value)) {
+    attr(out, "inference") <- list(
+      method = "delta_wald_weighted_kappa",
+      estimate = est,
+      se = as.numeric(fit$se),
+      statistic = as.numeric(fit$statistic),
+      p_value = as.numeric(fit$p_value),
+      n_obs = as.integer(fit$n_complete)
+    )
+  }
   out
 }
 
@@ -770,6 +800,33 @@ print.weighted_kappa <- function(x,
                                  width = NULL,
                                  show_ci = NULL,
                                  ...) {
+  if (!is.matrix(x)) {
+    diag_attr <- attr(x, "diagnostics", exact = TRUE)
+    ci_attr <- attr(x, "ci", exact = TRUE)
+    inf_attr <- attr(x, "inference", exact = TRUE)
+    cat("Weighted Cohen's kappa agreement\n")
+    cat("  kappa              :", formatC(as.numeric(x), format = "f", digits = digits), "\n")
+    cat("  weight type        :", attr(x, "weight_type", exact = TRUE) %||% NA_character_, "\n")
+    cat("  complete pairs     :", .mc_count_fmt(diag_attr$n_complete %||% NA_integer_), "\n")
+    cat("  observed agreement :", formatC(diag_attr$observed_agreement %||% NA_real_, format = "f", digits = digits), "\n")
+    cat("  expected agreement :", formatC(diag_attr$expected_agreement %||% NA_real_, format = "f", digits = digits), "\n")
+    if (is.list(ci_attr)) {
+      cat(
+        "  CI                 :",
+        sprintf(
+          "%g%% [%s, %s]",
+          100 * suppressWarnings(as.numeric(ci_attr$conf.level %||% NA_real_)),
+          formatC(ci_attr$lwr.ci %||% NA_real_, format = "f", digits = digits),
+          formatC(ci_attr$upr.ci %||% NA_real_, format = "f", digits = digits)
+        ),
+        "\n"
+      )
+    }
+    if (is.list(inf_attr)) {
+      cat("  p-value            :", formatC(inf_attr$p_value %||% NA_real_, format = "f", digits = digits), "\n")
+    }
+    return(invisible(x))
+  }
   .mc_print_corr_matrix(
     x,
     header = "Weighted Cohen's kappa agreement matrix",

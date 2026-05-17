@@ -88,3 +88,58 @@ test_that("ccc keeps only canonical CI components when intervals are requested",
   expect_true(is.matrix(attr(fit_ci, "diagnostics")$n_complete))
 })
 
+test_that("ccc missing-data modes match Pearson/Spearman semantics", {
+  X <- cbind(
+    a = c(1, 2, 3, 4, 5, NA),
+    b = c(1, 2, NA, 4, 5, 6),
+    c = c(6, 5, 4, 3, 2, 1)
+  )
+
+  expect_error(ccc(X, na_method = "error"), "Missing")
+
+  keep_all <- apply(is.finite(X), 1L, all)
+  fit_complete <- ccc(X, na_method = "complete")
+  ref_complete <- ccc(X[keep_all, , drop = FALSE])
+  got_complete <- unclass(as.matrix(fit_complete))
+  ref_complete_mat <- unclass(as.matrix(ref_complete))
+  attributes(got_complete) <- attributes(got_complete)[c("dim", "dimnames")]
+  attributes(ref_complete_mat) <- attributes(ref_complete_mat)[c("dim", "dimnames")]
+  expect_equal(got_complete, ref_complete_mat, tolerance = 1e-12)
+  expect_equal(attr(fit_complete, "diagnostics")$n_complete, matrix(sum(keep_all), 3, 3, dimnames = dimnames(fit_complete)))
+  expect_identical(attr(fit_complete, "diagnostics")$na_method, "complete")
+
+  fit_pairwise <- ccc(X, na_method = "pairwise")
+  diag_n <- attr(fit_pairwise, "diagnostics")$n_complete
+  expect_equal(diag_n["a", "b"], sum(is.finite(X[, "a"]) & is.finite(X[, "b"])))
+  expect_equal(diag_n["a", "c"], sum(is.finite(X[, "a"]) & is.finite(X[, "c"])))
+  expect_equal(diag_n["b", "c"], sum(is.finite(X[, "b"]) & is.finite(X[, "c"])))
+
+  ref_ab <- ccc(X[is.finite(X[, "a"]) & is.finite(X[, "b"]), c("a", "b"), drop = FALSE])
+  expect_equal(fit_pairwise["a", "b"], ref_ab["a", "b"], tolerance = 1e-12)
+})
+
+test_that("ccc pairwise CIs and negative estimates are supported across output modes", {
+  X <- cbind(
+    x = c(1, 2, 3, 4, 5, NA),
+    y = c(5.1, 3.8, 3.2, 2.1, 0.9, 0),
+    z = c(1, 2, 1, 2, NA, 3)
+  )
+
+  fit_ci <- ccc(X, ci = TRUE, na_method = "pairwise")
+  expect_s3_class(fit_ci, "ccc_ci")
+  expect_identical(attr(fit_ci, "ci.method", exact = TRUE), "lin_delta_fisher_z")
+  expect_true(is.finite(fit_ci$lwr.ci["x", "y"]))
+  expect_lt(fit_ci$est["x", "y"], 0)
+
+  edge <- ccc(X, na_method = "pairwise", output = "edge_list", threshold = 0.5)
+  expect_s3_class(edge, "corr_edge_list")
+  expect_true(any(edge$row == "x" & edge$col == "y" & edge$value < 0))
+
+  edge_ci <- ccc(X, ci = TRUE, na_method = "pairwise", output = "edge_list", threshold = 0.5)
+  expect_s3_class(edge_ci, "corr_edge_list")
+  ci_attr <- attr(edge_ci, "ci", exact = TRUE)
+  expect_true(is.matrix(ci_attr$lwr.ci))
+  expect_identical(ci_attr$ci.method, "lin_delta_fisher_z")
+  expect_true(any(edge_ci$row == "x" & edge_ci$col == "y" & edge_ci$value < 0))
+})
+
