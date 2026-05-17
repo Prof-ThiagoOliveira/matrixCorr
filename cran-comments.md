@@ -42,6 +42,11 @@ This is a new release of `matrixCorr`.
   method for count-agreement data. It reports total CCC, inter-CCC for
   replicate means, method-specific intra-CCC, variance-component diagnostics,
   and delta-method confidence intervals.
+* added `hsic()`, an exported pairwise Hilbert-Schmidt independence criterion
+  method for kernel dependence matrices. It supports raw biased and unbiased
+  HSIC estimates, normalised kCor-style dependence, Gaussian, linear, Laplace
+  and polynomial kernels, median/Silverman/Scott bandwidth rules, permutation
+  p-values, and error/complete/pairwise missing-data handling.
 
 ## Bug
 

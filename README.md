@@ -28,16 +28,17 @@ common interface and consistent outputs, so methods can be extended,
 compared, and used without repeated translation across packages.
 
 Supported measures include Pearson, Spearman, Kendall, distance
-correlation, partial correlation, robust biweight mid-correlation,
-percentage bend, Winsorized, skipped correlation, and latent
-categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
-and biserial), plus repeated-measures correlation (`rmcorr()`);
-agreement tools cover Cohen's kappa for nominal ratings, weighted
-Cohen's kappa for ordered two-rater agreement, Gwet's AC1/AC2,
-multi-rater kappa for nominal panel agreement, Krippendorff's alpha for
+correlation, partial correlation, kernel dependence via the
+Hilbert-Schmidt independence criterion (`hsic()`), robust biweight
+mid-correlation, percentage bend, Winsorized, skipped correlation, and
+latent categorical/ordinal correlations (tetrachoric, polychoric,
+polyserial, and biserial), plus repeated-measures correlation
+(`rmcorr()`); agreement tools cover Cohen’s kappa for nominal ratings,
+weighted Cohen’s kappa for ordered two-rater agreement, Gwet’s AC1/AC2,
+multi-rater kappa for nominal panel agreement, Krippendorff’s alpha for
 panel-level reliability, Bland-Altman (two-method and
 repeated-measures), the coefficient of individual agreement for
-replicated and repeated-measures designs (`cia()`, `cia_rm()`), Lin's
+replicated and repeated-measures designs (`cia()`, `cia_rm()`), Lin’s
 concordance correlation coefficient (including repeated-measures
 LMM/REML extensions and Poisson GLMM count-data CCC), and intraclass
 correlation for both wide and repeated-measures designs.
@@ -50,6 +51,7 @@ correlation for both wide and repeated-measures designs.
 | General correlations | `pearson_corr()`, `spearman_rho()`, `kendall_tau()` |
 | Robust correlations | `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()` |
 | Distance correlation | `dcor()`, `robust_dcor()` |
+| Kernel dependence | `hsic()` for raw biased/unbiased HSIC, normalised kCor-style dependence, kernel bandwidth rules, and permutation p-values |
 | Partial correlation | `pcorr()` |
 | Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
 | Repeated-measures correlation | `rmcorr()` |
@@ -59,7 +61,7 @@ correlation for both wide and repeated-measures designs.
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
 | Agreement: individual agreement | Replicated long-format `cia()`, repeated-measures `cia_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
-| Agreement: concordance | Pairwise Lin's CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, Poisson GLMM count-data CCC `ccc_glmm()`, non-parametric `ccc_rm_ustat()` |
+| Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, Poisson GLMM count-data CCC `ccc_glmm()`, non-parametric `ccc_rm_ustat()` |
 | Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |
 | Interactive viewers | Matrix-style Shiny viewers, including the repeated-measures correlation viewer `view_rmcorr_shiny()` |
 
@@ -120,10 +122,10 @@ summary(R_pear)
 #> Pearson correlation summary
 #>   output      : matrix
 #>   dimensions  : 6 x 6
-#>   retained_pairs: 21
+#>   retained_pairs: 15
 #>   threshold   : 0.0000
 #>   diag        : included
-#>   estimate    : -0.1410 to 1.0000
+#>   estimate    : -0.1410 to 0.1272
 #>   ci          : 95%
 #>   ci_method   : fisher_z
 #>   ci_width    : 0.222 to 0.226
@@ -158,9 +160,15 @@ plot(R_bicor)
 <img src="man/figures/README-unnamed-chunk-3-1.png" alt="" width="100%" />
 
 The same matrix-style workflow extends to Spearman, Kendall, distance
-correlation, partial correlation, shrinkage correlation, latent
-correlation, and the robust estimators `pbcor()`, `wincor()`, and
-`skipped_corr()`.
+correlation, HSIC/kernel dependence, partial correlation, shrinkage
+correlation, latent correlation, and the robust estimators `pbcor()`,
+`wincor()`, and `skipped_corr()`.
+
+`hsic()` computes pairwise kernel dependence matrices with Gaussian,
+linear, Laplace, and polynomial kernels. It defaults to the package’s
+normalised kCor-style output; use `normalise = FALSE` to return raw HSIC
+estimates, and `p_value = TRUE` for permutation-based independence
+tests.
 
 ### Agreement and repeated-measures workflow
 
@@ -194,17 +202,17 @@ summary(fit_ccc_rm)
 #> Concordance estimates
 #> 
 #>  item1 item2 estimate n_subjects n_obs SB     se_ccc
-#>  A     B     0.8841   24         192   0.0548 0.0216
+#>  A     B     0.884    24         192   0.0548 0.0216
 #> 
 #> Variance components
 #> 
 #>  sigma2_subject sigma2_subject_method sigma2_subject_time sigma2_error
-#>  0.7866         0.0176                0                   0.1229      
+#>  0.7848         0.0192                0.007               0.1168      
 #> 
 #> AR(1) diagnostics
 #> 
 #>  ar1_rho ar1_rho_lag1 ar1_rho_mom ar1_pairs ar1_pval use_ar1 ar1_recommend
-#>  -0.1256 -0.1256      -0.1256     144       0.1318   FALSE   FALSE
+#>  -0.1073 -0.1073      -0.1073     144       0.198    FALSE   FALSE
 ```
 
 Agreement and reliability methods use the same general inspection

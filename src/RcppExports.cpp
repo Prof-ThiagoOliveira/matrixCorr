@@ -653,6 +653,55 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// hsic_matrix_cpp
+arma::mat hsic_matrix_cpp(const arma::mat& X, int kernel_code, int bandwidth_code, bool normalise, int estimator_code);
+RcppExport SEXP _matrixCorr_hsic_matrix_cpp(SEXP XSEXP, SEXP kernel_codeSEXP, SEXP bandwidth_codeSEXP, SEXP normaliseSEXP, SEXP estimator_codeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< int >::type kernel_code(kernel_codeSEXP);
+    Rcpp::traits::input_parameter< int >::type bandwidth_code(bandwidth_codeSEXP);
+    Rcpp::traits::input_parameter< bool >::type normalise(normaliseSEXP);
+    Rcpp::traits::input_parameter< int >::type estimator_code(estimator_codeSEXP);
+    rcpp_result_gen = Rcpp::wrap(hsic_matrix_cpp(X, kernel_code, bandwidth_code, normalise, estimator_code));
+    return rcpp_result_gen;
+END_RCPP
+}
+// hsic_raw_biased_matrix_object_cpp
+Rcpp::NumericMatrix hsic_raw_biased_matrix_object_cpp(const arma::mat& X, int kernel_code, int bandwidth_code, std::string kernel, std::string bandwidth, Rcpp::CharacterVector names);
+RcppExport SEXP _matrixCorr_hsic_raw_biased_matrix_object_cpp(SEXP XSEXP, SEXP kernel_codeSEXP, SEXP bandwidth_codeSEXP, SEXP kernelSEXP, SEXP bandwidthSEXP, SEXP namesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< int >::type kernel_code(kernel_codeSEXP);
+    Rcpp::traits::input_parameter< int >::type bandwidth_code(bandwidth_codeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type kernel(kernelSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bandwidth(bandwidthSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type names(namesSEXP);
+    rcpp_result_gen = Rcpp::wrap(hsic_raw_biased_matrix_object_cpp(X, kernel_code, bandwidth_code, kernel, bandwidth, names));
+    return rcpp_result_gen;
+END_RCPP
+}
+// hsic_matrix_pairwise_cpp
+Rcpp::List hsic_matrix_pairwise_cpp(const arma::mat& X, int kernel_code, int bandwidth_code, bool normalise, int estimator_code, bool return_inference, int B, Rcpp::Nullable<Rcpp::IntegerVector> seed);
+RcppExport SEXP _matrixCorr_hsic_matrix_pairwise_cpp(SEXP XSEXP, SEXP kernel_codeSEXP, SEXP bandwidth_codeSEXP, SEXP normaliseSEXP, SEXP estimator_codeSEXP, SEXP return_inferenceSEXP, SEXP BSEXP, SEXP seedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< int >::type kernel_code(kernel_codeSEXP);
+    Rcpp::traits::input_parameter< int >::type bandwidth_code(bandwidth_codeSEXP);
+    Rcpp::traits::input_parameter< bool >::type normalise(normaliseSEXP);
+    Rcpp::traits::input_parameter< int >::type estimator_code(estimator_codeSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_inference(return_inferenceSEXP);
+    Rcpp::traits::input_parameter< int >::type B(BSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type seed(seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(hsic_matrix_pairwise_cpp(X, kernel_code, bandwidth_code, normalise, estimator_code, return_inference, B, seed));
+    return rcpp_result_gen;
+END_RCPP
+}
 // icc_matrix_cpp
 Rcpp::List icc_matrix_cpp(const arma::mat& X, const int form_code, const bool average_unit, const bool pairwise_complete, const bool return_ci, const double conf_level, const int n_threads);
 RcppExport SEXP _matrixCorr_icc_matrix_cpp(SEXP XSEXP, SEXP form_codeSEXP, SEXP average_unitSEXP, SEXP pairwise_completeSEXP, SEXP return_ciSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
@@ -1348,6 +1397,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_gwet_ac_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_threshold_triplets_cpp, 7},
     {"_matrixCorr_gwet_ac_counts_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_counts_cpp, 6},
     {"_matrixCorr_gwet_ac_ratings_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_ratings_cpp, 9},
+    {"_matrixCorr_hsic_matrix_cpp", (DL_FUNC) &_matrixCorr_hsic_matrix_cpp, 5},
+    {"_matrixCorr_hsic_raw_biased_matrix_object_cpp", (DL_FUNC) &_matrixCorr_hsic_raw_biased_matrix_object_cpp, 6},
+    {"_matrixCorr_hsic_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_hsic_matrix_pairwise_cpp, 8},
     {"_matrixCorr_icc_matrix_cpp", (DL_FUNC) &_matrixCorr_icc_matrix_cpp, 7},
     {"_matrixCorr_icc_overall_cpp", (DL_FUNC) &_matrixCorr_icc_overall_cpp, 3},
     {"_matrixCorr_kendall_matrix_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_cpp, 1},

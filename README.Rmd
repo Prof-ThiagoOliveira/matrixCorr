@@ -37,7 +37,8 @@ consistent outputs, so methods can be extended, compared, and used without
 repeated translation across packages.
 
 Supported measures include Pearson, Spearman, Kendall, distance correlation,
-partial correlation, robust biweight mid-correlation, percentage bend,
+partial correlation, kernel dependence via the Hilbert-Schmidt independence
+criterion (`hsic()`), robust biweight mid-correlation, percentage bend,
 Winsorized, skipped correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial, and
 biserial), plus repeated-measures correlation (`rmcorr()`); agreement tools
@@ -58,6 +59,7 @@ both wide and repeated-measures designs.
 | General correlations | `pearson_corr()`, `spearman_rho()`, `kendall_tau()` |
 | Robust correlations | `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()` |
 | Distance correlation | `dcor()`, `robust_dcor()` |
+| Kernel dependence | `hsic()` for raw biased/unbiased HSIC, normalised kCor-style dependence, kernel bandwidth rules, and permutation p-values |
 | Partial correlation | `pcorr()` |
 | Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
 | Repeated-measures correlation | `rmcorr()` |
@@ -116,8 +118,14 @@ plot(R_bicor)
 ```
 
 The same matrix-style workflow extends to Spearman, Kendall, distance
-correlation, partial correlation, shrinkage correlation, latent correlation,
-and the robust estimators `pbcor()`, `wincor()`, and `skipped_corr()`.
+correlation, HSIC/kernel dependence, partial correlation, shrinkage
+correlation, latent correlation, and the robust estimators `pbcor()`,
+`wincor()`, and `skipped_corr()`.
+
+`hsic()` computes pairwise kernel dependence matrices with Gaussian, linear,
+Laplace, and polynomial kernels. It defaults to the package's normalised
+kCor-style output; use `normalise = FALSE` to return raw HSIC estimates, and
+`p_value = TRUE` for permutation-based independence tests.
 
 ### Agreement and repeated-measures workflow
 

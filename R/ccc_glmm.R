@@ -553,7 +553,7 @@
 #' @references
 #' Carrasco JL (2010). A generalized concordance correlation coefficient based
 #' on the variance components generalized linear mixed models for overdispersed
-#' count ddata:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAAbElEQVR4Xs2RQQrAMAgEfZgf7W9LAguybljJpR3wEse5JOL3ZObDb4x1loDhHbBOFU6i2Ddnw2KNiXcdAXygJlwE8OFVBHDgKrLgSInN4WMe9iXiqIVsTMjH7z/GhNTEibOxQswcYIWYOR/zAjBJfiXh3jZ6AAAAAElFTkSuQmCCata. \emph{Biometrics}.
+#' count data. \emph{Biometrics}.
 #'
 #' @examples
 #' # Example 1: overall agreement for two Poisson count methods.

@@ -161,6 +161,18 @@ gwet_ac_ratings_cpp <- function(ratings, n_levels, weights, na_code = 1L, min_ra
     .Call(`_matrixCorr_gwet_ac_ratings_cpp`, ratings, n_levels, weights, na_code, min_raters, by_category, inference_code, conf_level, n_threads)
 }
 
+hsic_matrix_cpp <- function(X, kernel_code, bandwidth_code, normalise, estimator_code) {
+    .Call(`_matrixCorr_hsic_matrix_cpp`, X, kernel_code, bandwidth_code, normalise, estimator_code)
+}
+
+hsic_raw_biased_matrix_object_cpp <- function(X, kernel_code, bandwidth_code, kernel, bandwidth, names) {
+    .Call(`_matrixCorr_hsic_raw_biased_matrix_object_cpp`, X, kernel_code, bandwidth_code, kernel, bandwidth, names)
+}
+
+hsic_matrix_pairwise_cpp <- function(X, kernel_code, bandwidth_code, normalise, estimator_code, return_inference, B, seed = NULL) {
+    .Call(`_matrixCorr_hsic_matrix_pairwise_cpp`, X, kernel_code, bandwidth_code, normalise, estimator_code, return_inference, B, seed)
+}
+
 icc_matrix_cpp <- function(X, form_code = 0L, average_unit = FALSE, pairwise_complete = FALSE, return_ci = FALSE, conf_level = 0.95, n_threads = 1L) {
     .Call(`_matrixCorr_icc_matrix_cpp`, X, form_code, average_unit, pairwise_complete, return_ci, conf_level, n_threads)
 }
