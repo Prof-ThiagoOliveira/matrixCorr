@@ -696,9 +696,12 @@ for (s in seq_len(n_subj)) {
 y <- mu + u + e
 dat_ar4 <- data.frame(y = y, id = id, method = method, time = time)
 
-ccc_rm_reml(dat_ar4,
+fit4 <- ccc_rm_reml(dat_ar4,
              response = "y", subject = "id", method = "method", time = "time",
              ar = "ar1", ar_rho = 0.6, verbose = TRUE)
+fit4
+summary(fit4)
+plot(fit4)
 }
 
 # ====================================================================

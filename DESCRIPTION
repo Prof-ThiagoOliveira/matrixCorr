@@ -24,7 +24,8 @@ Description: Compute correlation, association, agreement, and reliability
     data, repeated-measures correlation, and agreement/reliability analyses
     based on Cohen's kappa, weighted kappa, multi-rater kappa, Gwet's AC1/AC2,
     Krippendorff's alpha, Bland-Altman methods, Lin's concordance correlation
-    coefficient, and repeated-measures intraclass/concordance correlation.
+    coefficient, Poisson GLMM concordance for count data, and
+    repeated-measures intraclass/concordance correlation.
     Implemented with optimized C++ backends using BLAS/OpenMP and memory-aware
     symmetric updates, and returns standard R objects with print/summary/plot
     methods plus optional Shiny viewers for matrix inspection. Methods based
