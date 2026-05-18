@@ -361,11 +361,21 @@ cia <- function(data,
     return(out)
   }
 
+  pair_payload <- .mc_cia_pairwise_payload(
+    prep,
+    diagnostics = diagnostics,
+    estimator = estimator,
+    conf_level = if (isTRUE(ci) && identical(inference, "delta")) conf_level else NULL,
+    return_delta = isTRUE(ci) && identical(inference, "delta"),
+    n_threads = n_threads
+  )
+
   .mc_cia_assert_estimable(
     prep,
     diagnostics,
     scope = scope,
-    n_threads = n_threads
+    n_threads = n_threads,
+    payload = pair_payload
   )
 
   if (!isTRUE(ci)) {
@@ -373,7 +383,8 @@ cia <- function(data,
       prep,
       diagnostics,
       estimator = estimator,
-      n_threads = n_threads
+      n_threads = n_threads,
+      payload = pair_payload
     ))
   }
 
@@ -395,7 +406,8 @@ cia <- function(data,
     inference = inference,
     boot = boot,
     conf_level = conf_level,
-    n_threads = n_threads
+    n_threads = n_threads,
+    payload = pair_payload
   )
 }
 
@@ -994,7 +1006,8 @@ cia <- function(data,
 .mc_cia_assert_estimable <- function(prep,
                                      diagnostics,
                                      scope = c("overall", "pairwise"),
-                                     n_threads = 1L) {
+                                     n_threads = 1L,
+                                     payload = NULL) {
   scope <- match.arg(scope)
   if (!any(diagnostics$n_replicate_pairs > 0L)) {
     abort_bad_arg(
@@ -1005,12 +1018,16 @@ cia <- function(data,
   }
 
   if (!identical(scope, "overall")) {
-    est <- .mc_cia_pairwise_payload(
-      prep,
-      diagnostics = diagnostics,
-      estimator = "vc_constrained",
-      n_threads = n_threads
-    )$est
+    est <- if (is.null(payload)) {
+      .mc_cia_pairwise_payload(
+        prep,
+        diagnostics = diagnostics,
+        estimator = "vc_constrained",
+        n_threads = n_threads
+      )$est
+    } else {
+      payload$est
+    }
     if (!any(is.finite(est[upper.tri(est, diag = FALSE)]))) {
       abort_bad_arg(
         "data",
@@ -1077,13 +1094,19 @@ cia <- function(data,
   diagnostics
 }
 
-.mc_cia_build_pairwise_matrix <- function(prep, diagnostics, estimator, n_threads = 1L) {
-  payload <- .mc_cia_pairwise_payload(
-    prep,
-    diagnostics = diagnostics,
-    estimator = estimator,
-    n_threads = n_threads
-  )
+.mc_cia_build_pairwise_matrix <- function(prep,
+                                          diagnostics,
+                                          estimator,
+                                          n_threads = 1L,
+                                          payload = NULL) {
+  if (is.null(payload)) {
+    payload <- .mc_cia_pairwise_payload(
+      prep,
+      diagnostics = diagnostics,
+      estimator = estimator,
+      n_threads = n_threads
+    )
+  }
   .mc_cia_warn_small_pairwise_n(payload)
   pair_diag <- .mc_cia_pairwise_diagnostics(diagnostics, payload)
   out <- .mc_new_corr_matrix(
@@ -1119,15 +1142,18 @@ cia <- function(data,
                                       inference,
                                       boot = NULL,
                                       conf_level,
-                                      n_threads = 1L) {
-  payload <- .mc_cia_pairwise_payload(
-    prep,
-    diagnostics = diagnostics,
-    estimator = estimator,
-    conf_level = conf_level,
-    return_delta = identical(inference, "delta"),
-    n_threads = n_threads
-  )
+                                      n_threads = 1L,
+                                      payload = NULL) {
+  if (is.null(payload)) {
+    payload <- .mc_cia_pairwise_payload(
+      prep,
+      diagnostics = diagnostics,
+      estimator = estimator,
+      conf_level = conf_level,
+      return_delta = identical(inference, "delta"),
+      n_threads = n_threads
+    )
+  }
   .mc_cia_warn_small_pairwise_n(payload)
   out <- list(
     est = payload$est,
@@ -1244,31 +1270,40 @@ cia <- function(data,
 .mc_cia_bootstrap_pairwise <- function(prep, estimator, B, conf_level, seed = NULL, n_threads = 1L) {
   .mc_eval_with_seed(seed, {
     alpha <- (1 - conf_level) / 2
-    arr <- array(NA_real_, dim = c(prep$n_methods, prep$n_methods, B))
+    pair_idx <- which(upper.tri(matrix(FALSE, prep$n_methods, prep$n_methods)), arr.ind = TRUE)
+    pair_linear <- pair_idx[, 1L] + (pair_idx[, 2L] - 1L) * prep$n_methods
+    n_pairs <- nrow(pair_idx)
+    boot_est <- matrix(NA_real_, nrow = B, ncol = n_pairs)
     for (b in seq_len(B)) {
       sampled <- sample.int(prep$n_subjects, size = prep$n_subjects, replace = TRUE)
-      boot_vec <- .mc_cia_bootstrap_vectors(prep, sampled)
-      boot_prep <- .mc_cia_bootstrap_prep(prep, boot_vec)
-      arr[, , b] <- .mc_cia_pairwise_payload(
-        boot_prep,
+      est <- cia_pairwise_bootstrap_est_cpp(
+        y = prep$y,
+        subject = prep$subject_code,
+        method = prep$method_code,
+        replicate = prep$replicate_code,
+        n_methods = prep$n_methods,
+        reference_method = prep$reference_index,
+        has_reference = prep$has_reference,
+        sampled_subjects = sampled,
         estimator = estimator,
         n_threads = n_threads
-      )$est
+      )
+      boot_est[b, ] <- est[pair_linear]
     }
 
     lwr <- matrix(NA_real_, prep$n_methods, prep$n_methods, dimnames = .mc_square_dimnames(prep$method_levels))
     upr <- lwr
-    keep_any <- 0L
-    for (i in seq_len(prep$n_methods)) {
-      for (j in seq_len(prep$n_methods)) {
-        vals <- arr[i, j, ]
-        ok <- is.finite(vals)
-        if (sum(ok) >= 2L) {
-          qs <- stats::quantile(vals[ok], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
-          lwr[i, j] <- as.numeric(qs[[1L]])
-          upr[i, j] <- as.numeric(qs[[2L]])
-          keep_any <- keep_any + 1L
-        }
+    for (p in seq_len(n_pairs)) {
+      vals <- boot_est[, p]
+      ok <- is.finite(vals)
+      if (sum(ok) >= 2L) {
+        qs <- stats::quantile(vals[ok], probs = c(alpha, 1 - alpha), names = FALSE, type = 6, na.rm = TRUE)
+        i <- pair_idx[p, 1L]
+        j <- pair_idx[p, 2L]
+        lwr[i, j] <- as.numeric(qs[[1L]])
+        lwr[j, i] <- as.numeric(qs[[1L]])
+        upr[i, j] <- as.numeric(qs[[2L]])
+        upr[j, i] <- as.numeric(qs[[2L]])
       }
     }
     diag(lwr) <- 1
@@ -1276,7 +1311,7 @@ cia <- function(data,
     list(
       lwr = lwr,
       upr = upr,
-      n_successful = sum(vapply(seq_len(B), function(b) any(is.finite(arr[, , b])), logical(1))),
+      n_successful = sum(rowSums(is.finite(boot_est)) > 0L),
       B = B
     )
   })

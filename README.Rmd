@@ -38,15 +38,15 @@ repeated translation across packages.
 
 Supported measures include Pearson, Spearman, Kendall, distance correlation,
 partial correlation, kernel dependence via the Hilbert-Schmidt independence
-criterion (`hsic()`), robust biweight mid-correlation, percentage bend,
+criterion, robust biweight mid-correlation, percentage bend,
 Winsorized, skipped correlation, and latent
 categorical/ordinal correlations (tetrachoric, polychoric, polyserial, and
-biserial), plus repeated-measures correlation (`rmcorr()`); agreement tools
+biserial), plus repeated-measures correlation; agreement tools
 cover Cohen's kappa for nominal ratings, weighted Cohen's kappa for ordered
 two-rater agreement, Gwet's AC1/AC2, multi-rater kappa for nominal panel
 agreement, Krippendorff's alpha for panel-level reliability, Bland-Altman
 (two-method and repeated-measures), the coefficient of individual agreement
-for replicated and repeated-measures designs (`cia()`, `cia_rm()`), Lin's
+for replicated and repeated-measures designs, Lin's
 concordance correlation coefficient (including repeated-measures LMM/REML
 extensions and Poisson GLMM count-data CCC), and intraclass correlation for
 both wide and repeated-measures designs.

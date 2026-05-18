@@ -81,6 +81,10 @@ cia_pairwise_stats_cpp <- function(y, subject, method, replicate, n_methods, ref
     .Call(`_matrixCorr_cia_pairwise_stats_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads)
 }
 
+cia_pairwise_bootstrap_est_cpp <- function(y, subject, method, replicate, n_methods, reference_method, has_reference, sampled_subjects, estimator, n_threads = 1L) {
+    .Call(`_matrixCorr_cia_pairwise_bootstrap_est_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, sampled_subjects, estimator, n_threads)
+}
+
 cia_overall_balanced_cpp <- function(y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads = 1L) {
     .Call(`_matrixCorr_cia_overall_balanced_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, n_threads)
 }

@@ -47,6 +47,27 @@ std::vector<double> build_cube(const Rcpp::NumericVector& y,
 
   const int total = n_subjects * n_methods * n_times;
   std::vector<double> cube(static_cast<std::size_t>(total), NA_REAL);
+
+  if (n_obs == total) {
+    bool ordered = true;
+    for (R_xlen_t i = 0; i < n_obs; ++i) {
+      if (!R_finite(y[i])) {
+        Rcpp::stop("response must contain only finite numeric values.");
+      }
+      const int expected_t = static_cast<int>(i % n_times) + 1;
+      const int expected_m = static_cast<int>((i / n_times) % n_methods) + 1;
+      const int expected_s = static_cast<int>(i / (n_times * n_methods)) + 1;
+      if (subject[i] != expected_s || method[i] != expected_m || time[i] != expected_t) {
+        ordered = false;
+        break;
+      }
+      cube[static_cast<std::size_t>(i)] = y[i];
+    }
+    if (ordered) {
+      return cube;
+    }
+  }
+
   std::vector<int> counts(static_cast<std::size_t>(total), 0);
 
   for (R_xlen_t i = 0; i < n_obs; ++i) {

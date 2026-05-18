@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace {
@@ -428,6 +429,112 @@ Rcpp::List cia_pairwise_stats_cpp(Rcpp::NumericVector y,
     Rcpp::_["n_eligible"] = n_eligible,
     Rcpp::_["n_subjects"] = n_subjects
   );
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix cia_pairwise_bootstrap_est_cpp(Rcpp::NumericVector y,
+                                                   Rcpp::IntegerVector subject,
+                                                   Rcpp::IntegerVector method,
+                                                   Rcpp::IntegerVector replicate,
+                                                   int n_methods,
+                                                   int reference_method,
+                                                   bool has_reference,
+                                                   Rcpp::IntegerVector sampled_subjects,
+                                                   std::string estimator,
+                                                   int n_threads = 1) {
+  const R_xlen_t n_obs = y.size();
+  if (subject.size() != n_obs || method.size() != n_obs || replicate.size() != n_obs) {
+    Rcpp::stop("y, subject, method, and replicate must have the same length.");
+  }
+
+  int n_subjects = 0;
+  for (R_xlen_t i = 0; i < n_obs; ++i) {
+    if (subject[i] != NA_INTEGER && subject[i] > n_subjects) {
+      n_subjects = subject[i];
+    }
+  }
+  std::vector< std::vector<R_xlen_t> > subject_rows(static_cast<std::size_t>(n_subjects));
+  for (R_xlen_t i = 0; i < n_obs; ++i) {
+    const int s = subject[i];
+    if (s != NA_INTEGER && s >= 1 && s <= n_subjects) {
+      subject_rows[static_cast<std::size_t>(s - 1)].push_back(i);
+    }
+  }
+
+  R_xlen_t total = 0;
+  for (R_xlen_t draw = 0; draw < sampled_subjects.size(); ++draw) {
+    const int sampled = sampled_subjects[draw];
+    if (sampled != NA_INTEGER && sampled >= 1 && sampled <= n_subjects) {
+      total += static_cast<R_xlen_t>(subject_rows[static_cast<std::size_t>(sampled - 1)].size());
+    }
+  }
+
+  Rcpp::NumericVector boot_y(total);
+  Rcpp::IntegerVector boot_subject(total);
+  Rcpp::IntegerVector boot_method(total);
+  Rcpp::IntegerVector boot_replicate(total);
+  R_xlen_t pos = 0;
+  for (R_xlen_t draw = 0; draw < sampled_subjects.size(); ++draw) {
+    const int sampled = sampled_subjects[draw];
+    if (sampled == NA_INTEGER || sampled < 1 || sampled > n_subjects) {
+      continue;
+    }
+    const std::vector<R_xlen_t>& rows = subject_rows[static_cast<std::size_t>(sampled - 1)];
+    for (std::size_t row_idx = 0; row_idx < rows.size(); ++row_idx) {
+      const R_xlen_t i = rows[row_idx];
+      boot_y[pos] = y[i];
+      boot_subject[pos] = static_cast<int>(draw + 1);
+      boot_method[pos] = method[i];
+      boot_replicate[pos] = replicate[i];
+      pos += 1;
+    }
+  }
+
+  Rcpp::List raw = cia_pairwise_stats_cpp(
+    boot_y,
+    boot_subject,
+    boot_method,
+    boot_replicate,
+    n_methods,
+    reference_method,
+    has_reference,
+    n_threads
+  );
+  Rcpp::NumericMatrix A_bar = raw["A_bar"];
+  Rcpp::NumericMatrix B_bar = raw["B_bar"];
+  Rcpp::IntegerMatrix n_eligible = raw["n_eligible"];
+
+  Rcpp::NumericMatrix est(n_methods, n_methods);
+  std::fill(est.begin(), est.end(), NA_REAL);
+  for (int j = 0; j < n_methods; ++j) {
+    est(j, j) = 1.0;
+  }
+
+  const bool constrained = estimator == "vc_constrained";
+  for (int j = 0; j < n_methods - 1; ++j) {
+    for (int k = j + 1; k < n_methods; ++k) {
+      if (n_eligible(j, k) <= 0) {
+        continue;
+      }
+      const double A = A_bar(j, k);
+      const double B = B_bar(j, k);
+      double value = NA_REAL;
+      if (constrained) {
+        const double tau2_raw = B - A;
+        const double tau2 = R_finite(tau2_raw) ? std::max(tau2_raw, 0.0) : NA_REAL;
+        const double denom = A + tau2;
+        if (R_finite(denom) && denom != 0.0) {
+          value = A / denom;
+        }
+      } else if (B != 0.0) {
+        value = A / B;
+      }
+      est(j, k) = value;
+      est(k, j) = value;
+    }
+  }
+
+  return est;
 }
 
 // [[Rcpp::export]]

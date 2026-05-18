@@ -186,10 +186,12 @@ df1 <- expand.grid(
 subject_eff <- rnorm(12, 0, 0.5)
 df1$eta <- 1.1 + subject_eff[as.integer(df1$subject)]
 df1$y <- rpois(nrow(df1), exp(df1$eta))
+\donttest{
 fit1 <- ccc_glmm(df1, "y", "subject", "method", replicate = "replicate",
 ci = TRUE)
 fit1
 summary(fit1)
+}
 
 # Example 2: method bias lowers total agreement.
 # This tests whether a systematic method shift is reflected in rho_ccc
@@ -223,12 +225,14 @@ method_id <- as.integer(df3$method)
 df3$eta <- 1.1 + subject_eff[as.integer(df3$subject)] +
   subject_method_eff[cbind(as.integer(df3$subject), method_id)]
 df3$y <- rpois(nrow(df3), exp(df3$eta))
+\donttest{
 fit3 <- ccc_glmm(
   df3, "y", "subject", "method",
   replicate = "replicate",
   include_subject_method = TRUE
 )
 attr(fit3, "sigma2_subject_method")
+}
 
 # Example 4: four methods.
 # This tests pairwise agreement across several count methods and helps
