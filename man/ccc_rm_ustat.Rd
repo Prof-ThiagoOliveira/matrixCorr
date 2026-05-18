@@ -45,20 +45,23 @@ Defaults to \code{getOption("matrixCorr.threads", 1L)}.}
 \item{Dmat}{Optional numeric weight matrix (T \eqn{\times} T) for
 timepoints. Defaults to identity.}
 
-\item{delta}{Numeric. Power exponent used in the distance computations
-between method trajectories
-across time points. This controls the contribution of differences between
-measurements:
+\item{delta}{Numeric. Exponent applied to the absolute pointwise differences
+between two method trajectories before the time-weighted quadratic form is
+evaluated. Internally, the function forms
+\eqn{v_t = |X_t - Y_t|^\delta} and then computes
+\eqn{v^\top D v}, where \eqn{D} is \code{Dmat}.
+Therefore, when \code{Dmat} is diagonal:
 \itemize{
-\item \code{delta = 1} (default) uses \strong{absolute differences}.
-\item \code{delta = 2} uses \strong{squared differences}, more sensitive to
-larger deviations.
-\item \code{delta = 0} reduces to a \strong{binary distance} (presence/absence
-of disagreement), analogous to a repeated-measures version of the kappa
-statistic.
+\item \code{delta = 1} (default) gives the standard quadratic
+repeated-measures CCC distance,
+\eqn{(X - Y)^\top D (X - Y)}.
+\item \code{delta = 2} gives a fourth-power loss,
+which puts stronger emphasis on large disagreements.
+\item \code{delta = 0} gives a binary disagreement indicator before
+aggregation, analogous to a repeated-measures kappa-type distance.
 }
-The choice of \code{delta} should reflect the penalty you want to assign to
-measurement disagreement.}
+In most applications, \code{delta = 1} should be used because it matches
+the usual quadratic distance used in repeated-measures CCC.}
 }
 \value{
 If \code{ci = FALSE}, a symmetric matrix of class \code{"ccc"} (estimates only).
@@ -173,18 +176,16 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 #------------------------------------------------------------------------
 # Choosing delta based on distance sensitivity
 #------------------------------------------------------------------------
-# Absolute distance (L1 norm) - robust
+# Standard quadratic RM-CCC distance: (X - Y)' D (X - Y)
 ccc_rm_ustat(df, response = "y", subject = "subject",
-                    method = "method", time = "time", delta = 1)
+             method = "method", time = "time", delta = 1)
 
-# Squared distance (L2 norm) - amplifies large deviations
+# Fourth-power loss when D is diagonal: emphasises large disagreements
 ccc_rm_ustat(df, response = "y", subject = "subject",
-                    method = "method", time = "time", delta = 2)
-
-# Presence/absence of disagreement (like kappa)
+             method = "method", time = "time", delta = 2)
+# Binary disagreement indicator before aggregation
 ccc_rm_ustat(df, response = "y", subject = "subject",
-                    method = "method", time = "time", delta = 0)
-
+             method = "method", time = "time", delta = 0)
 }
 \references{
 Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.

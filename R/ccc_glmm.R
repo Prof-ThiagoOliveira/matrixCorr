@@ -110,6 +110,103 @@
   out
 }
 
+.mc_num_grad_vec <- function(f, x, rel_step = 1e-5) {
+  f0 <- f(x)
+  g <- matrix(NA_real_, nrow = length(f0), ncol = length(x))
+  rownames(g) <- names(f0)
+  for (i in seq_along(x)) {
+    h <- rel_step * max(abs(x[[i]]), 1)
+    xp <- x
+    xm <- x
+    xp[[i]] <- xp[[i]] + h
+    xm[[i]] <- xm[[i]] - h
+    fp <- f(xp)
+    fm <- f(xm)
+    ok <- is.finite(fp) & is.finite(fm)
+    g[ok, i] <- (fp[ok] - fm[ok]) / (2 * h)
+  }
+  g
+}
+
+.mc_delta_ci_vec <- function(estimates,
+                             f,
+                             theta,
+                             vcov_theta,
+                             conf_level = 0.95,
+                             transform = c("fisher", "wald")) {
+  transform <- match.arg(transform)
+  out <- data.frame(
+    estimate = as.numeric(estimates),
+    se = NA_real_,
+    lwr.ci = NA_real_,
+    upr.ci = NA_real_,
+    conf_level = conf_level,
+    ci_method = paste0("delta_", transform),
+    row.names = names(estimates)
+  )
+
+  if (is.null(vcov_theta) || any(!is.finite(vcov_theta))) return(out)
+
+  grad <- .mc_num_grad_vec(f, theta)
+  alpha <- 1 - conf_level
+  zcrit <- stats::qnorm(1 - alpha / 2)
+
+  for (i in seq_along(estimates)) {
+    estimate <- estimates[[i]]
+    if (!is.finite(estimate) || any(!is.finite(grad[i, ]))) next
+
+    var_est <- as.numeric(t(grad[i, ]) %*% vcov_theta %*% grad[i, ])
+    if (!is.finite(var_est) || var_est < 0) next
+
+    se <- sqrt(var_est)
+    if (identical(transform, "wald")) {
+      lwr <- estimate - zcrit * se
+      upr <- estimate + zcrit * se
+    } else {
+      estimate_safe <- max(min(estimate, 1 - 1e-12), -1 + 1e-12)
+      z_est <- atanh(estimate_safe)
+      se_z <- se / (1 - estimate_safe^2)
+      lwr <- tanh(z_est - zcrit * se_z)
+      upr <- tanh(z_est + zcrit * se_z)
+    }
+
+    out$se[[i]] <- se
+    out$lwr.ci[[i]] <- lwr
+    out$upr.ci[[i]] <- upr
+  }
+
+  out
+}
+
+.mc_ccc_glmm_metric_vector <- function(theta,
+                                       include_subject_method,
+                                       phi,
+                                       m_reps) {
+  clamp01 <- function(x) pmax(0, pmin(1, x))
+
+  beta0 <- theta[[1L]]
+  beta_method <- theta[[2L]]
+  sigma2_subject <- exp(2 * theta[[3L]])
+  sigma2_subject_method <- if (isTRUE(include_subject_method)) exp(2 * theta[[4L]]) else 0
+  sigma2_method <- 0.5 * beta_method * beta_method
+  sigma2_total <- sigma2_subject + sigma2_method + sigma2_subject_method
+  sigma2_intra <- sigma2_subject + sigma2_subject_method
+
+  mu <- exp(beta0 + 0.5 * beta_method + 0.5 * sigma2_total)
+  mu1 <- exp(beta0 + 0.5 * sigma2_intra)
+  mu2 <- exp(beta0 + beta_method + 0.5 * sigma2_intra)
+  subject_cov <- mu * (exp(sigma2_subject) - 1)
+  intra_cov1 <- mu1 * (exp(sigma2_intra) - 1)
+  intra_cov2 <- mu2 * (exp(sigma2_intra) - 1)
+
+  c(
+    rho_ccc = clamp01(subject_cov / (mu * (exp(sigma2_total) - 1) + phi)),
+    rho_ccc_inter = clamp01(subject_cov / (mu * (exp(sigma2_total) - 1) + phi / m_reps)),
+    rho_ccc_intra_method1 = clamp01(intra_cov1 / (intra_cov1 + phi)),
+    rho_ccc_intra_method2 = clamp01(intra_cov2 / (intra_cov2 + phi))
+  )
+}
+
 .mc_ccc_glmm_delta_functions <- function(include_subject_method,
                                          phi,
                                          m_reps) {
@@ -221,13 +318,21 @@
     )
   }
 
+  blocks <- ccc_glmm_poisson_prepare_blocks_cpp(
+    y = y,
+    subject = subject,
+    method_code = method,
+    n_subjects = n_subjects
+  )
+
   objective <- function(par) {
-    ccc_glmm_poisson_ghq_nll_cpp(
+    ccc_glmm_poisson_ghq_nll_blocks_cpp(
       par = par,
-      y = y,
-      subject = subject,
-      method_code = method,
-      n_subjects = n_subjects,
+      y1 = blocks$y1,
+      y2 = blocks$y2,
+      n1 = blocks$n1,
+      n2 = blocks$n2,
+      log_factorial = blocks$log_factorial,
       include_subject_method = include_subject_method,
       gh_nodes = gh$nodes,
       gh_weights = gh$weights
@@ -294,12 +399,29 @@
   gamma1_hat <- numeric(n_subjects)
   gamma2_hat <- numeric(n_subjects)
   log_sqrt_pi <- 0.5 * log(pi)
+  rows_by_subject <- split(seq_along(subject), subject)
+  log_weights <- log(gh$weights)
+
+  if (!isTRUE(include_subject_method)) {
+    alpha <- sqrt(2) * sigma * gh$nodes
+    log_base <- log_weights - log_sqrt_pi
+  } else {
+    vals <- expand.grid(
+      qa = seq_along(gh$nodes),
+      q1 = seq_along(gh$nodes),
+      q2 = seq_along(gh$nodes)
+    )
+    alpha <- sqrt(2) * sigma * gh$nodes[vals$qa]
+    gamma1 <- sqrt(2) * sigma_sm * gh$nodes[vals$q1]
+    gamma2 <- sqrt(2) * sigma_sm * gh$nodes[vals$q2]
+    log_base <- log_weights[vals$qa] + log_weights[vals$q1] +
+      log_weights[vals$q2] - 3 * log_sqrt_pi
+  }
 
   for (s in seq_len(n_subjects)) {
-    idx <- which(subject == s)
+    idx <- rows_by_subject[[as.character(s)]]
     if (!isTRUE(include_subject_method)) {
-      alpha <- sqrt(2) * sigma * gh$nodes
-      log_terms <- log(gh$weights) - log_sqrt_pi
+      log_terms <- log_base
       for (q in seq_along(alpha)) {
         eta <- beta0 + ifelse(method[idx] == 2L, beta_method, 0) + alpha[[q]]
         log_terms[[q]] <- log_terms[[q]] + sum(y[idx] * eta - exp(eta) - lgamma(y[idx] + 1))
@@ -308,12 +430,7 @@
       w <- exp(log_terms - mx)
       alpha_hat[[s]] <- sum(w * alpha) / sum(w)
     } else {
-      vals <- expand.grid(qa = seq_along(gh$nodes), q1 = seq_along(gh$nodes), q2 = seq_along(gh$nodes))
-      alpha <- sqrt(2) * sigma * gh$nodes[vals$qa]
-      gamma1 <- sqrt(2) * sigma_sm * gh$nodes[vals$q1]
-      gamma2 <- sqrt(2) * sigma_sm * gh$nodes[vals$q2]
-      log_terms <- log(gh$weights[vals$qa]) + log(gh$weights[vals$q1]) +
-        log(gh$weights[vals$q2]) - 3 * log_sqrt_pi
+      log_terms <- log_base
       for (q in seq_along(alpha)) {
         eta <- beta0 + ifelse(method[idx] == 2L, beta_method + gamma2[[q]], gamma1[[q]]) + alpha[[q]]
         log_terms[[q]] <- log_terms[[q]] + sum(y[idx] * eta - exp(eta) - lgamma(y[idx] + 1))
@@ -880,43 +997,30 @@ ccc_glmm <- function(data,
         fit_status_mat[i, j] <- fit_status_mat[j, i] <- ans$fit_status %||% "converged"
 
         if (isTRUE(ci)) {
-          funcs <- .mc_ccc_glmm_delta_functions(
-            include_subject_method = include_subject_method,
-            phi = ans$phi,
-            m_reps = ans$m_reps
-          )
-          ci_total <- .mc_delta_ci(
-            estimate = ans$rho_ccc,
-            f = funcs$rho_ccc,
+          ci_vec <- .mc_delta_ci_vec(
+            estimates = c(
+              rho_ccc = ans$rho_ccc,
+              rho_ccc_inter = ans$rho_ccc_inter,
+              rho_ccc_intra_method1 = ans$rho_ccc_intra_method1,
+              rho_ccc_intra_method2 = ans$rho_ccc_intra_method2
+            ),
+            f = function(theta) {
+              .mc_ccc_glmm_metric_vector(
+                theta,
+                include_subject_method = include_subject_method,
+                phi = ans$phi,
+                m_reps = ans$m_reps
+              )
+            },
             theta = fit_pair$par,
             vcov_theta = fit_pair$vcov_par,
             conf_level = conf_level,
             transform = "fisher"
           )
-          ci_inter <- .mc_delta_ci(
-            estimate = ans$rho_ccc_inter,
-            f = funcs$rho_ccc_inter,
-            theta = fit_pair$par,
-            vcov_theta = fit_pair$vcov_par,
-            conf_level = conf_level,
-            transform = "fisher"
-          )
-          ci_intra1 <- .mc_delta_ci(
-            estimate = ans$rho_ccc_intra_method1,
-            f = funcs$rho_ccc_intra_method1,
-            theta = fit_pair$par,
-            vcov_theta = fit_pair$vcov_par,
-            conf_level = conf_level,
-            transform = "fisher"
-          )
-          ci_intra2 <- .mc_delta_ci(
-            estimate = ans$rho_ccc_intra_method2,
-            f = funcs$rho_ccc_intra_method2,
-            theta = fit_pair$par,
-            vcov_theta = fit_pair$vcov_par,
-            conf_level = conf_level,
-            transform = "fisher"
-          )
+          ci_total <- ci_vec["rho_ccc", , drop = FALSE]
+          ci_inter <- ci_vec["rho_ccc_inter", , drop = FALSE]
+          ci_intra1 <- ci_vec["rho_ccc_intra_method1", , drop = FALSE]
+          ci_intra2 <- ci_vec["rho_ccc_intra_method2", , drop = FALSE]
 
           rho_ccc_se_mat[i, j] <- rho_ccc_se_mat[j, i] <- num_or_na(ci_total$se)
           rho_ccc_lwr_mat[i, j] <- rho_ccc_lwr_mat[j, i] <- num_or_na(ci_total$lwr.ci)

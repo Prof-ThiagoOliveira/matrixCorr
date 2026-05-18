@@ -183,6 +183,39 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ccc_glmm_poisson_prepare_blocks_cpp
+Rcpp::List ccc_glmm_poisson_prepare_blocks_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method_code, int n_subjects);
+RcppExport SEXP _matrixCorr_ccc_glmm_poisson_prepare_blocks_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP method_codeSEXP, SEXP n_subjectsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type method_code(method_codeSEXP);
+    Rcpp::traits::input_parameter< int >::type n_subjects(n_subjectsSEXP);
+    rcpp_result_gen = Rcpp::wrap(ccc_glmm_poisson_prepare_blocks_cpp(y, subject, method_code, n_subjects));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ccc_glmm_poisson_ghq_nll_blocks_cpp
+double ccc_glmm_poisson_ghq_nll_blocks_cpp(Rcpp::NumericVector par, Rcpp::NumericVector y1, Rcpp::NumericVector y2, Rcpp::NumericVector n1, Rcpp::NumericVector n2, Rcpp::NumericVector log_factorial, bool include_subject_method, Rcpp::NumericVector gh_nodes, Rcpp::NumericVector gh_weights);
+RcppExport SEXP _matrixCorr_ccc_glmm_poisson_ghq_nll_blocks_cpp(SEXP parSEXP, SEXP y1SEXP, SEXP y2SEXP, SEXP n1SEXP, SEXP n2SEXP, SEXP log_factorialSEXP, SEXP include_subject_methodSEXP, SEXP gh_nodesSEXP, SEXP gh_weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type par(parSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y1(y1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y2(y2SEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type n1(n1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type n2(n2SEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type log_factorial(log_factorialSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_subject_method(include_subject_methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type gh_nodes(gh_nodesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type gh_weights(gh_weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(ccc_glmm_poisson_ghq_nll_blocks_cpp(par, y1, y2, n1, n2, log_factorial, include_subject_method, gh_nodes, gh_weights));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ccc_glmm_poisson_ghq_nll_cpp
 double ccc_glmm_poisson_ghq_nll_cpp(Rcpp::NumericVector par, Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method_code, int n_subjects, bool include_subject_method, Rcpp::NumericVector gh_nodes, Rcpp::NumericVector gh_weights);
 RcppExport SEXP _matrixCorr_ccc_glmm_poisson_ghq_nll_cpp(SEXP parSEXP, SEXP ySEXP, SEXP subjectSEXP, SEXP method_codeSEXP, SEXP n_subjectsSEXP, SEXP include_subject_methodSEXP, SEXP gh_nodesSEXP, SEXP gh_weightsSEXP) {
@@ -1388,6 +1421,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_ba_rm_slope_scale_cpp", (DL_FUNC) &_matrixCorr_ba_rm_slope_scale_cpp, 1},
     {"_matrixCorr_ba_rm_complete_pairs_cpp", (DL_FUNC) &_matrixCorr_ba_rm_complete_pairs_cpp, 4},
     {"_matrixCorr_bland_altman_repeated_em_ext_cpp", (DL_FUNC) &_matrixCorr_bland_altman_repeated_em_ext_cpp, 13},
+    {"_matrixCorr_ccc_glmm_poisson_prepare_blocks_cpp", (DL_FUNC) &_matrixCorr_ccc_glmm_poisson_prepare_blocks_cpp, 4},
+    {"_matrixCorr_ccc_glmm_poisson_ghq_nll_blocks_cpp", (DL_FUNC) &_matrixCorr_ccc_glmm_poisson_ghq_nll_blocks_cpp, 9},
     {"_matrixCorr_ccc_glmm_poisson_ghq_nll_cpp", (DL_FUNC) &_matrixCorr_ccc_glmm_poisson_ghq_nll_cpp, 8},
     {"_matrixCorr_cccUst_rcpp", (DL_FUNC) &_matrixCorr_cccUst_rcpp, 11},
     {"_matrixCorr_set_omp_threads", (DL_FUNC) &_matrixCorr_set_omp_threads, 1},

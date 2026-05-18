@@ -1212,7 +1212,10 @@ Rcpp::List ccc_vc_cpp(
     }
     arma::mat L(Lrm.begin(), X.n_cols, Lrm.ncol(), true);
     arma::mat auxD(Drm.begin(), Drm.nrow(), Drm.ncol(), true);
-    const double den = (double)nm * (double)(nm-1) * (double)std::max(nt,1);
+    // L contains undirected method-pair contrasts only.
+    // Therefore the normalising denominator must match the number of
+    // constructed contrasts, not the directed-pair count nm * (nm - 1).
+    const double den = static_cast<double>(Lrm.ncol());
 
     arma::vec difmed = L.t() * beta;
     arma::mat Afix   = L * auxD * L.t();

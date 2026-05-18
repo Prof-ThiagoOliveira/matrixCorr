@@ -209,6 +209,60 @@ test_that("ccc_vc_cpp handles absent optional method/time vectors safely", {
   expect_true(is.finite(as.numeric(fit$sigma2_subject)))
 })
 
+test_that("ccc_vc_cpp S_B uses undirected method-pair denominator", {
+  n_subj <- 80L
+  mu <- c(10, 12)
+  subject <- rep(seq_len(n_subj), each = 2L)
+  method <- rep(1:2, times = n_subj)
+  time <- rep(1L, length(subject))
+  subject_effect <- rep(seq(-1, 1, length.out = n_subj), each = 2L)
+  y <- subject_effect + mu[method]
+  X <- cbind(1, as.numeric(method == 2L))
+  colnames(X) <- c("(Intercept)", "methodB")
+
+  Laux <- matrixCorr:::build_L_Dm_cpp(
+    colnames_X = colnames(X),
+    rmet_name = "method",
+    rtime_name = NULL,
+    method_levels = c("A", "B"),
+    time_levels = character(0),
+    has_interaction = FALSE,
+    Dmat_global = NULL
+  )
+  expect_equal(ncol(Laux$L), 1L)
+
+  fit <- matrixCorr:::ccc_vc_cpp(
+    Xr = X,
+    yr = y,
+    subject = as.integer(subject),
+    method = as.integer(method),
+    time = as.integer(time),
+    nm = 2L,
+    nt = 1L,
+    max_iter = 200L,
+    tol = 1e-6,
+    conf_level = 0.95,
+    ci_mode = 2L,
+    Lr = Laux$L,
+    auxDr = Laux$Dm,
+    Zr = NULL,
+    use_ar1 = FALSE,
+    ar1_rho = 0,
+    include_subj_method = FALSE,
+    include_subj_time = FALSE,
+    sb_zero_tol = 0,
+    eval_single_visit = FALSE,
+    time_weights = NULL,
+    metric_mode = 0L,
+    ll_only = FALSE,
+    need_loglik = TRUE
+  )
+
+  expected_sb <- (mu[[1L]] - mu[[2L]])^2
+  expect_equal(as.numeric(fit$SB), expected_sb, tolerance = 1e-6)
+  expect_gt(abs(as.numeric(fit$SB) - expected_sb / 2), 1)
+})
+
 test_that("ccc_vc_cpp rejects malformed time and optional design inputs before native indexing", {
   set.seed(126)
   n_subj <- 12L

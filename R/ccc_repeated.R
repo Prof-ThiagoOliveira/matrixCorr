@@ -22,20 +22,23 @@
 #' one time point is assumed.
 #' @param Dmat Optional numeric weight matrix (T \eqn{\times} T) for
 #' timepoints. Defaults to identity.
-#' @param delta Numeric. Power exponent used in the distance computations
-#' between method trajectories
-#' across time points. This controls the contribution of differences between
-#' measurements:
-#' \itemize{
-#'   \item \code{delta = 1} (default) uses **absolute differences**.
-#'   \item \code{delta = 2} uses **squared differences**, more sensitive to
-#'   larger deviations.
-#'   \item \code{delta = 0} reduces to a **binary distance** (presence/absence
-#'   of disagreement), analogous to a repeated-measures version of the kappa
-#'   statistic.
-#' }
-#' The choice of \code{delta} should reflect the penalty you want to assign to
-#' measurement disagreement.
+#' @param delta Numeric. Exponent applied to the absolute pointwise differences
+#'   between two method trajectories before the time-weighted quadratic form is
+#'   evaluated. Internally, the function forms
+#'   \eqn{v_t = |X_t - Y_t|^\delta} and then computes
+#'   \eqn{v^\top D v}, where \eqn{D} is \code{Dmat}.
+#'   Therefore, when \code{Dmat} is diagonal:
+#'   \itemize{
+#'     \item \code{delta = 1} (default) gives the standard quadratic
+#'       repeated-measures CCC distance,
+#'       \eqn{(X - Y)^\top D (X - Y)}.
+#'     \item \code{delta = 2} gives a fourth-power loss,
+#'       which puts stronger emphasis on large disagreements.
+#'     \item \code{delta = 0} gives a binary disagreement indicator before
+#'       aggregation, analogous to a repeated-measures kappa-type distance.
+#'   }
+#'   In most applications, \code{delta = 1} should be used because it matches
+#'   the usual quadratic distance used in repeated-measures CCC.
 #
 #' @param ci Logical. If TRUE, returns confidence intervals (default FALSE).
 #' @param conf_level Confidence level for CI (default 0.95).
@@ -153,18 +156,16 @@
 #' #------------------------------------------------------------------------
 #' # Choosing delta based on distance sensitivity
 #' #------------------------------------------------------------------------
-#' # Absolute distance (L1 norm) - robust
+#' # Standard quadratic RM-CCC distance: (X - Y)' D (X - Y)
 #' ccc_rm_ustat(df, response = "y", subject = "subject",
-#'                     method = "method", time = "time", delta = 1)
+#'              method = "method", time = "time", delta = 1)
 #'
-#' # Squared distance (L2 norm) - amplifies large deviations
+#' # Fourth-power loss when D is diagonal: emphasises large disagreements
 #' ccc_rm_ustat(df, response = "y", subject = "subject",
-#'                     method = "method", time = "time", delta = 2)
-#'
-#' # Presence/absence of disagreement (like kappa)
+#'              method = "method", time = "time", delta = 2)
+#' # Binary disagreement indicator before aggregation
 #' ccc_rm_ustat(df, response = "y", subject = "subject",
-#'                     method = "method", time = "time", delta = 0)
-#'
+#'              method = "method", time = "time", delta = 0)
 #' @author Thiago de Paula Oliveira
 #' @export
 ccc_rm_ustat <- function(data,

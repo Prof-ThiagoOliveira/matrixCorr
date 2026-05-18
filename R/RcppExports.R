@@ -45,6 +45,14 @@ bland_altman_repeated_em_ext_cpp <- function(y, subject, method, time, include_s
     .Call(`_matrixCorr_bland_altman_repeated_em_ext_cpp`, y, subject, method, time, include_slope, use_ar1, ar1_rho, max_iter, tol, conf_level, loa_multiplier_arg, use_cov_su_se, n_threads)
 }
 
+ccc_glmm_poisson_prepare_blocks_cpp <- function(y, subject, method_code, n_subjects) {
+    .Call(`_matrixCorr_ccc_glmm_poisson_prepare_blocks_cpp`, y, subject, method_code, n_subjects)
+}
+
+ccc_glmm_poisson_ghq_nll_blocks_cpp <- function(par, y1, y2, n1, n2, log_factorial, include_subject_method, gh_nodes, gh_weights) {
+    .Call(`_matrixCorr_ccc_glmm_poisson_ghq_nll_blocks_cpp`, par, y1, y2, n1, n2, log_factorial, include_subject_method, gh_nodes, gh_weights)
+}
+
 ccc_glmm_poisson_ghq_nll_cpp <- function(par, y, subject, method_code, n_subjects, include_subject_method, gh_nodes, gh_weights) {
     .Call(`_matrixCorr_ccc_glmm_poisson_ghq_nll_cpp`, par, y, subject, method_code, n_subjects, include_subject_method, gh_nodes, gh_weights)
 }
