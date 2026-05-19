@@ -24,17 +24,26 @@ on the measurement scale itself. Reliability describes the proportion of
 variation attributable to stable differences among subjects rather than to
 measurement error or method disagreement.
 
-This vignette covers the wide-data functions:
+This vignette focuses on `ccc()` for wide data and uses related agreement and
+reliability functions as context:
 
 - `ccc()`
 - `ba()`
 - `icc()`
+- `ccc_rm_reml()` and `ccc_rm_ustat()`
+- `icc_rm_reml()`
+- `cia()` and `cia_rm()`
 
 ## Pairwise concordance and Bland-Altman analysis
 
 Lin's concordance correlation coefficient combines precision and accuracy in a
-single number. Bland-Altman analysis separates that question into estimated
-bias and limits of agreement.
+single number. In `matrixCorr`, `ccc()` computes Lin's pairwise CCC for numeric
+wide data and optionally returns large-sample confidence intervals. No formal
+hypothesis test is implemented; inference is based on the estimate and its
+confidence interval.
+
+Bland-Altman analysis separates the agreement question into estimated bias and
+limits of agreement.
 
 ```{r}
 library(matrixCorr)
@@ -166,15 +175,209 @@ For pairwise ICC, average-measure output uses `k = 2` because each estimate is
 based on exactly two methods. For overall ICC, average-measure output uses the
 full number of analysed columns.
 
-## Choosing among CCC, BA, and ICC
+## Agreement indices implemented in matrixCorr
+
+CCC, ICC and CIA address related but distinct agreement questions. CCC
+quantifies agreement between measurements by combining precision and accuracy
+(Lin, 1989). ICC expresses reliability or agreement through variance
+components; its interpretation depends on the study design, model form, and
+whether agreement or consistency is targeted (Shrout and Fleiss, 1979; McGraw
+and Wong, 1996). CIA targets individual agreement or interchangeability by
+comparing disagreement between methods with disagreement within methods
+(Barnhart, Kosinski, and Haber, 2007; Barnhart et al., 2007).
+
+These indices should not be treated as interchangeable without considering the
+scientific question, data structure, and implemented estimator.
+
+### CCC functions
+
+`ccc()` is the simple wide-data CCC implementation. It estimates pairwise Lin
+CCC values and, when `ci = TRUE`, returns Lin delta-method/Fisher-z confidence
+intervals. It does not report a p-value or test decision.
+
+For repeated-measures data, the package provides two CCC routes. `ccc_rm_reml()`
+fits pairwise mixed models by REML and converts the fitted variance components
+and fixed-effect bias term into repeated-measures CCC estimates. `ccc_rm_ustat()`
+computes a nonparametric U-statistic repeated-measures CCC with optional
+Fisher-z confidence intervals. These repeated-measures functions estimate
+agreement parameters and optional confidence intervals; they do not implement a
+formal hypothesis test of the CCC parameter. `ccc_rm_reml()` can use
+boundary-aware likelihood-ratio tests for variance-component selection when
+`vc_select = "auto"`, but those tests are model-selection diagnostics rather
+than tests of CCC agreement.
+
+### ICC functions
+
+`icc()` computes classical ANOVA ICC forms for wide data. With
+`scope = "pairwise"` it returns a pairwise matrix; with `scope = "overall"` it
+returns the standard six-form overall coefficient table. The selected ICC form
+is controlled by `model`, `type`, and `unit`, so the same numeric value should
+not be interpreted without those design choices.
+
+Pairwise `icc()` and repeated-measures `icc_rm_reml()` provide estimates and
+optional confidence intervals without a formal test of a target ICC parameter.
+For `icc(scope = "overall")`, the package reports ANOVA F statistics, degrees
+of freedom, and p-values in the overall coefficient table. The implementation
+and tests verify those reported p-values, but the package documentation does
+not define a generic ICC agreement hypothesis for users; this vignette therefore
+does not describe the overall ICC p-values as a generic test of agreement.
+
+### CIA functions
+
+`cia()` and `cia_rm()` are included here only as conceptual comparisons. CIA
+targets individual agreement or interchangeability rather than the same
+population concordance question targeted by CCC. In `cia()`, replicated readings
+within each subject-method cell are required because the estimator compares
+between-method disagreement with within-method replicate disagreement. The
+function supports pairwise and overall CIA, optional reference-method scaling,
+and optional confidence intervals by the selected inference method. No formal
+hypothesis test is implemented; inference is based on the estimate and its
+confidence interval.
+
+`cia_rm()` is different from `cia()` because it targets matched repeated measurements
+under conditions such as visits, raters, laboratories, treatments, or time
+points, and it is not a technical-replicate estimator. It reports
+condition-specific CIA estimates, optional confidence intervals, and a
+homogeneity test for agreement across conditions. As implemented, the reported
+test statistic is
+`MS_method_time / MS_error`, with an upper-tail F-test p-value using
+`df_method_time` and `df_error`. The null hypothesis documented by the function
+is homogeneous agreement across conditions; the alternative is that agreement
+changes across conditions.
+
+### Function summary
+
+In this package, the functions differ not only in the target index but also in
+the supported data structure and inferential procedure. Some functions provide
+estimates and confidence intervals only. A formal hypothesis test should only
+be interpreted when the function explicitly implements and reports one.
+
+```{r, echo = FALSE}
+agreement_summary <- data.frame(
+  Function = c(
+    "`ccc()`",
+    "`ccc_rm_reml()`",
+    "`ccc_rm_ustat()`",
+    "`icc()`",
+    "`icc_rm_reml()`",
+    "`cia()`",
+    "`cia_rm()`"
+  ),
+  `Index family` = c(
+    "Lin CCC",
+    "Repeated-measures CCC",
+    "Repeated-measures CCC",
+    "Classical ICC",
+    "Repeated-measures ICC",
+    "CIA",
+    "Repeated-measures CIA"
+  ),
+  `Target question` = c(
+    "Pairwise concordance combining precision and accuracy",
+    "Pairwise repeated-measures concordance from fitted variance components",
+    "Pairwise repeated-measures concordance from U-statistic distances",
+    "Reliability or agreement under the selected ICC model, type, and unit",
+    "Pairwise repeated-measures reliability/agreement from fitted variance components",
+    "Individual agreement/interchangeability relative to within-method replicate disagreement",
+    "Individual agreement/interchangeability across matched repeated conditions"
+  ),
+  `Data/design supported` = c(
+    "Numeric wide data; rows are paired observational units",
+    "Long repeated-measures data; subject plus optional method/time structure",
+    "Long repeated-measures data; balanced method/time coverage per pair",
+    "Numeric wide data; pairwise or overall all-column scope",
+    "Long repeated-measures data; subject plus optional method/time structure",
+    "Long replicated method-comparison data with replicate identifiers",
+    "Long matched repeated-measures data with one observation per subject-method-condition cell"
+  ),
+  `Estimation approach` = c(
+    "Moment CCC with Lin delta-method/Fisher-z CI when requested",
+    "REML mixed-model variance components and fixed-effect bias term",
+    "Nonparametric U-statistic estimator with Fisher-z CI when requested",
+    "Classical ANOVA mean-square formulas",
+    "REML mixed-model variance components and fixed-effect bias term",
+    "Method-of-moments disagreement ratios; optional bounded variance-component variant",
+    "Categorical-condition ANOVA estimator"
+  ),
+  `Inference reported` = c(
+    "Estimate; optional confidence interval",
+    "Estimate; optional confidence interval; variance-component diagnostics",
+    "Estimate; optional confidence interval",
+    "Pairwise: estimate and optional CI. Overall: coefficient table with F statistic, df, p-value, and optional CI",
+    "Estimate; optional confidence interval; variance-component diagnostics",
+    "Estimate; optional confidence interval",
+    "Estimate; optional confidence interval; homogeneity F statistic and p-value"
+  ),
+  `Formal hypothesis test implemented? Yes/No/Requires verification` = c(
+    "No",
+    "No for the CCC parameter; variance-component selection tests are not CCC tests",
+    "No",
+    "Requires verification for overall p-values; no pairwise ICC test is documented",
+    "No for the ICC parameter; variance-component selection tests are not ICC tests",
+    "No",
+    "Yes: homogeneity of agreement across conditions"
+  ),
+  check.names = FALSE
+)
+
+knitr::kable(agreement_summary, escape = FALSE)
+```
+
+
+## Choosing among CCC, BA, ICC, and CIA
 
 In practice these methods answer different questions.
 
 - Use `ccc()` when one concordance coefficient per pair is the main target.
+- Use `ccc_rm_ustat()` or `ccc_rm_reml()` when the concordance target is
+  repeated-measures CCC rather than simple paired wide-data CCC.
 - Use `ba()` when the size and direction of disagreement should be visible on
   the original measurement scale.
+  Use `ba_rm()` for the repeated-measures Bland-Altman workflow.
 - Use `icc()` when the target is reliability under a classical variance
   components interpretation.
+- Use `icc_rm_reml()` when the target is repeated-measures ICC from the
+  package's REML variance-component backend.
+- Use `cia()` when replicated readings within subject-method cells are
+  available and the target is individual agreement or interchangeability
+  relative to within-method replicate disagreement.
+- Use `cia_rm()` when the target is individual agreement across matched
+  repeated conditions rather than technical replicates.
 
 There is overlap in interpretation, but these are not interchangeable
 estimators.
+
+## References
+
+Barnhart HX, Haber M, Lokhnygina Y, Kosinski AS. (2007). Comparison of
+concordance correlation coefficient and coefficient of individual agreement in
+assessing agreement. *Journal of Biopharmaceutical Statistics*, 17(4), 721-738.
+
+Barnhart HX, Kosinski AS, Haber M. (2007). Assessing individual agreement.
+*Journal of Biopharmaceutical Statistics*, 17(4), 697-719.
+
+Carrasco JL, Jover L. (2003). Estimating the concordance correlation
+coefficient: a new approach. *Computational Statistics & Data Analysis*, 47(4),
+519-539.
+
+Carrasco JL, Phillips BR, Puig-Martinez J, King TS, Chinchilli VM. (2013).
+Estimation of the concordance correlation coefficient for repeated measures
+using SAS and R. *Computer Methods and Programs in Biomedicine*, 109(3),
+293-304.
+
+Haber M, Gao J, Barnhart HX. (2010). Evaluation of agreement between
+measurement methods from data with matched repeated measurements via the
+coefficient of individual agreement. *Journal of Data Science*, 8, 457-469.
+
+Lin L. (1989). A concordance correlation coefficient to evaluate
+reproducibility. *Biometrics*, 45, 255-268.
+
+McGraw KO, Wong SP. (1996). Forming inferences about some intraclass
+correlation coefficients. *Psychological Methods*, 1(1), 30-46.
+
+Pan Y, Gao J, Haber M, Barnhart HX. (2010). Estimation of coefficients of
+individual agreement (CIA's) for quantitative and binary data using SAS and R.
+*Computer Methods and Programs in Biomedicine*.
+
+Shrout PE, Fleiss JL. (1979). Intraclass correlations: uses in assessing rater
+reliability. *Psychological Bulletin*, 86(2), 420-428.
