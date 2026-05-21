@@ -456,11 +456,11 @@ resolve_na_args <- function(na_method = "error",
                                      arg = "data") {
   x <- as.matrix(x)
   min_n <- as.integer(min_n)
-  finite_row <- apply(is.finite(x), 1L, all)
-  keep <- finite_row
+  filtered <- complete_case_matrix_cpp(x)
+  keep <- filtered$complete_rows
 
-  n_original <- nrow(x)
-  n_complete <- sum(keep)
+  n_original <- filtered$n_original
+  n_complete <- filtered$n_complete
 
   if (n_complete < min_n) {
     abort_bad_arg(
@@ -471,9 +471,8 @@ resolve_na_args <- function(na_method = "error",
     )
   }
 
-  out <- x[keep, , drop = FALSE]
   list(
-    data = out,
+    data = filtered$data,
     diagnostics = list(
       na_method = "complete",
       n_original = n_original,
@@ -521,7 +520,6 @@ resolve_na_args <- function(na_method = "error",
 #' @keywords internal
 #' @noRd
 .mc_prepare_omp_threads <- function(n_threads,
-                                    n_threads_missing = FALSE,
                                     arg = "n_threads") {
   .mc_enter_omp_threads(check_scalar_int_pos(n_threads, arg = arg))
 }

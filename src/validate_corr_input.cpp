@@ -209,3 +209,77 @@ inline bool any_nonfinite_real_matrix_parallel(SEXP x, int nr, int nc){
     M.attr("dimnames") = Rcpp::List::create(R_NilValue, Rcpp::wrap(colnames));
     return M;
  }
+
+// [[Rcpp::export]]
+Rcpp::List complete_case_matrix_cpp(Rcpp::NumericMatrix x) {
+   const int nr = x.nrow();
+   const int nc = x.ncol();
+
+   Rcpp::LogicalVector keep(nr);
+   int n_complete = 0;
+
+   for (int i = 0; i < nr; ++i) {
+      bool row_ok = true;
+      for (int j = 0; j < nc; ++j) {
+         if (!R_finite(x(i, j))) {
+            row_ok = false;
+            break;
+         }
+      }
+      keep[i] = row_ok ? TRUE : FALSE;
+      if (row_ok) ++n_complete;
+   }
+
+   Rcpp::NumericMatrix out(n_complete, nc);
+   int dst_i = 0;
+   for (int i = 0; i < nr; ++i) {
+      if (keep[i] != TRUE) continue;
+      for (int j = 0; j < nc; ++j) {
+         out(dst_i, j) = x(i, j);
+      }
+      ++dst_i;
+   }
+
+   SEXP dn_sexp = x.attr("dimnames");
+   if (dn_sexp != R_NilValue) {
+      Rcpp::List dn(dn_sexp);
+      if (dn.size() != 2) {
+         return Rcpp::List::create(
+            Rcpp::_["data"] = out,
+            Rcpp::_["complete_rows"] = keep,
+            Rcpp::_["n_original"] = nr,
+            Rcpp::_["n_complete"] = n_complete
+         );
+      }
+      SEXP row_names = dn[0];
+      SEXP col_names = dn[1];
+      Rcpp::RObject out_row_names = R_NilValue;
+      Rcpp::RObject out_col_names = R_NilValue;
+      if (row_names != R_NilValue) {
+         Rcpp::CharacterVector rn(row_names);
+         keep.attr("names") = Rcpp::clone(rn);
+         Rcpp::CharacterVector kept_names(n_complete);
+         dst_i = 0;
+         for (int i = 0; i < nr; ++i) {
+            if (keep[i] == TRUE) {
+               kept_names[dst_i++] = rn[i];
+            }
+         }
+         out_row_names = kept_names;
+      }
+      if (col_names != R_NilValue) {
+         out_col_names = Rcpp::clone(Rcpp::CharacterVector(col_names));
+      }
+      out.attr("dimnames") = Rcpp::List::create(
+         out_row_names,
+         out_col_names
+      );
+   }
+
+   return Rcpp::List::create(
+      Rcpp::_["data"] = out,
+      Rcpp::_["complete_rows"] = keep,
+      Rcpp::_["n_original"] = nr,
+      Rcpp::_["n_complete"] = n_complete
+   );
+}

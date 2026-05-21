@@ -369,6 +369,10 @@ validate_corr_input_cpp <- function(data, check_na = TRUE) {
     .Call(`_matrixCorr_validate_corr_input_cpp`, data, check_na)
 }
 
+complete_case_matrix_cpp <- function(x) {
+    .Call(`_matrixCorr_complete_case_matrix_cpp`, x)
+}
+
 weighted_kappa_pair_cpp <- function(x, y, weights, return_inference = FALSE, conf_level = 0.95) {
     .Call(`_matrixCorr_weighted_kappa_pair_cpp`, x, y, weights, return_inference, conf_level)
 }

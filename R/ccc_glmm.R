@@ -836,8 +836,7 @@ ccc_glmm <- function(data,
   }
 
   prev_threads <- .mc_prepare_omp_threads(
-    n_threads,
-    n_threads_missing = missing(n_threads)
+    n_threads
   )
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)

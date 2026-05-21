@@ -32,7 +32,8 @@ Rules enforced:
 \item Only numeric (integer or double) columns are retained (data.frame path).
 \item At least two numeric columns are required.
 \item All columns must have the same length and \eqn{\ge} 2 observations.
-\item Missing values are not allowed when \code{check_na = TRUE}.
+\item Missing and non-finite values are not allowed when
+\code{check_na = TRUE}.
 \item Returns a \code{double} matrix; integer input is converted once.
 }
 }

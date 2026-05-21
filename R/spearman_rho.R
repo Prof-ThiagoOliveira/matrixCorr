@@ -191,150 +191,26 @@ spearman_rho <- function(data,
                          threshold = 0,
                          diag = TRUE,
                          ...) {
-  output_cfg <- .mc_prepare_corr_output(
+  .mc_corr_wrapper(
+    data = data,
+    dots = list(...),
+    na_method = na_method,
+    na_method_missing = missing(na_method),
+    ci = ci,
+    conf_level = conf_level,
+    n_threads = n_threads,
     output = output,
     threshold = threshold,
     diag = diag,
-    thresholded = TRUE
-  )
-  if (...length() == 0L && missing(na_method) && isFALSE(ci)) {
-    input <- .mc_prepare_corr_input(
-      data,
-      na_cfg = list(na_method = "error", check_na = TRUE),
-      min_n = 2L
-    )
-    return(.mc_with_omp_threads(
-      n_threads,
-      n_threads_missing = missing(n_threads),
-      {
-        if (.mc_supports_direct_threshold_path(
-          method = "spearman",
-          na_method = "error",
-          ci = FALSE,
-          output = output_cfg$output,
-          threshold = output_cfg$threshold,
-          pairwise = FALSE,
-          has_ci = FALSE
-        )) {
-          trip <- spearman_threshold_triplets_cpp(
-            input$data,
-            threshold = output_cfg$threshold,
-            diag = output_cfg$diag
-          )
-          .mc_finalize_triplets_output(
-            triplets = trip,
-            output = output_cfg$output,
-            estimator_class = "spearman_rho",
-            method = "spearman",
-            description = "Pairwise Spearman's rank correlation matrix",
-            threshold = output_cfg$threshold,
-            diag = output_cfg$diag,
-            source_dim = as.integer(c(ncol(input$data), ncol(input$data))),
-            source_dimnames = input$dimnames,
-            symmetric = TRUE
-          )
-        } else {
-          .mc_finalize_corr_result(
-            mat = spearman_matrix_cpp(input$data),
-            class_name = "spearman_rho",
-            method = "spearman",
-            description = "Pairwise Spearman's rank correlation matrix",
-            output_cfg = output_cfg,
-            dimnames = input$dimnames,
-            symmetric = TRUE
-          )
-        }
-      }
-    ))
-  }
-
-  na_cfg <- .mc_resolve_corr_na(
-    na_method = na_method,
-    dots = list(...),
-    na_method_missing = missing(na_method),
-    allowed = c("error", "pairwise", "complete")
-  )
-  if (!isFALSE(ci)) {
-    check_bool(ci, arg = "ci")
-    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
-  } else if (!is.logical(ci) || length(ci) != 1L || is.na(ci)) {
-    check_bool(ci, arg = "ci")
-  }
-
-  input <- .mc_prepare_corr_input(data, na_cfg = na_cfg, min_n = 2L)
-  diagnostics <- NULL
-  ci_attr <- NULL
-
-  .mc_with_omp_threads(
-    n_threads,
-    n_threads_missing = missing(n_threads),
-    {
-      if (.mc_supports_direct_threshold_path(
-        method = "spearman",
-        na_method = na_cfg$na_method,
-        ci = ci,
-        output = output_cfg$output,
-        threshold = output_cfg$threshold,
-        pairwise = identical(na_cfg$na_method, "pairwise"),
-        has_ci = ci
-      )) {
-        trip <- spearman_threshold_triplets_cpp(
-          input$data,
-          threshold = output_cfg$threshold,
-          diag = output_cfg$diag
-        )
-        .mc_finalize_triplets_output(
-          triplets = trip,
-          output = output_cfg$output,
-          estimator_class = "spearman_rho",
-          method = "spearman",
-          description = "Pairwise Spearman's rank correlation matrix",
-          threshold = output_cfg$threshold,
-          diag = output_cfg$diag,
-          source_dim = as.integer(c(ncol(input$data), ncol(input$data))),
-          source_dimnames = input$dimnames,
-          symmetric = TRUE
-        )
-      } else {
-        if (!identical(na_cfg$na_method, "pairwise") && !isTRUE(ci)) {
-          result <- spearman_matrix_cpp(input$data)
-        } else {
-          pairwise <- spearman_matrix_pairwise_cpp(
-            input$data,
-            return_ci = ci,
-            conf_level = conf_level
-          )
-          result <- pairwise$est
-          diagnostics <- list(
-            n_complete = .mc_set_matrix_dimnames(pairwise$n_complete, input$colnames)
-          )
-          if (isTRUE(ci)) {
-            ci_attr <- list(
-              est = .mc_set_matrix_dimnames(unclass(result), input$colnames),
-              lwr.ci = .mc_set_matrix_dimnames(unclass(pairwise$lwr), input$colnames),
-              upr.ci = .mc_set_matrix_dimnames(unclass(pairwise$upr), input$colnames),
-              conf.level = pairwise$conf_level
-            )
-          }
-        }
-        .mc_finalize_corr_result(
-          mat = result,
-          class_name = "spearman_rho",
-          method = "spearman",
-          description = "Pairwise Spearman's rank correlation matrix",
-          output_cfg = output_cfg,
-          diagnostics = .mc_merge_diagnostics(diagnostics, input$diagnostics),
-          dimnames = input$dimnames,
-          symmetric = TRUE,
-          extra_attrs = if (!is.null(ci_attr)) {
-            list(
-              ci = ci_attr,
-              conf.level = conf_level
-            )
-          }
-        )
-      }
-    }
+    estimator_class = "spearman_rho",
+    method = "spearman",
+    description = "Pairwise Spearman's rank correlation matrix",
+    kernel_matrix = spearman_matrix_cpp,
+    kernel_pairwise = spearman_matrix_pairwise_cpp,
+    kernel_threshold = spearman_threshold_triplets_cpp,
+    min_n = 2L,
+    symmetric = TRUE,
+    thresholded_output = TRUE
   )
 }
 

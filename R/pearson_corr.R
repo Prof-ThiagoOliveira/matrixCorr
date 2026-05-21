@@ -169,269 +169,29 @@ pearson_corr <- function(data,
                          threshold = 0,
                          diag = TRUE,
                          ...) {
-  output_cfg <- .mc_validate_thresholded_output_request(
+  .mc_corr_wrapper(
+    data = data,
+    dots = list(...),
+    na_method = na_method,
+    na_method_missing = missing(na_method),
+    ci = ci,
+    conf_level = conf_level,
+    n_threads = n_threads,
     output = output,
     threshold = threshold,
-    diag = diag
-  )
-  n_threads_missing <- missing(n_threads)
-  if (...length() == 0L &&
-      isFALSE(ci) &&
-      (missing(na_method) ||
-       (is.character(na_method) &&
-        length(na_method) == 1L &&
-        !is.na(na_method) &&
-        identical(na_method, "error")))) {
-    numeric_data <- validate_corr_input(data, check_na = TRUE)
-
-    colnames_data <- colnames(numeric_data)
-    dn <- if (is.null(colnames_data)) NULL else .mc_square_dimnames(colnames_data)
-
-    prev_threads <- .mc_prepare_omp_threads(
-      n_threads,
-      n_threads_missing = n_threads_missing
-    )
-
-    if (!is.null(prev_threads)) {
-      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-    }
-
-    if (identical(output_cfg$output, "edge_list") &&
-        isTRUE(output_cfg$threshold == 0)) {
-      trip <- pearson_threshold_triplets_cpp(
-        numeric_data,
-        threshold = 0,
-        diag = output_cfg$diag
-      )
-      return(.mc_finalize_pearson_edge_list_zero_threshold(
-        triplets = trip,
-        source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
-        source_dimnames = dn,
-        diag = output_cfg$diag
-      ))
-    }
-
-    if (.mc_supports_direct_threshold_path(
-      method = "pearson",
-      na_method = "error",
-      ci = FALSE,
-      output = output_cfg$output,
-      threshold = output_cfg$threshold,
-      pairwise = FALSE,
-      has_ci = FALSE
-    )) {
-      trip <- pearson_threshold_triplets_cpp(
-        numeric_data,
-        threshold = output_cfg$threshold,
-        diag = output_cfg$diag
-      )
-      return(.mc_finalize_triplets_output(
-        triplets = trip,
-        output = output_cfg$output,
-        estimator_class = "pearson_corr",
-        method = "pearson",
-        description = "Pairwise Pearson correlation matrix",
-        threshold = output_cfg$threshold,
-        diag = output_cfg$diag,
-        source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
-        source_dimnames = dn,
-        symmetric = TRUE
-      ))
-    }
-
-    result <- pearson_matrix_cpp(numeric_data)
-    if (identical(output_cfg$output, "matrix")) {
-      return(.mc_structure_pearson_matrix_fast(
-        mat = result,
-        dimnames = dn
-      ))
-    }
-    out <- .mc_structure_pearson_matrix(mat = result, dimnames = dn)
-    return(.mc_finalize_corr_output_fast(
-      out,
-      output = output_cfg$output,
-      threshold = output_cfg$threshold,
-      diag = output_cfg$diag
-    ))
-  }
-
-  if (...length() == 0L && missing(na_method)) {
-    na_cfg <- list(na_method = "error", check_na = TRUE)
-  } else {
-    legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
-    na_cfg <- resolve_na_args(
-      na_method = na_method,
-      check_na = legacy_args$check_na %||% NULL,
-      na_method_missing = missing(na_method),
-      allowed = c("error", "pairwise", "complete")
-    )
-  }
-  if (!isFALSE(ci)) {
-    check_bool(ci, arg = "ci")
-    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
-  } else if (!is.logical(ci) || length(ci) != 1L || is.na(ci)) {
-    check_bool(ci, arg = "ci")
-  }
-
-  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
-  diagnostics_extra <- NULL
-  if (identical(na_cfg$na_method, "complete")) {
-    cc <- .mc_complete_case_matrix(numeric_data, min_n = 2L, arg = "data")
-    numeric_data <- cc$data
-    diagnostics_extra <- cc$diagnostics
-  }
-  colnames_data <- colnames(numeric_data)
-  dn <- if (is.null(colnames_data)) NULL else .mc_square_dimnames(colnames_data)
-  diagnostics <- NULL
-  ci_attr <- NULL
-
-  prev_threads <- .mc_prepare_omp_threads(
-    n_threads,
-    n_threads_missing = n_threads_missing
-  )
-  if (!is.null(prev_threads)) {
-    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-  }
-
-  if (identical(output_cfg$output, "edge_list") &&
-      isTRUE(output_cfg$threshold == 0) &&
-      identical(na_cfg$na_method, "error") &&
-      isTRUE(na_cfg$check_na) &&
-      isFALSE(ci)) {
-    trip <- pearson_threshold_triplets_cpp(
-      numeric_data,
-      threshold = 0,
-      diag = output_cfg$diag
-    )
-    return(.mc_finalize_pearson_edge_list_zero_threshold(
-      triplets = trip,
-      source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
-      source_dimnames = dn,
-      diag = output_cfg$diag
-    ))
-  }
-
-  if (.mc_supports_direct_threshold_path(
-    method = "pearson",
-    na_method = na_cfg$na_method,
-    ci = ci,
-    output = output_cfg$output,
-    threshold = output_cfg$threshold,
-    pairwise = identical(na_cfg$na_method, "pairwise"),
-    has_ci = ci
-  )) {
-    trip <- pearson_threshold_triplets_cpp(
-      numeric_data,
-      threshold = output_cfg$threshold,
-      diag = output_cfg$diag
-    )
-    return(.mc_finalize_triplets_output(
-      triplets = trip,
-      output = output_cfg$output,
-      estimator_class = "pearson_corr",
-      method = "pearson",
-      description = "Pairwise Pearson correlation matrix",
-      threshold = output_cfg$threshold,
-      diag = output_cfg$diag,
-      source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
-      source_dimnames = dn,
-      symmetric = TRUE
-    ))
-  }
-
-  if (!identical(na_cfg$na_method, "pairwise") && !isTRUE(ci)) {
-    result <- pearson_matrix_cpp(numeric_data)
-  } else {
-    pairwise <- pearson_matrix_pairwise_cpp(
-      numeric_data,
-      return_ci = ci,
-      conf_level = conf_level
-    )
-    result <- pairwise$est
-    diagnostics <- list(
-      n_complete = .mc_set_matrix_dimnames(pairwise$n_complete, colnames_data)
-    )
-    if (isTRUE(ci)) {
-      ci_attr <- list(
-        est = .mc_set_matrix_dimnames(unclass(result), colnames_data),
-        lwr.ci = .mc_set_matrix_dimnames(unclass(pairwise$lwr), colnames_data),
-        upr.ci = .mc_set_matrix_dimnames(unclass(pairwise$upr), colnames_data),
-        conf.level = pairwise$conf_level
-      )
-    }
-  }
-  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
-
-  if (identical(output_cfg$output, "matrix") &&
-      is.null(diagnostics) &&
-      is.null(ci_attr)) {
-    return(.mc_structure_pearson_matrix_fast(
-      mat = result,
-      dimnames = dn
-    ))
-  }
-  out <- .mc_structure_pearson_matrix(
-    mat = result,
-    dimnames = dn,
-    diagnostics = diagnostics,
-    ci_attr = ci_attr,
-    conf_level = if (!is.null(ci_attr)) conf_level else NULL
-  )
-  .mc_finalize_corr_output_fast(
-    out,
-    output = output_cfg$output,
-    threshold = output_cfg$threshold,
-    diag = output_cfg$diag
-  )
-}
-
-.mc_finalize_pearson_edge_list_zero_threshold <- function(triplets,
-                                                          source_dim,
-                                                          source_dimnames = NULL,
-                                                          diag = TRUE) {
-  ii <- as.integer(triplets$i)
-  jj <- as.integer(triplets$j)
-  vv <- as.numeric(triplets$x)
-
-  rn <- NULL
-  cn <- NULL
-  if (is.list(source_dimnames) && length(source_dimnames) == 2L) {
-    rn <- source_dimnames[[1L]]
-    cn <- source_dimnames[[2L]]
-  }
-
-  row_out <- if (is.null(rn)) as.character(ii) else rn[ii]
-  col_out <- if (is.null(cn)) as.character(jj) else cn[jj]
-
-  out <- .mc_new_corr_edge_list(
-    df = data.frame(
-      row = row_out,
-      col = col_out,
-      value = vv,
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    ),
+    diag = diag,
     estimator_class = "pearson_corr",
     method = "pearson",
     description = "Pairwise Pearson correlation matrix",
-    threshold = 0,
-    diag = diag,
-    diagnostics = NULL,
-    ci = NULL,
-    conf.level = NULL,
-    source_dim = source_dim,
-    source_dimnames = source_dimnames,
-    symmetric = TRUE
+    kernel_matrix = pearson_matrix_cpp,
+    kernel_pairwise = pearson_matrix_pairwise_cpp,
+    kernel_threshold = pearson_threshold_triplets_cpp,
+    min_n = 2L,
+    symmetric = TRUE,
+    thresholded_output = TRUE,
+    structure_matrix = .mc_structure_pearson_matrix,
+    structure_matrix_fast = .mc_structure_pearson_matrix_fast
   )
-
-  attr(out, "matrixCorr_meta") <- list(
-    source_class = "pearson_corr",
-    method = "pearson",
-    description = "Pairwise Pearson correlation matrix",
-    package = "matrixCorr",
-    diagnostics = NULL
-  )
-  out
 }
 
 .mc_structure_pearson_matrix <- function(mat,

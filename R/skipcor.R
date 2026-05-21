@@ -267,18 +267,34 @@ skipped_corr <- function(data,
   check_bool(ci, arg = "ci")
   check_bool(p_value, arg = "p_value")
   check_scalar_numeric(cutoff, arg = "cutoff", lower = 0, closed_lower = FALSE)
-  check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
-  check_prob_scalar(fwe_level, arg = "fwe_level", open_ends = TRUE)
   n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
-  n_boot <- check_scalar_int_pos(n_boot, arg = "n_boot")
-  n_mc <- check_scalar_int_pos(n_mc, arg = "n_mc")
-  if (n_mc < 10L) {
-    abort_bad_arg("n_mc", message = "must be >= 10.")
+  do_inference <- isTRUE(ci) || isTRUE(p_value)
+  if (isTRUE(ci)) {
+    conf_level <- check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+  } else {
+    conf_level <- 0.95
   }
-  if (!is.null(seed)) {
+  if (isTRUE(do_inference)) {
+    n_boot <- check_scalar_int_pos(n_boot, arg = "n_boot")
+  } else {
+    n_boot <- 1L
+  }
+  if (isTRUE(p_value) && identical(p_adjust, "ecp")) {
+    check_prob_scalar(fwe_level, arg = "fwe_level", open_ends = TRUE)
+    n_mc <- check_scalar_int_pos(n_mc, arg = "n_mc")
+    if (n_mc < 10L) {
+      abort_bad_arg("n_mc", message = "must be >= 10.")
+    }
+  } else {
+    fwe_level <- 0.05
+    n_mc <- 10L
+  }
+  if (isTRUE(do_inference) && !is.null(seed)) {
     seed <- check_scalar_int_pos(seed, arg = "seed")
+  } else {
+    seed <- NULL
   }
-  if ((isTRUE(ci) || isTRUE(p_value)) && identical(na_method, "pairwise")) {
+  if (isTRUE(do_inference) && identical(na_method, "pairwise")) {
     abort_bad_arg(
       "na_method",
       message = "{.arg ci} and {.arg p_value} currently require {.code na_method = \"error\"} or {.code na_method = \"complete\"}."
@@ -307,8 +323,7 @@ skipped_corr <- function(data,
   method_int <- switch(method, pearson = 0L, spearman = 1L)
   use_mad <- identical(outlier_rule, "mad")
   prev_threads <- .mc_prepare_omp_threads(
-    n_threads,
-    n_threads_missing = missing(n_threads)
+    n_threads
   )
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
@@ -322,7 +337,7 @@ skipped_corr <- function(data,
     min_n = 5L,
     n_threads = n_threads,
     return_masks = return_masks,
-    return_inference = isTRUE(ci) || isTRUE(p_value),
+    return_inference = do_inference,
     conf_level = conf_level,
     n_boot = n_boot,
     seed = if (is.null(seed)) sample.int(.Machine$integer.max, 1L) else seed,

@@ -155,12 +155,13 @@ hsic <- function(data,
       isTRUE(threshold == 0) &&
       isTRUE(diag)
   ) {
-    colnames_data <- colnames(data)
+    numeric_data <- validate_corr_input(data, check_na = TRUE)
+    colnames_data <- colnames(numeric_data)
     if (is.null(colnames_data)) {
-      colnames_data <- paste0("V", seq_len(ncol(data)))
+      colnames_data <- paste0("V", seq_len(ncol(numeric_data)))
     }
     return(hsic_raw_biased_matrix_object_cpp(
-      data,
+      numeric_data,
       kernel_code = 0L,
       bandwidth_code = 0L,
       kernel = "gaussian",
@@ -220,12 +221,13 @@ hsic <- function(data,
       nrow(data) >= 2L &&
       ncol(data) >= 2L
   ) {
-    colnames_data <- colnames(data)
+    numeric_data <- validate_corr_input(data, check_na = TRUE)
+    colnames_data <- colnames(numeric_data)
     if (is.null(colnames_data)) {
-      colnames_data <- paste0("V", seq_len(ncol(data)))
+      colnames_data <- paste0("V", seq_len(ncol(numeric_data)))
     }
     return(hsic_raw_biased_matrix_object_cpp(
-      data,
+      numeric_data,
       kernel_code = kernel_code,
       bandwidth_code = bandwidth_code,
       kernel = kernel,
@@ -250,8 +252,7 @@ hsic <- function(data,
   dn <- .mc_square_dimnames(colnames_data)
 
   prev_threads <- .mc_prepare_omp_threads(
-    n_threads,
-    n_threads_missing = missing(n_threads)
+    n_threads
   )
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)

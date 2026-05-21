@@ -1409,6 +1409,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// complete_case_matrix_cpp
+Rcpp::List complete_case_matrix_cpp(Rcpp::NumericMatrix x);
+RcppExport SEXP _matrixCorr_complete_case_matrix_cpp(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(complete_case_matrix_cpp(x));
+    return rcpp_result_gen;
+END_RCPP
+}
 // weighted_kappa_pair_cpp
 Rcpp::List weighted_kappa_pair_cpp(Rcpp::IntegerVector x, Rcpp::IntegerVector y, Rcpp::NumericMatrix weights, bool return_inference, double conf_level);
 RcppExport SEXP _matrixCorr_weighted_kappa_pair_cpp(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP return_inferenceSEXP, SEXP conf_levelSEXP) {
@@ -1550,6 +1561,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_matrixCorr_polyserial_inference_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polyserial_inference_cpp, 3},
     {"_matrixCorr_matrixCorr_polydi_mle_cpp", (DL_FUNC) &_matrixCorr_matrixCorr_polydi_mle_cpp, 2},
     {"_matrixCorr_validate_corr_input_cpp", (DL_FUNC) &_matrixCorr_validate_corr_input_cpp, 2},
+    {"_matrixCorr_complete_case_matrix_cpp", (DL_FUNC) &_matrixCorr_complete_case_matrix_cpp, 1},
     {"_matrixCorr_weighted_kappa_pair_cpp", (DL_FUNC) &_matrixCorr_weighted_kappa_pair_cpp, 5},
     {"_matrixCorr_weighted_kappa_matrix_cpp", (DL_FUNC) &_matrixCorr_weighted_kappa_matrix_cpp, 6},
     {"_matrixCorr_weighted_kappa_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_weighted_kappa_threshold_triplets_cpp, 6},

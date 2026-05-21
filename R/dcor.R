@@ -178,7 +178,6 @@ dcor <- function(data,
     )
     return(.mc_with_omp_threads(
       n_threads,
-      n_threads_missing = missing(n_threads),
       {
         .mc_finalize_corr_result(
           mat = ustat_dcor_matrix_cpp(input$data),
@@ -210,7 +209,6 @@ dcor <- function(data,
 
   .mc_with_omp_threads(
     n_threads,
-    n_threads_missing = missing(n_threads),
     {
       if (isTRUE(p_value) || identical(na_cfg$na_method, "pairwise")) {
         pairwise <- ustat_dcor_matrix_pairwise_cpp(

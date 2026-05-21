@@ -208,7 +208,6 @@ kendall_tau <- function(data,
     )
     return(.mc_with_omp_threads(
       n_threads,
-      n_threads_missing = missing(n_threads),
       {
         .mc_finalize_corr_result(
           mat = kendall_matrix_cpp(input$data),
@@ -285,7 +284,6 @@ kendall_tau <- function(data,
 
   .mc_with_omp_threads(
     n_threads,
-    n_threads_missing = missing(n_threads),
     {
       if (!identical(na_cfg$na_method, "pairwise") && !isTRUE(ci)) {
         result <- kendall_matrix_cpp(input$data)

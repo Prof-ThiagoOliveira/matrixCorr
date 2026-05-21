@@ -321,7 +321,6 @@ xi_corr <- function(data,
     threshold = threshold,
     diag = diag
   )
-  n_threads_missing <- missing(n_threads)
 
   if (...length() == 0L && missing(na_method)) {
     na_cfg <- list(na_method = "error", check_na = TRUE)
@@ -355,8 +354,7 @@ xi_corr <- function(data,
   }
 
   prev_threads <- .mc_prepare_omp_threads(
-    n_threads,
-    n_threads_missing = n_threads_missing
+    n_threads
   )
   if (!is.null(prev_threads)) {
     on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
