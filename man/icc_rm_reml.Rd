@@ -363,7 +363,7 @@ backend but are not included in the ICC denominator.
 \strong{CIs / SEs (delta method for ICC).}
 Let \eqn{I_A = 1} for \code{type = "agreement"} and \eqn{I_A = 0} for
 \code{type = "consistency"}, and define
-\deqn{ \theta \;=\; \big(\sigma_S^2,\ \sigma_{S\times M,\mathrm{eff}}^2,\ 
+\deqn{ \theta \;=\; \big(\sigma_S^2,\ \sigma_{S\times M,\mathrm{eff}}^2,\
 \sigma_{S\times T,\mathrm{eff}}^2,\ \sigma_E^2,\ S_B\big)^\top. }
 Write \eqn{\mathrm{ICC}(\theta)=N/D} with
 \deqn{ N = \sigma_S^2, \qquad
@@ -473,10 +473,13 @@ fit_icc_rm <- icc_rm_reml(
   subject = "id",
   method = "method",
   time = "time",
-  type = "consistency"
+  type = "consistency",
+  ci = TRUE
 )
 print(fit_icc_rm)
 summary(fit_icc_rm)
+confint(fit_icc_rm)
+tidy(fit_icc_rm)
 
 }
 \references{

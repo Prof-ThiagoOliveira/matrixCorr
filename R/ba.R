@@ -107,6 +107,9 @@
 #' y <- x + rnorm(100, 0, 8)
 #' fit_ba <- ba(x, y)
 #' print(fit_ba)
+#' estimate(fit_ba)
+#' tidy(fit_ba)
+#' confint(fit_ba)
 #' plot(fit_ba)
 #'
 #' # Pairwise Bland-Altman across 3 methods
@@ -119,6 +122,7 @@
 #' fit_ba3 <- ba(wide3)
 #' print(fit_ba3)
 #' summary(fit_ba3)
+#' tidy(fit_ba3)
 #' plot(fit_ba3)
 #'
 #' @references
@@ -840,9 +844,6 @@ print.ba_matrix <- function(x,
 
   sm <- summary(x, digits = digits, ci_digits = ci_digits)
   cols <- c("method1", "method2", "bias", "sd_loa", "loa_low", "loa_up", "width", "n_obs")
-  if (identical(show_ci, "yes")) {
-    cols <- c(cols, "bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
-  }
   df <- as.data.frame(sm)[, cols[cols %in% names(sm)], drop = FALSE]
   header <- .mc_header_with_ci(
     sprintf("Bland-Altman (%s)", if (identical(as.integer(x$mode), 1L)) "row - column" else "column - row"),
@@ -926,7 +927,7 @@ print.summary.ba_matrix <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("item1", "item2", "n_obs", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
+        cols = c("method1", "method2", "n_obs", "bias", "sd_loa", "loa_low", "loa_up", "width", "loa_multiplier")
       ),
       list(
         title = "Confidence intervals",

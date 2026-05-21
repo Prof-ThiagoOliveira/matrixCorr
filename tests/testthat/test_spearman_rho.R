@@ -302,6 +302,6 @@ test_that("spearman_rho CI-aware print, summary, and plot follow the CI contract
   expect_false(any(grepl("Spearman correlation summary", txt_print, fixed = TRUE)))
   expect_match(paste(txt_summary, collapse = "\n"), "Spearman correlation summary")
   expect_match(paste(txt_summary, collapse = "\n"), "jackknife_euclidean_likelihood")
-  expect_match(paste(txt_summary, collapse = "\n"), "n_complete")
+  expect_match(paste(txt_summary, collapse = "\n"), "\\bn\\b")
   expect_s3_class(p, "ggplot")
 })

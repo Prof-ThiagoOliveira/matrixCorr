@@ -690,6 +690,10 @@
 #' ci = TRUE)
 #' fit1
 #' summary(fit1)
+#' estimate(fit1)
+#' tidy(fit1)
+#' ci(fit1)
+#' confint(fit1)
 #' }
 #'
 #' # Example 2: method bias lowers total agreement.

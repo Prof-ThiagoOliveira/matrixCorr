@@ -239,6 +239,8 @@ print(D3[1:3, 1:3], digits = 2)
 ## Optional inference
 D4 <- dcor(XY, p_value = TRUE)
 summary(D4)
+estimate(D4)
+tidy(D4)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

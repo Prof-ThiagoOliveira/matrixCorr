@@ -146,6 +146,10 @@
 #'                             method = "method", time = "time", ci = TRUE)
 #' print(ccc2)
 #' summary(ccc2)
+#' estimate(ccc2)
+#' tidy(ccc2)
+#' ci(ccc2)
+#' confint(ccc2)
 #' plot(ccc2)
 #'
 #' # Interactive viewing (requires shiny)
@@ -864,8 +868,12 @@ ccc_rm_ustat <- function(data,
 #'
 #' # Both sigma2_subject_method and sigma2_subject_time are identifiable here
 #' fit_both <- ccc_rm_reml(dat_both, "y", "id", method = "method", time = "time",
-#'                          vc_select = "auto", verbose = TRUE)
+#'                          vc_select = "auto", ci = TRUE, verbose = TRUE)
 #' summary(fit_both)
+#' estimate(fit_both)
+#' tidy(fit_both)
+#' ci(fit_both)
+#' confint(fit_both)
 #' plot(fit_both)
 #'
 #' # Interactive viewing (requires shiny)

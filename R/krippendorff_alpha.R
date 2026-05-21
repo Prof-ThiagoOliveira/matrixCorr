@@ -148,6 +148,8 @@
 #' fit <- krippendorff_alpha(raters, level = "nominal", na_method = "available")
 #' print(fit)
 #' summary(fit)
+#' estimate(fit)
+#' tidy(fit)
 #' plot(fit)
 #'
 #' @author Thiago de Paula Oliveira

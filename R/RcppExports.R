@@ -81,6 +81,18 @@ ccc_vc_cpp <- function(Xr, yr, subject, method, time, nm, nt, max_iter = 200L, t
     .Call(`_matrixCorr_ccc_vc_cpp`, Xr, yr, subject, method, time, nm, nt, max_iter, tol, conf_level, ci_mode, Lr, auxDr, Zr, use_ar1, ar1_rho, include_subj_method, include_subj_time, sb_zero_tol, eval_single_visit, time_weights, metric_mode, ll_only, need_loglik)
 }
 
+chatterjee_xi_vec_cpp <- function(x, y, tie_method = "random", bias_correction = "none") {
+    .Call(`_matrixCorr_chatterjee_xi_vec_cpp`, x, y, tie_method, bias_correction)
+}
+
+chatterjee_xi_matrix_cpp <- function(X, tie_method = "random", bias_correction = "none", n_threads = 1L) {
+    .Call(`_matrixCorr_chatterjee_xi_matrix_cpp`, X, tie_method, bias_correction, n_threads)
+}
+
+chatterjee_xi_matrix_pairwise_cpp <- function(X_, return_ci = FALSE, conf_level = 0.95, ci_method = "auto", bootstrap_reps = 999L, m = NULL, large_sample_cutoff = 1000L, tie_method = "random", bias_correction = "none", n_threads = 1L) {
+    .Call(`_matrixCorr_chatterjee_xi_matrix_pairwise_cpp`, X_, return_ci, conf_level, ci_method, bootstrap_reps, m, large_sample_cutoff, tie_method, bias_correction, n_threads)
+}
+
 cia_moments_cpp <- function(y, subject, method, replicate, n_methods, reference_method, has_reference, pairwise, n_threads = 1L) {
     .Call(`_matrixCorr_cia_moments_cpp`, y, subject, method, replicate, n_methods, reference_method, has_reference, pairwise, n_threads)
 }

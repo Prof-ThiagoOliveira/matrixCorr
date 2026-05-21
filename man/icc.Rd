@@ -280,10 +280,13 @@ fit_icc <- icc(dat,
 )
 print(fit_icc)
 summary(fit_icc)
+estimate(fit_icc)
+tidy(fit_icc)
 
 fit_icc_overall <- icc(dat, scope = "overall", ci = TRUE)
 print(fit_icc_overall)
 summary(fit_icc_overall)
+confint(fit_icc_overall)
 
 }
 \references{

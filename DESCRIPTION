@@ -16,7 +16,7 @@ Maintainer: Thiago de Paula Oliveira <thiago.paula.oliveira@gmail.com>
 Description: Compute correlation, association, agreement, and reliability
     measures for small to high-dimensional datasets through a consistent
     matrix-oriented interface. Supports classical correlations (Pearson,
-    Spearman, Kendall), distance correlation, partial correlation with
+    Spearman, Kendall, Chatterjee's rank correlation), distance correlation, partial correlation with
     regularised estimators, shrinkage correlation for p >= n settings, robust
     correlations including biweight mid-correlation, percentage-bend,
     Winsorized, and skipped correlation, latent-variable methods for binary
@@ -46,6 +46,7 @@ Imports:
     ggplot2 (>= 3.5.2),
     Matrix (>= 1.7.2),
     cli,
+    generics,
     rlang
 Suggests:
     knitr,

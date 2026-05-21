@@ -21,7 +21,7 @@ test_that("matrix-style correlation summaries use the standard compact format", 
     expect_true(any(grepl("^Correlation summary$", txt)))
     expect_true(any(grepl("pairs", txt, fixed = TRUE)))
     expect_true(any(grepl("estimate", txt, fixed = TRUE)))
-    expect_true(any(grepl("Strongest pairs by \\|estimate\\|", txt)))
+    expect_false(any(grepl("Strongest pairs by \\|estimate\\|", txt)))
   }
 })
 

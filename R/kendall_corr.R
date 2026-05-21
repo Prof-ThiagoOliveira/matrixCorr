@@ -158,6 +158,10 @@
 #' kt_ci <- kendall_tau(mat[, 1:3], ci = TRUE)
 #' print(kt_ci, show_ci = "yes")
 #' summary(kt_ci)
+#' estimate(kt_ci)
+#' tidy(kt_ci)
+#' ci(kt_ci)
+#' confint(kt_ci)
 #'
 #' # Two-vector mode (scalar path)
 #' x <- rnorm(1000); y <- 0.5 * x + rnorm(1000)

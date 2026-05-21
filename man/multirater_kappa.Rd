@@ -215,6 +215,8 @@ raters <- data.frame(
 fit <- multirater_kappa(raters)
 print(fit)
 summary(fit)
+estimate(fit)
+tidy(fit)
 # The default plot is an item-by-category agreement map.
 # Rows are items, ordered from stronger to weaker item-level agreement.
 # Columns are categories. Each tile shows how many raters assigned that

@@ -321,6 +321,8 @@ fit_overall <- cia(
 )
 print(fit_overall)
 summary(fit_overall)
+estimate(fit_overall)
+tidy(fit_overall)
 plot(fit_overall)
 
 fit_pairwise <- cia(
@@ -333,6 +335,7 @@ fit_pairwise <- cia(
 )
 print(fit_pairwise)
 summary(fit_pairwise)
+tidy(fit_pairwise)
 plot(fit_pairwise)
 
 }

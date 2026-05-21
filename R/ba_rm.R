@@ -426,6 +426,9 @@
 #'   include_slope = FALSE, use_ar1 = FALSE
 #' )
 #' summary(ba4)
+#' estimate(ba4)
+#' tidy(ba4)
+#' confint(ba4)
 #' plot(ba4)
 #'
 #' # -------- Simulate repeated-measures with AR(1) data --------
@@ -479,6 +482,7 @@
 #' # Matrices (row - column orientation)
 #' print(baN)
 #' summary(baN)
+#' tidy(baN)
 #'
 #' # Faceted BA scatter by pair
 #' plot(baN, smoother = "lm", facet_scales = "free_y")
@@ -1202,11 +1206,8 @@ print.ba_repeated_matrix <- function(x,
   }
 
   sm <- summary(x, digits = digits, ci_digits = ci_digits)
-  cols <- c("method1", "method2", "bias", "sd_loa", "loa_low", "loa_up", "width", "n")
+  cols <- c("method1", "method2", "bias", "sd_loa", "loa_low", "loa_up", "width", "n_obs")
   if ("slope" %in% names(sm)) cols <- c(cols, "slope")
-  if (identical(show_ci, "yes") && has_ci) {
-    cols <- c(cols, "bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
-  }
   df <- as.data.frame(sm)[, cols[cols %in% names(sm)], drop = FALSE]
 
   header <- .mc_header_with_ci("Bland-Altman (row \u2212 column)", cl, if (has_ci) show_ci else "no")
@@ -1357,7 +1358,7 @@ summary.ba_repeated_matrix <- function(object,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("item1", "item2", "n_obs", "bias", "sd_loa",
+        cols = c("method1", "method2", "n_obs", "bias", "sd_loa",
                  "loa_low", "loa_up", "width", "slope")
       ),
       list(
@@ -1389,7 +1390,7 @@ print.summary.ba_repeated <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("item1", "item2", "n_obs", "bias", "sd_loa",
+        cols = c("method1", "method2", "n_obs", "bias", "sd_loa",
                  "loa_low", "loa_up", "width", "slope")
       ),
       list(
@@ -1427,7 +1428,7 @@ print.summary.ba_repeated_matrix <- function(x, digits = NULL, n = NULL,
     sections = list(
       list(
         title = "Agreement estimates",
-        cols = c("item1", "item2", "n_obs", "bias", "sd_loa",
+        cols = c("method1", "method2", "n_obs", "bias", "sd_loa",
                  "loa_low", "loa_up", "width", "slope")
       ),
       list(

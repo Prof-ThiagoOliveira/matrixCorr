@@ -580,7 +580,7 @@ test_that("kendall_tau CI-aware print, summary, and plot follow the CI contract"
   expect_false(any(grepl("Kendall correlation summary", txt_print, fixed = TRUE)))
   expect_match(paste(txt_summary, collapse = "\n"), "Kendall correlation summary")
   expect_match(paste(txt_summary, collapse = "\n"), "fieller")
-  expect_match(paste(txt_summary, collapse = "\n"), "n_complete")
+  expect_match(paste(txt_summary, collapse = "\n"), "\\bn\\b")
   expect_s3_class(p, "ggplot")
 })
 

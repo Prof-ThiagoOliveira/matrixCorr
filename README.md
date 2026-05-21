@@ -29,15 +29,16 @@ compared, and used without repeated translation across packages.
 
 Supported measures include Pearson, Spearman, Kendall, distance
 correlation, partial correlation, kernel dependence via the
-Hilbert-Schmidt independence criterion, robust biweight mid-correlation,
-percentage bend, Winsorized, skipped correlation, and latent
-categorical/ordinal correlations (tetrachoric, polychoric, polyserial,
-and biserial), plus repeated-measures correlation; agreement tools cover
-Cohen’s kappa for nominal ratings, weighted Cohen’s kappa for ordered
-two-rater agreement, Gwet’s AC1/AC2, multi-rater kappa for nominal panel
-agreement, Krippendorff’s alpha for panel-level reliability,
-Bland-Altman (two-method and repeated-measures), the coefficient of
-individual agreement for replicated and repeated-measures designs, Lin’s
+Hilbert-Schmidt independence criterion, directed Chatterjee rank
+correlation, robust biweight mid-correlation, percentage bend,
+Winsorized, skipped correlation, and latent categorical/ordinal
+correlations (tetrachoric, polychoric, polyserial, and biserial), plus
+repeated-measures correlation; agreement tools cover Cohen’s kappa for
+nominal ratings, weighted Cohen’s kappa for ordered two-rater agreement,
+Gwet’s AC1/AC2, multi-rater kappa for nominal panel agreement,
+Krippendorff’s alpha for panel-level reliability, Bland-Altman
+(two-method and repeated-measures), the coefficient of individual
+agreement for replicated and repeated-measures designs, Lin’s
 concordance correlation coefficient (including repeated-measures
 LMM/REML extensions and Poisson GLMM count-data CCC), and intraclass
 correlation for both wide and repeated-measures designs.
@@ -52,6 +53,7 @@ correlation for both wide and repeated-measures designs.
 | Distance correlation | `dcor()`, `robust_dcor()` |
 | Kernel dependence | `hsic()` for raw biased/unbiased HSIC, normalised kCor-style dependence, kernel bandwidth rules, and permutation p-values |
 | Partial correlation | `pcorr()` |
+| Directed dependence | `xi_corr()` for Chatterjee rank correlation, with directed/asymmetric matrices and m-out-of-n bootstrap confidence intervals |
 | Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
 | Repeated-measures correlation | `rmcorr()` |
 | Shrinkage for $p >> n$ | `shrinkage_corr()` |
@@ -201,7 +203,7 @@ summary(fit_ccc_rm)
 #> Concordance estimates
 #> 
 #>  item1 item2 estimate n_subjects n_obs SB     se_ccc
-#>  A     B     0.884    24         192   0.0548 0.0216
+#>  A     B     0.8328   24         192   0.1096 0.0381
 #> 
 #> Variance components
 #> 

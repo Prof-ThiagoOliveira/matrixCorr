@@ -344,6 +344,10 @@ print(attr(R, "method"))
 summary(R)
 R_ci <- bicor(X[, 1:5], ci = TRUE)
 summary(R_ci)
+estimate(R_ci)
+tidy(R_ci)
+ci(R_ci)
+confint(R_ci)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

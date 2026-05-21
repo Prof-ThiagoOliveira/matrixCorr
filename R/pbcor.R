@@ -497,7 +497,14 @@
 #' R <- pbcor(X)
 #' print(R, digits = 2)
 #' summary(R)
+#' estimate(R)
+#' tidy(R)
 #' plot(R)
+#'
+#' ## Bootstrap confidence intervals
+#' R_ci <- pbcor(X, ci = TRUE, n_boot = 49, seed = 10)
+#' ci(R_ci)
+#' confint(R_ci)
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

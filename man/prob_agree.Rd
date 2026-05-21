@@ -121,6 +121,9 @@ fit_pa <- prob_agree(
 )
 print(fit_pa)
 summary(fit_pa)
+estimate(fit_pa)
+tidy(fit_pa)
+confint(fit_pa)
 plot(fit_pa)
 
 # Four generations are compared as all pairwise two-generation contrasts.

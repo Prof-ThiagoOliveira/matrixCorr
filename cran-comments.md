@@ -47,6 +47,12 @@ This is a new release of `matrixCorr`.
   HSIC estimates, normalised kCor-style dependence, Gaussian, linear, Laplace
   and polynomial kernels, median/Silverman/Scott bandwidth rules, permutation
   p-values, and error/complete/pairwise missing-data handling.
+* added `xi_corr()`, an exported directed Chatterjee rank correlation matrix
+  estimator with m-out-of-n bootstrap confidence intervals. The estimator was
+  checked across independent, monotone, non-monotone, sinusoidal,
+  tied-response, tied-predictor, diagonal, and full directed-matrix scenarios;
+  confidence intervals were checked against an independent R bootstrap
+  implementation.
 
 ## Bug
 

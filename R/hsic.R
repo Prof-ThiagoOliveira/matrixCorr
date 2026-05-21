@@ -124,6 +124,8 @@
 #' X <- cbind(a = rnorm(80), b = rnorm(80), c = rnorm(80))
 #' H_perm <- hsic(X, p_value = TRUE, B = 19, seed = 1)
 #' summary(H_perm)
+#' estimate(H_perm)
+#' tidy(H_perm)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export

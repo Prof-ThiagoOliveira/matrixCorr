@@ -332,6 +332,13 @@ colnames(X) <- sprintf("V\%02d", seq_len(p))
 
 pc <- pcorr(X)
 summary(pc)
+estimate(pc)
+tidy(pc)
+
+## Fisher-z confidence intervals for sample partial correlations
+pc_ci <- pcorr(X[, 1:5], ci = TRUE)
+ci(pc_ci)
+confint(pc_ci)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

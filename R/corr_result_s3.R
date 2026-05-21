@@ -264,26 +264,52 @@ print.summary.corr_result <- function(x,
     }
   }
   if (identical(cfg$show_ci, "yes")) {
+    summary_df <- as.data.frame(x, stringsAsFactors = FALSE)
     digest <- c(
       digest,
       .mc_ci_digest(
-        as.data.frame(x, stringsAsFactors = FALSE),
+        summary_df,
         conf_level = suppressWarnings(as.numeric(attr(x, "conf.level", exact = TRUE))),
         ci_method = attr(x, "ci_method", exact = TRUE) %||%
           (attr(x, "overview", exact = TRUE)$ci_method %||% NULL),
         digits = 3
       )
     )
+    constant_m <- .mc_single_display_value(summary_df$m)
+    if (!is.null(constant_m)) {
+      digest <- c(digest, m = constant_m)
+    }
+    constant_boot <- .mc_single_display_value(summary_df$bootstrap_reps)
+    if (!is.null(constant_boot)) {
+      digest <- c(digest, boot_reps = constant_boot)
+    }
+    se_vals <- suppressWarnings(as.numeric(summary_df$se))
+    se_vals <- se_vals[is.finite(se_vals)]
+    if (length(se_vals)) {
+      se_txt <- .mc_format_scalar_or_range(
+        min(se_vals),
+        max(se_vals),
+        digits = 3,
+        integer = FALSE
+      )
+      if (!is.null(se_txt)) {
+        digest <- c(digest, se = se_txt)
+      }
+    }
   }
   digest <- digest[!is.na(digest) & nzchar(digest)]
   .mc_print_named_digest(digest, header = header)
   cat("\n")
 
   preview <- as.data.frame(x, stringsAsFactors = FALSE, check.names = FALSE)
-  if (identical(cfg$show_ci, "no")) {
-    preview <- preview[, setdiff(names(preview), c("lwr", "upr")), drop = FALSE]
-  }
   ci_digits <- .mc_coalesce(attr(x, "ci_digits", exact = TRUE), digits)
+  preview <- .mc_compact_corr_summary_table(
+    preview,
+    show_ci = cfg$show_ci,
+    conf_level = suppressWarnings(as.numeric(attr(x, "conf.level", exact = TRUE))),
+    digits = digits,
+    ci_digits = ci_digits
+  )
   preview <- .mc_format_summary_numeric_table(
     preview,
     digits = digits,
@@ -299,29 +325,87 @@ print.summary.corr_result <- function(x,
     full_hint = TRUE,
     summary_hint = FALSE
   )
-  top_tbl <- attr(x, "top_results", exact = TRUE)
-  if (is.data.frame(top_tbl) && nrow(top_tbl)) {
-    if (identical(cfg$show_ci, "no")) {
-      top_tbl <- top_tbl[, setdiff(names(top_tbl), c("lwr", "upr")), drop = FALSE]
+  invisible(x)
+}
+
+.mc_single_display_value <- function(x) {
+  if (is.null(x)) {
+    return(NULL)
+  }
+  vals <- unique(x[!is.na(x)])
+  if (length(vals) != 1L) {
+    return(NULL)
+  }
+  if (is.numeric(vals)) {
+    vals <- vals[is.finite(vals)]
+    if (length(vals) != 1L) {
+      return(NULL)
     }
-    top_tbl <- .mc_format_summary_numeric_table(
-      top_tbl,
-      digits = digits,
-      ci_digits = ci_digits
-    )
-    cat("\nStrongest pairs by |estimate|\n\n")
-    .mc_print_preview_table(
-      top_tbl,
-      n = max(2L, nrow(top_tbl) + 1L),
-      topn = min(cfg$topn, max(1L, nrow(top_tbl))),
-      max_vars = cfg$max_vars,
-      width = cfg$width,
-      context = "summary",
-      full_hint = TRUE,
-      summary_hint = FALSE
+    return(format(vals[[1L]], trim = TRUE, scientific = FALSE))
+  }
+  vals <- as.character(vals)
+  if (!nzchar(vals[[1L]])) {
+    return(NULL)
+  }
+  vals[[1L]]
+}
+
+.mc_compact_corr_summary_table <- function(df,
+                                           show_ci = "yes",
+                                           conf_level = NA_real_,
+                                           digits = 4,
+                                           ci_digits = digits) {
+  if (!is.data.frame(df) || !nrow(df)) {
+    return(df)
+  }
+
+  out <- df
+  if ("n_complete" %in% names(out)) {
+    names(out)[match("n_complete", names(out))] <- "n"
+  }
+
+  if (identical(show_ci, "yes") && all(c("lwr", "upr") %in% names(out))) {
+    ci_label <- if (is.finite(conf_level)) {
+      sprintf("%g%% CI", 100 * conf_level)
+    } else {
+      "CI"
+    }
+    lwr <- suppressWarnings(as.numeric(out$lwr))
+    upr <- suppressWarnings(as.numeric(out$upr))
+    out[[ci_label]] <- ifelse(
+      is.finite(lwr) & is.finite(upr),
+      sprintf(
+        "[%s, %s]",
+        formatC(lwr, format = "f", digits = ci_digits),
+        formatC(upr, format = "f", digits = ci_digits)
+      ),
+      NA_character_
     )
   }
-  invisible(x)
+
+  always_drop <- c(
+    "lwr", "upr", "fisher_z", "statistic", "df", "se",
+    "bootstrap_reps", "skipped_n", "skipped_prop"
+  )
+  if (identical(show_ci, "no")) {
+    always_drop <- c(always_drop, grep("CI$", names(out), value = TRUE))
+  }
+
+  if ("ci_method" %in% names(out) && !is.null(.mc_single_display_value(out$ci_method))) {
+    always_drop <- c(always_drop, "ci_method")
+  }
+  if ("m" %in% names(out) && !is.null(.mc_single_display_value(out$m))) {
+    always_drop <- c(always_drop, "m")
+  }
+  out <- out[, setdiff(names(out), always_drop), drop = FALSE]
+
+  preferred <- c(
+    "item1", "item2", "estimate", "n",
+    grep("CI$", names(out), value = TRUE),
+    "p_value", "p_value_adjusted", "ci_method", "m"
+  )
+  preferred <- unique(preferred[preferred %in% names(out)])
+  out[, c(preferred, setdiff(names(out), preferred)), drop = FALSE]
 }
 
 #' S3 Plot for Dense Correlation Results
@@ -584,6 +668,22 @@ plot.dgCMatrix <- function(x,
   if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
     pairs$n_complete <- as.integer(round(add_from_matrix(diag_attr$n_complete)))
   }
+  if (identical(estimator_class, "chatterjee_xi") && is.list(diag_attr)) {
+    if (is.matrix(diag_attr$ci_method)) {
+      method_vals <- rep(NA_character_, nrow(pairs))
+      method_vals[idx_ok] <- as.character(diag_attr$ci_method[cbind(ii[idx_ok], jj[idx_ok])])
+      pairs$ci_method <- method_vals
+    }
+    if (is.matrix(diag_attr$m)) {
+      pairs$m <- as.integer(round(add_from_matrix(diag_attr$m)))
+    }
+    if (is.matrix(diag_attr$se)) {
+      pairs$se <- as.numeric(add_from_matrix(diag_attr$se))
+    }
+    if (!is.null(diag_attr$bootstrap_reps)) {
+      pairs$bootstrap_reps <- as.integer(diag_attr$bootstrap_reps[[1L]])
+    }
+  }
 
   ci_attr <- attr(object, "ci", exact = TRUE)
   if (is.list(ci_attr)) {
@@ -658,9 +758,24 @@ plot.dgCMatrix <- function(x,
   attr(pairs, "has_ci") <- any(c("lwr", "upr") %in% names(pairs))
   attr(pairs, "has_p") <- "p_value" %in% names(pairs)
   attr(pairs, "conf.level") <- overview$conf.level
-  attr(pairs, "ci_method") <- attr(object, "ci", exact = TRUE)$ci.method %||%
+  ci_method_attr <- attr(object, "ci", exact = TRUE)$ci.method %||%
     attr(object, "ci.method", exact = TRUE) %||%
     NA_character_
+  if (is.list(ci_method_attr)) {
+    ci_method_attr <- NA_character_
+  } else if (length(ci_method_attr) != 1L) {
+    method_values <- unique(as.character(ci_method_attr))
+    method_values <- method_values[!is.na(method_values) & nzchar(method_values)]
+    ci_method_attr <- if (length(method_values) == 1L) {
+      method_values
+    } else if (length(method_values) > 1L) {
+      "mixed"
+    } else {
+      NA_character_
+    }
+  }
+  ci_method_attr <- as.character(ci_method_attr)[[1L]]
+  attr(pairs, "ci_method") <- ci_method_attr
   if ((is.null(attr(pairs, "ci_method", exact = TRUE)) ||
        is.na(attr(pairs, "ci_method", exact = TRUE)) ||
        !nzchar(attr(pairs, "ci_method", exact = TRUE))) &&
@@ -700,6 +815,7 @@ plot.dgCMatrix <- function(x,
   }
   map <- c(
     pearson_corr = "Pearson correlation summary",
+    chatterjee_xi = "Chatterjee xi directed-dependence summary",
     spearman_rho = if (isTRUE(has_ci) || isTRUE(has_p)) "Spearman correlation summary" else "Correlation summary",
     kendall_matrix = "Kendall correlation summary",
     cohen_kappa = "Cohen's kappa agreement summary",

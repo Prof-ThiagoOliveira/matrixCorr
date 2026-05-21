@@ -217,6 +217,11 @@ Y <- data.frame(
 ps <- polyserial(X, Y)
 print(ps, digits = 3)
 summary(ps)
+estimate(ps)
+tidy(ps)
+ps_ci <- polyserial(X, Y, ci = TRUE)
+ci(ps_ci)
+confint(ps_ci)
 plot(ps)
 \dontshow{\}) # examplesIf}
 }

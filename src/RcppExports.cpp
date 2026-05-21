@@ -347,6 +347,54 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// chatterjee_xi_vec_cpp
+double chatterjee_xi_vec_cpp(Rcpp::NumericVector x, Rcpp::NumericVector y, std::string tie_method, std::string bias_correction);
+RcppExport SEXP _matrixCorr_chatterjee_xi_vec_cpp(SEXP xSEXP, SEXP ySEXP, SEXP tie_methodSEXP, SEXP bias_correctionSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< std::string >::type tie_method(tie_methodSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bias_correction(bias_correctionSEXP);
+    rcpp_result_gen = Rcpp::wrap(chatterjee_xi_vec_cpp(x, y, tie_method, bias_correction));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chatterjee_xi_matrix_cpp
+arma::mat chatterjee_xi_matrix_cpp(const arma::mat& X, std::string tie_method, std::string bias_correction, int n_threads);
+RcppExport SEXP _matrixCorr_chatterjee_xi_matrix_cpp(SEXP XSEXP, SEXP tie_methodSEXP, SEXP bias_correctionSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< std::string >::type tie_method(tie_methodSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bias_correction(bias_correctionSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(chatterjee_xi_matrix_cpp(X, tie_method, bias_correction, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chatterjee_xi_matrix_pairwise_cpp
+Rcpp::List chatterjee_xi_matrix_pairwise_cpp(SEXP X_, bool return_ci, double conf_level, std::string ci_method, int bootstrap_reps, Rcpp::Nullable<Rcpp::IntegerVector> m, int large_sample_cutoff, std::string tie_method, std::string bias_correction, int n_threads);
+RcppExport SEXP _matrixCorr_chatterjee_xi_matrix_pairwise_cpp(SEXP X_SEXP, SEXP return_ciSEXP, SEXP conf_levelSEXP, SEXP ci_methodSEXP, SEXP bootstrap_repsSEXP, SEXP mSEXP, SEXP large_sample_cutoffSEXP, SEXP tie_methodSEXP, SEXP bias_correctionSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X_(X_SEXP);
+    Rcpp::traits::input_parameter< bool >::type return_ci(return_ciSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< std::string >::type ci_method(ci_methodSEXP);
+    Rcpp::traits::input_parameter< int >::type bootstrap_reps(bootstrap_repsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type m(mSEXP);
+    Rcpp::traits::input_parameter< int >::type large_sample_cutoff(large_sample_cutoffSEXP);
+    Rcpp::traits::input_parameter< std::string >::type tie_method(tie_methodSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bias_correction(bias_correctionSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(chatterjee_xi_matrix_pairwise_cpp(X_, return_ci, conf_level, ci_method, bootstrap_reps, m, large_sample_cutoff, tie_method, bias_correction, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cia_moments_cpp
 Rcpp::List cia_moments_cpp(Rcpp::NumericVector y, Rcpp::IntegerVector subject, Rcpp::IntegerVector method, Rcpp::IntegerVector replicate, int n_methods, int reference_method, bool has_reference, bool pairwise, int n_threads);
 RcppExport SEXP _matrixCorr_cia_moments_cpp(SEXP ySEXP, SEXP subjectSEXP, SEXP methodSEXP, SEXP replicateSEXP, SEXP n_methodsSEXP, SEXP reference_methodSEXP, SEXP has_referenceSEXP, SEXP pairwiseSEXP, SEXP n_threadsSEXP) {
@@ -1430,6 +1478,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_build_L_Dm_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_cpp, 7},
     {"_matrixCorr_build_L_Dm_Z_cpp", (DL_FUNC) &_matrixCorr_build_L_Dm_Z_cpp, 11},
     {"_matrixCorr_ccc_vc_cpp", (DL_FUNC) &_matrixCorr_ccc_vc_cpp, 24},
+    {"_matrixCorr_chatterjee_xi_vec_cpp", (DL_FUNC) &_matrixCorr_chatterjee_xi_vec_cpp, 4},
+    {"_matrixCorr_chatterjee_xi_matrix_cpp", (DL_FUNC) &_matrixCorr_chatterjee_xi_matrix_cpp, 4},
+    {"_matrixCorr_chatterjee_xi_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_chatterjee_xi_matrix_pairwise_cpp, 10},
     {"_matrixCorr_cia_moments_cpp", (DL_FUNC) &_matrixCorr_cia_moments_cpp, 9},
     {"_matrixCorr_cia_pairwise_stats_cpp", (DL_FUNC) &_matrixCorr_cia_pairwise_stats_cpp, 8},
     {"_matrixCorr_cia_pairwise_bootstrap_est_cpp", (DL_FUNC) &_matrixCorr_cia_pairwise_bootstrap_est_cpp, 10},

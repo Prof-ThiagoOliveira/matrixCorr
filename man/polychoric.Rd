@@ -269,6 +269,11 @@ Y <- data.frame(
 pc <- polychoric(Y)
 print(pc, digits = 3)
 summary(pc)
+estimate(pc)
+tidy(pc)
+pc_ci <- polychoric(Y, ci = TRUE)
+ci(pc_ci)
+confint(pc_ci)
 plot(pc)
 polychoric(Y, output = "edge_list", threshold = 0.3, diag = FALSE)
 

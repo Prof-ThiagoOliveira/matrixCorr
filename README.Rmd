@@ -38,11 +38,11 @@ repeated translation across packages.
 
 Supported measures include Pearson, Spearman, Kendall, distance correlation,
 partial correlation, kernel dependence via the Hilbert-Schmidt independence
-criterion, robust biweight mid-correlation, percentage bend,
-Winsorized, skipped correlation, and latent
-categorical/ordinal correlations (tetrachoric, polychoric, polyserial, and
-biserial), plus repeated-measures correlation; agreement tools
-cover Cohen's kappa for nominal ratings, weighted Cohen's kappa for ordered
+criterion, directed Chatterjee rank correlation, robust biweight
+mid-correlation, percentage bend, Winsorized, skipped correlation, and
+latent categorical/ordinal correlations (tetrachoric, polychoric,
+polyserial, and biserial), plus repeated-measures correlation; agreement
+tools cover Cohen's kappa for nominal ratings, weighted Cohen's kappa for ordered
 two-rater agreement, Gwet's AC1/AC2, multi-rater kappa for nominal panel
 agreement, Krippendorff's alpha for panel-level reliability, Bland-Altman
 (two-method and repeated-measures), the coefficient of individual agreement
@@ -61,6 +61,7 @@ both wide and repeated-measures designs.
 | Distance correlation | `dcor()`, `robust_dcor()` |
 | Kernel dependence | `hsic()` for raw biased/unbiased HSIC, normalised kCor-style dependence, kernel bandwidth rules, and permutation p-values |
 | Partial correlation | `pcorr()` |
+| Directed dependence | `xi_corr()` for Chatterjee rank correlation, with directed/asymmetric matrices and m-out-of-n bootstrap confidence intervals |
 | Latent categorical/ordinal correlations | `tetrachoric()`, `polychoric()`, `polyserial()`, `biserial()` |
 | Repeated-measures correlation | `rmcorr()` |
 | Shrinkage for $p >> n$ | `shrinkage_corr()` |

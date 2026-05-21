@@ -213,6 +213,8 @@ raters <- data.frame(
 ck <- cohen_kappa(raters)
 print(ck)
 summary(ck)
+estimate(ck)
+tidy(ck)
 plot(ck)
 
 }

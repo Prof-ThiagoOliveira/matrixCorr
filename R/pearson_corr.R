@@ -123,7 +123,14 @@
 #' pr <- pearson_corr(X)
 #' print(pr, digits = 2)
 #' summary(pr)
+#' estimate(pr)
+#' tidy(pr)
 #' plot(pr)
+#'
+#' ## Confidence intervals
+#' pr_ci <- pearson_corr(X[, 1:3], ci = TRUE)
+#' ci(pr_ci)
+#' confint(pr_ci)
 #'
 #' ## Compare the sample estimate to the truth
 #' Rhat <- cor(X)

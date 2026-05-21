@@ -181,6 +181,9 @@
 #' fit_panel <- gwet_ac(raters, input = "ratings")
 #' print(fit_pw)
 #' print(fit_panel)
+#' estimate(fit_pw)
+#' tidy(fit_pw)
+#' tidy(fit_panel)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export

@@ -213,6 +213,10 @@ Y <- data.frame(
 bs <- biserial(X, Y, ci = TRUE, p_value = TRUE)
 print(bs, digits = 3)
 summary(bs)
+estimate(bs)
+tidy(bs)
+ci(bs)
+confint(bs)
 plot(bs)
 \dontshow{\}) # examplesIf}
 }

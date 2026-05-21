@@ -258,9 +258,8 @@ test_that("pcorr CI integrates with the existing summary contract", {
   expect_match(paste(txt, collapse = "\n"), "Partial correlation summary")
   expect_match(paste(txt, collapse = "\n"), "ci_method")
   expect_match(paste(txt, collapse = "\n"), "ci_width")
-  expect_match(paste(txt, collapse = "\n"), "Strongest pairs by \\|estimate\\|")
-  expect_true(any(grepl("\\blwr\\b", txt)))
-  expect_true(any(grepl("\\bupr\\b", txt)))
+  expect_false(any(grepl("Strongest pairs by \\|estimate\\|", txt)))
+  expect_true(any(grepl("95% CI", txt, fixed = TRUE)))
 })
 
 test_that("sample partial-correlation p-values match the reference example", {

@@ -610,6 +610,9 @@ ba4 <- ba_rm(
   include_slope = FALSE, use_ar1 = FALSE
 )
 summary(ba4)
+estimate(ba4)
+tidy(ba4)
+confint(ba4)
 plot(ba4)
 
 # -------- Simulate repeated-measures with AR(1) data --------
@@ -663,6 +666,7 @@ baN <- ba_rm(
 # Matrices (row - column orientation)
 print(baN)
 summary(baN)
+tidy(baN)
 
 # Faceted BA scatter by pair
 plot(baN, smoother = "lm", facet_scales = "free_y")

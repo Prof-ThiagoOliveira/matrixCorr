@@ -195,11 +195,16 @@ dat <- data.frame(
 fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject", keep_data = TRUE)
 print(fit_xy)
 summary(fit_xy)
+estimate(fit_xy)
+tidy(fit_xy)
+ci(fit_xy)
+confint(fit_xy)
 plot(fit_xy)
 
 fit_mat <- rmcorr(dat, response = c("x", "y", "z"), subject = "subject")
 print(fit_mat, digits = 3)
 summary(fit_mat)
+tidy(fit_mat)
 plot(fit_mat)
 
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

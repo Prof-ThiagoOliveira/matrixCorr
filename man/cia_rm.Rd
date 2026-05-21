@@ -314,6 +314,8 @@ fit_rater <- cia_rm(
 )
 print(fit_rater)
 summary(fit_rater)
+estimate(fit_rater)
+tidy(fit_rater)
 plot(fit_rater)
 
 # Example 2

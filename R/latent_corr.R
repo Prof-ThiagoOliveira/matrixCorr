@@ -1271,6 +1271,11 @@
 #' tc <- tetrachoric(X)
 #' print(tc, digits = 3)
 #' summary(tc)
+#' estimate(tc)
+#' tidy(tc)
+#' tc_ci <- tetrachoric(X, ci = TRUE)
+#' ci(tc_ci)
+#' confint(tc_ci)
 #' plot(tc)
 #' tetrachoric(X, output = "edge_list", diag = FALSE)
 #' tetrachoric(X, output = "sparse", threshold = 0.4, diag = FALSE)
@@ -1921,6 +1926,11 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #' pc <- polychoric(Y)
 #' print(pc, digits = 3)
 #' summary(pc)
+#' estimate(pc)
+#' tidy(pc)
+#' pc_ci <- polychoric(Y, ci = TRUE)
+#' ci(pc_ci)
+#' confint(pc_ci)
 #' plot(pc)
 #' polychoric(Y, output = "edge_list", threshold = 0.3, diag = FALSE)
 #'
@@ -2559,6 +2569,11 @@ print.summary.polychoric_corr <- function(x, digits = NULL, n = NULL,
 #' ps <- polyserial(X, Y)
 #' print(ps, digits = 3)
 #' summary(ps)
+#' estimate(ps)
+#' tidy(ps)
+#' ps_ci <- polyserial(X, Y, ci = TRUE)
+#' ci(ps_ci)
+#' confint(ps_ci)
 #' plot(ps)
 #' @author Thiago de Paula Oliveira
 #' @export
@@ -2964,6 +2979,10 @@ print.summary.polyserial_corr <- function(x, digits = NULL, n = NULL,
 #' bs <- biserial(X, Y, ci = TRUE, p_value = TRUE)
 #' print(bs, digits = 3)
 #' summary(bs)
+#' estimate(bs)
+#' tidy(bs)
+#' ci(bs)
+#' confint(bs)
 #' plot(bs)
 #' @author Thiago de Paula Oliveira
 #' @export

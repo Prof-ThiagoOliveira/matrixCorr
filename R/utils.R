@@ -1010,7 +1010,8 @@ resolve_na_args <- function(na_method = "error",
 #' @noRd
 .mc_matrix_to_edge_list <- function(mat,
                                     threshold = 0,
-                                    diag = TRUE) {
+                                    diag = TRUE,
+                                    symmetric = NULL) {
   check_matrix_dims(mat, arg = "mat")
   check_scalar_numeric(threshold, arg = "threshold", lower = 0, closed_lower = TRUE)
   check_bool(diag, arg = "diag")
@@ -1027,9 +1028,15 @@ resolve_na_args <- function(na_method = "error",
 
   same_dimnames <- isTRUE(identical(rownames(mat), colnames(mat))) ||
     (is.null(rownames(mat)) && is.null(colnames(mat)))
-  use_upper <- isTRUE(nrow(mat) == ncol(mat)) &&
-    same_dimnames &&
-    isTRUE(isSymmetric(mat, check.attributes = FALSE))
+  use_upper <- if (is.null(symmetric)) {
+    isTRUE(nrow(mat) == ncol(mat)) &&
+      same_dimnames &&
+      isTRUE(isSymmetric(mat, check.attributes = FALSE))
+  } else {
+    isTRUE(symmetric) &&
+      isTRUE(nrow(mat) == ncol(mat)) &&
+      same_dimnames
+  }
   if (use_upper) {
     idx <- upper.tri(mat, diag = isTRUE(diag))
   } else {
@@ -1072,7 +1079,8 @@ resolve_na_args <- function(na_method = "error",
 #' @noRd
 .mc_matrix_to_sparse_thresholded <- function(mat,
                                              threshold = 0,
-                                             diag = TRUE) {
+                                             diag = TRUE,
+                                             symmetric = NULL) {
   check_matrix_dims(mat, arg = "mat")
   check_scalar_numeric(threshold, arg = "threshold", lower = 0, closed_lower = TRUE)
   check_bool(diag, arg = "diag")
@@ -1080,9 +1088,15 @@ resolve_na_args <- function(na_method = "error",
   dn <- dimnames(mat)
   same_dimnames <- isTRUE(identical(rownames(mat), colnames(mat))) ||
     (is.null(rownames(mat)) && is.null(colnames(mat)))
-  use_upper <- isTRUE(nrow(mat) == ncol(mat)) &&
-    same_dimnames &&
-    isTRUE(isSymmetric(mat, check.attributes = FALSE))
+  use_upper <- if (is.null(symmetric)) {
+    isTRUE(nrow(mat) == ncol(mat)) &&
+      same_dimnames &&
+      isTRUE(isSymmetric(mat, check.attributes = FALSE))
+  } else {
+    isTRUE(symmetric) &&
+      isTRUE(nrow(mat) == ncol(mat)) &&
+      same_dimnames
+  }
   if (use_upper) {
     idx <- upper.tri(mat, diag = isTRUE(diag))
   } else {
@@ -1234,7 +1248,12 @@ resolve_na_args <- function(na_method = "error",
 
   if (identical(cfg$output, "edge_list")) {
     out <- .mc_new_corr_edge_list(
-      df = .mc_matrix_to_edge_list(mat, threshold = cfg$threshold, diag = cfg$diag),
+      df = .mc_matrix_to_edge_list(
+        mat,
+        threshold = cfg$threshold,
+        diag = cfg$diag,
+        symmetric = source_symmetric
+      ),
       estimator_class = estimator_class,
       method = method,
       description = description,
@@ -1254,7 +1273,12 @@ resolve_na_args <- function(na_method = "error",
   }
 
   out <- .mc_new_corr_sparse(
-    x = .mc_matrix_to_sparse_thresholded(mat, threshold = cfg$threshold, diag = cfg$diag),
+    x = .mc_matrix_to_sparse_thresholded(
+      mat,
+      threshold = cfg$threshold,
+      diag = cfg$diag,
+      symmetric = source_symmetric
+    ),
     estimator_class = estimator_class,
     method = method,
     description = description,
@@ -1345,7 +1369,8 @@ resolve_na_args <- function(na_method = "error",
   .mc_matrix_to_edge_list(
     as.matrix(x),
     threshold = if (identical(output, "matrix")) 0 else (attr(x, "threshold", exact = TRUE) %||% 0),
-    diag = if (identical(output, "matrix")) TRUE else (attr(x, "diag", exact = TRUE) %||% TRUE)
+    diag = if (identical(output, "matrix")) TRUE else (attr(x, "diag", exact = TRUE) %||% TRUE),
+    symmetric = attr(x, "corr_symmetric", exact = TRUE)
   )
 }
 

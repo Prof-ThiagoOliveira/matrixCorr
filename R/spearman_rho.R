@@ -159,6 +159,10 @@
 #' sp_ci <- spearman_rho(X[, 1:3], ci = TRUE)
 #' print(sp_ci, show_ci = "yes")
 #' summary(sp_ci)
+#' estimate(sp_ci)
+#' tidy(sp_ci)
+#' ci(sp_ci)
+#' confint(sp_ci)
 #'
 #' ## Ties handled via mid-ranks
 #' tied <- cbind(

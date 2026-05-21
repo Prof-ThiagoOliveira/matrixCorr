@@ -219,6 +219,8 @@ colnames(X) <- paste0("V", seq_len(p))
 Rshr <- shrinkage_corr(X)
 print(Rshr, digits = 2, n = 6, max_vars = 6)
 summary(Rshr)
+estimate(Rshr)
+tidy(Rshr)
 plot(Rshr)
 
 ## Shrinkage typically moves the sample correlation closer to the truth

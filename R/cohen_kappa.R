@@ -121,6 +121,8 @@
 #' ck <- cohen_kappa(raters)
 #' print(ck)
 #' summary(ck)
+#' estimate(ck)
+#' tidy(ck)
 #' plot(ck)
 #'
 #' @author Thiago de Paula Oliveira

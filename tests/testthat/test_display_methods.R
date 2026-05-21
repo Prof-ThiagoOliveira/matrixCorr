@@ -28,11 +28,13 @@ test_that("summary output remains bounded and preserves full underlying data", {
   expect_s3_class(sm, "summary.corr_matrix")
   expect_equal(nrow(sm$top_results), 6L)
   expect_true(any(grepl("^Correlation summary$", txt)))
-  expect_true(any(grepl("^Strongest pairs by \\|estimate\\|$", txt)))
+  expect_false(any(grepl("^Strongest pairs by \\|estimate\\|$", txt)))
+  expect_true(any(grepl("\\bitem1\\b", txt)))
+  expect_true(any(grepl("\\bestimate\\b", txt)))
   expect_true(any(grepl("Use as.data.frame()/tidy()/as.matrix() to inspect the full result.", txt, fixed = TRUE)))
 })
 
-test_that("corr_result strongest-pairs block respects print digits", {
+test_that("corr_result compact summary table respects print digits", {
   set.seed(20260428)
   X <- matrix(rnorm(60), nrow = 20, ncol = 3)
   colnames(X) <- c("A", "B", "C")
@@ -40,10 +42,23 @@ test_that("corr_result strongest-pairs block respects print digits", {
   sm <- summary(pearson_corr(X, ci = TRUE))
   txt <- capture.output(print(sm, digits = 2, topn = 3))
 
-  idx <- grep("^Strongest pairs by \\|estimate\\|$", txt)
-  expect_true(length(idx) == 1L)
-  strong_block <- txt[seq.int(idx[[1L]] + 1L, length(txt))]
-  expect_false(any(grepl("\\b-?\\d+\\.\\d{3,}\\b", strong_block)))
+  expect_false(any(grepl("^Strongest pairs by \\|estimate\\|$", txt)))
+  expect_true(any(grepl("95% CI", txt, fixed = TRUE)))
+  table_block <- txt[grep("\\bitem1\\b", txt):length(txt)]
+  expect_false(any(grepl("\\b-?\\d+\\.\\d{3,}\\b", table_block)))
+})
+
+test_that("summary numeric columns align signed and unsigned estimates", {
+  df <- data.frame(
+    item1 = c("x", "square", "sine"),
+    item2 = c("sine", "x", "noise"),
+    estimate = c(0.9603, -0.4668, 0.0550),
+    stringsAsFactors = FALSE
+  )
+
+  out <- matrixCorr:::`.mc_format_summary_numeric_table`(df, digits = 4)
+
+  expect_identical(out$estimate, c(" 0.9603", "-0.4668", " 0.0550"))
 })
 
 test_that("width-aware truncation responds to width and max_vars overrides", {

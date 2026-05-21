@@ -329,7 +329,9 @@ print(Rm2, digits = 2)
 
 # Example 2:
 Ri <- skipped_corr(Xm, method = "pearson", ci = TRUE, n_boot = 40, seed = 1)
-Ri$ci
+ci(Ri)
+confint(Ri)
+tidy(Ri)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

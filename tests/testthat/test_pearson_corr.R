@@ -200,7 +200,7 @@ test_that("pearson_corr CI-aware print, summary, and plot follow the CI style", 
   expect_false(any(grepl("Pearson correlation summary", txt_print, fixed = TRUE)))
   expect_match(paste(txt_summary, collapse = "\n"), "Pearson correlation summary")
   expect_match(paste(txt_summary, collapse = "\n"), "ci_width")
-  expect_match(paste(txt_summary, collapse = "\n"), "n_complete")
+  expect_match(paste(txt_summary, collapse = "\n"), "\\bn\\b")
   expect_s3_class(p, "ggplot")
 })
 

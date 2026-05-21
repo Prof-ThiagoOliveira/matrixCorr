@@ -153,10 +153,13 @@
 #' )
 #' print(fit_icc)
 #' summary(fit_icc)
+#' estimate(fit_icc)
+#' tidy(fit_icc)
 #'
 #' fit_icc_overall <- icc(dat, scope = "overall", ci = TRUE)
 #' print(fit_icc_overall)
 #' summary(fit_icc_overall)
+#' confint(fit_icc_overall)
 #'
 #' @export
 icc <- function(data,
@@ -815,7 +818,7 @@ print.summary.icc_overall <- function(x,
 #' \strong{CIs / SEs (delta method for ICC).}
 #' Let \eqn{I_A = 1} for \code{type = "agreement"} and \eqn{I_A = 0} for
 #' \code{type = "consistency"}, and define
-#' \deqn{ \theta \;=\; \big(\sigma_S^2,\ \sigma_{S\times M,\mathrm{eff}}^2,\ 
+#' \deqn{ \theta \;=\; \big(\sigma_S^2,\ \sigma_{S\times M,\mathrm{eff}}^2,\
 #' \sigma_{S\times T,\mathrm{eff}}^2,\ \sigma_E^2,\ S_B\big)^\top. }
 #' Write \eqn{\mathrm{ICC}(\theta)=N/D} with
 #' \deqn{ N = \sigma_S^2, \qquad
@@ -1086,10 +1089,13 @@ print.summary.icc_overall <- function(x,
 #'   subject = "id",
 #'   method = "method",
 #'   time = "time",
-#'   type = "consistency"
+#'   type = "consistency",
+#'   ci = TRUE
 #' )
 #' print(fit_icc_rm)
 #' summary(fit_icc_rm)
+#' confint(fit_icc_rm)
+#' tidy(fit_icc_rm)
 #'
 #' @export
 icc_rm_reml <- function(data, response, subject,

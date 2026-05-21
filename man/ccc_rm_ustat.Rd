@@ -166,6 +166,10 @@ ccc2 <- ccc_rm_ustat(df, response = "y", subject = "subject",
                             method = "method", time = "time", ci = TRUE)
 print(ccc2)
 summary(ccc2)
+estimate(ccc2)
+tidy(ccc2)
+ci(ccc2)
+confint(ccc2)
 plot(ccc2)
 
 # Interactive viewing (requires shiny)

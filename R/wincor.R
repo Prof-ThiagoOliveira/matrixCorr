@@ -174,7 +174,14 @@
 #' R <- wincor(X, tr = 0.2)
 #' print(R, digits = 2)
 #' summary(R)
+#' estimate(R)
+#' tidy(R)
 #' plot(R)
+#'
+#' ## Bootstrap confidence intervals
+#' R_ci <- wincor(X, tr = 0.2, ci = TRUE, n_boot = 49, seed = 11)
+#' ci(R_ci)
+#' confint(R_ci)
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {

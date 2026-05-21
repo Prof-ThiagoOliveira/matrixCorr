@@ -220,6 +220,8 @@ round(c(
 print(classical)
 print(robust)
 summary(robust)
+estimate(robust)
+tidy(robust)
 plot(robust)
 
 ## Several variables.

@@ -268,6 +268,9 @@ x <- rnorm(100, 100, 10)
 y <- x + rnorm(100, 0, 8)
 fit_ba <- ba(x, y)
 print(fit_ba)
+estimate(fit_ba)
+tidy(fit_ba)
+confint(fit_ba)
 plot(fit_ba)
 
 # Pairwise Bland-Altman across 3 methods
@@ -280,6 +283,7 @@ wide3 <- data.frame(
 fit_ba3 <- ba(wide3)
 print(fit_ba3)
 summary(fit_ba3)
+tidy(fit_ba3)
 plot(fit_ba3)
 
 }

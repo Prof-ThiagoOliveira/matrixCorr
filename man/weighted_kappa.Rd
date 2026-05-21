@@ -168,6 +168,8 @@ raters <- data.frame(
 wk <- weighted_kappa(raters)
 print(wk)
 summary(wk)
+estimate(wk)
+tidy(wk)
 plot(wk)
 
 x <- raters$r1
