@@ -202,11 +202,6 @@ wincor <- function(data,
                    output = c("matrix", "sparse", "edge_list"),
                    threshold = 0,
                    diag = TRUE) {
-  output_cfg <- .mc_validate_thresholded_output_request(
-    output = output,
-    threshold = threshold,
-    diag = diag
-  )
   na_method <- match.arg(na_method)
   check_scalar_numeric(tr,
                        arg = "tr",
@@ -214,167 +209,56 @@ wincor <- function(data,
                        upper = 0.5,
                        closed_lower = TRUE,
                        closed_upper = FALSE)
-  if (isFALSE(ci) && isFALSE(p_value)) {
-    n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
-    numeric_data <- if (na_method == "error") {
-      validate_corr_input(data)
-    } else {
-      validate_corr_input(data, check_na = FALSE)
-    }
-    diagnostics_extra <- NULL
-    if (identical(na_method, "complete")) {
-      cc <- .mc_complete_case_matrix(numeric_data, min_n = 5L, arg = "data")
-      numeric_data <- cc$data
-      diagnostics_extra <- cc$diagnostics
-    }
-    colnames_data <- colnames(numeric_data)
-    dn <- if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data) else NULL
-    desc <- paste0(
-      "Winsorized correlation; tr = ", tr,
-      "; NA mode = ", na_method, "."
-    )
-    prev_threads <- .mc_prepare_omp_threads(
-      n_threads
-    )
-    if (!is.null(prev_threads)) {
-      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-    }
+  desc <- paste0(
+    "Winsorized correlation; tr = ", tr,
+    "; NA mode = ", na_method, "."
+  )
 
-    if (.mc_supports_direct_threshold_path(
-      method = "wincor",
-      na_method = na_method,
-      ci = FALSE,
-      output = output_cfg$output,
-      threshold = output_cfg$threshold,
-      pairwise = identical(na_method, "pairwise"),
-      has_ci = FALSE,
-      has_inference = FALSE
-    )) {
-      trip <- wincor_threshold_triplets_cpp(
-        numeric_data,
+  .mc_inference_corr_wrapper(
+    data = data,
+    na_method = na_method,
+    ci = ci,
+    p_value = p_value,
+    conf_level = conf_level,
+    n_threads = n_threads,
+    output = output,
+    threshold = threshold,
+    diag = diag,
+    estimator_class = "wincor",
+    method = "winsorized_correlation",
+    description = desc,
+    kernel_matrix = function(x, n_threads) {
+      wincor_matrix_cpp(x, tr = tr, n_threads = n_threads)
+    },
+    kernel_pairwise = function(x, n_threads) {
+      wincor_matrix_pairwise_cpp(x, tr = tr, min_n = 5L, n_threads = n_threads)
+    },
+    kernel_threshold = function(x, threshold, diag, n_threads) {
+      wincor_threshold_triplets_cpp(
+        x,
         tr = tr,
-        threshold = output_cfg$threshold,
-        diag = output_cfg$diag,
+        threshold = threshold,
+        diag = diag,
         n_threads = n_threads
       )
-      return(.mc_finalize_triplets_output(
-        triplets = trip,
-        output = output_cfg$output,
-        estimator_class = "wincor",
-        method = "winsorized_correlation",
-        description = desc,
-        threshold = output_cfg$threshold,
-        diag = output_cfg$diag,
-        source_dim = as.integer(c(ncol(numeric_data), ncol(numeric_data))),
-        source_dimnames = dn,
-        symmetric = TRUE
-      ))
-    }
-
-    res <- if (!identical(na_method, "pairwise")) {
-      wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
-    } else {
-      wincor_matrix_pairwise_cpp(numeric_data, tr = tr, min_n = 5L, n_threads = n_threads)
-    }
-
-    out <- .mc_structure_corr_matrix(
-      res,
-      class_name = "wincor",
-      method = "winsorized_correlation",
-      description = desc,
-      symmetric = TRUE,
-      diagnostics = diagnostics_extra,
-      dimnames = dn
-    )
-    return(.mc_finalize_corr_output_fast(
-      out,
-      output = output_cfg$output,
-      threshold = output_cfg$threshold,
-      diag = output_cfg$diag
-    ))
-  }
-
-  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
-  check_bool(ci, arg = "ci")
-  check_bool(p_value, arg = "p_value")
-  check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
-  n_boot <- check_scalar_int_pos(n_boot, arg = "n_boot")
-  if (!is.null(seed)) {
-    seed <- check_scalar_int_pos(seed, arg = "seed")
-  }
-
-  numeric_data <- if (na_method == "error") {
-    validate_corr_input(data)
-  } else {
-    validate_corr_input(data, check_na = FALSE)
-  }
-  diagnostics_extra <- NULL
-  if (identical(na_method, "complete")) {
-    cc <- .mc_complete_case_matrix(numeric_data, min_n = 5L, arg = "data")
-    numeric_data <- cc$data
-    diagnostics_extra <- cc$diagnostics
-  }
-  colnames_data <- colnames(numeric_data)
-  dn <- .mc_square_dimnames(colnames_data)
-
-  prev_threads <- .mc_prepare_omp_threads(
-    n_threads
-  )
-  if (!is.null(prev_threads)) {
-    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-  }
-  res <- if (!identical(na_method, "pairwise")) {
-    wincor_matrix_cpp(numeric_data, tr = tr, n_threads = n_threads)
-  } else {
-    wincor_matrix_pairwise_cpp(numeric_data, tr = tr, min_n = 5L, n_threads = n_threads)
-  }
-  res <- .mc_set_matrix_dimnames(res, colnames_data)
-
-  payload <- NULL
-  if (isTRUE(ci) || isTRUE(p_value)) {
-    payload <- .mc_wincor_pairwise_payload(
-      numeric_data,
-      est = res,
-      tr = tr,
-      ci = ci,
-      p_value = p_value,
-      conf_level = conf_level,
-      n_boot = n_boot,
-      seed = seed
-    )
-  }
-
-  out <- .mc_structure_corr_matrix(
-    res,
-    class_name = "wincor",
-    method = "winsorized_correlation",
-    description = paste0(
-      "Winsorized correlation; tr = ", tr,
-      "; NA mode = ", na_method, "."
-    ),
+    },
+    payload_builder = function(x, est, ci, p_value, conf_level, n_boot, seed) {
+      .mc_wincor_pairwise_payload(
+        x,
+        est = est,
+        tr = tr,
+        ci = ci,
+        p_value = p_value,
+        conf_level = conf_level,
+        n_boot = n_boot,
+        seed = seed
+      )
+    },
+    min_n = 5L,
+    direct_method = "wincor",
     symmetric = TRUE,
-    diagnostics = .mc_merge_diagnostics(
-      if (is.null(payload)) NULL else payload$diagnostics,
-      diagnostics_extra
-    ),
-    extra_attrs = c(
-      if (!is.null(payload$ci)) {
-        list(
-          ci = payload$ci,
-          conf.level = conf_level,
-          n_boot = n_boot
-        )
-      },
-      if (!is.null(payload$inference)) {
-        list(inference = payload$inference)
-      }
-    )
-  )
-  .mc_finalize_corr_output_fast(
-    out,
-    output = output_cfg$output,
-    threshold = output_cfg$threshold,
-    diag = output_cfg$diag
+    n_boot = n_boot,
+    seed = seed
   )
 }
 

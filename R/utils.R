@@ -10,6 +10,11 @@
 #' @importFrom rlang is_bool is_scalar_integerish is_scalar_character arg_match
 NULL
 
+#' Null-coalescing helper
+#' @keywords internal
+#' @noRd
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
 #' Abort for internal errors (should not happen)
 #' @keywords internal
 abort_internal <- function(message, ...,
@@ -820,6 +825,25 @@ resolve_na_args <- function(na_method = "error",
                                    package_name = "matrixCorr",
                                    extra_attrs = list()) {
   out <- data.frame(df, stringsAsFactors = FALSE, check.names = FALSE)
+  if (!all(c("row", "col", "value") %in% names(out)) &&
+      all(c("i", "j", "x") %in% names(out))) {
+    dn <- source_dimnames
+    ii <- as.integer(out$i)
+    jj <- as.integer(out$j)
+    rn <- if (is.list(dn) && length(dn) == 2L) dn[[1L]] else NULL
+    cn <- if (is.list(dn) && length(dn) == 2L) dn[[2L]] else NULL
+    out <- data.frame(
+      row = if (is.null(rn)) as.character(ii) else rn[ii],
+      col = if (is.null(cn)) as.character(jj) else cn[jj],
+      value = as.numeric(out$x),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  }
+  if (!all(c("row", "col", "value") %in% names(out))) {
+    abort_bad_arg("df", message = "must contain columns `row`, `col`, and `value`.")
+  }
+  out <- out[, c("row", "col", "value"), drop = FALSE]
   class(out) <- c("corr_edge_list", estimator_class, "corr_result", "data.frame")
   attr(out, "method") <- method
   attr(out, "description") <- description
@@ -877,16 +901,27 @@ resolve_na_args <- function(na_method = "error",
   out
 }
 
-#' Convert C++ triplets to internal edge-list payload
+#' Convert C++ triplets to public edge-list payload
 #' @keywords internal
 #' @noRd
-.mc_triplets_to_edge_list <- function(triplets) {
+.mc_triplets_to_edge_list <- function(triplets,
+                                      dimnames = NULL) {
   check_same_length(triplets$i, triplets$j, arg_x = "triplets$i", arg_y = "triplets$j")
   check_same_length(triplets$i, triplets$x, arg_x = "triplets$i", arg_y = "triplets$x")
+  ii <- as.integer(triplets$i)
+  jj <- as.integer(triplets$j)
+
+  rn <- NULL
+  cn <- NULL
+  if (is.list(dimnames) && length(dimnames) == 2L) {
+    rn <- dimnames[[1L]]
+    cn <- dimnames[[2L]]
+  }
+
   data.frame(
-    i = as.integer(triplets$i),
-    j = as.integer(triplets$j),
-    x = as.numeric(triplets$x),
+    row = if (is.null(rn)) as.character(ii) else rn[ii],
+    col = if (is.null(cn)) as.character(jj) else cn[jj],
+    value = as.numeric(triplets$x),
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
@@ -947,7 +982,7 @@ resolve_na_args <- function(na_method = "error",
   }
 
   out <- .mc_new_corr_edge_list(
-    df = .mc_triplets_to_edge_list(triplets),
+    df = .mc_triplets_to_edge_list(triplets, dimnames = source_dimnames),
     estimator_class = estimator_class,
     method = method,
     description = description,

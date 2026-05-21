@@ -87,7 +87,10 @@ inline bool any_nonfinite_real_matrix_parallel(SEXP x, int nr, int nc){
                  dst[i] = static_cast<double>(v);
                }
              } else {
-               for (int i = 0; i < nr; ++i) dst[i] = static_cast<double>(src[i]);
+               for (int i = 0; i < nr; ++i) {
+                 const int v = src[i];
+                 dst[i] = (v == NA_INTEGER) ? NA_REAL : static_cast<double>(v);
+               }
              }
           }
           if (bad.load(std::memory_order_relaxed)) Rcpp::stop(missing_values_message);
@@ -187,7 +190,10 @@ inline bool any_nonfinite_real_matrix_parallel(SEXP x, int nr, int nc){
                 dst[i] = static_cast<double>(v);
              }
           } else {
-             for (int i = 0; i < n; ++i) dst[i] = static_cast<double>(pi[i]);
+             for (int i = 0; i < n; ++i) {
+                const int v = pi[i];
+                dst[i] = (v == NA_INTEGER) ? NA_REAL : static_cast<double>(v);
+             }
           }
        }
     }

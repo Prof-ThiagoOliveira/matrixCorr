@@ -3,6 +3,7 @@
 #include <limits>
 #include <cmath>
 #include <vector>
+#include "correlation_math.h"
 #include "matrixCorr_detail.h"
 #include "threshold_triplets.h"
 // [[Rcpp::depends(RcppArmadillo)]]
@@ -10,15 +11,9 @@
 
 using matrixCorr_detail::ranking::safe_inv_stddev;
 using matrixCorr_detail::ranking::rank_vector;
+using matrixCorr::correlation_math::clamp_corr_na;
 
 namespace {
-
-inline double clamp_corr(double x) {
-  if (!std::isfinite(x)) return NA_REAL;
-  if (x > 1.0) return 1.0;
-  if (x < -1.0) return -1.0;
-  return x;
-}
 
 inline double pearson_from_ranks(const arma::vec& rx, const arma::vec& ry) {
   const arma::uword n = rx.n_elem;
@@ -45,7 +40,7 @@ inline double pearson_from_ranks(const arma::vec& rx, const arma::vec& ry) {
   const double syy = sum_yy - adj;
   const double sxy = sum_xy - adj;
   if (!(sxx > 0.0) || !(syy > 0.0)) return arma::datum::nan;
-  return clamp_corr(sxy / std::sqrt(sxx * syy));
+  return clamp_corr_na(sxy / std::sqrt(sxx * syy));
 }
 
 inline double spearman_pair_core(const arma::vec& x,
@@ -170,8 +165,8 @@ inline bool spearman_jel_ci_core(const arma::vec& x,
     }
   }
 
-  lwr = clamp_corr(lwr);
-  upr = clamp_corr(upr);
+  lwr = clamp_corr_na(lwr);
+  upr = clamp_corr_na(upr);
   return std::isfinite(lwr) && std::isfinite(upr);
 }
 
@@ -431,7 +426,7 @@ Rcpp::List spearman_threshold_triplets_cpp(SEXP X_,
             if (gj == gk) {
               val = 1.0;
             } else {
-              val = clamp_corr(blk(
+              val = clamp_corr_na(blk(
                 static_cast<arma::uword>(r),
                 static_cast<arma::uword>(c)
               ));

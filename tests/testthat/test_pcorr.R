@@ -108,7 +108,7 @@ test_that("pcorr returns expected components for each method", {
   X <- matrix(rnorm(200), nrow = 40, ncol = 5)
   colnames(X) <- paste0("V", seq_len(5))
 
-  samp <- pcorr(X, method = "sample", return_cov_precision = TRUE)
+  samp <- pcorr(X, method = "sample", return_cov_precision = TRUE, return_details = TRUE)
   expect_s3_class(samp, "partial_corr")
   expect_equal(dim(samp$pcor), c(5, 5))
   expect_true(all(diag(samp$pcor) == 1))
@@ -118,17 +118,19 @@ test_that("pcorr returns expected components for each method", {
   expect_true(is.na(samp$lambda))
   expect_true(is.na(samp$rho))
 
-  ridge <- pcorr(X, method = "ridge", lambda = 1e-2, return_cov_precision = TRUE)
+  ridge <- pcorr(X, method = "ridge", lambda = 1e-2, return_cov_precision = TRUE,
+                 return_details = TRUE)
   expect_equal(ridge$method, "ridge")
   expect_equal(ridge$lambda, 1e-2)
   expect_true(is.na(ridge$rho))
 
-  oas <- pcorr(X, method = "oas", return_cov_precision = TRUE)
+  oas <- pcorr(X, method = "oas", return_cov_precision = TRUE, return_details = TRUE)
   expect_equal(oas$method, "oas")
   expect_true(is.na(oas$lambda))
   expect_true(oas$rho >= 0 && oas$rho <= 1)
 
-  glasso <- pcorr(X, method = "glasso", lambda = 0.05, return_cov_precision = TRUE)
+  glasso <- pcorr(X, method = "glasso", lambda = 0.05, return_cov_precision = TRUE,
+                  return_details = TRUE)
   expect_equal(glasso$method, "glasso")
   expect_equal(glasso$lambda, 0.05)
   expect_true(is.na(glasso$rho))
@@ -140,7 +142,8 @@ test_that("pcorr print and plot methods cover options", {
   set.seed(222)
   X <- matrix(rnorm(150), nrow = 30, ncol = 5)
   colnames(X) <- paste0("G", seq_len(5))
-  pc <- pcorr(X, method = "ridge", lambda = 5e-3, return_cov_precision = TRUE)
+  pc <- pcorr(X, method = "ridge", lambda = 5e-3, return_cov_precision = TRUE,
+              return_details = TRUE)
 
   out1 <- capture.output(print(pc, digits = 4, max_rows = 3, max_cols = 4))
   expect_true(any(grepl("omitted", out1)))
@@ -159,6 +162,28 @@ test_that("pcorr validates lambda", {
   expect_error(pcorr(X, method = "ridge", lambda = -1), "must be >=")
 })
 
+test_that("pcorr returns matrix output by default and details only when requested", {
+  set.seed(2)
+  X <- matrix(rnorm(80), nrow = 20, ncol = 4)
+  colnames(X) <- paste0("V", seq_len(ncol(X)))
+
+  fit <- pcorr(X)
+  expect_s3_class(fit, "corr_matrix")
+  expect_s3_class(fit, "partial_corr_matrix")
+  expect_false(inherits(fit, "partial_corr"))
+  expect_true(is.matrix(fit))
+  expect_equal(dim(estimate(fit)), c(4L, 4L))
+  expect_equal(dimnames(estimate(fit)), list(colnames(X), colnames(X)))
+
+  detailed <- pcorr(X, return_details = TRUE)
+  expect_s3_class(detailed, "partial_corr")
+  expect_true(is.matrix(detailed$pcor))
+  expect_error(
+    pcorr(X, return_cov_precision = TRUE),
+    "return_details"
+  )
+})
+
 test_that("pcorr rejects non-finite matrix inputs without an R-side copy", {
   X <- matrix(rnorm(16), nrow = 4)
   X[3] <- Inf
@@ -170,18 +195,19 @@ test_that("pcorr exposes shrinkage metadata without cov/precision", {
   X <- matrix(rnorm(120), nrow = 30, ncol = 4)
 
   oas <- pcorr(X, method = "oas")
-  expect_true(is.numeric(oas$rho))
-  expect_true(isTRUE(oas$rho >= 0 && oas$rho <= 1))
-  expect_true(is.numeric(oas$jitter))
-  expect_false(is.na(oas$jitter))
-  expect_null(oas$cov)
-  expect_null(oas$precision)
+  expect_true(is.numeric(attr(oas, "rho", exact = TRUE)))
+  expect_true(isTRUE(attr(oas, "rho", exact = TRUE) >= 0 &&
+                     attr(oas, "rho", exact = TRUE) <= 1))
+  expect_true(is.numeric(attr(oas, "jitter", exact = TRUE)))
+  expect_false(is.na(attr(oas, "jitter", exact = TRUE)))
+  expect_null(attr(oas, "cov", exact = TRUE))
+  expect_null(attr(oas, "precision", exact = TRUE))
 
   samp <- pcorr(X, method = "sample")
-  expect_true(is.na(samp$rho))
-  expect_true(is.na(samp$lambda))
-  expect_true(is.numeric(samp$jitter))
-  expect_null(samp$p_value)
+  expect_true(is.na(attr(samp, "rho", exact = TRUE)))
+  expect_true(is.na(attr(samp, "lambda", exact = TRUE)))
+  expect_true(is.numeric(attr(samp, "jitter", exact = TRUE)))
+  expect_null(attr(samp, "p_value", exact = TRUE))
 })
 
 test_that("pcorr default CI behaviour remains estimate-only", {
@@ -190,10 +216,13 @@ test_that("pcorr default CI behaviour remains estimate-only", {
 
   fit <- pcorr(X, method = "sample")
 
-  expect_null(fit$ci)
+  expect_s3_class(fit, "partial_corr_matrix")
+  expect_s3_class(fit, "corr_matrix")
+  expect_false(inherits(fit, "partial_corr"))
+  expect_true(is.matrix(estimate(fit)))
   expect_null(attr(fit, "ci", exact = TRUE))
   expect_null(attr(fit, "conf.level", exact = TRUE))
-  expect_true(is.list(fit$diagnostics))
+  expect_true(is.list(attr(fit, "diagnostics", exact = TRUE)))
 })
 
 test_that("pcorr Fisher-z CI matches manual partial-correlation calculation", {
@@ -208,19 +237,16 @@ test_that("pcorr Fisher-z CI matches manual partial-correlation calculation", {
   expect_true(is.list(ci))
   expect_identical(ci$ci.method, "fisher_z_partial")
   expect_equal(ci$conf.level, 0.95)
-  expect_equal(
-    strip_matrix_metadata(fit$pcor),
-    strip_matrix_metadata(ref$pcor),
-    tolerance = 1e-10
-  )
+  expect_equal(estimate(fit), ref$pcor, tolerance = 1e-10)
   expect_equal(ci$lwr.ci, ref$lwr, tolerance = 1e-10)
   expect_equal(ci$upr.ci, ref$upr, tolerance = 1e-10)
-  expect_identical(unique(as.integer(fit$diagnostics$n_complete)), as.integer(ref$n_complete))
-  expect_identical(unique(as.integer(fit$diagnostics$n_conditioning[upper.tri(fit$diagnostics$n_conditioning)])), as.integer(ref$n_conditioning))
-  expect_true(is.matrix(fit$p_value))
-  expect_false("inference" %in% names(unclass(fit)))
-  expect_null(attr(fit$pcor, "ci", exact = TRUE))
-  expect_null(attr(fit$pcor, "diagnostics", exact = TRUE))
+  diagnostics <- attr(fit, "diagnostics", exact = TRUE)
+  expect_identical(unique(as.integer(diagnostics$n_complete)), as.integer(ref$n_complete))
+  expect_identical(unique(as.integer(diagnostics$n_conditioning[upper.tri(diagnostics$n_conditioning)])), as.integer(ref$n_conditioning))
+  inference <- attr(fit, "inference", exact = TRUE)
+  expect_true(is.matrix(inference$p_value))
+  expect_null(attr(estimate(fit), "ci", exact = TRUE))
+  expect_null(attr(estimate(fit), "diagnostics", exact = TRUE))
 })
 
 test_that("pcorr custom conf_level changes CI width", {
@@ -250,7 +276,7 @@ test_that("pcorr CI integrates with the existing summary contract", {
   sm <- summary(fit)
   txt <- capture.output(print(sm, show_ci = "yes"))
 
-  expect_s3_class(sm, "summary.partial_corr")
+  expect_s3_class(sm, "summary.corr_matrix")
   expect_s3_class(sm, "summary.matrixCorr")
   expect_s3_class(sm, "data.frame")
   expect_true(isTRUE(attr(sm, "has_ci")))
@@ -271,7 +297,7 @@ test_that("sample partial-correlation p-values match the reference example", {
            0.00e+00, 0.00e+00, 4.48e-03, 2.10e-06, 0.00e+00)
   )
 
-  ours <- pcorr(y.data, method = "sample", return_p_value = TRUE)
+  ours <- pcorr(y.data, method = "sample", return_p_value = TRUE, return_details = TRUE)
 
   vars <- c("hl", "disp", "deg", "BC")
   expected_pcor <- structure(
@@ -376,7 +402,7 @@ test_that("sample partial correlation is close to truth in a structured MVN mode
   X <- MASS::mvrnorm(n, mu = rep(0, p), Sigma = Sigma)
   colnames(X) <- paste0("V", seq_len(p))
 
-  ours <- pcorr(X, method = "sample", return_cov_precision = FALSE)$pcor
+  ours <- estimate(pcorr(X, method = "sample", return_cov_precision = FALSE))
   truth <- pcor_from_precision(Theta)
 
   ut <- upper.tri(ours, diag = FALSE)
@@ -401,7 +427,7 @@ test_that("sample method equals the base-R precision construction", {
   X <- matrix(rnorm(n * p), n, p)
   colnames(X) <- paste0("V", seq_len(p))
 
-  ours <- pcorr(X, method = "sample", return_cov_precision = TRUE)
+  ours <- pcorr(X, method = "sample", return_cov_precision = TRUE, return_details = TRUE)
 
   S_unb <- stats::cov(X)
   Theta <- solve(S_unb)
@@ -425,7 +451,7 @@ test_that("ridge method equals the base-R ridge construction", {
   lambda <- 5e-3
 
   ours <- pcorr(X, method = "ridge", lambda = lambda,
-                              return_cov_precision = TRUE)
+                return_cov_precision = TRUE, return_details = TRUE)
 
   S_unb <- stats::cov(X)
   diag(S_unb) <- diag(S_unb) + lambda
@@ -449,7 +475,7 @@ test_that("OAS method matches an R implementation of the same formula", {
   X <- matrix(rnorm(n * p), n, p)
   colnames(X) <- paste0("V", seq_len(p))
 
-  ours <- pcorr(X, method = "oas", return_cov_precision = TRUE)
+  ours <- pcorr(X, method = "oas", return_cov_precision = TRUE, return_details = TRUE)
 
   oas <- oas_shrink_R(X)
   Sigma <- oas$Sigma
@@ -474,7 +500,8 @@ test_that("glasso method matches fixed graphical-lasso reference values", {
   ref <- glasso_reference_case()
   lambda <- ref$lambda
 
-  ours <- pcorr(X, method = "glasso", lambda = lambda, return_cov_precision = TRUE)
+  ours <- pcorr(X, method = "glasso", lambda = lambda, return_cov_precision = TRUE,
+                return_details = TRUE)
   ref_pcor <- pcor_from_precision(ref$Theta)
   dimnames(ref_pcor) <- dimnames(ours$pcor)
 
@@ -496,7 +523,7 @@ test_that("p >> n: OAS returns a finite, well-formed matrix", {
   X <- matrix(rnorm(n * p), n, p)
   colnames(X) <- paste0("V", seq_len(p))
 
-  oas <- pcorr(X, method = "oas", return_cov_precision = TRUE)
+  oas <- pcorr(X, method = "oas", return_cov_precision = TRUE, return_details = TRUE)
   M <- oas$pcor
   expect_true(is.matrix(M))
   expect_true(isSymmetric(M, tol = 1e-12))
@@ -521,7 +548,7 @@ test_that("non-numeric columns are ignored and dimnames propagate", {
   )
   cols <- c("a", "b", "c")
 
-  pc <- pcorr(X, method = "oas", return_cov_precision = FALSE)$pcor
+  pc <- estimate(pcorr(X, method = "oas", return_cov_precision = FALSE))
   expect_equal(dim(pc), c(3L, 3L))
   expect_equal(dimnames(pc), list(cols, cols))
 })

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <random>
+#include "correlation_math.h"
 #include "matrixCorr_omp.h"
 
 #include "matrixCorr_detail.h"
@@ -16,15 +17,9 @@
 using namespace Rcpp;
 using namespace arma;
 using matrixCorr_detail::ranking::rank_vector;
+using matrixCorr::correlation_math::clamp_corr_nan;
 
 namespace {
-
-inline double clamp_corr(double x) {
-  if (!std::isfinite(x)) return arma::datum::nan;
-  if (x > 1.0) return 1.0;
-  if (x < -1.0) return -1.0;
-  return x;
-}
 
 inline double median_sorted_vec(const arma::vec& xs) {
   const arma::uword n = xs.n_elem;
@@ -152,7 +147,7 @@ inline double pearson_vec_core(const arma::vec& x, const arma::vec& y) {
   const double dx = arma::dot(xc, xc);
   const double dy = arma::dot(yc, yc);
   if (!(dx > 0.0) || !(dy > 0.0)) return arma::datum::nan;
-  return clamp_corr(arma::dot(xc, yc) / std::sqrt(dx * dy));
+  return clamp_corr_nan(arma::dot(xc, yc) / std::sqrt(dx * dy));
 }
 
 inline double spearman_vec_core(const arma::vec& x, const arma::vec& y) {
@@ -247,7 +242,7 @@ inline double pbcor_pair_complete_core(const arma::vec& x,
   const double da = arma::dot(a, a);
   const double db = arma::dot(b, b);
   if (!(da > 0.0) || !(db > 0.0)) return arma::datum::nan;
-  return clamp_corr(arma::dot(a, b) / std::sqrt(da * db));
+  return clamp_corr_nan(arma::dot(a, b) / std::sqrt(da * db));
 }
 
 inline void standardise_win_column(const arma::vec& x,
@@ -562,7 +557,7 @@ inline double skipcor_pair_core_ptr(const double* x_orig,
     syy += dy * dy;
   }
   if (!(sxx > 0.0) || !(syy > 0.0)) return arma::datum::nan;
-  return clamp_corr(sxy / std::sqrt(sxx * syy));
+  return clamp_corr_nan(sxy / std::sqrt(sxx * syy));
 }
 
 template <class RNG>
@@ -900,7 +895,7 @@ arma::mat pbcor_matrix_cpp(const arma::mat& X,
   }
 
   arma::mat R = arma::symmatu(A.t() * A);
-  R.transform([](double val) { return clamp_corr(val); });
+  R.transform([](double val) { return clamp_corr_nan(val); });
 
   for (std::size_t j = 0; j < p; ++j) {
     if (col_valid[j] == 0u) {
@@ -965,7 +960,7 @@ Rcpp::List pbcor_threshold_triplets_cpp(const arma::mat& X,
           if (gj == gk) {
             val = 1.0;
           } else if (col_valid[gj] && col_valid[gk]) {
-            val = clamp_corr(blk(
+            val = clamp_corr_nan(blk(
               static_cast<arma::uword>(r),
               static_cast<arma::uword>(c)
             ));
@@ -1061,7 +1056,7 @@ arma::mat wincor_matrix_cpp(const arma::mat& X,
   }
 
   arma::mat R = arma::symmatu(Z.t() * Z);
-  R.transform([](double val) { return clamp_corr(val); });
+  R.transform([](double val) { return clamp_corr_nan(val); });
 
   for (std::size_t j = 0; j < p; ++j) {
     if (col_valid[j] == 0u) {
@@ -1123,7 +1118,7 @@ Rcpp::List wincor_threshold_triplets_cpp(const arma::mat& X,
           if (gj == gk) {
             val = 1.0;
           } else if (col_valid[gj] && col_valid[gk]) {
-            val = clamp_corr(blk(
+            val = clamp_corr_nan(blk(
               static_cast<arma::uword>(r),
               static_cast<arma::uword>(c)
             ));
@@ -1181,7 +1176,7 @@ arma::mat wincor_matrix_pairwise_cpp(const arma::mat& X,
       standardise_win_column(xview, zj, tr, okj);
       standardise_win_column(yview, zk, tr, okk);
       double val = arma::datum::nan;
-      if (okj && okk) val = clamp_corr(arma::dot(zj, zk));
+      if (okj && okk) val = clamp_corr_nan(arma::dot(zj, zk));
       R(j, k) = val;
       R(k, j) = val;
     }

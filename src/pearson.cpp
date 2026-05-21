@@ -4,35 +4,14 @@
 #include <limits>
 #include <cmath>
 #include <vector>
+#include "correlation_math.h"
 #include "threshold_triplets.h"
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::plugins(openmp)]]
 
-namespace {
-
-inline double clamp_corr(double x) {
-  if (!std::isfinite(x)) return NA_REAL;
-  if (x > 1.0) return 1.0;
-  if (x < -1.0) return -1.0;
-  return x;
-}
-
-inline double fisher_z(double r) {
-  const double one_minus = std::nextafter(1.0, 0.0);
-  if (r > one_minus) r = one_minus;
-  if (r < -one_minus) r = -one_minus;
-  return std::atanh(r);
-}
-
-inline double fisher_z_inv(double z) {
-  double r = std::tanh(z);
-  const double one_minus = std::nextafter(1.0, 0.0);
-  if (r > one_minus) r = one_minus;
-  if (r < -one_minus) r = -one_minus;
-  return r;
-}
-
-} // namespace
+using matrixCorr::correlation_math::clamp_corr_na;
+using matrixCorr::correlation_math::fisher_z;
+using matrixCorr::correlation_math::fisher_z_inv;
 
 struct PearsonScaleInfo {
   arma::rowvec mu;
@@ -131,7 +110,7 @@ for (arma::sword j = 0; j < static_cast<arma::sword>(p); ++j) {
 
     if (valid_j && valid[static_cast<std::size_t>(i)] != 0u) {
       const double num = R(i, uj) - n_d * mu_ptr[i] * mu_j;
-      val = clamp_corr(num * inv_ptr[i] * inv_j);
+      val = clamp_corr_na(num * inv_ptr[i] * inv_j);
     }
 
     R(i, uj) = val;
@@ -169,101 +148,47 @@ Rcpp::List pearson_threshold_triplets_cpp(SEXP X_,
   const double* inv_ptr = scale.inv_s.memptr();
   const std::vector<unsigned char>& valid = scale.valid;
 
-  matrixCorr_detail::threshold_triplets::TripletBuffer out;
-
   const std::size_t pz = static_cast<std::size_t>(p);
-  const std::size_t total_upper = diag
-  ? (pz * (pz + 1u)) / 2u
-  : (pz * (pz - 1u)) / 2u;
-
-  if (threshold <= 0.0) {
-    out.i.reserve(total_upper);
-    out.j.reserve(total_upper);
-    out.x.reserve(total_upper);
-  } else {
-    const std::size_t initial =
-      std::min<std::size_t>(total_upper, std::max<std::size_t>(1024u, 8u * pz));
-    out.i.reserve(initial);
-    out.j.reserve(initial);
-    out.x.reserve(initial);
-  }
-
-  const std::size_t bs = std::max<std::size_t>(
-    1u, static_cast<std::size_t>(block_size)
-  );
-
-  for (std::size_t j0 = 0u; j0 < pz; j0 += bs) {
-    const std::size_t j1 = std::min<std::size_t>(pz, j0 + bs);
-    const std::size_t bj = j1 - j0;
-
-    for (std::size_t k0 = j0; k0 < pz; k0 += bs) {
-      const std::size_t k1 = std::min<std::size_t>(pz, k0 + bs);
-      const std::size_t bk = k1 - k0;
-
+  const auto trip = matrixCorr_detail::threshold_triplets::collect_upper_triplets(
+    pz,
+    static_cast<std::size_t>(block_size),
+    diag,
+    threshold,
+    [&](std::size_t j0, std::size_t j1, std::size_t k0, std::size_t k1) -> arma::mat {
       arma::mat blk =
         X.cols(static_cast<arma::uword>(j0), static_cast<arma::uword>(j1 - 1u)).t() *
         X.cols(static_cast<arma::uword>(k0), static_cast<arma::uword>(k1 - 1u));
 
-      if (j0 == k0) {
-        for (std::size_t r = 0u; r < bj; ++r) {
-          const std::size_t gj = j0 + r;
-          if (valid[gj] == 0u) continue;
-
+      for (std::size_t r = 0u; r < (j1 - j0); ++r) {
+        const std::size_t gj = j0 + r;
+        double val = NA_REAL;
+        if (valid[gj] != 0u) {
           const double mu_j = mu_ptr[gj];
           const double inv_j = inv_ptr[gj];
-          const std::size_t c_start = diag ? r : (r + 1u);
-
-          for (std::size_t c = c_start; c < bk; ++c) {
+          for (std::size_t c = 0u; c < (k1 - k0); ++c) {
             const std::size_t gk = k0 + c;
-            if (valid[gk] == 0u) continue;
-
-            const double val = (gj == gk)
-              ? 1.0
-            : clamp_corr(
-                (blk(static_cast<arma::uword>(r), static_cast<arma::uword>(c)) -
-                  n_d * mu_j * mu_ptr[gk]) *
-                  inv_j * inv_ptr[gk]
-            );
-
-            if (!matrixCorr_detail::threshold_triplets::retain_value(val, threshold))
-              continue;
-
-            out.i.push_back(static_cast<int>(gj + 1u));
-            out.j.push_back(static_cast<int>(gk + 1u));
-            out.x.push_back(val);
+            val = NA_REAL;
+            if (valid[gk] != 0u) {
+              val = (gj == gk)
+                ? 1.0
+                : clamp_corr_na(
+                    (blk(static_cast<arma::uword>(r), static_cast<arma::uword>(c)) -
+                      n_d * mu_j * mu_ptr[gk]) *
+                      inv_j * inv_ptr[gk]
+                  );
+            }
+            blk(static_cast<arma::uword>(r), static_cast<arma::uword>(c)) = val;
           }
-        }
-      } else {
-        for (std::size_t r = 0u; r < bj; ++r) {
-          const std::size_t gj = j0 + r;
-          if (valid[gj] == 0u) continue;
-
-          const double mu_j = mu_ptr[gj];
-          const double inv_j = inv_ptr[gj];
-
-          for (std::size_t c = 0u; c < bk; ++c) {
-            const std::size_t gk = k0 + c;
-            if (valid[gk] == 0u) continue;
-
-            const double val = clamp_corr(
-              (blk(static_cast<arma::uword>(r), static_cast<arma::uword>(c)) -
-                n_d * mu_j * mu_ptr[gk]) *
-                inv_j * inv_ptr[gk]
-            );
-
-            if (!matrixCorr_detail::threshold_triplets::retain_value(val, threshold))
-              continue;
-
-            out.i.push_back(static_cast<int>(gj + 1u));
-            out.j.push_back(static_cast<int>(gk + 1u));
-            out.x.push_back(val);
-          }
+        } else {
+          blk.row(static_cast<arma::uword>(r)).fill(NA_REAL);
         }
       }
-    }
-  }
 
-  return matrixCorr_detail::threshold_triplets::as_list(out);
+      return blk;
+    }
+  );
+
+  return matrixCorr_detail::threshold_triplets::as_list(trip);
 }
 
 // Pairwise-complete Pearson matrix with optional Fisher-z confidence intervals.
@@ -360,7 +285,7 @@ Rcpp::List pearson_matrix_pairwise_cpp(SEXP X_,
 
       double r = arma::datum::nan;
       if (sxx > 0.0 && syy > 0.0) {
-        r = clamp_corr(sxy / std::sqrt(sxx * syy));
+        r = clamp_corr_na(sxy / std::sqrt(sxx * syy));
       }
       R(uj, k) = r;
       R(k, uj) = r;

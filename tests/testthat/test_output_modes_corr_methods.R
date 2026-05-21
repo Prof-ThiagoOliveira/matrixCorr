@@ -118,7 +118,8 @@ test_that("eligible methods use direct triplet payloads and match dense filterin
     mat <- as.matrix(dense)
 
     edge <- fn(output = "edge_list", threshold = thr, diag = FALSE)
-    expect_true(all(c("i", "j", "x") %in% names(edge)), info = nm)
+    expect_true(all(c("row", "col", "value") %in% names(edge)), info = nm)
+    expect_false(any(c("i", "j", "x") %in% names(edge)), info = nm)
     edge_df <- .mc_corr_as_edge_df(edge)
     expect_equal(
       edge_df,
@@ -201,7 +202,7 @@ test_that("pcorr supports output modes for point-estimate path", {
   colnames(X) <- paste0("P", seq_len(ncol(X)))
 
   fit <- pcorr(X, method = "sample")
-  mat <- as.matrix(fit$pcor)
+  mat <- estimate(fit)
   expect_equal(colnames(mat), colnames(X))
   expect_equal(rownames(mat), colnames(X))
 
@@ -210,7 +211,8 @@ test_that("pcorr supports output modes for point-estimate path", {
     "must be 0 when"
   )
   expect_error(
-    pcorr(X, method = "sample", output = "edge_list", return_cov_precision = TRUE),
+    pcorr(X, method = "sample", output = "edge_list", return_cov_precision = TRUE,
+          return_details = TRUE),
     "point estimates only"
   )
 

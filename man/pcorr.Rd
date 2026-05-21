@@ -15,6 +15,7 @@ pcorr(
   ci = FALSE,
   conf_level = 0.95,
   return_cov_precision = FALSE,
+  return_details = FALSE,
   return_p_value = FALSE,
   lambda = 0.001,
   output = c("matrix", "sparse", "edge_list"),
@@ -91,12 +92,23 @@ estimator in the ordinary low-dimensional setting.}
 
 \item{return_cov_precision}{Logical; if \code{TRUE}, also return the
 covariance (\code{cov}) and precision (\code{precision}) matrices used to
-form the partial correlations. Default to \code{FALSE}}
+form the partial correlations. Requires \code{return_details = TRUE}.
+Default to \code{FALSE}.}
 
-\item{return_p_value}{Logical; if \code{TRUE}, also return the matrix of
-two-sided p-values for testing whether each sample partial correlation is
-zero. This option is available only for \code{method = "sample"} and
-requires \eqn{n > p}. Default to \code{FALSE}.}
+\item{return_details}{Logical; if \code{TRUE}, return the rich
+\code{"partial_corr"} list containing \code{pcor}, diagnostics, method
+metadata, and any requested covariance, precision, p-value, or CI
+components. If \code{FALSE} (default), \code{output = "matrix"} returns the
+standard matrixCorr estimate matrix, consistent with other correlation
+methods.}
+
+\item{return_p_value}{Logical; if \code{TRUE}, compute two-sided p-values
+for testing whether each sample partial correlation is zero. With the
+default matrix result, p-values are stored in the inference metadata and
+exposed by \code{tidy()}. With \code{return_details = TRUE}, they are also
+returned as the \code{p_value} matrix. This option is available only for
+\code{method = "sample"} and requires \eqn{n > p}. Default to
+\code{FALSE}.}
 
 \item{lambda}{Numeric \eqn{\ge 0}; regularisation strength. For
 \code{method = "ridge"}, this is the penalty added to the covariance
@@ -171,7 +183,11 @@ on the heatmap tiles.}
 hierarchical clustering of \eqn{1 - |pcor|}. Default \code{FALSE}.}
 }
 \value{
-An object of class \code{"partial_corr"} (a list) with elements:
+With the default \code{return_details = FALSE}, a standard
+matrixCorr correlation result: a dense \code{corr_matrix}, sparse matrix,
+or \code{corr_edge_list}, depending on \code{output}. With
+\code{return_details = TRUE}, an object of class \code{"partial_corr"} (a
+list) with elements:
 \itemize{
 \item \code{pcor}: \eqn{p \times p} partial correlation matrix.
 \item \code{cov} (if requested): covariance matrix used.
@@ -350,7 +366,7 @@ pcor_true <- -Omega / sqrt(diag(Omega) \%o\% diag(Omega))
 diag(pcor_true) <- 1
 
 ## Quick visual check (first 5x5 block)
-round(pc$pcor[1:5, 1:5], 2)
+round(estimate(pc)[1:5, 1:5], 2)
 round(pcor_true[1:5, 1:5], 2)
 
 ## Plot method
@@ -371,9 +387,9 @@ X_g <- matrix(rnorm(n * p), n, p) \%*\% chol(Sigma_g)
 colnames(X_g) <- paste0("Node", seq_len(p))
 
 gfit_1 <- pcorr(X_g, method = "glasso", lambda = 0.02,
-                return_cov_precision = TRUE)
+                return_cov_precision = TRUE, return_details = TRUE)
 gfit_2 <- pcorr(X_g, method = "glasso", lambda = 0.08,
-                return_cov_precision = TRUE)
+                return_cov_precision = TRUE, return_details = TRUE)
 
 ## Larger lambda gives a sparser conditional-dependence graph
 edge_count <- function(M, tol = 1e-8) {
@@ -414,15 +430,17 @@ X_hd <- matrix(rnorm(n * p), n, p) \%*\% L
 colnames(X_hd) <- paste0("G", seq_len(p))
 
 pc_oas   <-
- pcorr(X_hd, method = "oas",   return_cov_precision = TRUE)
+ pcorr(X_hd, method = "oas",   return_cov_precision = TRUE,
+       return_details = TRUE)
 pc_ridge <-
  pcorr(X_hd, method = "ridge", lambda = 1e-2,
-                     return_cov_precision = TRUE)
+                     return_cov_precision = TRUE, return_details = TRUE)
 pc_samp  <-
- pcorr(X_hd, method = "sample", return_cov_precision = TRUE)
+ pcorr(X_hd, method = "sample", return_cov_precision = TRUE,
+       return_details = TRUE)
 pc_glasso <-
  pcorr(X_hd, method = "glasso", lambda = 5e-3,
-                     return_cov_precision = TRUE)
+                     return_cov_precision = TRUE, return_details = TRUE)
 
 ## Show how much diagonal regularisation was used
 c(oas_jitter = pc_oas$jitter,

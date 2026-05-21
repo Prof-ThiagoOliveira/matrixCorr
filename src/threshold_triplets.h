@@ -29,6 +29,21 @@ TripletBuffer collect_upper_triplets(const std::size_t p,
   TripletBuffer out;
   if (p == 0u) return out;
   const std::size_t bs = std::max<std::size_t>(1u, block_size);
+  const std::size_t total_upper = include_diag
+    ? (p * (p + 1u)) / 2u
+    : (p * (p - 1u)) / 2u;
+
+  if (threshold <= 0.0) {
+    out.i.reserve(total_upper);
+    out.j.reserve(total_upper);
+    out.x.reserve(total_upper);
+  } else {
+    const std::size_t initial =
+      std::min<std::size_t>(total_upper, std::max<std::size_t>(1024u, 8u * p));
+    out.i.reserve(initial);
+    out.j.reserve(initial);
+    out.x.reserve(initial);
+  }
 
   for (std::size_t j0 = 0u; j0 < p; j0 += bs) {
     const std::size_t j1 = std::min<std::size_t>(p, j0 + bs);

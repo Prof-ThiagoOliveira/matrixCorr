@@ -492,14 +492,33 @@ test_that("pbcor and wincor CI and p-value payloads are optional and well-formed
   expect_null(attr(fit_win_p, "ci", exact = TRUE))
 })
 
-test_that("pbcor validates bootstrap arguments only when CI is requested", {
+test_that("pbcor and wincor validate bootstrap arguments only when CI is requested", {
   X <- matrix(seq_len(30), nrow = 10, ncol = 3)
   colnames(X) <- c("A", "B", "C")
 
-  fit <- pbcor(X, p_value = TRUE, ci = FALSE, n_boot = 0L, seed = "bad")
-  expect_s3_class(fit, "pbcor")
-  expect_true(is.list(attr(fit, "inference", exact = TRUE)))
-  expect_null(attr(fit, "ci", exact = TRUE))
+  pb_plain <- pbcor(X, ci = FALSE, p_value = FALSE, conf_level = NA_real_,
+                    n_boot = 0L, seed = "bad")
+  expect_s3_class(pb_plain, "pbcor")
+  expect_null(attr(pb_plain, "ci", exact = TRUE))
+  expect_null(attr(pb_plain, "inference", exact = TRUE))
+
+  pb_p <- pbcor(X, p_value = TRUE, ci = FALSE, conf_level = NA_real_,
+                n_boot = 0L, seed = "bad")
+  expect_s3_class(pb_p, "pbcor")
+  expect_true(is.list(attr(pb_p, "inference", exact = TRUE)))
+  expect_null(attr(pb_p, "ci", exact = TRUE))
+
+  win_plain <- wincor(X, ci = FALSE, p_value = FALSE, conf_level = NA_real_,
+                      n_boot = 0L, seed = "bad")
+  expect_s3_class(win_plain, "wincor")
+  expect_null(attr(win_plain, "ci", exact = TRUE))
+  expect_null(attr(win_plain, "inference", exact = TRUE))
+
+  win_p <- wincor(X, p_value = TRUE, ci = FALSE, conf_level = NA_real_,
+                  n_boot = 0L, seed = "bad")
+  expect_s3_class(win_p, "wincor")
+  expect_true(is.list(attr(win_p, "inference", exact = TRUE)))
+  expect_null(attr(win_p, "ci", exact = TRUE))
 
   expect_error(
     pbcor(X, ci = TRUE, n_boot = 0L),
@@ -507,6 +526,14 @@ test_that("pbcor validates bootstrap arguments only when CI is requested", {
   )
   expect_error(
     pbcor(X, ci = TRUE, seed = "bad"),
+    class = "matrixCorr_arg_error"
+  )
+  expect_error(
+    wincor(X, ci = TRUE, n_boot = 0L),
+    class = "matrixCorr_arg_error"
+  )
+  expect_error(
+    wincor(X, ci = TRUE, seed = "bad"),
     class = "matrixCorr_arg_error"
   )
 })

@@ -1328,9 +1328,6 @@ ccc_rm_reml <- function(data, response, subject,
   )
 }
 
-#' @keywords internal
-`%||%` <- function(a, b) if (!is.null(a)) a else b
-
 #' @title num_or_na
 #' @description Helper to safely coerce a value to numeric or return NA if invalid.
 #' @keywords internal

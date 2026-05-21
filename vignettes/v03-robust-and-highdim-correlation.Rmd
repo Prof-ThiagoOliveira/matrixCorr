@@ -140,7 +140,7 @@ R_raw <- pearson_corr(X)
 
 round(c(
   raw_x1_x3 = R_raw["x1", "x3"],
-  partial_x1_x3 = fit_pcor_sample$pcor["x1", "x3"]
+  partial_x1_x3 = estimate(fit_pcor_sample)["x1", "x3"]
 ), 2)
 
 print(fit_pcor_sample, digits = 2)
@@ -160,9 +160,9 @@ The choice of `method` is important:
 When the classical sample estimator is appropriate, partial correlation also
 supports p-values and Fisher-z confidence intervals.
 
-Unlike the other correlation wrappers, `pcorr()` uses
-`return_p_value = TRUE` rather than `p_value = TRUE`. That is intentional:
-the p-value matrix is an optional returned component of the fitted list object.
+Like the other correlation wrappers, `pcorr()` returns an estimate matrix by
+default. Use `estimate()`, `tidy()`, `ci()`, and `confint()` for public access.
+If you need the covariance or precision matrix, set `return_details = TRUE`.
 
 ```{r}
 fit_pcor_inf <- pcorr(
@@ -173,6 +173,9 @@ fit_pcor_inf <- pcorr(
 )
 
 summary(fit_pcor_inf)
+tidy(fit_pcor_inf)
+ci(fit_pcor_inf)
+confint(fit_pcor_inf)
 ```
 
 That inference layer is available only for the ordinary sample estimator in the

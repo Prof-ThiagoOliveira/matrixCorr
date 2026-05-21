@@ -50,6 +50,16 @@ test_that("complete diagnostics record the common sample", {
   expect_true(diag$common_sample)
 })
 
+test_that("complete-case handling works for integer matrices with NA", {
+  X <- matrix(c(1L, NA_integer_, 3L, 4L, 5L, 6L), ncol = 2)
+
+  res <- pearson_corr(X, na_method = "complete")
+  expected <- stats::cor(X[stats::complete.cases(X), , drop = FALSE])
+
+  expect_equal(estimate(res), expected)
+  expect_equal(attr(res, "diagnostics")$n_complete, 2L)
+})
+
 test_that("error and pairwise behaviours remain available", {
   set.seed(2)
   X <- matrix(rnorm(50), 10, 5)

@@ -5,6 +5,7 @@
 #include <limits>
 #include <cmath>
 #include <algorithm>
+#include "correlation_math.h"
 #include "matrixCorr_detail.h"
 #include "matrixCorr_omp.h"
 
@@ -18,6 +19,7 @@ using matrixCorr_detail::linalg::invert_spd_inplace;
 using matrixCorr_detail::linalg::precision_to_pcor_inplace;
 using matrixCorr_detail::cov_shrinkage::oas_shrink_inplace;
 using matrixCorr_detail::sparse_precision::graphical_lasso;
+using matrixCorr::correlation_math::clamp_corr_nan;
 
 namespace {
 
@@ -41,8 +43,7 @@ arma::mat partial_correlation_p_values(const arma::mat& pcor,
   for (arma::sword j = 1; j < static_cast<arma::sword>(p); ++j) {
     const arma::uword uj = static_cast<arma::uword>(j);
     for (arma::uword i = 0; i < uj; ++i) {
-      double r = pcor(i, uj);
-      r = std::max(-1.0, std::min(1.0, r));
+      double r = clamp_corr_nan(pcor(i, uj));
       const double denom = 1.0 - (r * r);
       const double p_ij =
         (denom <= 0.0)

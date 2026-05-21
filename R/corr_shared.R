@@ -219,6 +219,7 @@
                                           description,
                                           na_method = "error",
                                           ci = FALSE,
+                                          has_inference = FALSE,
                                           pairwise = FALSE,
                                           symmetric = TRUE,
                                           diagnostics = NULL,
@@ -231,6 +232,7 @@
   source_dim <- as.integer(c(ncol(input$data), ncol(input$data)))
   can_use_error_no_ci <- identical(na_method, "error") &&
     isFALSE(ci) &&
+    isFALSE(has_inference) &&
     !isTRUE(pairwise)
 
   if (identical(output_cfg$output, "edge_list") &&
@@ -264,6 +266,7 @@
     threshold = output_cfg$threshold,
     pairwise = isTRUE(pairwise),
     has_ci = ci,
+    has_inference = has_inference,
     symmetric = symmetric
   )) {
     trip <- kernel_threshold(
@@ -361,6 +364,7 @@
         description = description,
         na_method = na_cfg$na_method,
         ci = ci,
+        has_inference = FALSE,
         pairwise = identical(na_cfg$na_method, "pairwise"),
         symmetric = symmetric
       )
@@ -431,6 +435,160 @@
             diag = output_cfg$diag
           )
         }
+      }
+    }
+  )
+}
+
+.mc_inference_corr_wrapper <- function(data,
+                                       na_method,
+                                       ci = FALSE,
+                                       p_value = FALSE,
+                                       conf_level = 0.95,
+                                       n_threads = getOption("matrixCorr.threads", 1L),
+                                       output = c("matrix", "sparse", "edge_list"),
+                                       threshold = 0,
+                                       diag = TRUE,
+                                       estimator_class,
+                                       method,
+                                       description,
+                                       kernel_matrix,
+                                       kernel_pairwise = NULL,
+                                       kernel_threshold = NULL,
+                                       payload_builder = NULL,
+                                       min_n = 2L,
+                                       direct_method = method,
+                                       symmetric = TRUE,
+                                       extra_attrs = list(),
+                                       n_boot = NULL,
+                                       seed = NULL,
+                                       arg_data = "data") {
+  output_cfg <- .mc_validate_thresholded_output_request(
+    output = output,
+    threshold = threshold,
+    diag = diag
+  )
+  na_method <- match.arg(na_method, c("error", "pairwise", "complete"))
+  check_bool(ci, arg = "ci")
+  check_bool(p_value, arg = "p_value")
+  needs_ci <- isTRUE(ci)
+  needs_p_value <- isTRUE(p_value)
+  needs_bootstrap <- needs_ci
+  if (needs_bootstrap) {
+    check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
+    n_boot <- check_scalar_int_pos(n_boot %||% 500L, arg = "n_boot")
+    if (!is.null(seed)) {
+      seed <- check_scalar_int_pos(seed, arg = "seed")
+    }
+  } else {
+    conf_level <- 0.95
+    n_boot <- n_boot %||% 500L
+    seed <- NULL
+  }
+  n_threads <- check_scalar_int_pos(n_threads, arg = "n_threads")
+
+  numeric_data <- if (identical(na_method, "error")) {
+    validate_corr_input(data)
+  } else {
+    validate_corr_input(data, check_na = FALSE)
+  }
+  diagnostics_extra <- NULL
+  if (identical(na_method, "complete")) {
+    cc <- .mc_complete_case_matrix(numeric_data, min_n = min_n, arg = arg_data)
+    numeric_data <- cc$data
+    diagnostics_extra <- cc$diagnostics
+  }
+  colnames_data <- colnames(numeric_data)
+  dn <- if (is.null(colnames_data)) NULL else .mc_square_dimnames(colnames_data)
+
+  .mc_with_omp_threads(
+    n_threads,
+    {
+      direct <- .mc_try_direct_triplet_output(
+        input = list(data = numeric_data, dimnames = dn),
+        output_cfg = output_cfg,
+        kernel_threshold = if (is.null(kernel_threshold)) {
+          NULL
+        } else {
+          function(x, threshold, diag) {
+            kernel_threshold(
+              x,
+              threshold = threshold,
+              diag = diag,
+              n_threads = n_threads
+            )
+          }
+        },
+        estimator_class = estimator_class,
+        method = direct_method,
+        description = description,
+        na_method = na_method,
+        ci = ci,
+        has_inference = needs_p_value,
+        pairwise = identical(na_method, "pairwise"),
+        symmetric = symmetric
+      )
+      if (!is.null(direct)) {
+        direct
+      } else {
+        use_pairwise_kernel <- identical(na_method, "pairwise")
+        if (!isTRUE(use_pairwise_kernel)) {
+          est <- kernel_matrix(numeric_data, n_threads = n_threads)
+        } else {
+          if (is.null(kernel_pairwise)) {
+            abort_internal("Pairwise kernel is required when {.arg na_method} is {.val pairwise}.")
+          }
+          est <- kernel_pairwise(numeric_data, n_threads = n_threads)
+        }
+
+        est <- .mc_set_matrix_dimnames(est, colnames_data)
+        payload <- NULL
+        if ((isTRUE(ci) || isTRUE(p_value)) && !is.null(payload_builder)) {
+          payload <- payload_builder(
+            numeric_data,
+            est = est,
+            ci = ci,
+            p_value = p_value,
+            conf_level = conf_level,
+            n_boot = n_boot,
+            seed = seed
+          )
+        }
+
+        diagnostics <- .mc_merge_diagnostics(
+          if (is.null(payload)) NULL else payload$diagnostics,
+          diagnostics_extra
+        )
+
+        out <- .mc_structure_corr_matrix(
+          est,
+          class_name = estimator_class,
+          method = method,
+          description = description,
+          symmetric = symmetric,
+          diagnostics = diagnostics,
+          dimnames = dn,
+          extra_attrs = c(
+            extra_attrs,
+            if (!is.null(payload) && !is.null(payload$ci)) {
+              list(
+                ci = payload$ci,
+                conf.level = conf_level,
+                n_boot = n_boot
+              )
+            },
+            if (!is.null(payload) && !is.null(payload$inference)) {
+              list(inference = payload$inference)
+            }
+          )
+        )
+
+        .mc_finalize_corr_output_fast(
+          out,
+          output = output_cfg$output,
+          threshold = output_cfg$threshold,
+          diag = output_cfg$diag
+        )
       }
     }
   )

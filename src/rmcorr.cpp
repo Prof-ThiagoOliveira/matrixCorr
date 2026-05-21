@@ -8,9 +8,11 @@
 #include <algorithm>
 #include <limits>
 
+#include "correlation_math.h"
 #include "matrixCorr_omp.h"
 
 using namespace Rcpp;
+using matrixCorr::correlation_math::clamp_corr_na;
 
 namespace {
 
@@ -42,13 +44,6 @@ struct CompleteSubjectIndex {
   int n_subjects{0};
   double df{NA_REAL};
 };
-
-inline double clamp_corr(double x) {
-  if (!std::isfinite(x)) return NA_REAL;
-  if (x > 1.0) return 1.0;
-  if (x < -1.0) return -1.0;
-  return x;
-}
 
 inline bool all_finite_ptr(const double* x, const R_xlen_t n) {
   for (R_xlen_t i = 0; i < n; ++i) {
@@ -228,7 +223,7 @@ inline RmStats compute_rmcorr_stats(
 
   if (!(sxx > 0.0) || !(syy > 0.0)) return out;
 
-  out.estimate = clamp_corr(sxy / std::sqrt(sxx * syy));
+  out.estimate = clamp_corr_na(sxy / std::sqrt(sxx * syy));
   out.slope = sxy / sxx;
   out.valid = std::isfinite(out.estimate) && std::isfinite(out.slope);
   if (!out.valid) return out;
@@ -260,8 +255,8 @@ inline RmStats compute_rmcorr_stats(
       const double se_z = 1.0 / std::sqrt(eff_n - 3.0);
       if (std::isfinite(zcrit) && std::isfinite(se_z) && se_z > 0.0) {
         const double zr = std::atanh(out.estimate);
-        out.conf_low = clamp_corr(std::tanh(zr - zcrit * se_z));
-        out.conf_high = clamp_corr(std::tanh(zr + zcrit * se_z));
+        out.conf_low = clamp_corr_na(std::tanh(zr - zcrit * se_z));
+        out.conf_high = clamp_corr_na(std::tanh(zr + zcrit * se_z));
       }
     }
   }
@@ -331,7 +326,7 @@ inline RmStats compute_rmcorr_stats_complete(
 
   if (!(sxx > 0.0) || !(syy > 0.0)) return out;
 
-  out.estimate = clamp_corr(sxy / std::sqrt(sxx * syy));
+  out.estimate = clamp_corr_na(sxy / std::sqrt(sxx * syy));
   out.slope = sxy / sxx;
   out.valid = std::isfinite(out.estimate) && std::isfinite(out.slope);
   if (!out.valid) return out;
@@ -363,8 +358,8 @@ inline RmStats compute_rmcorr_stats_complete(
       const double se_z = 1.0 / std::sqrt(eff_n - 3.0);
       if (std::isfinite(zcrit) && std::isfinite(se_z) && se_z > 0.0) {
         const double zr = std::atanh(out.estimate);
-        out.conf_low = clamp_corr(std::tanh(zr - zcrit * se_z));
-        out.conf_high = clamp_corr(std::tanh(zr + zcrit * se_z));
+        out.conf_low = clamp_corr_na(std::tanh(zr - zcrit * se_z));
+        out.conf_high = clamp_corr_na(std::tanh(zr + zcrit * se_z));
       }
     }
   }
@@ -499,7 +494,7 @@ inline RmStats compute_rmcorr_weighted_stats(
   const double mag = std::sqrt(weighted_ss_x / denom);
   if (!std::isfinite(mag)) return out;
   const double sign_beta = (out.slope > 0.0) ? 1.0 : ((out.slope < 0.0) ? -1.0 : 0.0);
-  out.estimate = clamp_corr(sign_beta * mag);
+  out.estimate = clamp_corr_na(sign_beta * mag);
   if (!std::isfinite(out.estimate)) return out;
 
   if (sse < 0.0 && sse > -1e-12) sse = 0.0;
@@ -527,8 +522,8 @@ inline RmStats compute_rmcorr_weighted_stats(
       const double se_z = 1.0 / std::sqrt(eff_n - 3.0);
       if (std::isfinite(zcrit) && std::isfinite(se_z) && se_z > 0.0) {
         const double zr = std::atanh(out.estimate);
-        out.conf_low = clamp_corr(std::tanh(zr - zcrit * se_z));
-        out.conf_high = clamp_corr(std::tanh(zr + zcrit * se_z));
+        out.conf_low = clamp_corr_na(std::tanh(zr - zcrit * se_z));
+        out.conf_high = clamp_corr_na(std::tanh(zr + zcrit * se_z));
       }
     }
   }

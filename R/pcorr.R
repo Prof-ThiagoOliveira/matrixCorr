@@ -24,11 +24,21 @@
 #'   \code{1e-3}.
 #' @param return_cov_precision Logical; if \code{TRUE}, also return the
 #'   covariance (\code{cov}) and precision (\code{precision}) matrices used to
-#'   form the partial correlations. Default to \code{FALSE}
-#' @param return_p_value Logical; if \code{TRUE}, also return the matrix of
-#'   two-sided p-values for testing whether each sample partial correlation is
-#'   zero. This option is available only for \code{method = "sample"} and
-#'   requires \eqn{n > p}. Default to \code{FALSE}.
+#'   form the partial correlations. Requires \code{return_details = TRUE}.
+#'   Default to \code{FALSE}.
+#' @param return_details Logical; if \code{TRUE}, return the rich
+#'   \code{"partial_corr"} list containing \code{pcor}, diagnostics, method
+#'   metadata, and any requested covariance, precision, p-value, or CI
+#'   components. If \code{FALSE} (default), \code{output = "matrix"} returns the
+#'   standard matrixCorr estimate matrix, consistent with other correlation
+#'   methods.
+#' @param return_p_value Logical; if \code{TRUE}, compute two-sided p-values
+#'   for testing whether each sample partial correlation is zero. With the
+#'   default matrix result, p-values are stored in the inference metadata and
+#'   exposed by \code{tidy()}. With \code{return_details = TRUE}, they are also
+#'   returned as the \code{p_value} matrix. This option is available only for
+#'   \code{method = "sample"} and requires \eqn{n > p}. Default to
+#'   \code{FALSE}.
 #' @param ci Logical (default \code{FALSE}). If \code{TRUE}, attach Fisher-z
 #'   confidence intervals for the off-diagonal partial correlations. This
 #'   option is available only for the classical \code{method = "sample"}
@@ -54,7 +64,11 @@
 #' @param diag Logical; whether to include diagonal entries in
 #'   \code{"sparse"} and \code{"edge_list"} outputs.
 #'
-#' @return An object of class \code{"partial_corr"} (a list) with elements:
+#' @return With the default \code{return_details = FALSE}, a standard
+#'   matrixCorr correlation result: a dense \code{corr_matrix}, sparse matrix,
+#'   or \code{corr_edge_list}, depending on \code{output}. With
+#'   \code{return_details = TRUE}, an object of class \code{"partial_corr"} (a
+#'   list) with elements:
 #'   \itemize{
 #'     \item \code{pcor}: \eqn{p \times p} partial correlation matrix.
 #'     \item \code{cov} (if requested): covariance matrix used.
@@ -219,7 +233,7 @@
 #' diag(pcor_true) <- 1
 #'
 #' ## Quick visual check (first 5x5 block)
-#' round(pc$pcor[1:5, 1:5], 2)
+#' round(estimate(pc)[1:5, 1:5], 2)
 #' round(pcor_true[1:5, 1:5], 2)
 #'
 #' ## Plot method
@@ -240,9 +254,9 @@
 #' colnames(X_g) <- paste0("Node", seq_len(p))
 #'
 #' gfit_1 <- pcorr(X_g, method = "glasso", lambda = 0.02,
-#'                 return_cov_precision = TRUE)
+#'                 return_cov_precision = TRUE, return_details = TRUE)
 #' gfit_2 <- pcorr(X_g, method = "glasso", lambda = 0.08,
-#'                 return_cov_precision = TRUE)
+#'                 return_cov_precision = TRUE, return_details = TRUE)
 #'
 #' ## Larger lambda gives a sparser conditional-dependence graph
 #' edge_count <- function(M, tol = 1e-8) {
@@ -283,15 +297,17 @@
 #' colnames(X_hd) <- paste0("G", seq_len(p))
 #'
 #' pc_oas   <-
-#'  pcorr(X_hd, method = "oas",   return_cov_precision = TRUE)
+#'  pcorr(X_hd, method = "oas",   return_cov_precision = TRUE,
+#'        return_details = TRUE)
 #' pc_ridge <-
 #'  pcorr(X_hd, method = "ridge", lambda = 1e-2,
-#'                      return_cov_precision = TRUE)
+#'                      return_cov_precision = TRUE, return_details = TRUE)
 #' pc_samp  <-
-#'  pcorr(X_hd, method = "sample", return_cov_precision = TRUE)
+#'  pcorr(X_hd, method = "sample", return_cov_precision = TRUE,
+#'        return_details = TRUE)
 #' pc_glasso <-
 #'  pcorr(X_hd, method = "glasso", lambda = 5e-3,
-#'                      return_cov_precision = TRUE)
+#'                      return_cov_precision = TRUE, return_details = TRUE)
 #'
 #' ## Show how much diagonal regularisation was used
 #' c(oas_jitter = pc_oas$jitter,
@@ -339,6 +355,7 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
                                 na_method = c("error", "complete"),
                                 ci = FALSE, conf_level = 0.95,
                                 return_cov_precision = FALSE,
+                                return_details = FALSE,
                                 return_p_value = FALSE, lambda = 1e-3,
                                 output = c("matrix", "sparse", "edge_list"),
                                 threshold = 0,
@@ -353,17 +370,25 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   lambda <- check_scalar_numeric(lambda, arg = "lambda", lower = 0, closed_lower = TRUE)
   lambda <- as.numeric(lambda)
   check_bool(return_cov_precision, arg = "return_cov_precision")
+  check_bool(return_details, arg = "return_details")
   check_bool(return_p_value, arg = "return_p_value")
   check_bool(ci, arg = "ci")
   if (isTRUE(ci)) {
     check_prob_scalar(conf_level, arg = "conf_level", open_ends = TRUE)
   }
+  if (isTRUE(return_cov_precision) && !isTRUE(return_details)) {
+    abort_bad_arg(
+      "return_details",
+      message = "must be TRUE when `return_cov_precision = TRUE`."
+    )
+  }
   if (!identical(output_cfg$output, "matrix") &&
-      (isTRUE(return_cov_precision) || isTRUE(return_p_value) || isTRUE(ci))) {
+      (isTRUE(return_cov_precision) || isTRUE(return_details) ||
+       isTRUE(return_p_value) || isTRUE(ci))) {
     abort_bad_arg(
       "output",
       message = "non-matrix outputs currently support point estimates only.",
-      .hint = "Set `.arg return_cov_precision = FALSE`, `.arg return_p_value = FALSE`, and `.arg ci = FALSE`."
+      .hint = "Set `.arg return_cov_precision = FALSE`, `.arg return_details = FALSE`, `.arg return_p_value = FALSE`, and `.arg ci = FALSE`."
     )
   }
 
@@ -463,10 +488,25 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     conf.level = if (!is.null(ci_attr)) conf_level else NULL,
     ci.method = if (!is.null(ci_attr)) ci_attr$ci.method else NULL
   )
-  if (identical(output_cfg$output, "matrix")) {
+  if (isTRUE(return_details)) {
     return(out)
   }
 
+  inference <- NULL
+  if (isTRUE(return_p_value)) {
+    inference <- list(
+      method = "partial_correlation_t_test",
+      p.value = res$p_value,
+      p_value = res$p_value,
+      statistic = NULL,
+      parameter = matrix(
+        as.integer(nrow(numeric_data) - ncol(numeric_data)),
+        nrow = ncol(numeric_data),
+        ncol = ncol(numeric_data),
+        dimnames = dn
+      )
+    )
+  }
   pcor_obj <- .mc_structure_corr_matrix(
     out$pcor,
     class_name = "partial_corr_matrix",
@@ -475,7 +515,25 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     symmetric = TRUE,
     diagnostics = diagnostics,
     dimnames = dn,
-    classes = c("partial_corr_matrix", "matrix")
+    classes = c("partial_corr_matrix", "matrix"),
+    extra_attrs = c(
+      list(
+        partial_method = method,
+        lambda = out$lambda,
+        rho = out$rho,
+        jitter = out$jitter
+      ),
+      if (!is.null(ci_attr)) {
+        list(
+          ci = ci_attr,
+          conf.level = conf_level,
+          ci.method = ci_attr$ci.method
+        )
+      } else {
+        list()
+      },
+      if (!is.null(inference)) list(inference = inference) else list()
+    )
   )
   .mc_finalize_corr_output_fast(
     pcor_obj,
@@ -484,10 +542,6 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
     diag = output_cfg$diag
   )
 }
-
-
-# small helper for older R versions without %||%
-`%||%` <- function(a, b) if (!is.null(a)) a else b
 
 .mc_sample_covariance_needs_ci_repair <- function(x) {
   centered <- scale(as.matrix(x), center = TRUE, scale = FALSE)
