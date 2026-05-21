@@ -158,6 +158,6 @@ test_that("partial_correlation wrapper preserves the old default method", {
   old_fit <- suppressWarnings(partial_correlation(X))
   new_fit <- pcorr(X, method = "oas")
 
-  expect_equal(old_fit$pcor, new_fit$pcor, tolerance = 1e-12)
-  expect_equal(old_fit$method, "oas")
+  expect_equal(estimate(old_fit), estimate(new_fit), tolerance = 1e-12)
+  expect_equal(attr(old_fit, "partial_method", exact = TRUE), "oas")
 })

@@ -96,8 +96,8 @@ test_that("pcorr complete matches manual listwise deletion", {
   R_manual <- pcorr(Xcc, na_method = "error")
 
   expect_equal(
-    unclass(R_complete$pcor),
-    unclass(R_manual$pcor),
+    unclass(estimate(R_complete)),
+    unclass(estimate(R_manual)),
     tolerance = 1e-8
   )
 })

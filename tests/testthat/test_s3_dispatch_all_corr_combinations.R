@@ -262,7 +262,8 @@ test_that("S3 dispatch works for partial correlation matrix and non-matrix outpu
     output = "matrix"
   )
   sm_matrix <- summary(matrix_fit)
-  expect_s3_class(sm_matrix, "summary.partial_corr")
+  expect_s3_class(sm_matrix, "summary.corr_result")
+  expect_s3_class(sm_matrix, "summary.partial_corr_matrix")
   expect_s3_class(plot(matrix_fit, show_value = FALSE), "ggplot")
 
   sparse_fit <- pcorr(

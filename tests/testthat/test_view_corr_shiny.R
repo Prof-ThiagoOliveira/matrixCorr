@@ -22,7 +22,7 @@ test_that("viewer helpers coerce package outputs", {
   expect_true(all(vapply(res, function(x) is.matrix(x$matrix), logical(1))))
   expect_equal(res$Distance$signed, FALSE)
   expect_true(res$Pearson$signed)
-  expect_equal(colnames(res$Partial$matrix), colnames(partial$pcor))
+  expect_equal(colnames(res$Partial$matrix), colnames(estimate(partial)))
   expect_equal(res$Kendall$class, paste(class(kendall), collapse = ", "))
   expect_equal(res$Biweight$class, paste(class(biweight), collapse = ", "))
   expect_equal(res$Shrinkage$class, paste(class(shrinkage), collapse = ", "))
