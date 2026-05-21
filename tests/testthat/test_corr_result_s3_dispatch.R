@@ -74,6 +74,32 @@ test_that("correlation summary objects keep standardized overview metadata", {
   }
 })
 
+test_that("sparse and edge-list summaries do not reconstruct dense matrices", {
+  set.seed(43)
+  X <- matrix(rnorm(180 * 5), nrow = 180, ncol = 5)
+  X[, 2] <- X[, 1] + rnorm(180, sd = 0.05)
+  X[, 3] <- -X[, 1] + rnorm(180, sd = 0.05)
+  colnames(X) <- paste0("M", seq_len(ncol(X)))
+
+  sparse <- pearson_corr(X, output = "sparse", threshold = 0.70, diag = FALSE)
+  edge <- pearson_corr(X, output = "edge_list", threshold = 0.70, diag = FALSE)
+
+  testthat::local_mocked_bindings(
+    .mc_corr_as_dense_matrix = function(...) {
+      stop("dense reconstruction should not be used", call. = FALSE)
+    },
+    .package = "matrixCorr"
+  )
+
+  sm_sparse <- summary(sparse)
+  sm_edge <- summary(edge)
+
+  expect_s3_class(sm_sparse, "summary.corr_sparse")
+  expect_s3_class(sm_edge, "summary.corr_edge_list")
+  expect_equal(attr(sm_sparse, "overview", exact = TRUE)$output, "sparse")
+  expect_equal(attr(sm_edge, "overview", exact = TRUE)$output, "edge_list")
+})
+
 test_that("summary() dispatches CI-aware sparse outputs across correlation estimators", {
   set.seed(20260417)
   X <- matrix(rnorm(260 * 5), nrow = 260, ncol = 5)

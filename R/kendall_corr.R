@@ -195,48 +195,40 @@ kendall_tau <- function(data,
                         threshold = 0,
                         diag = TRUE,
                         ...) {
-  output_cfg <- .mc_validate_output_args(
+  output_cfg <- .mc_prepare_corr_output(
     output = output,
     threshold = threshold,
     diag = diag
   )
   if (is.null(y) && ...length() == 0L && missing(na_method) && isFALSE(ci)) {
-    numeric_data <- validate_corr_input(data, check_na = TRUE)
-    colnames_data <- colnames(numeric_data)
-    prev_threads <- .mc_prepare_omp_threads(
+    input <- .mc_prepare_corr_input(
+      data,
+      na_cfg = list(na_method = "error", check_na = TRUE),
+      min_n = 2L
+    )
+    return(.mc_with_omp_threads(
       n_threads,
-      n_threads_missing = missing(n_threads)
-    )
-    if (!is.null(prev_threads)) {
-      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-    }
-    out <- .mc_structure_corr_matrix(
-      kendall_matrix_cpp(numeric_data),
-      class_name = "kendall_matrix",
-      method = "kendall",
-      description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
-      symmetric = TRUE,
-      dimnames = if (!is.null(colnames_data)) .mc_square_dimnames(colnames_data)
-    )
-    return(.mc_finalize_corr_output_fast(
-      out,
-      output = output_cfg$output,
-      threshold = output_cfg$threshold,
-      diag = output_cfg$diag
+      n_threads_missing = missing(n_threads),
+      {
+        .mc_finalize_corr_result(
+          mat = kendall_matrix_cpp(input$data),
+          class_name = "kendall_matrix",
+          method = "kendall",
+          description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
+          output_cfg = output_cfg,
+          dimnames = input$dimnames,
+          symmetric = TRUE
+        )
+      }
     ))
   }
 
-  if (...length() == 0L && missing(na_method)) {
-    na_cfg <- list(na_method = "error", check_na = TRUE)
-  } else {
-    legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
-    na_cfg <- resolve_na_args(
-      na_method = na_method,
-      check_na = legacy_args$check_na %||% NULL,
-      na_method_missing = missing(na_method),
-      allowed = c("error", "pairwise", "complete")
-    )
-  }
+  na_cfg <- .mc_resolve_corr_na(
+    na_method = na_method,
+    dots = list(...),
+    na_method_missing = missing(na_method),
+    allowed = c("error", "pairwise", "complete")
+  )
   if (!isFALSE(ci)) {
     check_bool(ci, arg = "ci")
   } else if (!is.logical(ci) || length(ci) != 1L || is.na(ci)) {
@@ -287,72 +279,56 @@ kendall_tau <- function(data,
     return(as.numeric(tau))
   }
 
-  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
-  diagnostics_extra <- NULL
-  if (identical(na_cfg$na_method, "complete")) {
-    cc <- .mc_complete_case_matrix(numeric_data, min_n = 2L, arg = "data")
-    numeric_data <- cc$data
-    diagnostics_extra <- cc$diagnostics
-  }
-  colnames_data <- colnames(numeric_data)
-  dn <- .mc_square_dimnames(colnames_data)
+  input <- .mc_prepare_corr_input(data, na_cfg = na_cfg, min_n = 2L)
   diagnostics <- NULL
   ci_attr <- NULL
 
-  prev_threads <- .mc_prepare_omp_threads(
+  .mc_with_omp_threads(
     n_threads,
-    n_threads_missing = missing(n_threads)
-  )
-  if (!is.null(prev_threads)) {
-    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-  }
+    n_threads_missing = missing(n_threads),
+    {
+      if (!identical(na_cfg$na_method, "pairwise") && !isTRUE(ci)) {
+        result <- kendall_matrix_cpp(input$data)
+      } else {
+        pairwise <- kendall_matrix_pairwise_cpp(
+          input$data,
+          return_ci = ci,
+          conf_level = conf_level,
+          ci_method = ci_method
+        )
+        result <- pairwise$est
+        diagnostics <- list(
+          n_complete = .mc_set_matrix_dimnames(pairwise$n_complete, input$colnames)
+        )
+        if (isTRUE(ci)) {
+          ci_attr <- list(
+            est = .mc_set_matrix_dimnames(unclass(result), input$colnames),
+            lwr.ci = .mc_set_matrix_dimnames(unclass(pairwise$lwr), input$colnames),
+            upr.ci = .mc_set_matrix_dimnames(unclass(pairwise$upr), input$colnames),
+            conf.level = pairwise$conf_level,
+            ci.method = pairwise$ci_method
+          )
+        }
+      }
 
-  if (!identical(na_cfg$na_method, "pairwise") && !isTRUE(ci)) {
-    result <- kendall_matrix_cpp(numeric_data)
-  } else {
-    pairwise <- kendall_matrix_pairwise_cpp(
-      numeric_data,
-      return_ci = ci,
-      conf_level = conf_level,
-      ci_method = ci_method
-    )
-    result <- pairwise$est
-    diagnostics <- list(
-      n_complete = .mc_set_matrix_dimnames(pairwise$n_complete, colnames_data)
-    )
-    if (isTRUE(ci)) {
-      ci_attr <- list(
-        est = .mc_set_matrix_dimnames(unclass(result), colnames_data),
-        lwr.ci = .mc_set_matrix_dimnames(unclass(pairwise$lwr), colnames_data),
-        upr.ci = .mc_set_matrix_dimnames(unclass(pairwise$upr), colnames_data),
-        conf.level = pairwise$conf_level,
-        ci.method = pairwise$ci_method
+      .mc_finalize_corr_result(
+        mat = result,
+        class_name = "kendall_matrix",
+        method = "kendall",
+        description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
+        output_cfg = output_cfg,
+        diagnostics = .mc_merge_diagnostics(diagnostics, input$diagnostics),
+        dimnames = input$dimnames,
+        symmetric = TRUE,
+        extra_attrs = if (!is.null(ci_attr)) {
+          list(
+            ci = ci_attr,
+            conf.level = conf_level,
+            ci.method = ci_method
+          )
+        }
       )
     }
-  }
-  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
-
-  out <- .mc_structure_corr_matrix(
-    result,
-    class_name = "kendall_matrix",
-    method = "kendall",
-    description = "Pairwise Kendall's tau (auto tau-a/tau-b) correlation matrix",
-    symmetric = TRUE,
-    diagnostics = diagnostics,
-    dimnames = dn,
-    extra_attrs = if (!is.null(ci_attr)) {
-      list(
-        ci = ci_attr,
-        conf.level = conf_level,
-        ci.method = ci_method
-      )
-    }
-  )
-  .mc_finalize_corr_output_fast(
-    out,
-    output = output_cfg$output,
-    threshold = output_cfg$threshold,
-    diag = output_cfg$diag
   )
 }
 

@@ -469,7 +469,7 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   }
   output <- attr(x, "output", exact = TRUE)
   is.character(output) && length(output) == 1L &&
-    output %in% c("matrix", "sparse", "edge_list", "packed_upper")
+    output %in% c("matrix", "sparse", "edge_list")
 }
 
 .mc_parse_corr_object <- function(obj, label) {

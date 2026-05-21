@@ -42,28 +42,6 @@ summary.corr_sparse <- function(object, topn = NULL, show_ci = NULL, ...) {
   )
 }
 
-#' S3 Summary for Packed-Upper Correlation Results
-#'
-#' Representation-first summary for packed upper-triangle outputs.
-#'
-#' @param object A packed upper-triangle correlation result.
-#' @param topn Optional number of head/tail rows when preview is truncated.
-#' @param show_ci One of `"yes"` or `"no"`.
-#' @param ... Unused.
-#'
-#' @return A standardized summary data frame with class
-#'   `c("summary.corr_result", "data.frame")` (plus compatibility classes).
-#' @method summary corr_packed_upper
-#' @export
-summary.corr_packed_upper <- function(object, topn = NULL, show_ci = NULL, ...) {
-  .mc_summary_corr_result(
-    object,
-    output_class = "summary.corr_packed_upper",
-    topn = topn,
-    show_ci = show_ci
-  )
-}
-
 #' S3 Summary for Edge-List Correlation Results
 #'
 #' Representation-first summary for edge-list outputs.
@@ -132,8 +110,8 @@ summary.dgCMatrix <- function(object, topn = NULL, show_ci = NULL, ...) {
   NextMethod()
 }
 
-#' @title Print Packed-Upper Correlation Results
-#' @param x A packed-upper correlation result.
+#' @title Print Edge-List Correlation Results
+#' @param x An edge-list correlation result.
 #' @param digits Number of digits for numeric values.
 #' @param n Optional preview row threshold.
 #' @param topn Optional number of head/tail rows when preview is truncated.
@@ -141,34 +119,6 @@ summary.dgCMatrix <- function(object, topn = NULL, show_ci = NULL, ...) {
 #' @param width Optional output width.
 #' @param show_ci One of `"yes"` or `"no"`.
 #' @param ... Unused.
-#' @return Invisibly returns `x`.
-#' @method print corr_packed_upper
-#' @export
-print.corr_packed_upper <- function(x,
-                                    digits = 4,
-                                    n = NULL,
-                                    topn = NULL,
-                                    max_vars = NULL,
-                                    width = NULL,
-                                    show_ci = NULL,
-                                    ...) {
-  .mc_print_corr_records(
-    x,
-    output_label = "packed upper",
-    digits = digits,
-    n = n,
-    topn = topn,
-    max_vars = max_vars,
-    width = width,
-    show_ci = show_ci,
-    ...
-  )
-  invisible(x)
-}
-
-#' @title Print Edge-List Correlation Results
-#' @param x An edge-list correlation result.
-#' @inheritParams print.corr_packed_upper
 #' @method print corr_edge_list
 #' @export
 print.corr_edge_list <- function(x,
@@ -463,34 +413,6 @@ plot.corr_sparse <- function(x,
   .mc_plot_corr_result(
     x,
     title = title %||% "Retained sparse correlation heatmap",
-    low_color = low_color,
-    high_color = high_color,
-    mid_color = mid_color,
-    value_text_size = value_text_size,
-    ci_text_size = ci_text_size,
-    show_value = show_value,
-    ...
-  )
-}
-
-#' S3 Plot for Packed-Upper Correlation Results
-#'
-#' @inheritParams plot.corr_matrix
-#' @param x A packed-upper correlation result.
-#' @method plot corr_packed_upper
-#' @export
-plot.corr_packed_upper <- function(x,
-                                   title = NULL,
-                                   low_color = "indianred1",
-                                   high_color = "steelblue1",
-                                   mid_color = "white",
-                                   value_text_size = 4,
-                                   ci_text_size = 3,
-                                   show_value = TRUE,
-                                   ...) {
-  .mc_plot_corr_result(
-    x,
-    title = title %||% "Packed upper-triangle correlation heatmap",
     low_color = low_color,
     high_color = high_color,
     mid_color = mid_color,

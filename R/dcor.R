@@ -165,116 +165,89 @@ dcor <- function(data,
                  threshold = 0,
                  diag = TRUE,
                  ...) {
-  output_cfg <- .mc_validate_output_args(
+  output_cfg <- .mc_prepare_corr_output(
     output = output,
     threshold = threshold,
     diag = diag
   )
   if (...length() == 0L && missing(na_method) && isFALSE(p_value)) {
-    numeric_data <- validate_corr_input(data, check_na = TRUE)
-    colnames_data <- colnames(numeric_data)
-    prev_threads <- .mc_prepare_omp_threads(
+    input <- .mc_prepare_corr_input(
+      data,
+      na_cfg = list(na_method = "error", check_na = TRUE),
+      min_n = 4L
+    )
+    return(.mc_with_omp_threads(
       n_threads,
-      n_threads_missing = missing(n_threads)
-    )
-    if (!is.null(prev_threads)) {
-      on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-    }
-    dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
-    if (!is.null(colnames_data)) {
-      dimnames(dcor_matrix) <- .mc_square_dimnames(colnames_data)
-    }
-    out <- .mc_structure_corr_matrix(
-      dcor_matrix,
-      class_name = "dcor",
-      method = "distance_correlation",
-      description = "Pairwise distance correlation matrix (unbiased)",
-      symmetric = TRUE
-    )
-    return(.mc_finalize_corr_output_fast(
-      out,
-      output = output_cfg$output,
-      threshold = output_cfg$threshold,
-      diag = output_cfg$diag
+      n_threads_missing = missing(n_threads),
+      {
+        .mc_finalize_corr_result(
+          mat = ustat_dcor_matrix_cpp(input$data),
+          class_name = "dcor",
+          method = "distance_correlation",
+          description = "Pairwise distance correlation matrix (unbiased)",
+          output_cfg = output_cfg,
+          dimnames = input$dimnames,
+          symmetric = TRUE
+        )
+      }
     ))
   }
 
-  if (...length() == 0L && missing(na_method)) {
-    na_cfg <- list(na_method = "error", check_na = TRUE)
-  } else {
-    legacy_args <- .mc_extract_legacy_aliases(list(...), allowed = "check_na")
-    na_cfg <- resolve_na_args(
-      na_method = na_method,
-      check_na = legacy_args$check_na %||% NULL,
-      na_method_missing = missing(na_method),
-      allowed = c("error", "pairwise", "complete")
-    )
-  }
+  na_cfg <- .mc_resolve_corr_na(
+    na_method = na_method,
+    dots = list(...),
+    na_method_missing = missing(na_method),
+    allowed = c("error", "pairwise", "complete")
+  )
   if (!isFALSE(p_value)) {
     check_bool(p_value, arg = "p_value")
   } else if (!is.logical(p_value) || length(p_value) != 1L || is.na(p_value)) {
     check_bool(p_value, arg = "p_value")
   }
-  numeric_data <- validate_corr_input(data, check_na = na_cfg$check_na)
-  diagnostics_extra <- NULL
-  if (identical(na_cfg$na_method, "complete")) {
-    cc <- .mc_complete_case_matrix(numeric_data, min_n = 4L, arg = "data")
-    numeric_data <- cc$data
-    diagnostics_extra <- cc$diagnostics
-  }
-  colnames_data <- colnames(numeric_data)
-  dn <- .mc_square_dimnames(colnames_data)
+  input <- .mc_prepare_corr_input(data, na_cfg = na_cfg, min_n = 4L)
   diagnostics <- NULL
   inference_attr <- NULL
 
-  prev_threads <- .mc_prepare_omp_threads(
+  .mc_with_omp_threads(
     n_threads,
-    n_threads_missing = missing(n_threads)
-  )
-  if (!is.null(prev_threads)) {
-    on.exit(.mc_exit_omp_threads(prev_threads), add = TRUE)
-  }
+    n_threads_missing = missing(n_threads),
+    {
+      if (isTRUE(p_value) || identical(na_cfg$na_method, "pairwise")) {
+        pairwise <- ustat_dcor_matrix_pairwise_cpp(
+          input$data,
+          return_inference = p_value
+        )
+        dcor_matrix <- pairwise$est
+        diagnostics <- list(
+          n_complete = .mc_set_matrix_dimnames(unclass(pairwise$n_complete), input$colnames)
+        )
 
-  if (isTRUE(p_value) || identical(na_cfg$na_method, "pairwise")) {
-    pairwise <- ustat_dcor_matrix_pairwise_cpp(
-      numeric_data,
-      return_inference = p_value
-    )
-    dcor_matrix <- pairwise$est
-    diagnostics <- list(
-      n_complete = .mc_set_matrix_dimnames(unclass(pairwise$n_complete), colnames_data)
-    )
+        if (isTRUE(p_value)) {
+          inference_attr <- list(
+            method = "dcor_t_test",
+            estimate = .mc_set_matrix_dimnames(unclass(pairwise$estimate), input$colnames),
+            statistic = .mc_set_matrix_dimnames(unclass(pairwise$statistic), input$colnames),
+            parameter = .mc_set_matrix_dimnames(unclass(pairwise$parameter), input$colnames),
+            p_value = .mc_set_matrix_dimnames(unclass(pairwise$p_value), input$colnames),
+            alternative = "greater"
+          )
+        }
+      } else {
+        dcor_matrix <- ustat_dcor_matrix_cpp(input$data)
+      }
 
-    if (isTRUE(p_value)) {
-      inference_attr <- list(
-        method = "dcor_t_test",
-        estimate = .mc_set_matrix_dimnames(unclass(pairwise$estimate), colnames_data),
-        statistic = .mc_set_matrix_dimnames(unclass(pairwise$statistic), colnames_data),
-        parameter = .mc_set_matrix_dimnames(unclass(pairwise$parameter), colnames_data),
-        p_value = .mc_set_matrix_dimnames(unclass(pairwise$p_value), colnames_data),
-        alternative = "greater"
+      .mc_finalize_corr_result(
+        mat = dcor_matrix,
+        class_name = "dcor",
+        method = "distance_correlation",
+        description = "Pairwise distance correlation matrix (unbiased)",
+        output_cfg = output_cfg,
+        diagnostics = .mc_merge_diagnostics(diagnostics, input$diagnostics),
+        dimnames = input$dimnames,
+        symmetric = TRUE,
+        extra_attrs = if (!is.null(inference_attr)) list(inference = inference_attr)
       )
     }
-  } else {
-    dcor_matrix <- ustat_dcor_matrix_cpp(numeric_data)
-  }
-  diagnostics <- .mc_merge_diagnostics(diagnostics, diagnostics_extra)
-
-  out <- .mc_structure_corr_matrix(
-    dcor_matrix,
-    class_name = "dcor",
-    method = "distance_correlation",
-    description = "Pairwise distance correlation matrix (unbiased)",
-    symmetric = TRUE,
-    diagnostics = diagnostics,
-    dimnames = dn,
-    extra_attrs = if (!is.null(inference_attr)) list(inference = inference_attr)
-  )
-  .mc_finalize_corr_output_fast(
-    out,
-    output = output_cfg$output,
-    threshold = output_cfg$threshold,
-    diag = output_cfg$diag
   )
 }
 

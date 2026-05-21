@@ -9,9 +9,10 @@ using namespace Rcpp;
 
 namespace {
 const char* missing_values_message =
-   "Missing values are not allowed when na_method = \"error\". "
+   "Missing values are not allowed when na_method = \"error\"; "
+   "non-finite values are not allowed either. "
    "Use na_method = \"pairwise\" to use pairwise complete observations, "
-   "or na_method = \"complete\" to drop rows with missing values before computing correlations.";
+   "or na_method = \"complete\" to drop rows with missing or non-finite values before computing correlations.";
 }
 
 // ---- helpers (single-thread safe) ----
@@ -27,22 +28,22 @@ inline bool has_class(SEXP x, const char* cls){
    return Rf_inherits(x, cls);
 }
 
-// Parallel NA scan for a REALSXP matrix (no copies)
-// Returns true if any NA/NaN is present.
-inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
+// Parallel finite-value scan for a REALSXP matrix (no copies).
+// Returns true if any NA/NaN/Inf/-Inf is present.
+inline bool any_nonfinite_real_matrix_parallel(SEXP x, int nr, int nc){
    const double* pr = REAL(x);
-   std::atomic<bool> has_na(false);
+   std::atomic<bool> has_nonfinite(false);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) if(nc > 1)
 #endif
    for (int j = 0; j < nc; ++j) {
-      if (has_na.load(std::memory_order_relaxed)) continue;
+      if (has_nonfinite.load(std::memory_order_relaxed)) continue;
       const double* col = pr + static_cast<R_xlen_t>(j) * nr;
       for (int i = 0; i < nr; ++i) {
-         if (ISNAN(col[i])) { has_na.store(true, std::memory_order_relaxed); break; }
+         if (!R_finite(col[i])) { has_nonfinite.store(true, std::memory_order_relaxed); break; }
       }
    }
-   return has_na.load(std::memory_order_relaxed);
+   return has_nonfinite.load(std::memory_order_relaxed);
 }
 
 // [[Rcpp::export]]
@@ -62,7 +63,7 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
 
        // double matrix: shallow wrap; optional parallel NA scan
        if (t == REALSXP){
-          if (check_na && any_na_real_matrix_parallel(data, nr, nc))
+          if (check_na && any_nonfinite_real_matrix_parallel(data, nr, nc))
              Rcpp::stop(missing_values_message);
           return Rcpp::NumericMatrix(data); // shallow, no copy
        }
@@ -171,7 +172,7 @@ inline bool any_na_real_matrix_parallel(SEXP x, int nr, int nc){
           if (check_na){
              for (int i = 0; i < n; ++i){
                 const double v = pr[i];
-                if (ISNAN(v)) { bad.store(true, std::memory_order_relaxed); break; }
+                if (!R_finite(v)) { bad.store(true, std::memory_order_relaxed); break; }
                 dst[i] = v;
              }
           } else {

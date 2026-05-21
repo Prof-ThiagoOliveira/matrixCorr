@@ -668,7 +668,7 @@ resolve_na_args <- function(na_method = "error",
     return(default)
   }
   skip <- c(
-    "corr_matrix", "corr_sparse", "corr_packed_upper", "corr_edge_list",
+    "corr_matrix", "corr_sparse", "corr_edge_list",
     "corr_result", "matrix", "array", "data.frame", "list",
     "sparseMatrix", "Matrix", "mMatrix", "dMatrix", "symmetricMatrix",
     "CsparseMatrix", "dsparseMatrix", "dCsparseMatrix", "generalMatrix"
@@ -801,43 +801,6 @@ resolve_na_args <- function(na_method = "error",
   } else {
     isTRUE(symmetric)
   }
-  .mc_set_attrs(out, extra_attrs)
-}
-
-#' New packed-upper correlation result
-#' @keywords internal
-#' @noRd
-.mc_new_corr_packed_upper <- function(df,
-                                      estimator_class,
-                                      method,
-                                      description,
-                                      threshold = 0,
-                                      diag = TRUE,
-                                      diagnostics = NULL,
-                                      ci = NULL,
-                                      conf.level = NULL,
-                                      source_dim = NULL,
-                                      source_dimnames = NULL,
-                                      symmetric = TRUE,
-                                      package_name = "matrixCorr",
-                                      extra_attrs = list()) {
-  out <- data.frame(df, stringsAsFactors = FALSE, check.names = FALSE)
-  class(out) <- c("corr_packed_upper", estimator_class, "corr_result", "data.frame")
-  attr(out, "method") <- method
-  attr(out, "description") <- description
-  attr(out, "package") <- package_name
-  attr(out, "output") <- "packed_upper"
-  attr(out, "threshold") <- as.numeric(threshold)
-  attr(out, "diag") <- isTRUE(diag)
-  attr(out, "diagnostics") <- diagnostics
-  attr(out, "ci") <- ci
-  attr(out, "conf.level") <- conf.level
-  attr(out, "corr_result") <- TRUE
-  attr(out, "corr_output_class") <- "corr_packed_upper"
-  attr(out, "corr_estimator_class") <- estimator_class
-  attr(out, "corr_dim") <- as.integer(source_dim %||% c(NA_integer_, NA_integer_))
-  attr(out, "corr_dimnames") <- source_dimnames
-  attr(out, "corr_symmetric") <- isTRUE(symmetric)
   .mc_set_attrs(out, extra_attrs)
 }
 
@@ -1065,15 +1028,6 @@ resolve_na_args <- function(na_method = "error",
   )
 }
 
-#' Convert a symmetric matrix to packed upper-triangle records
-#' @keywords internal
-#' @noRd
-.mc_matrix_to_packed_upper <- function(mat,
-                                       threshold = 0,
-                                       diag = TRUE) {
-  .mc_matrix_to_edge_list(mat, threshold = threshold, diag = diag)
-}
-
 #' Convert a symmetric matrix to thresholded sparse matrix
 #' @keywords internal
 #' @noRd
@@ -1225,27 +1179,6 @@ resolve_na_args <- function(na_method = "error",
     ))
   }
 
-  if (identical(cfg$output, "packed_upper")) {
-    out <- .mc_new_corr_packed_upper(
-      df = .mc_matrix_to_packed_upper(mat, threshold = cfg$threshold, diag = cfg$diag),
-      estimator_class = estimator_class,
-      method = method,
-      description = description,
-      threshold = cfg$threshold,
-      diag = cfg$diag,
-      diagnostics = diagnostics,
-      ci = ci,
-      conf.level = conf.level,
-      source_dim = source_dim,
-      source_dimnames = source_dimnames,
-      symmetric = source_symmetric,
-      package_name = package_name,
-      extra_attrs = extra_attrs
-    )
-    attr(out, "matrixCorr_meta") <- meta
-    return(out)
-  }
-
   if (identical(cfg$output, "edge_list")) {
     out <- .mc_new_corr_edge_list(
       df = .mc_matrix_to_edge_list(
@@ -1324,7 +1257,7 @@ resolve_na_args <- function(na_method = "error",
 .mc_corr_as_edge_df <- function(x) {
   output <- attr(x, "output", exact = TRUE) %||% "matrix"
 
-  if (inherits(x, "corr_packed_upper") || inherits(x, "corr_edge_list")) {
+  if (inherits(x, "corr_edge_list")) {
     out <- x
     class(out) <- "data.frame"
     out <- as.data.frame(out, stringsAsFactors = FALSE, check.names = FALSE)
@@ -1457,28 +1390,43 @@ resolve_na_args <- function(na_method = "error",
     NA_character_
   }
 
-  m <- .mc_corr_as_dense_matrix(x)
-  selector <- if (symmetric && dm[[1L]] == dm[[2L]]) {
-    upper.tri(m, diag = FALSE)
-  } else {
-    matrix(TRUE, nrow = dm[[1L]], ncol = dm[[2L]])
-  }
-  vals <- if (is.matrix(m) && identical(dim(m), dm)) {
-    as.numeric(m[selector])
-  } else {
-    edge_vals <- as.numeric(edges$value)
-    if (symmetric && dm[[1L]] == dm[[2L]] && nrow(edges)) {
-      edge_vals[as.character(edges$row) != as.character(edges$col)]
+  matrix_output <- identical(output, "matrix") || inherits(x, "corr_matrix")
+  use_matrix_overview <- isTRUE(matrix_output)
+  selector <- NULL
+  if (isTRUE(use_matrix_overview)) {
+    m <- .mc_corr_as_dense_matrix(x)
+    selector <- if (symmetric && dm[[1L]] == dm[[2L]]) {
+      upper.tri(m, diag = FALSE)
     } else {
-      edge_vals
+      matrix(TRUE, nrow = dm[[1L]], ncol = dm[[2L]])
     }
+    vals <- if (is.matrix(m) && identical(dim(m), dm)) {
+      as.numeric(m[selector])
+    } else {
+      numeric()
+    }
+    n_missing <- if (is.matrix(m)) sum(is.na(m)) else NA_integer_
+  } else {
+    vals <- as.numeric(edges$value)
+    if (symmetric && dm[[1L]] == dm[[2L]] && nrow(edges)) {
+      vals <- vals[as.character(edges$row) != as.character(edges$col)]
+    }
+    n_missing <- sum(is.na(edges$value))
   }
   vals <- vals[is.finite(vals)]
   pick_range <- function(mat) {
     if (!is.matrix(mat) || !identical(dim(mat), dm)) {
       return(c(NA_real_, NA_real_))
     }
-    vv <- as.numeric(mat[selector])
+    idx <- selector
+    if (is.null(idx)) {
+      idx <- if (symmetric && dm[[1L]] == dm[[2L]]) {
+        upper.tri(mat, diag = FALSE)
+      } else {
+        matrix(TRUE, nrow = dm[[1L]], ncol = dm[[2L]])
+      }
+    }
+    vv <- as.numeric(mat[idx])
     vv <- vv[is.finite(vv)]
     if (!length(vv)) {
       return(c(NA_real_, NA_real_))
@@ -1488,7 +1436,6 @@ resolve_na_args <- function(na_method = "error",
   diag_attr <- attr(x, "diagnostics", exact = TRUE)
   skipped_n <- if (is.list(diag_attr)) pick_range(diag_attr$skipped_n) else c(NA_real_, NA_real_)
   skipped_prop <- if (is.list(diag_attr)) pick_range(diag_attr$skipped_prop) else c(NA_real_, NA_real_)
-  n_missing <- if (is.matrix(m)) sum(is.na(m)) else NA_integer_
   threshold_sets <- {
     thr <- attr(x, "thresholds", exact = TRUE)
     if (is.list(thr)) length(thr) else NA_integer_

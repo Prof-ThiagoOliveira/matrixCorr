@@ -64,7 +64,7 @@ ci <- function(x, ...) {
 #' @rdname estimate
 #' @export
 estimate.corr_result <- function(x, ...) {
-  if (inherits(x, "corr_edge_list") || inherits(x, "corr_packed_upper")) {
+  if (inherits(x, "corr_edge_list")) {
     out <- .mc_corr_as_edge_df(x)
     names(out)[names(out) == "row"] <- "item1"
     names(out)[names(out) == "col"] <- "item2"
