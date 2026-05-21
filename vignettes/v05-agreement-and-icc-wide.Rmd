@@ -58,6 +58,10 @@ fit_ccc <- ccc(data.frame(m1 = m1, m2 = m2), ci = TRUE)
 
 print(fit_ba)
 summary(fit_ccc)
+estimate(fit_ccc)
+confint(fit_ccc)
+ci(fit_ccc)
+tidy(fit_ccc)
 ```
 
 The two summaries are complementary rather than redundant. `ccc()` gives a

@@ -95,6 +95,10 @@ the current scope explicitly.
 ```{r}
 fit_bicor_ci <- bicor(Y, ci = TRUE)
 summary(fit_bicor_ci)
+estimate(fit_bicor_ci)
+confint(fit_bicor_ci)
+ci(fit_bicor_ci)
+tidy(fit_bicor_ci)
 
 fit_pb_inf <- pbcor(Y, ci = TRUE, p_value = TRUE, n_boot = 200, seed = 1)
 summary(fit_pb_inf)

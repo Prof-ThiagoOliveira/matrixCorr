@@ -61,6 +61,16 @@ print(fit_pearson, digits = 2)
 summary(fit_spearman)
 ```
 
+For fitted objects with confidence intervals, the public accessors expose the
+stored pieces without asking users to read attributes directly.
+
+```{r}
+estimate(fit_pearson)
+confint(fit_pearson)
+ci(fit_pearson)
+tidy(fit_pearson)
+```
+
 This pattern extends to other wide-data estimators such as `kendall_tau()`,
 `dcor()`, `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`,
 `shrinkage_corr()`, `pcorr()`, `ccc()`, and `icc()`.
@@ -100,6 +110,10 @@ Overall ICC asks how reliable the full set of columns is when analysed jointly.
 fit_icc_overall <- icc(wide_methods, scope = "overall", ci = TRUE)
 print(fit_icc_overall)
 summary(fit_icc_overall)
+estimate(fit_icc_overall)
+confint(fit_icc_overall)
+ci(fit_icc_overall)
+tidy(fit_icc_overall)
 ```
 
 ## Repeated-measures workflow

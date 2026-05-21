@@ -81,6 +81,10 @@ If confidence intervals are required, they can be requested directly.
 ```{r}
 R_pear_ci <- pearson_corr(X, ci = TRUE)
 summary(R_pear_ci)
+estimate(R_pear_ci)
+confint(R_pear_ci)
+ci(R_pear_ci)
+tidy(R_pear_ci)
 ```
 
 ## Spearman and Kendall

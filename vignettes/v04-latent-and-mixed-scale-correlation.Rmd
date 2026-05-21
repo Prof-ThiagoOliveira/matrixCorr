@@ -76,6 +76,10 @@ fit_pol <- polychoric(X_ord, ci = TRUE, p_value = TRUE)
 
 print(fit_tet, digits = 2)
 summary(fit_pol)
+estimate(fit_tet)
+confint(fit_tet)
+ci(fit_tet)
+tidy(fit_tet)
 ```
 
 These estimators assume a latent-normal threshold model. That assumption should
