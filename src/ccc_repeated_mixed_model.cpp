@@ -1195,7 +1195,7 @@ Rcpp::List ccc_vc_cpp(
   if (nm > 0 && Lr.isNotNull() && auxDr.isNotNull()) {
     Rcpp::NumericMatrix Lrm = Rcpp::as<Rcpp::NumericMatrix>(Lr);
     Rcpp::NumericMatrix Drm = Rcpp::as<Rcpp::NumericMatrix>(auxDr);
-    if (Lrm.nrow() != X.n_cols) stop("Lr row count must match ncol(X).");
+    if (Lrm.nrow() != p) stop("Lr row count must match ncol(X).");
     if (Lrm.ncol() <= 0) stop("Lr must have at least one column when method effects are present.");
     if (Drm.nrow() != Lrm.ncol() || Drm.ncol() != Lrm.ncol()) {
       stop("auxDr must be a square matrix with dimension ncol(Lr).");
