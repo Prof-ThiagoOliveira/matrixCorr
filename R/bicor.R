@@ -577,14 +577,6 @@ bicor <- function(
   )
 }
 
-.mc_bicor_ci_attr <- function(x) {
-  attr(x, "ci", exact = TRUE)
-}
-
-.mc_bicor_inference_attr <- function(x) {
-  attr(x, "inference", exact = TRUE)
-}
-
 .mc_bicor_pairwise_summary <- function(object,
                                        digits = 4,
                                        ci_digits = 3,
@@ -597,60 +589,30 @@ bicor <- function(
   )
   check_inherits(object, "bicor")
 
-  est <- as.matrix(object)
-  rn <- rownames(est); cn <- colnames(est)
-  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
-  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
-
-  ci <- .mc_bicor_ci_attr(object)
-  inf <- .mc_bicor_inference_attr(object)
-  diag_attr <- attr(object, "diagnostics", exact = TRUE)
-  include_ci <- identical(show_ci, "yes") && !is.null(ci)
+  ci <- .mc_ci_attr(object)
+  inf <- .mc_inference_attr(object)
   include_p <- !is.null(inf) && !is.null(inf$p_value)
-
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
-  k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      rec <- list(
-        var1 = rn[i],
-        var2 = cn[j],
-        estimate = round(est[i, j], digits)
+  .mc_pairwise_matrix_summary(
+    object,
+    class_name = "summary.bicor",
+    digits = digits,
+    ci_digits = ci_digits,
+    p_digits = p_digits,
+    show_ci = show_ci,
+    ci_attr = ci,
+    inference_attr = inf,
+    include_p = include_p,
+    extra_columns = if (isTRUE(include_p)) {
+      list(
+        statistic = list(matrix = inf$statistic, digits = digits),
+        fisher_z = list(matrix = inf$Z, digits = digits),
+        p_value = list(matrix = inf$p_value, digits = p_digits)
       )
-      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
-        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
-      }
-      if (include_ci) {
-        rec$lwr <- if (is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
-        rec$upr <- if (is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
-      }
-      if (include_p) {
-        rec$statistic <- if (is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], digits) else NA_real_
-        rec$fisher_z <- if (is.finite(inf$Z[i, j])) round(inf$Z[i, j], digits) else NA_real_
-        rec$p_value <- if (is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
-      }
-      rows[[k]] <- rec
-    }
-  }
-
-  df <- do.call(rbind.data.frame, rows)
-  rownames(df) <- NULL
-  num_cols <- intersect(c("estimate", "lwr", "upr", "statistic", "fisher_z", "p_value"), names(df))
-  int_cols <- intersect(c("n_complete"), names(df))
-  for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
-  for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
-
-  out <- .mc_finalize_summary_df(df, class_name = "summary.bicor")
-  attr(out, "overview") <- .mc_summary_corr_matrix(object)
-  attr(out, "has_ci") <- include_ci
-  attr(out, "has_p") <- include_p
-  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
-  attr(out, "digits") <- digits
-  attr(out, "ci_digits") <- ci_digits
-  attr(out, "p_digits") <- p_digits
-  attr(out, "inference_method") <- if (is.null(inf)) NA_character_ else inf$method
-  out
+    },
+    extra_attrs = list(
+      inference_method = if (is.null(inf)) NA_character_ else inf$method
+    )
+  )
 }
 
 #' @rdname bicor
@@ -784,7 +746,7 @@ plot.bicor <- function(
   df <- tm
   df$Var1 <- factor(as.character(df$Var1), levels = rev(rn))
   df$Var2 <- factor(as.character(df$Var2), levels = cn)
-  ci <- .mc_bicor_ci_attr(x)
+  ci <- .mc_ci_attr(x)
   if (!is.null(ci) && is.matrix(ci$lwr.ci) && is.matrix(ci$upr.ci)) {
     lwr_mat <- ci$lwr.ci
     upr_mat <- ci$upr.ci
@@ -874,7 +836,7 @@ summary.bicor <- function(object, n = NULL, topn = NULL,
                           p_digits = 4,
                           show_ci = NULL, ...) {
   check_inherits(object, "bicor")
-  if (is.null(.mc_bicor_ci_attr(object))) {
+  if (is.null(.mc_ci_attr(object))) {
     return(.mc_summary_corr_matrix(object, topn = topn))
   }
   .mc_bicor_pairwise_summary(

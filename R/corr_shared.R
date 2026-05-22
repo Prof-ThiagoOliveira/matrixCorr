@@ -306,6 +306,163 @@
   )
 }
 
+.mc_ci_attr <- function(x) {
+  attr(x, "ci", exact = TRUE)
+}
+
+.mc_inference_attr <- function(x) {
+  attr(x, "inference", exact = TRUE)
+}
+
+.mc_round_finite <- function(x, digits) {
+  x <- as.numeric(x)
+  if (is.null(digits)) {
+    return(x)
+  }
+  out <- rep(NA_real_, length(x))
+  keep <- is.finite(x)
+  out[keep] <- round(x[keep], digits)
+  out
+}
+
+.mc_pairwise_matrix_summary <- function(object,
+                                        class_name,
+                                        digits,
+                                        ci_digits = NULL,
+                                        p_digits = NULL,
+                                        show_ci = NULL,
+                                        ci_attr = .mc_ci_attr(object),
+                                        inference_attr = .mc_inference_attr(object),
+                                        diagnostics_attr = attr(object, "diagnostics", exact = TRUE),
+                                        include_n_complete = TRUE,
+                                        include_ci = TRUE,
+                                        include_p = TRUE,
+                                        extra_columns = NULL,
+                                        extra_attrs = list(),
+                                        overview = NULL) {
+  est <- as.matrix(object)
+  nr <- nrow(est)
+  nc <- ncol(est)
+  rn <- rownames(est)
+  cn <- colnames(est)
+  if (is.null(rn)) rn <- as.character(seq_len(nr))
+  if (is.null(cn)) cn <- as.character(seq_len(nc))
+
+  n_pairs <- nr * (nc - 1L) / 2L
+  var1 <- character(n_pairs)
+  var2 <- character(n_pairs)
+  estimate <- numeric(n_pairs)
+
+  has_n_complete <- isTRUE(include_n_complete) &&
+    is.list(diagnostics_attr) &&
+    is.matrix(diagnostics_attr$n_complete)
+  n_complete <- if (has_n_complete) integer(n_pairs) else NULL
+
+  show_ci <- if (is.null(show_ci)) "yes" else show_ci
+  has_ci <- isTRUE(include_ci) &&
+    identical(show_ci, "yes") &&
+    is.list(ci_attr)
+  lwr <- if (has_ci) numeric(n_pairs) else NULL
+  upr <- if (has_ci) numeric(n_pairs) else NULL
+
+  extra_columns <- extra_columns %||% list()
+  extra_values <- vector("list", length(extra_columns))
+  names(extra_values) <- names(extra_columns)
+  if (length(extra_columns)) {
+    for (nm in names(extra_columns)) {
+      spec <- extra_columns[[nm]]
+      type <- spec$type %||% "numeric"
+      extra_values[[nm]] <- switch(
+        type,
+        integer = integer(n_pairs),
+        logical = logical(n_pairs),
+        character = character(n_pairs),
+        numeric(n_pairs)
+      )
+    }
+  }
+
+  k <- 0L
+  for (i in seq_len(nr - 1L)) {
+    for (j in (i + 1L):nc) {
+      k <- k + 1L
+      var1[[k]] <- rn[[i]]
+      var2[[k]] <- cn[[j]]
+      estimate[[k]] <- round(est[i, j], digits)
+      if (!is.null(n_complete)) {
+        n_complete[[k]] <- as.integer(diagnostics_attr$n_complete[i, j])
+      }
+      if (has_ci) {
+        lwr[[k]] <- if (!is.null(ci_attr$lwr.ci) && is.finite(ci_attr$lwr.ci[i, j])) {
+          round(ci_attr$lwr.ci[i, j], ci_digits)
+        } else {
+          NA_real_
+        }
+        upr[[k]] <- if (!is.null(ci_attr$upr.ci) && is.finite(ci_attr$upr.ci[i, j])) {
+          round(ci_attr$upr.ci[i, j], ci_digits)
+        } else {
+          NA_real_
+        }
+      }
+      if (length(extra_columns)) {
+        for (nm in names(extra_columns)) {
+          spec <- extra_columns[[nm]]
+          mat <- spec$matrix
+          value <- if (is.matrix(mat)) {
+            mat[i, j]
+          } else if (is.function(spec$value)) {
+            spec$value(i, j)
+          } else {
+            NA
+          }
+          type <- spec$type %||% "numeric"
+          extra_values[[nm]][[k]] <- switch(
+            type,
+            integer = as.integer(value),
+            logical = isTRUE(value),
+            character = as.character(value),
+            .mc_round_finite(value, if ("digits" %in% names(spec)) spec$digits else digits)
+          )
+        }
+      }
+    }
+  }
+
+  df <- data.frame(
+    var1 = var1,
+    var2 = var2,
+    estimate = as.numeric(estimate),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  if (!is.null(n_complete)) df$n_complete <- as.integer(n_complete)
+  if (!is.null(lwr)) df$lwr <- as.numeric(lwr)
+  if (!is.null(upr)) df$upr <- as.numeric(upr)
+  if (length(extra_values)) {
+    for (nm in names(extra_values)) {
+      df[[nm]] <- extra_values[[nm]]
+    }
+  }
+  rownames(df) <- NULL
+
+  out <- .mc_finalize_summary_df(df, class_name = class_name)
+  attr(out, "overview") <- overview %||% .mc_summary_corr_matrix(object)
+  attr(out, "has_ci") <- has_ci
+  if (!is.null(include_p)) {
+    attr(out, "has_p") <- isTRUE(include_p)
+  }
+  attr(out, "conf.level") <- if (is.null(ci_attr)) NA_real_ else ci_attr$conf.level
+  attr(out, "digits") <- digits
+  if (!is.null(ci_digits)) attr(out, "ci_digits") <- ci_digits
+  if (!is.null(p_digits)) attr(out, "p_digits") <- p_digits
+  if (length(extra_attrs)) {
+    for (nm in names(extra_attrs)) {
+      attr(out, nm) <- extra_attrs[[nm]]
+    }
+  }
+  out
+}
+
 .mc_corr_wrapper <- function(data,
                              dots,
                              na_method,

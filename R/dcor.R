@@ -249,69 +249,31 @@ dcor <- function(data,
   )
 }
 
-.mc_dcor_inference_attr <- function(x) {
-  attr(x, "inference", exact = TRUE)
-}
-
 .mc_dcor_pairwise_summary <- function(object,
                                       digits = 4,
                                       p_digits = 4) {
   check_inherits(object, "dcor")
-  est <- as.matrix(object)
-  rn <- rownames(est); cn <- colnames(est)
-  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
-  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
 
-  inf <- .mc_dcor_inference_attr(object)
-  diag_attr <- attr(object, "diagnostics", exact = TRUE)
-
-  n_pairs <- nrow(est) * (ncol(est) - 1L) / 2L
-  var1 <- character(n_pairs)
-  var2 <- character(n_pairs)
-  estimate <- numeric(n_pairs)
-  n_complete <- if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) integer(n_pairs) else NULL
-  statistic <- if (is.list(inf)) numeric(n_pairs) else NULL
-  df_param <- if (is.list(inf)) numeric(n_pairs) else NULL
-  p_value <- if (is.list(inf)) numeric(n_pairs) else NULL
-  k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      var1[k] <- rn[i]
-      var2[k] <- cn[j]
-      estimate[k] <- round(est[i, j], digits)
-      if (!is.null(n_complete)) n_complete[k] <- as.integer(diag_attr$n_complete[i, j])
-      if (is.list(inf)) {
-        statistic[k] <- if (is.matrix(inf$statistic) && is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], digits) else NA_real_
-        df_param[k] <- if (is.matrix(inf$parameter) && is.finite(inf$parameter[i, j])) round(inf$parameter[i, j], digits) else NA_real_
-        p_value[k] <- if (is.matrix(inf$p_value) && is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
-      }
-    }
-  }
-
-  df <- data.frame(
-    var1 = var1,
-    var2 = var2,
-    estimate = as.numeric(estimate),
-    stringsAsFactors = FALSE,
-    check.names = FALSE
-  )
-  if (!is.null(n_complete)) df$n_complete <- as.integer(n_complete)
-  if (!is.null(statistic)) {
-    df$statistic <- as.numeric(statistic)
-    df$df <- as.numeric(df_param)
-    df$p_value <- as.numeric(p_value)
-  }
-  rownames(df) <- NULL
-
-  out <- .mc_finalize_summary_df(df, class_name = "summary.dcor")
-  attr(out, "overview") <- .mc_summary_corr_matrix(object)
+  inf <- .mc_inference_attr(object)
   has_p <- is.list(inf) && is.matrix(inf$p_value)
-  attr(out, "has_p") <- has_p
-  attr(out, "digits") <- digits
-  attr(out, "p_digits") <- p_digits
-  attr(out, "inference_method") <- if (isTRUE(has_p)) inf$method %||% NA_character_ else NA_character_
-  out
+  .mc_pairwise_matrix_summary(
+    object,
+    class_name = "summary.dcor",
+    digits = digits,
+    p_digits = p_digits,
+    include_ci = FALSE,
+    include_p = has_p,
+    extra_columns = if (is.list(inf)) {
+      list(
+        statistic = list(matrix = inf$statistic, digits = digits),
+        df = list(matrix = inf$parameter, digits = digits),
+        p_value = list(matrix = inf$p_value, digits = p_digits)
+      )
+    },
+    extra_attrs = list(
+      inference_method = if (isTRUE(has_p)) inf$method %||% NA_character_ else NA_character_
+    )
+  )
 }
 
 #' @rdname dcor
@@ -414,7 +376,7 @@ summary.dcor <- function(object, n = NULL, topn = NULL,
                          max_vars = NULL, width = NULL,
                          show_ci = NULL, ...) {
   check_inherits(object, "dcor")
-  inf <- .mc_dcor_inference_attr(object)
+  inf <- .mc_inference_attr(object)
   if (!is.list(inf) || !is.matrix(inf$p_value)) {
     return(.mc_summary_corr_matrix(object, topn = topn))
   }

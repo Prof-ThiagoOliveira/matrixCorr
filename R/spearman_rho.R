@@ -214,10 +214,6 @@ spearman_rho <- function(data,
   )
 }
 
-.mc_spearman_ci_attr <- function(x) {
-  attr(x, "ci", exact = TRUE)
-}
-
 .mc_spearman_pairwise_summary <- function(object,
                                           digits = 4,
                                           ci_digits = 3,
@@ -229,56 +225,14 @@ spearman_rho <- function(data,
   )
   check_inherits(object, "spearman_rho")
 
-  est <- as.matrix(object)
-  rn <- rownames(est); cn <- colnames(est)
-  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
-  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
-
-  ci <- .mc_spearman_ci_attr(object)
-  diag_attr <- attr(object, "diagnostics", exact = TRUE)
-  include_ci <- identical(show_ci, "yes") && !is.null(ci)
-
-  n_pairs <- nrow(est) * (ncol(est) - 1L) / 2L
-  var1 <- character(n_pairs)
-  var2 <- character(n_pairs)
-  estimate <- numeric(n_pairs)
-  n_complete <- if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) integer(n_pairs) else NULL
-  lwr <- if (include_ci) numeric(n_pairs) else NULL
-  upr <- if (include_ci) numeric(n_pairs) else NULL
-  k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      var1[k] <- rn[i]
-      var2[k] <- cn[j]
-      estimate[k] <- round(est[i, j], digits)
-      if (!is.null(n_complete)) n_complete[k] <- as.integer(diag_attr$n_complete[i, j])
-      if (include_ci) {
-        lwr[k] <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
-        upr[k] <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
-      }
-    }
-  }
-
-  df <- data.frame(
-    var1 = var1,
-    var2 = var2,
-    estimate = as.numeric(estimate),
-    stringsAsFactors = FALSE,
-    check.names = FALSE
+  .mc_pairwise_matrix_summary(
+    object,
+    class_name = "summary.spearman_rho",
+    digits = digits,
+    ci_digits = ci_digits,
+    show_ci = show_ci,
+    include_p = NULL
   )
-  if (!is.null(n_complete)) df$n_complete <- as.integer(n_complete)
-  if (!is.null(lwr)) df$lwr <- as.numeric(lwr)
-  if (!is.null(upr)) df$upr <- as.numeric(upr)
-  rownames(df) <- NULL
-
-  out <- .mc_finalize_summary_df(df, class_name = "summary.spearman_rho")
-  attr(out, "overview") <- .mc_summary_corr_matrix(object)
-  attr(out, "has_ci") <- include_ci
-  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
-  attr(out, "digits") <- digits
-  attr(out, "ci_digits") <- ci_digits
-  out
 }
 
 #' @rdname spearman_rho
@@ -350,7 +304,7 @@ plot.spearman_rho <-
            mid_color = "white", value_text_size = 4,
            ci_text_size = 3, show_value = TRUE, ...) {
     check_bool(show_value, arg = "show_value")
-    ci <- .mc_spearman_ci_attr(x)
+    ci <- .mc_ci_attr(x)
     if (is.null(ci) || is.null(ci$lwr.ci) || is.null(ci$upr.ci)) {
       return(.mc_plot_corr_matrix(
         x, class_name = "spearman_rho", fill_name = "Rho",
@@ -444,7 +398,7 @@ summary.spearman_rho <- function(object,
     arg = "show_ci",
     default = .mc_display_option("summary_show_ci", "yes")
   )
-  if (is.null(.mc_spearman_ci_attr(object))) {
+  if (is.null(.mc_ci_attr(object))) {
     return(.mc_summary_corr_matrix(object, topn = topn))
   }
   .mc_spearman_pairwise_summary(

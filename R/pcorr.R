@@ -566,64 +566,24 @@ pcorr <- function(data, method = c("sample","oas","ridge","glasso"),
   )
   check_inherits(object, "partial_corr")
 
-  est <- as.matrix(object$pcor)
-  rn <- rownames(est)
-  cn <- colnames(est)
-  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
-  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
-
   ci <- object$ci %||% attr(object, "ci", exact = TRUE)
   diag_attr <- object$diagnostics %||% attr(object, "diagnostics", exact = TRUE)
   p_value <- object$p_value %||% NULL
-  include_ci <- identical(show_ci, "yes") && !is.null(ci)
-
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
-  k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      rec <- list(
-        var1 = rn[i],
-        var2 = cn[j],
-        estimate = round(est[i, j], digits)
-      )
-      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
-        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
-      }
-      if (!is.null(p_value) && is.matrix(p_value) && identical(dim(p_value), dim(est))) {
-        rec$p_value <- p_value[i, j]
-      }
-      if (include_ci) {
-        rec$lwr <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) {
-          round(ci$lwr.ci[i, j], ci_digits)
-        } else {
-          NA_real_
-        }
-        rec$upr <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) {
-          round(ci$upr.ci[i, j], ci_digits)
-        } else {
-          NA_real_
-        }
-      }
-      rows[[k]] <- rec
-    }
-  }
-
-  df <- do.call(rbind.data.frame, rows)
-  rownames(df) <- NULL
-  if ("estimate" %in% names(df)) df$estimate <- as.numeric(df$estimate)
-  if ("lwr" %in% names(df)) df$lwr <- as.numeric(df$lwr)
-  if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
-  if ("p_value" %in% names(df)) df$p_value <- as.numeric(df$p_value)
-  if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
-
-  out <- .mc_finalize_summary_df(df, class_name = "summary.partial_corr")
-  attr(out, "overview") <- .mc_summary_corr_matrix(object$pcor)
-  attr(out, "has_ci") <- include_ci
-  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
-  attr(out, "digits") <- digits
-  attr(out, "ci_digits") <- ci_digits
-  out
+  .mc_pairwise_matrix_summary(
+    object$pcor,
+    class_name = "summary.partial_corr",
+    digits = digits,
+    ci_digits = ci_digits,
+    show_ci = show_ci,
+    ci_attr = ci,
+    diagnostics_attr = diag_attr,
+    include_p = NULL,
+    extra_columns = if (!is.null(p_value) && is.matrix(p_value) &&
+      identical(dim(p_value), dim(as.matrix(object$pcor)))) {
+      list(p_value = list(matrix = p_value, digits = NULL))
+    },
+    overview = .mc_summary_corr_matrix(object$pcor)
+  )
 }
 
 .mc_partial_corr_fisher_ci <- function(pcor,

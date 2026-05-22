@@ -754,68 +754,51 @@ plot.skipped_corr <- function(x,
   show_p <- match.arg(show_p)
   check_inherits(object, "skipped_corr")
 
-  est <- as.matrix(object)
-  rn <- rownames(est); cn <- colnames(est)
-  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
-  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
-
   ci <- .mc_skipcor_ci_attr(object)
   inf <- .mc_skipcor_inference_attr(object)
   diag_attr <- attr(object, "diagnostics", exact = TRUE)
 
-  include_ci <- identical(show_ci, "yes") && !is.null(ci)
   include_p <- switch(show_p, auto = !is.null(inf) && !is.null(inf$p_value), yes = TRUE, no = FALSE)
 
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
-  k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      rec <- list(
-        var1 = rn[i],
-        var2 = cn[j],
-        estimate = round(est[i, j], digits)
-      )
-      if (include_ci) {
-        rec$lwr <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
-        rec$upr <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
-      }
-      if (include_p) {
-        rec$p_value <- if (!is.null(inf$p_value) && is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
-        if (!is.null(inf$p_value_adjusted)) {
-          rec$p_value_adjusted <- if (is.finite(inf$p_value_adjusted[i, j])) round(inf$p_value_adjusted[i, j], p_digits) else NA_real_
-        }
-        if (!is.null(inf$reject)) rec$reject <- isTRUE(inf$reject[i, j])
-      }
-      if (is.list(diag_attr)) {
-        if (is.matrix(diag_attr$skipped_n)) rec$skipped_n <- as.integer(diag_attr$skipped_n[i, j])
-        if (is.matrix(diag_attr$skipped_prop)) rec$skipped_prop <- round(diag_attr$skipped_prop[i, j], p_digits)
-        if (is.matrix(diag_attr$n_complete)) rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
-      }
-      rows[[k]] <- rec
+  base <- .mc_summary_corr_matrix(object)
+  extra_columns <- list()
+  if (isTRUE(include_p)) {
+    extra_columns$p_value <- list(matrix = if (is.null(inf)) NULL else inf$p_value, digits = p_digits)
+    if (!is.null(inf$p_value_adjusted)) {
+      extra_columns$p_value_adjusted <- list(matrix = inf$p_value_adjusted, digits = p_digits)
+    }
+    if (!is.null(inf$reject)) {
+      extra_columns$reject <- list(matrix = inf$reject, type = "logical")
+    }
+  }
+  if (is.list(diag_attr)) {
+    if (is.matrix(diag_attr$skipped_n)) {
+      extra_columns$skipped_n <- list(matrix = diag_attr$skipped_n, type = "integer")
+    }
+    if (is.matrix(diag_attr$skipped_prop)) {
+      extra_columns$skipped_prop <- list(matrix = diag_attr$skipped_prop, digits = p_digits)
     }
   }
 
-  df <- do.call(rbind.data.frame, rows)
-  rownames(df) <- NULL
-  num_cols <- intersect(c("estimate", "lwr", "upr", "p_value", "p_value_adjusted", "skipped_prop"), names(df))
-  int_cols <- intersect(c("skipped_n", "n_complete"), names(df))
-  for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
-  for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
-
-  base <- .mc_summary_corr_matrix(object)
-  out <- .mc_finalize_summary_df(df, class_name = "summary.skipped_corr")
-  attr(out, "overview") <- base
-  attr(out, "has_ci") <- include_ci
-  attr(out, "has_p") <- include_p
-  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
-  attr(out, "digits") <- digits
-  attr(out, "ci_digits") <- ci_digits
-  attr(out, "p_digits") <- p_digits
-  attr(out, "inference_method") <- if (is.null(inf)) NA_character_ else inf$method
-  attr(out, "p_adjust") <- if (is.null(inf) || is.null(inf$p_adjust)) "none" else inf$p_adjust
-  attr(out, "critical_p_value") <- if (is.null(inf)) NA_real_ else inf$critical_p_value %||% NA_real_
-  out
+  .mc_pairwise_matrix_summary(
+    object,
+    class_name = "summary.skipped_corr",
+    digits = digits,
+    ci_digits = ci_digits,
+    p_digits = p_digits,
+    show_ci = show_ci,
+    ci_attr = ci,
+    inference_attr = inf,
+    diagnostics_attr = diag_attr,
+    include_p = include_p,
+    extra_columns = extra_columns,
+    extra_attrs = list(
+      inference_method = if (is.null(inf)) NA_character_ else inf$method,
+      p_adjust = if (is.null(inf) || is.null(inf$p_adjust)) "none" else inf$p_adjust,
+      critical_p_value = if (is.null(inf)) NA_real_ else inf$critical_p_value %||% NA_real_
+    ),
+    overview = base
+  )
 }
 
 #' @rdname skipped_corr

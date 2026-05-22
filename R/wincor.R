@@ -347,14 +347,6 @@ wincor <- function(data,
   )
 }
 
-.mc_wincor_ci_attr <- function(x) {
-  attr(x, "ci", exact = TRUE)
-}
-
-.mc_wincor_inference_attr <- function(x) {
-  attr(x, "inference", exact = TRUE)
-}
-
 .mc_wincor_pairwise_payload <- function(X,
                                         est,
                                         tr = 0.2,
@@ -464,60 +456,30 @@ wincor <- function(data,
   )
   check_inherits(object, "wincor")
 
-  est <- as.matrix(object)
-  rn <- rownames(est); cn <- colnames(est)
-  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
-  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
-
-  ci <- .mc_wincor_ci_attr(object)
-  inf <- .mc_wincor_inference_attr(object)
-  diag_attr <- attr(object, "diagnostics", exact = TRUE)
-  include_ci <- identical(show_ci, "yes") && !is.null(ci)
+  ci <- .mc_ci_attr(object)
+  inf <- .mc_inference_attr(object)
   include_p <- !is.null(inf) && !is.null(inf$p_value)
-
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
-  k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      rec <- list(
-        var1 = rn[i],
-        var2 = cn[j],
-        estimate = round(est[i, j], digits)
+  .mc_pairwise_matrix_summary(
+    object,
+    class_name = "summary.wincor",
+    digits = digits,
+    ci_digits = ci_digits,
+    p_digits = p_digits,
+    show_ci = show_ci,
+    ci_attr = ci,
+    inference_attr = inf,
+    include_p = include_p,
+    extra_columns = if (isTRUE(include_p)) {
+      list(
+        statistic = list(matrix = inf$statistic, digits = digits),
+        p_value = list(matrix = inf$p_value, digits = p_digits)
       )
-      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
-        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
-      }
-      if (include_ci) {
-        rec$lwr <- if (is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
-        rec$upr <- if (is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
-      }
-      if (include_p) {
-        rec$statistic <- if (is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], digits) else NA_real_
-        rec$p_value <- if (is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], p_digits) else NA_real_
-      }
-      rows[[k]] <- rec
-    }
-  }
-
-  df <- do.call(rbind.data.frame, rows)
-  rownames(df) <- NULL
-  num_cols <- intersect(c("estimate", "lwr", "upr", "statistic", "p_value"), names(df))
-  int_cols <- intersect(c("n_complete"), names(df))
-  for (nm in num_cols) df[[nm]] <- as.numeric(df[[nm]])
-  for (nm in int_cols) df[[nm]] <- as.integer(df[[nm]])
-
-  out <- .mc_finalize_summary_df(df, class_name = "summary.wincor")
-  attr(out, "overview") <- .mc_summary_corr_matrix(object)
-  attr(out, "has_ci") <- include_ci
-  attr(out, "has_p") <- include_p
-  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
-  attr(out, "digits") <- digits
-  attr(out, "ci_digits") <- ci_digits
-  attr(out, "p_digits") <- p_digits
-  attr(out, "inference_method") <- if (is.null(inf)) NA_character_ else inf$method
-  attr(out, "n_boot") <- if (is.null(ci)) NA_integer_ else attr(object, "n_boot", exact = TRUE) %||% NA_integer_
-  out
+    },
+    extra_attrs = list(
+      inference_method = if (is.null(inf)) NA_character_ else inf$method,
+      n_boot = if (is.null(ci)) NA_integer_ else attr(object, "n_boot", exact = TRUE) %||% NA_integer_
+    )
+  )
 }
 
 #' @rdname wincor
@@ -576,7 +538,7 @@ summary.wincor <- function(object, n = NULL, topn = NULL,
                            p_digits = 4,
                            show_ci = NULL, ...) {
   check_inherits(object, "wincor")
-  if (is.null(.mc_wincor_ci_attr(object)) && is.null(.mc_wincor_inference_attr(object))) {
+  if (is.null(.mc_ci_attr(object)) && is.null(.mc_inference_attr(object))) {
     return(.mc_summary_corr_matrix(object, topn = topn))
   }
   .mc_wincor_pairwise_summary(

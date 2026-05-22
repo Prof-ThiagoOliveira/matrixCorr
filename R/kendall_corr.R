@@ -330,10 +330,6 @@ kendall_tau <- function(data,
   )
 }
 
-.mc_kendall_ci_attr <- function(x) {
-  attr(x, "ci", exact = TRUE)
-}
-
 .mc_kendall_pairwise_summary <- function(object,
                                          digits = 4,
                                          ci_digits = 3,
@@ -345,51 +341,19 @@ kendall_tau <- function(data,
   )
   check_inherits(object, "kendall_matrix")
 
-  est <- as.matrix(object)
-  rn <- rownames(est); cn <- colnames(est)
-  if (is.null(rn)) rn <- as.character(seq_len(nrow(est)))
-  if (is.null(cn)) cn <- as.character(seq_len(ncol(est)))
-
-  ci <- .mc_kendall_ci_attr(object)
-  diag_attr <- attr(object, "diagnostics", exact = TRUE)
-  include_ci <- identical(show_ci, "yes") && !is.null(ci)
-
-  rows <- vector("list", nrow(est) * (ncol(est) - 1L) / 2L)
-  k <- 0L
-  for (i in seq_len(nrow(est) - 1L)) {
-    for (j in (i + 1L):ncol(est)) {
-      k <- k + 1L
-      rec <- list(
-        var1 = rn[i],
-        var2 = cn[j],
-        estimate = round(est[i, j], digits)
-      )
-      if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
-        rec$n_complete <- as.integer(diag_attr$n_complete[i, j])
-      }
-      if (include_ci) {
-        rec$lwr <- if (!is.null(ci$lwr.ci) && is.finite(ci$lwr.ci[i, j])) round(ci$lwr.ci[i, j], ci_digits) else NA_real_
-        rec$upr <- if (!is.null(ci$upr.ci) && is.finite(ci$upr.ci[i, j])) round(ci$upr.ci[i, j], ci_digits) else NA_real_
-      }
-      rows[[k]] <- rec
-    }
-  }
-
-  df <- do.call(rbind.data.frame, rows)
-  rownames(df) <- NULL
-  if ("estimate" %in% names(df)) df$estimate <- as.numeric(df$estimate)
-  if ("lwr" %in% names(df)) df$lwr <- as.numeric(df$lwr)
-  if ("upr" %in% names(df)) df$upr <- as.numeric(df$upr)
-  if ("n_complete" %in% names(df)) df$n_complete <- as.integer(df$n_complete)
-
-  out <- .mc_finalize_summary_df(df, class_name = "summary.kendall_matrix")
-  attr(out, "overview") <- .mc_summary_corr_matrix(object)
-  attr(out, "has_ci") <- include_ci
-  attr(out, "conf.level") <- if (is.null(ci)) NA_real_ else ci$conf.level
-  attr(out, "ci.method") <- if (is.null(ci)) NA_character_ else ci$ci.method
-  attr(out, "digits") <- digits
-  attr(out, "ci_digits") <- ci_digits
-  out
+  ci <- .mc_ci_attr(object)
+  .mc_pairwise_matrix_summary(
+    object,
+    class_name = "summary.kendall_matrix",
+    digits = digits,
+    ci_digits = ci_digits,
+    show_ci = show_ci,
+    ci_attr = ci,
+    include_p = NULL,
+    extra_attrs = list(
+      ci.method = if (is.null(ci)) NA_character_ else ci$ci.method
+    )
+  )
 }
 
 #' @rdname kendall_tau
@@ -455,7 +419,7 @@ plot.kendall_matrix <- function(x, title = "Kendall's Tau correlation heatmap",
                                 mid_color = "white", value_text_size = 4,
                                 ci_text_size = 3, show_value = TRUE, ...) {
   check_bool(show_value, arg = "show_value")
-  ci <- .mc_kendall_ci_attr(x)
+  ci <- .mc_ci_attr(x)
   if (is.null(ci) || is.null(ci$lwr.ci) || is.null(ci$upr.ci)) {
     return(.mc_plot_corr_matrix(
       x, class_name = "kendall_matrix", fill_name = "Tau",
@@ -549,7 +513,7 @@ summary.kendall_matrix <- function(object,
     arg = "show_ci",
     default = .mc_display_option("summary_show_ci", "yes")
   )
-  if (is.null(.mc_kendall_ci_attr(object))) {
+  if (is.null(.mc_ci_attr(object))) {
     return(.mc_summary_corr_matrix(object, topn = topn))
   }
   .mc_kendall_pairwise_summary(
