@@ -9,6 +9,7 @@
 ^codecov\.yml$
 ^CRAN-SUBMISSION$
 ^CONTRIBUTING\.md$
+^LICENSE\.md$
 ^codemeta\.json$
 ^\.local-lib$
 ^\.tmp_build$
