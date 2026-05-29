@@ -260,6 +260,7 @@ guidelines and `cran-comments.md`/`DESCRIPTION` for package metadata.
 
 ## License
 
-MIT [Thiago de Paula Oliveira](https://orcid.org/0000-0002-4555-2584)
+GPL (>= 3) [Thiago de Paula Oliveira](https://orcid.org/0000-0002-4555-2584)
 
-See inst/LICENSE for the full MIT license text.
+This is a copyleft license: modified versions distributed to others must be
+distributed under the same GPL terms.

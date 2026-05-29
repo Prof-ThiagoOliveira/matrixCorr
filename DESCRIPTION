@@ -36,7 +36,7 @@ Description: Compute correlation, association, agreement, and reliability
     <doi:10.1080/0266476032000148821>; Hayes and Krippendorff (2007)
     <doi:10.1080/19312450709336664>; weighted repeated-measures correlation by
     Kondo et al. (2025) <doi:10.1002/sim.70046>.
-License: MIT + file LICENSE
+License: GPL (>= 3)
 Encoding: UTF-8
 Depends:
     R (>= 4.4.0)

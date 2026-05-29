@@ -38,4 +38,4 @@ Please keep pull requests focused; open a new issue for any large redesigns.
 ## 5. License
 
 By contributing, you agree that your code will be released under the
-package's MIT license.
+package's GPL (>= 3) license.
