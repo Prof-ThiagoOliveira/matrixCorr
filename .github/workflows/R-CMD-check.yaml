@@ -2,7 +2,7 @@
 # Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, v2-branch]
   pull_request:
 
 name: R-CMD-check.yaml
@@ -21,8 +21,13 @@ jobs:
         config:
           - {os: macos-latest,   r: 'release'}
           - {os: windows-latest, r: 'release'}
+          - {os: windows-latest, r: 'devel'}
+          - {os: ubuntu-latest,  r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest,   r: 'release'}
           - {os: ubuntu-latest,   r: 'oldrel-1'}
+          - {os: ubuntu-latest,   r: 'oldrel-2'}
+          - {os: ubuntu-latest,   r: 'oldrel-3'}
+          - {os: ubuntu-latest,   r: 'oldrel-4'}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -31,41 +36,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: ./.github/actions/setup-r-check
         with:
-          pandoc-version: '3.1.11'
-
-      - uses: r-lib/actions/setup-r@v2
-        with:
+          install-pandoc: "true"
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
-          use-public-rspm: true
-
-      - name: Remove stale pak lockfile
-        run: rm -f .github/pkg.lock
-        shell: bash
-
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          cache-version: 3
           extra-packages: any::rcmdcheck
           needs: check
-
-      - name: Reinstall rlang to fix SETLENGTH issue
-        run: |
-          install.packages("rlang", type = "source", repos = "https://cloud.r-project.org")
-        shell: Rscript {0}
-
-      - name: Refresh packages built under older R
-        run: >
-          Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org"));
-          ip <- installed.packages();
-          cur <- paste0(R.version$major, ".", strsplit(R.version$minor, ".", fixed = TRUE)[[1]][1]);
-          built <- ip[, "Built"];
-          priority <- ip[, "Priority"];
-          pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)];
-          if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))'
-        shell: bash
+          refresh-built-packages: "true"
 
       - name: Run REML reproducer
         if: ${{ startsWith(matrix.config.os, 'ubuntu') }}

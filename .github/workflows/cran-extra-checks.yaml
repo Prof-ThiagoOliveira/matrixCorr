@@ -1,0 +1,94 @@
+name: cran-extra-checks
+
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  as-cran-tarball:
+    runs-on: ubuntu-latest
+    name: R-devel tarball --as-cran
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      _R_CHECK_CRAN_INCOMING_REMOTE_: false
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-r-check
+        with:
+          install-pandoc: "true"
+          r-version: devel
+          http-user-agent: release
+          extra-packages: any::rcmdcheck
+          needs: check
+          refresh-built-packages: "true"
+
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghostscript qpdf
+        shell: bash
+
+      - name: Build source tarball
+        run: R CMD build . --no-manual --compact-vignettes=gs+qpdf
+        shell: bash
+
+      - name: Check source tarball as CRAN
+        run: R CMD check --as-cran --no-manual matrixCorr_*.tar.gz
+        shell: bash
+
+      - name: Upload check results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: as-cran-check-results
+          path: |
+            *.Rcheck
+            *.tar.gz
+
+  valgrind:
+    runs-on: ubuntu-latest
+    name: R-release valgrind check
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      R_VALGRIND_OPTS: --leak-check=full --track-origins=yes --error-exitcode=1
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-r-check
+        with:
+          install-pandoc: "true"
+          r-version: release
+          extra-packages: any::rcmdcheck
+          needs: check
+          reinstall-rlang: "false"
+
+      - name: Install valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+        shell: bash
+
+      - name: Build source tarball
+        run: R CMD build . --no-manual
+        shell: bash
+
+      - name: Check source tarball under valgrind
+        run: R CMD check --use-valgrind --no-manual matrixCorr_*.tar.gz
+        shell: bash
+
+      - name: Upload valgrind check results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: valgrind-check-results
+          path: |
+            *.Rcheck
+            *.tar.gz

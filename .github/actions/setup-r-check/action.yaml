@@ -1,0 +1,82 @@
+name: Setup R check environment
+description: Setup R, install package check dependencies, and apply repository CI maintenance steps.
+
+inputs:
+  r-version:
+    description: R version passed to r-lib/actions/setup-r.
+    required: false
+    default: release
+  http-user-agent:
+    description: Optional HTTP user agent passed to r-lib/actions/setup-r.
+    required: false
+    default: ""
+  install-pandoc:
+    description: Whether to install pandoc before setting up R.
+    required: false
+    default: "false"
+  pandoc-version:
+    description: Pandoc version passed to r-lib/actions/setup-pandoc.
+    required: false
+    default: "3.1.11"
+  cache-version:
+    description: Cache version passed to r-lib/actions/setup-r-dependencies.
+    required: false
+    default: "3"
+  extra-packages:
+    description: Extra packages passed to r-lib/actions/setup-r-dependencies.
+    required: false
+    default: any::rcmdcheck
+  needs:
+    description: Dependency type passed to r-lib/actions/setup-r-dependencies.
+    required: false
+    default: check
+  reinstall-rlang:
+    description: Whether to reinstall rlang from source after dependency setup.
+    required: false
+    default: "true"
+  refresh-built-packages:
+    description: Whether to reinstall packages built under a different R minor version.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: r-lib/actions/setup-pandoc@v2
+      if: ${{ inputs.install-pandoc == 'true' }}
+      with:
+        pandoc-version: ${{ inputs.pandoc-version }}
+
+    - uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ inputs.r-version }}
+        http-user-agent: ${{ inputs.http-user-agent }}
+        use-public-rspm: true
+
+    - name: Remove stale pak lockfile
+      run: rm -f .github/pkg.lock
+      shell: bash
+
+    - uses: r-lib/actions/setup-r-dependencies@v2
+      with:
+        cache-version: ${{ inputs.cache-version }}
+        extra-packages: ${{ inputs.extra-packages }}
+        needs: ${{ inputs.needs }}
+
+    - name: Reinstall rlang to fix SETLENGTH issue
+      if: ${{ inputs.reinstall-rlang == 'true' }}
+      run: |
+        install.packages("rlang", type = "source", repos = "https://cloud.r-project.org")
+      shell: Rscript {0}
+
+    - name: Refresh packages built under older R
+      if: ${{ inputs.refresh-built-packages == 'true' }}
+      run: >
+        Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org"));
+        ip <- installed.packages();
+        cur <- paste0(R.version$major, ".", strsplit(R.version$minor, ".", fixed = TRUE)[[1]][1]);
+        built <- ip[, "Built"];
+        priority <- ip[, "Priority"];
+        pkgs <- rownames(ip)[!is.na(built) & !startsWith(built, cur) & is.na(priority)];
+        if (length(pkgs)) install.packages(pkgs, Ncpus = max(1L, parallel::detectCores(logical = FALSE)))'
+      shell: bash
