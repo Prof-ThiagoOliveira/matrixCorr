@@ -38,6 +38,8 @@ Description: Compute correlation, association, agreement, and reliability
     Kondo et al. (2025) <doi:10.1002/sim.70046>.
 License: MIT + file LICENSE
 Encoding: UTF-8
+Depends:
+    R (>= 4.4.0)
 LinkingTo:
     Rcpp,
     RcppArmadillo
