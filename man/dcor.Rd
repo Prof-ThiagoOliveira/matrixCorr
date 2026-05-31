@@ -208,6 +208,7 @@ variance yield \code{NA} in their row/column. Typical per-pair cost uses
 the \eqn{O(n \log n)} fast path, with \eqn{O(n^2)} fallback when needed.
 }
 \examples{
+\donttest{
 ## Independent variables -> dCor ~ 0
 set.seed(1)
 X <- cbind(a = rnorm(200), b = rnorm(200))
@@ -245,6 +246,7 @@ tidy(D4)
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
   view_corr_shiny(D)
+}
 }
 
 }

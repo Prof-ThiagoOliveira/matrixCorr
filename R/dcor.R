@@ -115,6 +115,7 @@
 #' (energy statistics). R package version 1.7-12.
 #'
 #' @examples
+#' \donttest{
 #' ## Independent variables -> dCor ~ 0
 #' set.seed(1)
 #' X <- cbind(a = rnorm(200), b = rnorm(200))
@@ -152,6 +153,7 @@
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 #'   view_corr_shiny(D)
+#' }
 #' }
 #'
 #' @author Thiago de paula Oliveira
