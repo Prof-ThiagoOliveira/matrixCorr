@@ -39,9 +39,10 @@ Gwet’s AC1/AC2, multi-rater kappa for nominal panel agreement,
 Krippendorff’s alpha for panel-level reliability, Bland-Altman
 (two-method and repeated-measures), the coefficient of individual
 agreement for replicated and repeated-measures designs, Lin’s
-concordance correlation coefficient (including repeated-measures
-LMM/REML extensions and Poisson GLMM count-data CCC), and intraclass
-correlation for both wide and repeated-measures designs.
+concordance correlation coefficient (including MCD-based robust
+concordance, repeated-measures LMM/REML extensions, and Poisson GLMM
+count-data CCC), and intraclass correlation for both wide and
+repeated-measures designs.
 
 ## Features
 
@@ -62,7 +63,7 @@ correlation for both wide and repeated-measures designs.
 | Agreement: Bland-Altman | Two-method or pairwise wide-input `ba()`, repeated-measures `ba_rm()` |
 | Agreement: individual agreement | Replicated long-format `cia()`, repeated-measures `cia_rm()` |
 | Agreement: probability of agreement | `prob_agree()` |
-| Agreement: concordance | Pairwise Lin’s CCC `ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, Poisson GLMM count-data CCC `ccc_glmm()`, non-parametric `ccc_rm_ustat()` |
+| Agreement: concordance | Pairwise Lin’s CCC `ccc()`, MCD-based robust CCC `robust_ccc()`, repeated-measures LMM/REML `ccc_rm_reml()`, Poisson GLMM count-data CCC `ccc_glmm()`, non-parametric `ccc_rm_ustat()` |
 | Agreement: intraclass correlation | Wide-data `icc()` with pairwise and overall scope, repeated-measures REML `icc_rm_reml()` |
 | Interactive viewers | Matrix-style Shiny viewers, including the repeated-measures correlation viewer `view_rmcorr_shiny()` |
 
@@ -172,6 +173,37 @@ estimates, and `p_value = TRUE` for permutation-based independence
 tests.
 
 ### Agreement and repeated-measures workflow
+
+For wide data with discordant outliers, `robust_ccc()` replaces the
+classical means, variances, and covariance in Lin’s coefficient with
+joint, reweighted minimum covariance determinant estimates. Set `seed`
+for reproducible FastMCD searches; percentile bootstrap intervals are
+available with `ci = TRUE`.
+
+``` r
+set.seed(42)
+reference <- rnorm(40)
+method <- reference + rnorm(40, sd = 0.2)
+method[1] <- -8
+reference[1] <- 9
+
+wide_agreement <- data.frame(reference, method)
+
+fit_ccc <- ccc(wide_agreement)
+fit_robust_ccc <- robust_ccc(wide_agreement, seed = 42)
+
+c(
+  classical = estimate(fit_ccc)[1, 2],
+  robust = estimate(fit_robust_ccc)[1, 2]
+)
+#>  classical     robust
+#> -0.1085298  0.9892595
+```
+
+Use `robust_ccc()` when an approximately elliptical, unimodal core is a
+reasonable model and resistance to contamination is required. It is not
+a distribution-free replacement for `ccc()`; `alpha` controls the
+robustness and efficiency trade-off.
 
 ``` r
 set.seed(6)

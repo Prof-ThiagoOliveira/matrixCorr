@@ -24,10 +24,11 @@ on the measurement scale itself. Reliability describes the proportion of
 variation attributable to stable differences among subjects rather than to
 measurement error or method disagreement.
 
-This vignette focuses on `ccc()` for wide data and uses related agreement and
-reliability functions as context:
+This vignette focuses on classical and robust CCC for wide data and uses
+related agreement and reliability functions as context:
 
 - `ccc()`
+- `robust_ccc()`
 - `ba()`
 - `icc()`
 - `ccc_rm_reml()` and `ccc_rm_ustat()`
@@ -41,6 +42,12 @@ single number. In `matrixCorr`, `ccc()` computes Lin's pairwise CCC for numeric
 wide data and optionally returns large-sample confidence intervals. No formal
 hypothesis test is implemented; inference is based on the estimate and its
 confidence interval.
+
+When discordant outliers can dominate the ordinary moments, `robust_ccc()`
+replaces the means, variances, and covariance in Lin's coefficient with joint,
+reweighted minimum covariance determinant (MCD) estimates. The estimator is
+intended for data with an approximately elliptically symmetric, unimodal core;
+it is not distribution free.
 
 Bland-Altman analysis separates the agreement question into estimated bias and
 limits of agreement.
@@ -63,6 +70,29 @@ confint(fit_ccc)
 ci(fit_ccc)
 tidy(fit_ccc)
 ```
+
+The classical and robust estimators can be compared directly because both use
+the standard matrixCorr result interface:
+
+```{r}
+contaminated <- data.frame(m1 = m1, m2 = m2)
+contaminated[1, ] <- c(145, 65)
+
+fit_ccc_contaminated <- ccc(contaminated)
+fit_robust_ccc <- robust_ccc(contaminated, seed = 40)
+
+c(
+  classical = estimate(fit_ccc_contaminated)[1, 2],
+  robust = estimate(fit_robust_ccc)[1, 2]
+)
+```
+
+In `robust_ccc()`, lower `alpha` values retain a smaller MCD subset and provide
+greater resistance to contamination. The default `alpha = 0.75` balances
+robustness and efficiency. Set `seed` when reproducibility matters because the
+FastMCD search is stochastic. Optional confidence intervals use a paired
+percentile bootstrap and can be computationally expensive because the MCD fit
+is repeated for every pair and resample.
 
 The two summaries are complementary rather than redundant. `ccc()` gives a
 single concordance coefficient, while `ba()` makes the scale of disagreement
@@ -199,6 +229,13 @@ scientific question, data structure, and implemented estimator.
 CCC values and, when `ci = TRUE`, returns Lin delta-method/Fisher-z confidence
 intervals. It does not report a p-value or test decision.
 
+`robust_ccc()` is the robust wide-data counterpart for contamination-prone
+measurements. It retains Lin's coefficient form but substitutes pairwise joint
+reweighted MCD location and scatter estimates. It supports optional paired
+percentile-bootstrap confidence intervals, but does not implement a formal
+hypothesis test. Sparse and edge-list outputs use the same absolute-threshold
+semantics as other matrixCorr estimators.
+
 For repeated-measures data, the package provides two CCC routes. `ccc_rm_reml()`
 fits pairwise mixed models by REML and converts the fitted variance components
 and fixed-effect bias term into repeated-measures CCC estimates. `ccc_rm_ustat()`
@@ -260,6 +297,7 @@ be interpreted when the function explicitly implements and reports one.
 agreement_summary <- data.frame(
   Function = c(
     "`ccc()`",
+    "`robust_ccc()`",
     "`ccc_rm_reml()`",
     "`ccc_rm_ustat()`",
     "`icc()`",
@@ -269,6 +307,7 @@ agreement_summary <- data.frame(
   ),
   `Index family` = c(
     "Lin CCC",
+    "MCD-based robust Lin CCC",
     "Repeated-measures CCC",
     "Repeated-measures CCC",
     "Classical ICC",
@@ -278,6 +317,7 @@ agreement_summary <- data.frame(
   ),
   `Target question` = c(
     "Pairwise concordance combining precision and accuracy",
+    "Pairwise concordance resistant to contamination in an elliptical, unimodal core",
     "Pairwise repeated-measures concordance from fitted variance components",
     "Pairwise repeated-measures concordance from U-statistic distances",
     "Reliability or agreement under the selected ICC model, type, and unit",
@@ -286,6 +326,7 @@ agreement_summary <- data.frame(
     "Individual agreement/interchangeability across matched repeated conditions"
   ),
   `Data/design supported` = c(
+    "Numeric wide data; rows are paired observational units",
     "Numeric wide data; rows are paired observational units",
     "Long repeated-measures data; subject plus optional method/time structure",
     "Long repeated-measures data; balanced method/time coverage per pair",
@@ -296,6 +337,7 @@ agreement_summary <- data.frame(
   ),
   `Estimation approach` = c(
     "Moment CCC with Lin delta-method/Fisher-z CI when requested",
+    "Lin CCC form with joint reweighted MCD location and scatter; paired percentile-bootstrap CI when requested",
     "REML mixed-model variance components and fixed-effect bias term",
     "Nonparametric U-statistic estimator with Fisher-z CI when requested",
     "Classical ANOVA mean-square formulas",
@@ -305,6 +347,7 @@ agreement_summary <- data.frame(
   ),
   `Inference reported` = c(
     "Estimate; optional confidence interval",
+    "Estimate; optional paired percentile-bootstrap confidence interval",
     "Estimate; optional confidence interval; variance-component diagnostics",
     "Estimate; optional confidence interval",
     "Pairwise: estimate and optional CI. Overall: coefficient table with F statistic, df, p-value, and optional CI",
@@ -313,6 +356,7 @@ agreement_summary <- data.frame(
     "Estimate; optional confidence interval; homogeneity F statistic and p-value"
   ),
   `Formal hypothesis test implemented? Yes/No/Requires verification` = c(
+    "No",
     "No",
     "No for the CCC parameter; variance-component selection tests are not CCC tests",
     "No",
@@ -333,6 +377,9 @@ knitr::kable(agreement_summary, escape = FALSE)
 In practice these methods answer different questions.
 
 - Use `ccc()` when one concordance coefficient per pair is the main target.
+- Use `robust_ccc()` when wide-data concordance is the target, discordant
+  outliers are a concern, and an approximately elliptical, unimodal core is a
+  defensible assumption.
 - Use `ccc_rm_ustat()` or `ccc_rm_reml()` when the concordance target is
   repeated-measures CCC rather than simple paired wide-data CCC.
 - Use `ba()` when the size and direction of disagreement should be visible on
@@ -359,6 +406,12 @@ assessing agreement. *Journal of Biopharmaceutical Statistics*, 17(4), 721-738.
 
 Barnhart HX, Kosinski AS, Haber M. (2007). Assessing individual agreement.
 *Journal of Biopharmaceutical Statistics*, 17(4), 697-719.
+
+Bulut H, Zobu M, Sağlam V. (2026). A high-breakdown MCD-based robust
+concordance correlation coefficient. *Mathematics*, 14(1), 196.
+
+Hubert M, Debruyne M, Rousseeuw PJ. (2018). Minimum covariance determinant and
+extensions. *WIREs Computational Statistics*, 10, e1421.
 
 Carrasco JL, Jover L. (2003). Estimating the concordance correlation
 coefficient: a new approach. *Computational Statistics & Data Analysis*, 47(4),
