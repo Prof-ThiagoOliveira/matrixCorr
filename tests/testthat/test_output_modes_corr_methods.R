@@ -42,6 +42,7 @@ test_that("output modes are consistent across dense correlation methods", {
     dcor = function(...) dcor(X, na_method = "error", p_value = FALSE, ...),
     pbcor = function(...) pbcor(X, na_method = "error", ci = FALSE, p_value = FALSE, ...),
     wincor = function(...) wincor(X, na_method = "error", ci = FALSE, p_value = FALSE, ...),
+    robust_ccc = function(...) robust_ccc(X, na_method = "error", seed = 42L, ...),
     skipped = function(...) skipped_corr(
       X,
       method = "pearson",

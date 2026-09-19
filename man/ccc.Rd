@@ -260,6 +260,8 @@ between two methods of clinical measurement. The Lancet 327: 307-310.
 \seealso{
 \code{\link{print.ccc}}, \code{\link{plot.ccc}},
 \code{\link{ba}}, \code{\link{prob_agree}}, and \code{\link{cia}}.
+See \code{\link{robust_ccc}} for MCD based robust concordance using joint
+reweighted location and scatter estimates.
 \code{ccc()} answers the question "How well do two paired measurements
 agree overall, accounting for both correlation and mean/scale bias?".
 In contrast, \code{cia()} answers "Are two or more methods

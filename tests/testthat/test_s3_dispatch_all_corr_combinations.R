@@ -185,6 +185,15 @@ test_that("S3 dispatch works across all core correlation estimators and output c
         )
       )
     },
+    robust_ccc = function(output, infer) {
+      do.call(
+        robust_ccc,
+        c(
+          list(data = X, ci = infer, n_boot = 8, seed = 42),
+          case_output_args(output)
+        )
+      )
+    },
     skipped_corr = function(output, infer) {
       do.call(
         skipped_corr,
@@ -216,7 +225,11 @@ test_that("S3 dispatch works across all core correlation estimators and output c
           expected_summary_class = "summary.corr_result",
           expected_output = output,
           expected_has_ci = infer,
-          expected_has_p = if (identical(nm, "skipped_corr")) NULL else infer
+          expected_has_p = if (identical(nm, "skipped_corr")) {
+            NULL
+          } else if (identical(nm, "robust_ccc")) {
+            FALSE
+          } else infer
         )
       }
     }
