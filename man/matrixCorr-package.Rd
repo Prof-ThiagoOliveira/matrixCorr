@@ -50,5 +50,10 @@ Useful links:
 \author{
 \strong{Maintainer}: Thiago de Paula Oliveira \email{thiago.paula.oliveira@gmail.com} (\href{https://orcid.org/0000-0002-4555-2584}{ORCID})
 
+Authors:
+\itemize{
+  \item Thiago de Paula Oliveira \email{thiago.paula.oliveira@gmail.com} (\href{https://orcid.org/0000-0002-4555-2584}{ORCID})
+}
+
 }
 \keyword{internal}
