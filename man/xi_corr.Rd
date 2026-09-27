@@ -101,11 +101,13 @@ this cutoff; otherwise use \code{"dette_kroll"}.}
 \item{bias_correction}{Finite-sample normalisation:
 \itemize{
 \item \code{"none"} (default): return Chatterjee's original finite-sample
-statistic.
+statistic without rescaling. This reproduces the estimator as originally
+defined; its sample maximum is below one for finite continuous samples.
 \item \code{"upper_bound"}: divide by the raw finite-sample upper-bound
 estimate \eqn{\xi_n(Y,Y)} and return
-\eqn{\max(-1, \xi_n(X,Y) / \xi_n(Y,Y))}. This can reduce the finite-sample
-downward bias of the raw statistic, but it is not the default.
+\eqn{\max(-1, \xi_n(X,Y) / \xi_n(Y,Y))}. Use this option when you want
+the bias-reduced version proposed by Dalitz, Arning and Goebbels (2024);
+it is not the default.
 }}
 
 \item{tie_method}{How ties in the sorting variable \eqn{X} are broken:
@@ -214,10 +216,18 @@ rank-difference expression
 \xi_n = 1 -
 \frac{3 \sum_{i=1}^{n-1}|r_{i+1}-r_i|}{n^2 - 1}.
 }
-The raw finite-sample statistic is not forced to one on the diagonal; with
-no ties and \code{X = Y}, it equals \eqn{(n - 2)/(n + 1)}. Use
-\code{bias_correction = "upper_bound"} only when this finite-sample
-upper-bound normalisation is desired.
+The default \code{bias_correction = "none"} returns Chatterjee's original
+finite-sample estimator. This raw statistic is not forced to attain one
+under perfect deterministic dependence. In continuous data without ties, its
+finite-sample upper bound is
+\deqn{
+\xi_{\max} = \xi_n(Y,Y) = \frac{n - 2}{n + 1}.
+}
+For example, when \eqn{n = 20}, the largest possible raw value is
+\eqn{18 / 21 \approx 0.857}. This is a property of the estimator rather
+than an implementation error. Use
+\code{bias_correction = "upper_bound"} when you want the bias-reduced
+Dalitz-Arning-Goebbels normalisation, which rescales by \eqn{\xi_n(Y,Y)}.
 
 Ties in the sorting variable \eqn{X} are handled before computing adjacent
 rank differences. Chatterjee's definition uses random tie breaking, provided
@@ -307,7 +317,8 @@ c(
 )
 
 ## Example 3: the raw finite-sample diagonal is not forced to one
-## The optional upper-bound normalisation rescales this finite-sample ceiling.
+## With n = 20 and no ties, the raw finite-sample maximum is 18 / 21.
+## Use the Dalitz et al. upper-bound normalisation for the bias-reduced scale.
 z <- 1:20
 c(
   raw = xi_corr(z, z, tie_method = "first"),
