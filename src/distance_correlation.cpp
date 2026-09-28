@@ -9,6 +9,7 @@
 #include <numeric>
 #include <random>
 #include <cstdint>
+#include <limits>
 #include "matrixCorr_omp.h"
 
 // Fenwick-tree utilities for prefix sums over ranked y values.
@@ -29,7 +30,7 @@ inline double dot_ptr(const double* a, const double* b, const int n) {
   return out;
 }
 
-inline double dcor_signed_ratio(const double xy, const double x2, const double y2) {
+inline double bcdcor_ratio(const double xy, const double x2, const double y2) {
   if (!std::isfinite(x2) || !std::isfinite(y2) || x2 <= 0.0 || y2 <= 0.0) {
     return NA_REAL;
   }
@@ -37,6 +38,24 @@ inline double dcor_signed_ratio(const double xy, const double x2, const double y
   const double dcor = xy / denom;
   if (!std::isfinite(dcor)) return NA_REAL;
   return dcor;
+}
+
+inline double conventional_dcor_r2_ratio(
+  const double xy,
+  const double x2,
+  const double y2
+) {
+  if (!std::isfinite(x2) || !std::isfinite(y2) || x2 <= 0.0 || y2 <= 0.0) {
+    return NA_REAL;
+  }
+  double r2 = xy / std::sqrt(x2 * y2);
+  if (!std::isfinite(r2)) return NA_REAL;
+
+  const double tol = 64.0 * std::numeric_limits<double>::epsilon();
+  if (r2 < 0.0 && r2 > -tol) r2 = 0.0;
+  if (r2 > 1.0 && r2 < 1.0 + tol) r2 = 1.0;
+  if (r2 < 0.0) return NA_REAL;
+  return r2;
 }
 
 inline double clip_dcor_estimate(const double dcor) {
@@ -61,8 +80,21 @@ inline double u_centered_cov_stat(
   return term1 - term2 + term3;
 }
 
+inline double v_centered_cov_stat(
+  const double pair_sum,
+  const double row_dot,
+  const double total_x,
+  const double total_y,
+  const int n
+) {
+  const double dn = static_cast<double>(n);
+  return pair_sum / (dn * dn) -
+    2.0 * row_dot / (dn * dn * dn) +
+    (total_x * total_y) / (dn * dn * dn * dn);
+}
+
 inline double finalize_dcor(const double xy, const double x2, const double y2) {
-  return clip_dcor_estimate(dcor_signed_ratio(xy, x2, y2));
+  return clip_dcor_estimate(bcdcor_ratio(xy, x2, y2));
 }
 
 inline void dcor_t_test_from_signed(
@@ -261,7 +293,244 @@ inline double sum_cross_abs_prod_ptr(const double* x, const double* y, const int
   return sum_cross_abs_prod_ranked_ptr(x, y, n, rank_y.data(), m);
 }
 
-inline double ustat_dcor_from_precomputed_quadratic_ptr(
+inline double conventional_dcor_from_stats(
+  const double Sxy_pair,
+  const double Sxx_pair,
+  const double Syy_pair,
+  const double row_dot_xy,
+  const double row_dot_xx,
+  const double row_dot_yy,
+  const double Sx,
+  const double Sy,
+  const int n,
+  const bool squared
+) {
+  const double XY = v_centered_cov_stat(Sxy_pair, row_dot_xy, Sx, Sy, n);
+  const double X2 = v_centered_cov_stat(Sxx_pair, row_dot_xx, Sx, Sx, n);
+  const double Y2 = v_centered_cov_stat(Syy_pair, row_dot_yy, Sy, Sy, n);
+  const double r2 = conventional_dcor_r2_ratio(XY, X2, Y2);
+  if (squared || !std::isfinite(r2)) return r2;
+  return std::sqrt(r2);
+}
+
+inline double conventional_dcor_ptr(
+  const double* x,
+  const double* y,
+  const int n,
+  const bool squared
+) {
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for distance correlation");
+
+  static thread_local std::vector<double> Rx_buf;
+  static thread_local std::vector<double> Ry_buf;
+  Rx_buf.assign(static_cast<std::size_t>(n), 0.0);
+  Ry_buf.assign(static_cast<std::size_t>(n), 0.0);
+
+  double Sx = 0.0;
+  double Sy = 0.0;
+  compute_row_sums_and_total_fast_ptr(x, n, Rx_buf.data(), Sx);
+  compute_row_sums_and_total_fast_ptr(y, n, Ry_buf.data(), Sy);
+
+  double sum_x = 0.0, sum_x2 = 0.0;
+  double sum_y = 0.0, sum_y2 = 0.0;
+  for (int i = 0; i < n; ++i) {
+    const double xi = x[i];
+    const double yi = y[i];
+    sum_x += xi;
+    sum_x2 += xi * xi;
+    sum_y += yi;
+    sum_y2 += yi * yi;
+  }
+
+  const double Sxy_pair = sum_cross_abs_prod_ptr(x, y, n);
+  const double Sxx_pair =
+    2.0 * (static_cast<double>(n) * sum_x2 - sum_x * sum_x);
+  const double Syy_pair =
+    2.0 * (static_cast<double>(n) * sum_y2 - sum_y * sum_y);
+
+  return conventional_dcor_from_stats(
+    Sxy_pair,
+    Sxx_pair,
+    Syy_pair,
+    dot_ptr(Rx_buf.data(), Ry_buf.data(), n),
+    dot_ptr(Rx_buf.data(), Rx_buf.data(), n),
+    dot_ptr(Ry_buf.data(), Ry_buf.data(), n),
+    Sx,
+    Sy,
+    n,
+    squared
+  );
+}
+
+inline int collect_complete_pair_ptr(
+  const double* x,
+  const double* y,
+  const int n,
+  std::vector<double>& xi,
+  std::vector<double>& yi
+) {
+  xi.clear();
+  yi.clear();
+  xi.reserve(static_cast<std::size_t>(n));
+  yi.reserve(static_cast<std::size_t>(n));
+  for (int r = 0; r < n; ++r) {
+    const double a = x[r];
+    const double b = y[r];
+    if (std::isfinite(a) && std::isfinite(b)) {
+      xi.push_back(a);
+      yi.push_back(b);
+    }
+  }
+  return static_cast<int>(xi.size());
+}
+
+// Conventional V-statistic distance correlation.
+// [[Rcpp::export]]
+double dcor_pair_cpp(const arma::vec& x, const arma::vec& y, const bool squared = false) {
+  const int n = static_cast<int>(x.n_elem);
+  return conventional_dcor_ptr(x.memptr(), y.memptr(), n, squared);
+}
+
+// Full matrix of conventional V-statistic distance correlations.
+// [[Rcpp::export]]
+arma::mat dcor_matrix_cpp(const arma::mat& X, const bool squared = false) {
+  const int n = static_cast<int>(X.n_rows);
+  const int p = static_cast<int>(X.n_cols);
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for distance correlation");
+  arma::mat R(p, p, arma::fill::eye);
+
+  if (static_cast<double>(n) * static_cast<double>(p) > 5e7) {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+    for (int j = 1; j < p; ++j) {
+      for (int i = 0; i < j; ++i) {
+        const double d = conventional_dcor_ptr(X.colptr(i), X.colptr(j), n, squared);
+        R(i, j) = d;
+        R(j, i) = d;
+      }
+    }
+    return R;
+  }
+
+  arma::mat row_sums(n, p, arma::fill::zeros);
+  arma::vec totals(p, arma::fill::zeros);
+  arma::vec self_vvar(p, arma::fill::zeros);
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+  for (int j = 0; j < p; ++j) {
+    const double* xj = X.colptr(j);
+    double* rj = row_sums.colptr(j);
+    double Sj = 0.0;
+    compute_row_sums_and_total_fast_ptr(xj, n, rj, Sj);
+    totals[j] = Sj;
+
+    double sum_x = 0.0;
+    double sum_x2 = 0.0;
+    for (int k = 0; k < n; ++k) {
+      const double v = xj[k];
+      sum_x += v;
+      sum_x2 += v * v;
+    }
+    const double Sxx_pair =
+      2.0 * (static_cast<double>(n) * sum_x2 - sum_x * sum_x);
+    self_vvar[j] = v_centered_cov_stat(
+      Sxx_pair,
+      dot_ptr(rj, rj, n),
+      Sj,
+      Sj,
+      n
+    );
+  }
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+  for (int j = 1; j < p; ++j) {
+    const double* xj = X.colptr(j);
+    const double* rj = row_sums.colptr(j);
+    const double Sj = totals[j];
+    const double Y2 = self_vvar[j];
+
+    static thread_local std::vector<int> y_order;
+    static thread_local std::vector<int> rank_y;
+    const int m = compute_rank_y_ptr(xj, n, y_order, rank_y);
+
+    for (int i = 0; i < j; ++i) {
+      const double* xi = X.colptr(i);
+      const double* ri = row_sums.colptr(i);
+      const double X2 = self_vvar[i];
+      double d = NA_REAL;
+      if (std::isfinite(X2) && X2 > 0.0 && std::isfinite(Y2) && Y2 > 0.0) {
+        const double Sxy_pair = sum_cross_abs_prod_ranked_ptr(
+          xi, xj, n, rank_y.data(), m
+        );
+        const double XY = v_centered_cov_stat(
+          Sxy_pair,
+          dot_ptr(ri, rj, n),
+          totals[i],
+          Sj,
+          n
+        );
+        const double r2 = conventional_dcor_r2_ratio(XY, X2, Y2);
+        d = (squared || !std::isfinite(r2)) ? r2 : std::sqrt(r2);
+        if (!std::isfinite(d)) d = conventional_dcor_ptr(xi, xj, n, squared);
+      }
+      R(i, j) = d;
+      R(j, i) = d;
+    }
+  }
+
+  return R;
+}
+
+// Pairwise-complete conventional V-statistic distance correlations.
+// [[Rcpp::export]]
+Rcpp::List dcor_matrix_pairwise_cpp(const arma::mat& X, const bool squared = false) {
+  const int n = static_cast<int>(X.n_rows);
+  const int p = static_cast<int>(X.n_cols);
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for distance correlation");
+
+  arma::mat est(p, p, arma::fill::eye);
+  arma::mat n_complete(p, p, arma::fill::zeros);
+
+  for (int j = 0; j < p; ++j) {
+    int n_j = 0;
+    const double* xj = X.colptr(j);
+    for (int r = 0; r < n; ++r) {
+      if (std::isfinite(xj[r])) ++n_j;
+    }
+    n_complete(j, j) = static_cast<double>(n_j);
+  }
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+  for (int j = 1; j < p; ++j) {
+    std::vector<double> xi;
+    std::vector<double> xjv;
+    for (int i = 0; i < j; ++i) {
+      const int nij = collect_complete_pair_ptr(
+        X.colptr(i), X.colptr(j), n, xi, xjv
+      );
+      double d = NA_REAL;
+      if (nij >= 4) d = conventional_dcor_ptr(xi.data(), xjv.data(), nij, squared);
+      est(i, j) = d;
+      est(j, i) = d;
+      n_complete(i, j) = static_cast<double>(nij);
+      n_complete(j, i) = static_cast<double>(nij);
+    }
+  }
+
+  return Rcpp::List::create(
+    Rcpp::Named("est") = est,
+    Rcpp::Named("n_complete") = n_complete
+  );
+}
+
+inline double bcdcor_from_precomputed_quadratic_ptr(
   const double* x,
   const double* y,
   const double* row_sums_x,
@@ -298,10 +567,10 @@ inline double ustat_dcor_from_precomputed_quadratic_ptr(
   XY *= scale;
   X2 *= scale;
   Y2 *= scale;
-  return finalize_dcor(XY, X2, Y2);
+  return bcdcor_ratio(XY, X2, Y2);
 }
 
-inline double ustat_dcor_signed_from_precomputed_quadratic_ptr(
+inline double bcdcor_signed_from_precomputed_quadratic_ptr(
   const double* x,
   const double* y,
   const double* row_sums_x,
@@ -338,11 +607,11 @@ inline double ustat_dcor_signed_from_precomputed_quadratic_ptr(
   XY *= scale;
   X2 *= scale;
   Y2 *= scale;
-  return dcor_signed_ratio(XY, X2, Y2);
+  return bcdcor_ratio(XY, X2, Y2);
 }
 
-inline double ustat_dcor_quadratic_ptr(const double* x, const double* y, const int n) {
-  if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased dCor");
+inline double bcdcor_quadratic_ptr(const double* x, const double* y, const int n) {
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for bias-corrected dCor");
   static thread_local std::vector<double> Rx_buf;
   static thread_local std::vector<double> Ry_buf;
   Rx_buf.assign(static_cast<std::size_t>(n), 0.0);
@@ -351,13 +620,13 @@ inline double ustat_dcor_quadratic_ptr(const double* x, const double* y, const i
   double Sy = 0.0;
   compute_row_sums_and_total_quadratic_ptr(x, n, Rx_buf.data(), Sx);
   compute_row_sums_and_total_quadratic_ptr(y, n, Ry_buf.data(), Sy);
-  return ustat_dcor_from_precomputed_quadratic_ptr(
+  return bcdcor_from_precomputed_quadratic_ptr(
     x, y, Rx_buf.data(), Ry_buf.data(), Sx, Sy, n
   );
 }
 
-inline double ustat_dcor_quadratic_signed_ptr(const double* x, const double* y, const int n) {
-  if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased dCor");
+inline double bcdcor_quadratic_signed_ptr(const double* x, const double* y, const int n) {
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for bias-corrected dCor");
   static thread_local std::vector<double> Rx_buf;
   static thread_local std::vector<double> Ry_buf;
   Rx_buf.assign(static_cast<std::size_t>(n), 0.0);
@@ -366,16 +635,16 @@ inline double ustat_dcor_quadratic_signed_ptr(const double* x, const double* y, 
   double Sy = 0.0;
   compute_row_sums_and_total_quadratic_ptr(x, n, Rx_buf.data(), Sx);
   compute_row_sums_and_total_quadratic_ptr(y, n, Ry_buf.data(), Sy);
-  return ustat_dcor_signed_from_precomputed_quadratic_ptr(
+  return bcdcor_signed_from_precomputed_quadratic_ptr(
     x, y, Rx_buf.data(), Ry_buf.data(), Sx, Sy, n
   );
 }
 
 // Fast per-pair path:
 // - O(n log n) cross-distance term via Fenwick trees
-// - exact U-statistic normalization for unbiased dCor
-inline double ustat_dcor_fast_ptr(const double* x, const double* y, const int n) {
-  if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased dCor");
+// - exact U-statistic normalization for bias-corrected squared dCor
+inline double bcdcor_fast_ptr(const double* x, const double* y, const int n) {
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for bias-corrected dCor");
 
   static thread_local std::vector<double> Rx_buf;
   static thread_local std::vector<double> Ry_buf;
@@ -411,34 +680,33 @@ inline double ustat_dcor_fast_ptr(const double* x, const double* y, const int n)
   const double XY = u_centered_cov_stat(Sxy_pair, row_dot_xy, Sx, Sy, n);
   const double X2 = u_centered_cov_stat(Sxx_pair, row_dot_xx, Sx, Sx, n);
   const double Y2 = u_centered_cov_stat(Syy_pair, row_dot_yy, Sy, Sy, n);
-  return finalize_dcor(XY, X2, Y2);
+  return bcdcor_ratio(XY, X2, Y2);
 }
 
 // Dispatch policy:
 // - small n uses exact O(n^2) path (lower constant overhead)
 // - otherwise use fast O(n log n) path with exact fallback if needed
-inline double ustat_dcor_dispatch_ptr(const double* x, const double* y, const int n) {
-  if (n < 64) return ustat_dcor_quadratic_ptr(x, y, n);
-  const double fast = ustat_dcor_fast_ptr(x, y, n);
+inline double bcdcor_dispatch_ptr(const double* x, const double* y, const int n) {
+  if (n < 64) return bcdcor_quadratic_ptr(x, y, n);
+  const double fast = bcdcor_fast_ptr(x, y, n);
   if (std::isfinite(fast)) return fast;
-  return ustat_dcor_quadratic_ptr(x, y, n);
+  return bcdcor_quadratic_ptr(x, y, n);
 }
 
-// Pairwise unbiased distance correlation (U-statistic)
-// Székely, Rizzo & Bakirov, 2007
+// Pairwise U-centred bias-corrected squared distance-correlation statistic.
 // [[Rcpp::export]]
-double ustat_dcor(const arma::vec& x, const arma::vec& y) {
+double bcdcor_pair_cpp(const arma::vec& x, const arma::vec& y) {
   const int n = static_cast<int>(x.n_elem);
-  return ustat_dcor_dispatch_ptr(x.memptr(), y.memptr(), n);
+  return bcdcor_dispatch_ptr(x.memptr(), y.memptr(), n);
 }
 
-// Full matrix of unbiased distance correlations:
+// Full matrix of U-centred bias-corrected squared distance-correlation statistics:
 // precompute per-column statistics once, then evaluate upper-triangle pairs.
 // [[Rcpp::export]]
-arma::mat ustat_dcor_matrix_cpp(const arma::mat& X) {
+arma::mat bcdcor_matrix_cpp(const arma::mat& X) {
   const int n = static_cast<int>(X.n_rows);
   const int p = static_cast<int>(X.n_cols);
-  if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased dCor");
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for bias-corrected dCor");
   arma::mat R(p, p, arma::fill::eye);
 
   // Small n: keep simple exact quadratic kernel.
@@ -450,7 +718,7 @@ arma::mat ustat_dcor_matrix_cpp(const arma::mat& X) {
       for (int i = 0; i < j; ++i) {
         const double* xi = X.colptr(i);
         const double* xj = X.colptr(j);
-        const double d = ustat_dcor_quadratic_ptr(xi, xj, n);
+        const double d = bcdcor_quadratic_ptr(xi, xj, n);
         R(i, j) = d;
         R(j, i) = d;
       }
@@ -467,7 +735,7 @@ arma::mat ustat_dcor_matrix_cpp(const arma::mat& X) {
       for (int i = 0; i < j; ++i) {
         const double* xi = X.colptr(i);
         const double* xj = X.colptr(j);
-        const double d = ustat_dcor_dispatch_ptr(xi, xj, n);
+        const double d = bcdcor_dispatch_ptr(xi, xj, n);
         R(i, j) = d;
         R(j, i) = d;
       }
@@ -535,8 +803,8 @@ arma::mat ustat_dcor_matrix_cpp(const arma::mat& X) {
         );
         const double row_dot_xy = dot_ptr(ri, rj, n);
         const double XY = u_centered_cov_stat(Sxy_pair, row_dot_xy, Si, Sj, n);
-        d = finalize_dcor(XY, X2, Y2);
-        if (!std::isfinite(d)) d = ustat_dcor_quadratic_ptr(xi, xj, n);
+        d = bcdcor_ratio(XY, X2, Y2);
+        if (!std::isfinite(d)) d = bcdcor_quadratic_ptr(xi, xj, n);
       }
       R(i, j) = d;
       R(j, i) = d;
@@ -545,21 +813,47 @@ arma::mat ustat_dcor_matrix_cpp(const arma::mat& X) {
   return R;
 }
 
-// Pairwise matrix path with optional t-test inference.
+// Pairwise matrix path for U-centred bias-corrected squared dCor with optional t-test inference.
 // [[Rcpp::export]]
-Rcpp::List ustat_dcor_matrix_pairwise_cpp(
+Rcpp::List bcdcor_matrix_pairwise_cpp(
   const arma::mat& X,
   const bool return_inference = false
 ) {
   const int n = static_cast<int>(X.n_rows);
   const int p = static_cast<int>(X.n_cols);
-  if (n < 4) Rcpp::stop("Sample size must be at least 4 for unbiased dCor");
+  if (n < 4) Rcpp::stop("Sample size must be at least 4 for bias-corrected dCor");
 
   arma::mat est(p, p, arma::fill::eye);
-  arma::mat n_complete(p, p, arma::fill::value(static_cast<double>(n)));
+  arma::mat n_complete(p, p, arma::fill::zeros);
+
+  for (int j = 0; j < p; ++j) {
+    int n_j = 0;
+    const double* xj = X.colptr(j);
+    for (int r = 0; r < n; ++r) {
+      if (std::isfinite(xj[r])) ++n_j;
+    }
+    n_complete(j, j) = static_cast<double>(n_j);
+  }
 
   if (!return_inference) {
-    est = ustat_dcor_matrix_cpp(X);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+    for (int j = 1; j < p; ++j) {
+      std::vector<double> xi;
+      std::vector<double> xjv;
+      for (int i = 0; i < j; ++i) {
+        const int nij = collect_complete_pair_ptr(
+          X.colptr(i), X.colptr(j), n, xi, xjv
+        );
+        double d = NA_REAL;
+        if (nij >= 4) d = bcdcor_dispatch_ptr(xi.data(), xjv.data(), nij);
+        est(i, j) = d;
+        est(j, i) = d;
+        n_complete(i, j) = static_cast<double>(nij);
+        n_complete(j, i) = static_cast<double>(nij);
+      }
+    }
     return Rcpp::List::create(
       Rcpp::Named("est") = est,
       Rcpp::Named("n_complete") = n_complete
@@ -577,6 +871,69 @@ Rcpp::List ustat_dcor_matrix_pairwise_cpp(
     parameter(j, j) = NA_REAL;
   }
 
+  bool has_nonfinite = false;
+  for (int j = 0; j < p && !has_nonfinite; ++j) {
+    const double* xj = X.colptr(j);
+    for (int r = 0; r < n; ++r) {
+      if (!std::isfinite(xj[r])) {
+        has_nonfinite = true;
+        break;
+      }
+    }
+  }
+
+  if (has_nonfinite) {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+    for (int j = 1; j < p; ++j) {
+      std::vector<double> xi;
+      std::vector<double> xjv;
+      for (int i = 0; i < j; ++i) {
+        const int nij = collect_complete_pair_ptr(
+          X.colptr(i), X.colptr(j), n, xi, xjv
+        );
+        double raw = NA_REAL;
+        double tstat = NA_REAL;
+        double pval = NA_REAL;
+        double df = NA_REAL;
+        if (nij >= 4) {
+          raw = bcdcor_dispatch_ptr(xi.data(), xjv.data(), nij);
+          dcor_t_test_from_signed(raw, nij, tstat, df, pval);
+        }
+
+        est(i, j) = raw;
+        est(j, i) = raw;
+        estimate(i, j) = raw;
+        estimate(j, i) = raw;
+        statistic(i, j) = tstat;
+        statistic(j, i) = tstat;
+        parameter(i, j) = df;
+        parameter(j, i) = df;
+        p_value(i, j) = pval;
+        p_value(j, i) = pval;
+        n_complete(i, j) = static_cast<double>(nij);
+        n_complete(j, i) = static_cast<double>(nij);
+      }
+    }
+
+    return Rcpp::List::create(
+      Rcpp::Named("est") = est,
+      Rcpp::Named("n_complete") = n_complete,
+      Rcpp::Named("estimate") = estimate,
+      Rcpp::Named("statistic") = statistic,
+      Rcpp::Named("parameter") = parameter,
+      Rcpp::Named("p_value") = p_value
+    );
+  }
+
+  for (int j = 1; j < p; ++j) {
+    for (int i = 0; i < j; ++i) {
+      n_complete(i, j) = static_cast<double>(n);
+      n_complete(j, i) = static_cast<double>(n);
+    }
+  }
+
   if (n < 64) {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
@@ -585,15 +942,14 @@ Rcpp::List ustat_dcor_matrix_pairwise_cpp(
       for (int i = 0; i < j; ++i) {
         const double* xi = X.colptr(i);
         const double* xj = X.colptr(j);
-        const double raw = ustat_dcor_quadratic_signed_ptr(xi, xj, n);
-        const double clipped = clip_dcor_estimate(raw);
+        const double raw = bcdcor_quadratic_signed_ptr(xi, xj, n);
         double tstat = NA_REAL;
         double pval = NA_REAL;
         double df = df_value;
         dcor_t_test_from_signed(raw, n, tstat, df, pval);
 
-        est(i, j) = clipped;
-        est(j, i) = clipped;
+        est(i, j) = raw;
+        est(j, i) = raw;
         estimate(i, j) = raw;
         estimate(j, i) = raw;
         statistic(i, j) = tstat;
@@ -682,18 +1038,17 @@ Rcpp::List ustat_dcor_matrix_pairwise_cpp(
         );
         const double row_dot_xy = dot_ptr(ri, rj, n);
         const double XY = u_centered_cov_stat(Sxy_pair, row_dot_xy, Si, Sj, n);
-        raw = dcor_signed_ratio(XY, X2, Y2);
-        if (!std::isfinite(raw)) raw = ustat_dcor_quadratic_signed_ptr(xi, xj, n);
+        raw = bcdcor_ratio(XY, X2, Y2);
+        if (!std::isfinite(raw)) raw = bcdcor_quadratic_signed_ptr(xi, xj, n);
       }
 
-      const double clipped = clip_dcor_estimate(raw);
       double tstat = NA_REAL;
       double pval = NA_REAL;
       double df = df_value;
       dcor_t_test_from_signed(raw, n, tstat, df, pval);
 
-      est(i, j) = clipped;
-      est(j, i) = clipped;
+      est(i, j) = raw;
+      est(j, i) = raw;
       estimate(i, j) = raw;
       estimate(j, i) = raw;
       statistic(i, j) = tstat;

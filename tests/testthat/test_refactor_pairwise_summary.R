@@ -146,6 +146,7 @@ test_that("shared pairwise summaries preserve estimator-specific data frames", {
   dc <- dcor(X, p_value = TRUE)
   dc_extra <- function(i, j, inf, diagnostics) {
     list(
+      bcdcor = if (is.matrix(inf$bcdcor) && is.finite(inf$bcdcor[i, j])) round(inf$bcdcor[i, j], 4) else NA_real_,
       statistic = if (is.matrix(inf$statistic) && is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], 4) else NA_real_,
       df = if (is.matrix(inf$parameter) && is.finite(inf$parameter[i, j])) round(inf$parameter[i, j], 4) else NA_real_,
       p_value = if (is.matrix(inf$p_value) && is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], 4) else NA_real_
@@ -160,7 +161,10 @@ test_that("shared pairwise summaries preserve estimator-specific data frames", {
       include_ci = FALSE,
       include_p = TRUE,
       extra = dc_extra,
-      attrs = list(inference_method = attr(dc, "inference", exact = TRUE)$method)
+      attrs = list(
+        inference_method = attr(dc, "inference", exact = TRUE)$method,
+        squared = FALSE
+      )
     )
   )
 })

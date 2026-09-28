@@ -10,6 +10,7 @@
 \usage{
 dcor(
   data,
+  squared = FALSE,
   na_method = c("error", "pairwise", "complete"),
   p_value = FALSE,
   n_threads = getOption("matrixCorr.threads", 1L),
@@ -32,7 +33,7 @@ dcor(
 
 \method{plot}{dcor}(
   x,
-  title = "Distance correlation heatmap",
+  title = NULL,
   low_color = "white",
   high_color = "steelblue1",
   value_text_size = 4,
@@ -65,37 +66,28 @@ dcor(
 \item{data}{A numeric matrix or a data frame with at least two numeric
 columns. All non-numeric columns are dropped. Columns must be numeric.}
 
+\item{squared}{Logical; if \code{FALSE} (default), return \eqn{R_n}. If \code{TRUE},
+return conventional squared distance correlation \eqn{R_n^2}.}
+
 \item{na_method}{Character scalar controlling missing-data handling.
 \code{"error"} rejects missing, \code{NaN}, and infinite values.
 \code{"pairwise"} recomputes each association on its own pairwise
-complete-case overlap. This is permissive, but different matrix entries
-may be based on different rows. \code{"complete"} performs listwise
-deletion once across the retained numeric columns and then computes the
-estimator on the common complete sample.}
+complete-case overlap. \code{"complete"} performs listwise deletion once
+across the retained numeric columns.}
 
-\item{p_value}{Logical (default \code{FALSE}). If \code{TRUE}, attach
-pairwise p-values, test statistics, and degrees of freedom from the
-distance-correlation t-test of independence.}
+\item{p_value}{Logical (default \code{FALSE}). Compatibility option. If
+\code{TRUE}, attach the Székely-Rizzo t-test metadata computed from the
+signed bias-corrected statistic returned by \code{bcdcor()}, not from the
+conventional \eqn{R_n} values in the main matrix.}
 
 \item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
 
-\item{output}{Output representation for the computed estimates.
-\itemize{
-\item \code{"matrix"} (default): full dense matrix; best when you need
-matrix algebra, dense heatmaps, or full compatibility with existing code.
-\item \code{"sparse"}: sparse matrix from \pkg{Matrix} containing only
-retained entries; best when many values are dropped by thresholding.
-\item \code{"edge_list"}: long-form data frame with columns
-\code{row}, \code{col}, \code{value}; convenient for filtering, joins,
-and network-style workflows.
-}}
+\item{output}{Output representation for the computed estimates:
+\code{"matrix"}, \code{"sparse"}, or \code{"edge_list"}.}
 
 \item{threshold}{Non-negative absolute-value filter for non-matrix outputs:
-keep entries with \code{abs(value) >= threshold}. Use
-\code{threshold > 0} when you want only stronger associations (typically
-with \code{output = "sparse"} or \code{"edge_list"}). Keep
-\code{threshold = 0} to retain all values. Must be \code{0} when
+keep entries with \code{abs(value) >= threshold}. Must be \code{0} when
 \code{output = "matrix"}.}
 
 \item{diag}{Logical; whether to include diagonal entries in
@@ -133,120 +125,65 @@ on the heatmap tiles.}
 \item{object}{An object of class \code{dcor}.}
 }
 \value{
-A symmetric numeric matrix where the \code{(i, j)} entry is the
-unbiased distance correlation between the \code{i}-th and \code{j}-th
-numeric columns. The object has class \code{dcor} with attributes
-\code{method = "distance_correlation"}, \code{description}, and
-\code{package = "matrixCorr"}. When \code{p_value = TRUE}, the object also
-carries an \code{inference} attribute with matrices \code{estimate},
-\code{statistic}, \code{parameter}, and \code{p_value}, plus
-\code{attr(x, "diagnostics")$n_complete}. The main returned matrix remains
-the usual non-negative unbiased distance-correlation estimate.
+A symmetric correlation result where the \code{(i, j)} entry is
+conventional distance correlation \eqn{R_n}, or \eqn{R_n^2} when
+\code{squared = TRUE}. When \code{p_value = TRUE}, the \code{inference} attribute contains
+\code{bcdcor}, \code{statistic}, \code{parameter}, and \code{p_value}; the t-test uses the
+signed U-centred statistic in \code{inference$bcdcor}.
 
 Invisibly returns \code{x}.
 
 A \code{ggplot} object representing the heatmap.
 }
 \description{
-Computes pairwise distance correlations for the numeric columns of a matrix
-or data frame using a high-performance 'C++' backend. Distance correlation
-detects general dependence, including non-linear relationships. Optional
-p-values are available via the bias-corrected distance-correlation t-test.
+Computes conventional pairwise distance correlation for numeric columns using
+a high-performance C++ backend. Distance correlation is a nonnegative sample
+measure of dependence that can capture nonlinear and nonmonotonic
+relationships. By default, \code{dcor()} returns the conventional sample distance
+correlation \eqn{R_n}; set \code{squared = TRUE} to return \eqn{R_n^2}.
 }
 \details{
-Let \eqn{x \in \mathbb{R}^n} and \eqn{D^{(x)}} be the pairwise distance matrix
-with zero diagonal: \eqn{D^{(x)}_{ii} = 0}, \eqn{D^{(x)}_{ij} = |x_i - x_j|} for
-\eqn{i \neq j}. Define row sums \eqn{r^{(x)}_i = \sum_{k \neq i} D^{(x)}_{ik}} and
-grand sum \eqn{S^{(x)} = \sum_{i \neq k} D^{(x)}_{ik}}. The U-centred matrix is
-\deqn{A^{(x)}_{ij} =
-      \begin{cases}
-        D^{(x)}_{ij} - \dfrac{r^{(x)}_i + r^{(x)}_j}{n - 2}
-        + \dfrac{S^{(x)}}{(n - 1)(n - 2)}, & i \neq j,\\[6pt]
-        0, & i = j~.
-      \end{cases}}
-For two variables \eqn{x,y}, the unbiased distance covariance and variances are
-\deqn{\widehat{\mathrm{dCov}}^2_u(x,y) = \frac{2}{n(n-3)} \sum_{i<j} A^{(x)}_{ij} A^{(y)}_{ij}
-\;=\; \frac{1}{n(n-3)} \sum_{i \neq j} A^{(x)}_{ij} A^{(y)}_{ij},}
-with \eqn{\widehat{\mathrm{dVar}}^2_u(x)} defined analogously from \eqn{A^{(x)}}.
-The unbiased distance correlation is
-\deqn{\widehat{\mathrm{dCor}}_u(x,y) =
-      \frac{\widehat{\mathrm{dCov}}_u(x,y)}
-           {\sqrt{\widehat{\mathrm{dVar}}_u(x)\,\widehat{\mathrm{dVar}}_u(y)}} \in [0,1].}
+For distances \eqn{a_{ij}=|x_i-x_j|}, define the conventional doubly centred
+distances
+\deqn{A_{ij}=a_{ij}-\bar a_{i\cdot}-\bar a_{\cdot j}+\bar a_{\cdot\cdot}.}
+Define \eqn{B_{ij}} analogously for \eqn{y}. The sample squared distance
+covariance is
+\deqn{V_n^2(x,y)=\frac{1}{n^2}\sum_{i,j} A_{ij}B_{ij},}
+with \eqn{V_n^2(x,x)} and \eqn{V_n^2(y,y)} defined analogously. The
+conventional squared distance correlation is
+\deqn{R_n^2(x,y)=
+\frac{V_n^2(x,y)}{\sqrt{V_n^2(x,x)V_n^2(y,y)}}.}
+\code{dcor()} returns \eqn{R_n=\sqrt{R_n^2}} unless \code{squared = TRUE}.
 
-\strong{Computation.} All heavy lifting (distance matrices, U-centering,
-and unbiased scaling) is implemented in C++ (\code{ustat_dcor_matrix_cpp}),
-so the R wrapper only validates/coerces the input. OpenMP parallelises the
-upper-triangular loops. The implementation includes a Huo-Szekely style
-univariate \eqn{O(n \log n)} dispatch for pairwise terms. We also have an exact
-unbiased \eqn{O(n^2)} fallback retained for robustness in small-sample or
-non-finite-path cases; no external dependencies are used.
-
-\strong{Inference.} When \code{p_value = TRUE}, the package computes the
-bias-corrected distance-correlation t-test of independence of Szekely and
-Rizzo (2013). Let \eqn{\widehat{\mathrm{dCor}}^\ast(x,y)} denote the signed
-bias-corrected distance correlation used internally by the test (that is,
-the same ratio before the package's usual clipping to \eqn{[0,1]}). With
-\deqn{M = \frac{n(n-3)}{2},}
-the test statistic is
-\deqn{
-T = \sqrt{M - 1}\;
-\frac{\widehat{\mathrm{dCor}}^\ast(x,y)}
-     {\sqrt{1 - \{\widehat{\mathrm{dCor}}^\ast(x,y)\}^2}},
-}
-referenced to a Student \eqn{t}-distribution with \eqn{M - 1} degrees of
-freedom. The reported p-value uses the upper-tail probability
-\eqn{P(t_{M-1} \ge T)}. This inference payload is attached as metadata; the
-main returned matrix is unchanged unless \code{p_value} is explicitly
-requested. The t reference is an asymptotic approximation. For small
-complete-case sample sizes, especially when \eqn{M - 1} is small, p-values
-can be unstable and should be interpreted cautiously; a permutation-based
-dependence test is preferable when exact small-sample calibration matters.
+Under the required finite first-moment conditions, population distance
+correlation is zero if and only if the variables are independent. This
+population property should not be read as a sample-level test by itself.
 }
 \note{
-Requires \eqn{n \ge 4}. Columns with (near) zero unbiased distance
-variance yield \code{NA} in their row/column. Typical per-pair cost uses
-the \eqn{O(n \log n)} fast path, with \eqn{O(n^2)} fallback when needed.
+Requires \eqn{n \ge 4}. Columns with zero distance variance yield
+\code{NA} in their off-diagonal row/column entries.
 }
+\section{Difference between \code{dcor()} and \code{bcdcor()}}{
+
+\code{dcor()} returns conventional nonnegative distance correlation \eqn{R_n}.
+\code{dcor(squared = TRUE)} returns conventional \eqn{R_n^2}. \code{bcdcor()} returns
+a U-centred bias-corrected squared distance-correlation statistic that may be
+negative in finite samples and is used by the bias-corrected dCor t-test. In
+finite samples, \code{bcdcor(x)} is not generally equal to \code{dcor(x)^2}.
+}
+
 \examples{
 \donttest{
-## Independent variables -> dCor ~ 0
-set.seed(1)
-X <- cbind(a = rnorm(200), b = rnorm(200))
-D <- dcor(X)
-print(D, digits = 3)
-summary(D)
-
-## Non-linear dependence: Pearson ~ 0, but unbiased dCor > 0
 set.seed(42)
 n <- 200
 x <- rnorm(n)
 y <- x^2 + rnorm(n, sd = 0.2)
-XY <- cbind(x = x, y = y)
-D2 <- dcor(XY)
-# Compare Pearson vs unbiased distance correlation
-round(c(pearson = cor(XY)[1, 2], dcor = D2["x", "y"]), 3)
-summary(D2)
-plot(D2, title = "Unbiased distance correlation (non-linear example)")
+X <- cbind(x = x, y = y)
 
-## Small AR(1) multivariate normal example
-set.seed(7)
-p <- 5; n <- 150; rho <- 0.6
-Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
-X3 <- MASS::mvrnorm(n, mu = rep(0, p), Sigma = Sigma)
-colnames(X3) <- paste0("V", seq_len(p))
-D3 <- dcor(X3)
-print(D3[1:3, 1:3], digits = 2)
-
-## Optional inference
-D4 <- dcor(XY, p_value = TRUE)
-summary(D4)
-estimate(D4)
-tidy(D4)
-
-# Interactive viewing (requires shiny)
-if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
-  view_corr_shiny(D)
-}
+dcor(X)
+dcor(X, squared = TRUE)
+bcdcor(X)
+bcdcor(X, p_value = TRUE)
 }
 
 }
@@ -258,10 +195,10 @@ Measuring and testing dependence by correlation of distances.
 Szekely, G. J., & Rizzo, M. L. (2013).
 The distance correlation t-test of independence.
 \emph{Journal of Multivariate Analysis}, 117, 193-213.
-
-Rizzo, M. L., & Szekely, G. J. (2024). \pkg{energy}: E-statistics
-(energy statistics). R package version 1.7-12.
+}
+\seealso{
+\code{\link[=bcdcor]{bcdcor()}}, \code{\link[=robust_dcor]{robust_dcor()}}
 }
 \author{
-Thiago de paula Oliveira
+Thiago de Paula Oliveira
 }

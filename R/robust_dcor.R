@@ -2,8 +2,8 @@
 #'
 #' @description
 #' Computes robust distance correlations by applying the biloop transformation
-#' to each numeric variable and then computing unbiased distance correlation on
-#' the transformed variables.
+#' to each numeric variable and then computing a U-centred robust
+#' distance-correlation statistic on the transformed variables.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns are dropped. Columns must be numeric.
@@ -99,13 +99,12 @@
 #' \eqn{S^{(j)} = \sum_{a \ne b}D^{(j)}_{ab}}. The diagonal of
 #' \eqn{A^{(j)}} is zero.
 #'
-#' For variables \eqn{j} and \eqn{k}, the unbiased robust distance covariance
-#' is
+#' For variables \eqn{j} and \eqn{k}, the U-centred robust squared distance
+#' covariance estimator is
 #' \deqn{\widehat{\mathrm{dCov}}^2_u(j,k) =
 #' \frac{2}{n(n-3)}\sum_{a < b} A^{(j)}_{ab} A^{(k)}_{ab}.}
-#' The corresponding robust distance correlation is the usual non-negative
-#' distance-correlation ratio based on this covariance and the two transformed
-#' distance variances. Small negative numerical artifacts are clipped to zero.
+#' The corresponding robust statistic is a non-negative clipped ratio based on
+#' this covariance estimator and the two transformed distance variances.
 #'
 #' @note
 #' `robust_dcor()` is more robust to extreme observations than classical
@@ -117,7 +116,7 @@
 #' Leyder, J., Raymaekers, J., & Rousseeuw, P. J. (2025). Robust distance
 #' correlation through bounded transformations.
 #'
-#' @seealso [dcor()], [wincor()], [pbcor()], [skipped_corr()]
+#' @seealso [dcor()], [bcdcor()], [wincor()], [pbcor()], [skipped_corr()]
 #'
 #' @examples
 #' ## Non-linear dependence: both estimators detect association.

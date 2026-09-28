@@ -1,3 +1,43 @@
+local_v_dcor <- function(x, y, squared = FALSE) {
+  ax <- abs(outer(x, x, "-"))
+  ay <- abs(outer(y, y, "-"))
+  Ax <- sweep(sweep(ax, 1L, rowMeans(ax), "-"), 2L, colMeans(ax), "-") + mean(ax)
+  Ay <- sweep(sweep(ay, 1L, rowMeans(ay), "-"), 2L, colMeans(ay), "-") + mean(ay)
+  xy <- mean(Ax * Ay)
+  x2 <- mean(Ax * Ax)
+  y2 <- mean(Ay * Ay)
+  r2 <- xy / sqrt(x2 * y2)
+  if (!is.finite(r2)) {
+    return(NA_real_)
+  }
+  r2 <- min(1, max(0, r2))
+  if (isTRUE(squared)) r2 else sqrt(r2)
+}
+
+local_u_center <- function(x) {
+  a <- abs(outer(x, x, "-"))
+  n <- nrow(a)
+  out <- matrix(0, n, n)
+  off <- row(a) != col(a)
+  row_sum <- rowSums(a)
+  col_sum <- colSums(a)
+  total <- sum(a)
+  out[off] <- a[off] -
+    row_sum[row(a)[off]] / (n - 2) -
+    col_sum[col(a)[off]] / (n - 2) +
+    total / ((n - 1) * (n - 2))
+  out
+}
+
+local_bcdcor <- function(x, y) {
+  Ax <- local_u_center(x)
+  Ay <- local_u_center(y)
+  xy <- sum(Ax * Ay)
+  x2 <- sum(Ax * Ax)
+  y2 <- sum(Ay * Ay)
+  xy / sqrt(x2 * y2)
+}
+
 test_that("returns correct structure and handles simple cases", {
   n <- 5
   mat <- cbind(
@@ -13,7 +53,7 @@ test_that("returns correct structure and handles simple cases", {
   expect_true(all(diag(res) == 1))
 
   expect_gt(res["x","y"], 0.95)
-  expect_lt(res["x","z"], 0.5)  # pick a margin that passes for this fixed z
+  expect_lt(res["x","z"], 0.7)  # finite-sample conventional dCor for this fixed z
 })
 
 test_that("detects non-linear dependence missed by Pearson", {
@@ -60,15 +100,15 @@ test_that("matches expected dCor in AR(1) matrix", {
   expect_gt(res["V1", "V2"], res["V1", "V3"])
 })
 
-test_that("distance-correlation inference matches the reference t-test", {
+test_that("bcdcor inference matches the signed reference t-test", {
   set.seed(2026)
   x <- rnorm(80)
   y <- x^2 + rnorm(80, sd = 0.25)
   z <- -0.4 * x + rnorm(80, sd = 0.8)
   X <- cbind(x = x, y = y, z = z)
 
-  dc <- dcor(X, p_value = TRUE)
-  inf <- attr(dc, "inference", exact = TRUE)
+  bc <- bcdcor(X, p_value = TRUE)
+  inf <- attr(bc, "inference", exact = TRUE)
   ref_estimate <- matrix(
     c(
       NA_real_, 0.248471103773309, 0.0998513936435007,
@@ -107,13 +147,13 @@ test_that("distance-correlation inference matches the reference t-test", {
   )
 
   expect_type(inf, "list")
-  expect_identical(inf$method, "dcor_t_test")
-  expect_true(is.matrix(inf$estimate))
+  expect_identical(inf$method, "bcdcor_t_test")
+  expect_true(is.matrix(inf$bcdcor))
   expect_true(is.matrix(inf$statistic))
   expect_true(is.matrix(inf$parameter))
   expect_true(is.matrix(inf$p_value))
 
-  idx <- which(upper.tri(dc), arr.ind = TRUE)
+  idx <- which(upper.tri(bc), arr.ind = TRUE)
   for (k in seq_len(nrow(idx))) {
     i <- idx[k, 1]
     j <- idx[k, 2]
@@ -122,7 +162,8 @@ test_that("distance-correlation inference matches the reference t-test", {
     ref_df_ij <- ref_df[i, j]
     ref_p <- ref_p_value[i, j]
 
-    expect_lt(abs(inf$estimate[i, j] - ref_est), 1e-6)
+    expect_lt(abs(bc[i, j] - ref_est), 1e-6)
+    expect_lt(abs(inf$bcdcor[i, j] - ref_est), 1e-6)
     expect_lt(abs(inf$statistic[i, j] - ref_t), 1e-5)
     expect_equal(inf$parameter[i, j], ref_df_ij, tolerance = 1e-10)
     if (isTRUE(is.finite(ref_p) && ref_p == 0)) {
@@ -131,7 +172,6 @@ test_that("distance-correlation inference matches the reference t-test", {
     } else {
       expect_lt(abs(inf$p_value[i, j] - ref_p), 1e-10)
     }
-    expect_lt(abs(dc[i, j] - max(ref_est, 0)), 1e-6)
   }
 })
 
@@ -167,8 +207,8 @@ test_that("dcor stores inference payload only when requested", {
 
   inf <- attr(fit_p, "inference", exact = TRUE)
   expect_type(inf, "list")
-  expect_identical(names(inf), c("method", "estimate", "statistic", "parameter", "p_value", "alternative"))
-  expect_true(is.matrix(inf$estimate))
+  expect_identical(names(inf), c("method", "bcdcor", "statistic", "parameter", "p_value", "alternative"))
+  expect_true(is.matrix(inf$bcdcor))
   expect_true(is.matrix(inf$statistic))
   expect_true(is.matrix(inf$parameter))
   expect_true(is.matrix(inf$p_value))
@@ -203,7 +243,7 @@ test_that("dcor summary switches to pairwise inference view when requested", {
 
   expect_s3_class(sm, "summary.dcor")
   expect_s3_class(sm, "data.frame")
-  expect_true(all(c("item1", "item2", "estimate", "n_complete", "statistic", "df", "p_value") %in% names(sm)))
+  expect_true(all(c("item1", "item2", "estimate", "n_complete", "bcdcor", "statistic", "df", "p_value") %in% names(sm)))
 
   txt <- capture.output(print(sm))
   expect_true(any(grepl("^Distance correlation summary$", txt)))
@@ -228,4 +268,140 @@ test_that("dcor print/plot cover optional parameters", {
 test_that("dcor rejects missing values by default", {
   X <- cbind(a = c(1, 2, NA, 4), b = c(1, 2, 3, 4), c = c(1, 2, 3, 4))
   expect_error(dcor(X), "Missing values are not allowed.")
+  expect_error(bcdcor(X), "Missing values are not allowed.")
+})
+
+test_that("dcor matches a conventional V-statistic reference and squared identity", {
+  set.seed(100)
+  n <- 400
+  rho <- 0.7
+  x <- rnorm(n)
+  y <- rho * x + sqrt(1 - rho^2) * rnorm(n)
+  X <- cbind(x = x, y = y)
+
+  mc_R <- dcor(X)["x", "y"]
+  mc_R2 <- dcor(X, squared = TRUE)["x", "y"]
+  mc_bc <- bcdcor(X)["x", "y"]
+  ref_R <- local_v_dcor(x, y)
+  ref_R2 <- local_v_dcor(x, y, squared = TRUE)
+  ref_bc <- local_bcdcor(x, y)
+
+  expect_equal(mc_R, ref_R, tolerance = 1e-10)
+  expect_equal(mc_R2, ref_R2, tolerance = 1e-10)
+  expect_equal(unname(mc_bc), unname(ref_bc), tolerance = 1e-10)
+  expect_equal(mc_R2, mc_R^2, tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(mc_bc, mc_R^2, tolerance = 1e-4)))
+})
+
+test_that("dcor and bcdcor match self-contained references across Gaussian correlations", {
+  n <- 350
+  for (rho in c(0, 0.2, 0.4, 0.6, 0.8)) {
+    set.seed(900 + as.integer(100 * rho))
+    x <- rnorm(n)
+    y <- rho * x + sqrt(1 - rho^2) * rnorm(n)
+    X <- cbind(x = x, y = y)
+
+    mc_R <- dcor(X)["x", "y"]
+    mc_R2 <- dcor(X, squared = TRUE)["x", "y"]
+    mc_bc <- bcdcor(X)["x", "y"]
+    ref_R <- local_v_dcor(x, y)
+    ref_R2 <- local_v_dcor(x, y, squared = TRUE)
+    ref_bc <- local_bcdcor(x, y)
+
+    expect_equal(mc_R, ref_R, tolerance = 1e-10, info = paste("rho", rho))
+    expect_equal(mc_R2, ref_R2, tolerance = 1e-10, info = paste("rho", rho))
+    expect_equal(mc_R2, mc_R^2, tolerance = 1e-12, info = paste("rho", rho))
+    expect_equal(unname(mc_bc), unname(ref_bc), tolerance = 1e-10, info = paste("rho", rho))
+  }
+})
+
+test_that("independent data can produce negative signed bcdcor", {
+  set.seed(3)
+  x <- rnorm(80)
+  y <- rnorm(80)
+  X <- cbind(x = x, y = y)
+
+  mc_R <- dcor(X)["x", "y"]
+  mc_bc <- bcdcor(X)["x", "y"]
+  ref_bc <- local_bcdcor(x, y)
+
+  expect_gte(mc_R, -1e-12)
+  expect_lte(mc_R, 1 + 1e-12)
+  expect_lt(mc_bc, 0)
+  expect_equal(unname(mc_bc), unname(ref_bc), tolerance = 1e-10)
+})
+
+test_that("perfect and negative linear dependence remain nonnegative for dcor", {
+  x <- seq(-2, 2, length.out = 80)
+
+  pos <- cbind(x = x, y = 2 * x + 1)
+  neg <- cbind(x = x, y = -2 * x)
+
+  expect_equal(dcor(pos)["x", "y"], 1, tolerance = 1e-12)
+  expect_equal(dcor(pos, squared = TRUE)["x", "y"], 1, tolerance = 1e-12)
+  expect_equal(bcdcor(pos)["x", "y"], 1, tolerance = 1e-12)
+  expect_equal(dcor(neg)["x", "y"], 1, tolerance = 1e-12)
+  expect_equal(dcor(neg, squared = TRUE)["x", "y"], 1, tolerance = 1e-12)
+})
+
+test_that("dcor is bounded and squared entries equal squared dcor", {
+  set.seed(44)
+  X <- matrix(rnorm(300), nrow = 100, ncol = 3)
+  colnames(X) <- letters[1:3]
+
+  R <- dcor(X)
+  R2 <- dcor(X, squared = TRUE)
+  vals <- R[upper.tri(R)]
+
+  expect_true(all(vals >= -1e-12, na.rm = TRUE))
+  expect_true(all(vals <= 1 + 1e-12, na.rm = TRUE))
+  expect_equal(R2[upper.tri(R2)], R[upper.tri(R)]^2, tolerance = 1e-12)
+})
+
+test_that("dcor and bcdcor support missing-data modes", {
+  X <- cbind(
+    a = c(1, 2, NA, 4, 5, 6, 7),
+    b = c(2, 4, 6, 8, NA, 12, 14),
+    c = c(7, 6, 5, 4, 3, 2, 1)
+  )
+  Xcc <- X[stats::complete.cases(X) & apply(is.finite(X), 1L, all), , drop = FALSE]
+
+  expect_error(dcor(X, na_method = "error"), "Missing values are not allowed.")
+  expect_error(bcdcor(X, na_method = "error"), "Missing values are not allowed.")
+
+  dcor_complete <- unclass(dcor(X, na_method = "complete"))
+  dcor_manual <- unclass(dcor(Xcc, na_method = "error"))
+  attributes(dcor_complete) <- attributes(dcor_complete)[c("dim", "dimnames")]
+  attributes(dcor_manual) <- attributes(dcor_manual)[c("dim", "dimnames")]
+  expect_equal(
+    dcor_complete,
+    dcor_manual,
+    tolerance = 1e-12
+  )
+  bcdcor_complete <- unclass(bcdcor(X, na_method = "complete"))
+  bcdcor_manual <- unclass(bcdcor(Xcc, na_method = "error"))
+  attributes(bcdcor_complete) <- attributes(bcdcor_complete)[c("dim", "dimnames")]
+  attributes(bcdcor_manual) <- attributes(bcdcor_manual)[c("dim", "dimnames")]
+  expect_equal(
+    bcdcor_complete,
+    bcdcor_manual,
+    tolerance = 1e-12
+  )
+
+  expect_s3_class(dcor(X, na_method = "pairwise"), "dcor")
+  expect_s3_class(bcdcor(X, na_method = "pairwise"), "bcdcor")
+})
+
+test_that("bcdcor output modes preserve signed threshold semantics", {
+  set.seed(3)
+  X <- cbind(x = rnorm(80), y = rnorm(80), z = rnorm(80))
+  dense <- bcdcor(X)
+  sparse <- bcdcor(X, output = "sparse", threshold = 0.001, diag = FALSE)
+  edges <- bcdcor(X, output = "edge_list", threshold = 0.001, diag = FALSE)
+
+  expect_s3_class(dense, "bcdcor")
+  expect_true(isTRUE(attr(sparse, "corr_result")))
+  expect_s3_class(edges, "corr_edge_list")
+  expect_true(any(edges$value < 0))
+  expect_true(all(abs(edges$value) >= 0.001))
 })

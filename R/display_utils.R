@@ -495,7 +495,7 @@ NULL
 .mc_reorder_summary_columns <- function(df,
                                         repeated = FALSE) {
   if (!is.data.frame(df)) return(df)
-  core <- c("item1", "item2", "estimate", "lwr", "upr", "statistic", "df", "p_value")
+  core <- c("item1", "item2", "estimate", "lwr", "upr", "bcdcor", "statistic", "df", "p_value")
   counts <- if (isTRUE(repeated)) c("n_subjects", "n_obs") else "n_complete"
   keep <- c(core, counts)
   ordered <- c(intersect(keep, names(df)), setdiff(names(df), keep))
@@ -589,7 +589,7 @@ NULL
   df <- format_cols(df, c("lwr", "upr"), ci_digits)
   df <- format_cols(
     df,
-    c("statistic", "df", "p_value", "fisher_z", "se", "p_value_adjusted", "skipped_prop"),
+    c("bcdcor", "statistic", "df", "p_value", "fisher_z", "se", "p_value_adjusted", "skipped_prop"),
     digits
   )
   df

@@ -2,6 +2,12 @@
 
 ## New features
 
+* Distance-correlation API correction: `dcor()` now returns the conventional
+  sample distance correlation \(R_n\). Previous versions returned a
+  U-centred bias-corrected squared distance-correlation statistic. The 
+  latter is now exposed as `bcdcor()`,
+  with signed finite-sample values preserved. Use `dcor(..., squared = TRUE)`
+  for conventional \(R_n^2\).
 * Added `robust_ccc()` for pairwise MCD-based robust concordance correlation.
   The estimator substitutes joint reweighted minimum covariance determinant
   location and scatter estimates into Lin's concordance coefficient and

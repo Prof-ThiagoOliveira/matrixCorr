@@ -120,8 +120,8 @@ edge-list outputs use the package-standard \code{corr_sparse} and
 }
 \description{
 Computes robust distance correlations by applying the biloop transformation
-to each numeric variable and then computing unbiased distance correlation on
-the transformed variables.
+to each numeric variable and then computing a U-centred robust
+distance-correlation statistic on the transformed variables.
 }
 \details{
 Permutation inference is computed for every unique column pair, so the
@@ -164,13 +164,12 @@ where \eqn{r^{(j)}_a = \sum_{b \ne a}D^{(j)}_{ab}} and
 \eqn{S^{(j)} = \sum_{a \ne b}D^{(j)}_{ab}}. The diagonal of
 \eqn{A^{(j)}} is zero.
 
-For variables \eqn{j} and \eqn{k}, the unbiased robust distance covariance
-is
+For variables \eqn{j} and \eqn{k}, the U-centred robust squared distance
+covariance estimator is
 \deqn{\widehat{\mathrm{dCov}}^2_u(j,k) =
 \frac{2}{n(n-3)}\sum_{a < b} A^{(j)}_{ab} A^{(k)}_{ab}.}
-The corresponding robust distance correlation is the usual non-negative
-distance-correlation ratio based on this covariance and the two transformed
-distance variances. Small negative numerical artifacts are clipped to zero.
+The corresponding robust statistic is a non-negative clipped ratio based on
+this covariance estimator and the two transformed distance variances.
 }
 \note{
 \code{robust_dcor()} is more robust to extreme observations than classical
@@ -248,7 +247,7 @@ Leyder, J., Raymaekers, J., & Rousseeuw, P. J. (2025). Robust distance
 correlation through bounded transformations.
 }
 \seealso{
-\code{\link[=dcor]{dcor()}}, \code{\link[=wincor]{wincor()}}, \code{\link[=pbcor]{pbcor()}}, \code{\link[=skipped_corr]{skipped_corr()}}
+\code{\link[=dcor]{dcor()}}, \code{\link[=bcdcor]{bcdcor()}}, \code{\link[=wincor]{wincor()}}, \code{\link[=pbcor]{pbcor()}}, \code{\link[=skipped_corr]{skipped_corr()}}
 }
 \author{
 Thiago de Paula Oliveira

@@ -605,38 +605,75 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// ustat_dcor
-double ustat_dcor(const arma::vec& x, const arma::vec& y);
-RcppExport SEXP _matrixCorr_ustat_dcor(SEXP xSEXP, SEXP ySEXP) {
+// dcor_pair_cpp
+double dcor_pair_cpp(const arma::vec& x, const arma::vec& y, const bool squared);
+RcppExport SEXP _matrixCorr_dcor_pair_cpp(SEXP xSEXP, SEXP ySEXP, SEXP squaredSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::vec& >::type x(xSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
-    rcpp_result_gen = Rcpp::wrap(ustat_dcor(x, y));
+    Rcpp::traits::input_parameter< const bool >::type squared(squaredSEXP);
+    rcpp_result_gen = Rcpp::wrap(dcor_pair_cpp(x, y, squared));
     return rcpp_result_gen;
 END_RCPP
 }
-// ustat_dcor_matrix_cpp
-arma::mat ustat_dcor_matrix_cpp(const arma::mat& X);
-RcppExport SEXP _matrixCorr_ustat_dcor_matrix_cpp(SEXP XSEXP) {
+// dcor_matrix_cpp
+arma::mat dcor_matrix_cpp(const arma::mat& X, const bool squared);
+RcppExport SEXP _matrixCorr_dcor_matrix_cpp(SEXP XSEXP, SEXP squaredSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
-    rcpp_result_gen = Rcpp::wrap(ustat_dcor_matrix_cpp(X));
+    Rcpp::traits::input_parameter< const bool >::type squared(squaredSEXP);
+    rcpp_result_gen = Rcpp::wrap(dcor_matrix_cpp(X, squared));
     return rcpp_result_gen;
 END_RCPP
 }
-// ustat_dcor_matrix_pairwise_cpp
-Rcpp::List ustat_dcor_matrix_pairwise_cpp(const arma::mat& X, const bool return_inference);
-RcppExport SEXP _matrixCorr_ustat_dcor_matrix_pairwise_cpp(SEXP XSEXP, SEXP return_inferenceSEXP) {
+// dcor_matrix_pairwise_cpp
+Rcpp::List dcor_matrix_pairwise_cpp(const arma::mat& X, const bool squared);
+RcppExport SEXP _matrixCorr_dcor_matrix_pairwise_cpp(SEXP XSEXP, SEXP squaredSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const bool >::type squared(squaredSEXP);
+    rcpp_result_gen = Rcpp::wrap(dcor_matrix_pairwise_cpp(X, squared));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bcdcor_pair_cpp
+double bcdcor_pair_cpp(const arma::vec& x, const arma::vec& y);
+RcppExport SEXP _matrixCorr_bcdcor_pair_cpp(SEXP xSEXP, SEXP ySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    rcpp_result_gen = Rcpp::wrap(bcdcor_pair_cpp(x, y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bcdcor_matrix_cpp
+arma::mat bcdcor_matrix_cpp(const arma::mat& X);
+RcppExport SEXP _matrixCorr_bcdcor_matrix_cpp(SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(bcdcor_matrix_cpp(X));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bcdcor_matrix_pairwise_cpp
+Rcpp::List bcdcor_matrix_pairwise_cpp(const arma::mat& X, const bool return_inference);
+RcppExport SEXP _matrixCorr_bcdcor_matrix_pairwise_cpp(SEXP XSEXP, SEXP return_inferenceSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
     Rcpp::traits::input_parameter< const bool >::type return_inference(return_inferenceSEXP);
-    rcpp_result_gen = Rcpp::wrap(ustat_dcor_matrix_pairwise_cpp(X, return_inference));
+    rcpp_result_gen = Rcpp::wrap(bcdcor_matrix_pairwise_cpp(X, return_inference));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1505,9 +1542,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_ccc_with_ci_cpp", (DL_FUNC) &_matrixCorr_ccc_with_ci_cpp, 2},
     {"_matrixCorr_openmp_threads", (DL_FUNC) &_matrixCorr_openmp_threads, 0},
     {"_matrixCorr_ccc_threshold_triplets_cpp", (DL_FUNC) &_matrixCorr_ccc_threshold_triplets_cpp, 4},
-    {"_matrixCorr_ustat_dcor", (DL_FUNC) &_matrixCorr_ustat_dcor, 2},
-    {"_matrixCorr_ustat_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_cpp, 1},
-    {"_matrixCorr_ustat_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_ustat_dcor_matrix_pairwise_cpp, 2},
+    {"_matrixCorr_dcor_pair_cpp", (DL_FUNC) &_matrixCorr_dcor_pair_cpp, 3},
+    {"_matrixCorr_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_dcor_matrix_cpp, 2},
+    {"_matrixCorr_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_dcor_matrix_pairwise_cpp, 2},
+    {"_matrixCorr_bcdcor_pair_cpp", (DL_FUNC) &_matrixCorr_bcdcor_pair_cpp, 2},
+    {"_matrixCorr_bcdcor_matrix_cpp", (DL_FUNC) &_matrixCorr_bcdcor_matrix_cpp, 1},
+    {"_matrixCorr_bcdcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_bcdcor_matrix_pairwise_cpp, 2},
     {"_matrixCorr_robust_dcor_matrix_cpp", (DL_FUNC) &_matrixCorr_robust_dcor_matrix_cpp, 3},
     {"_matrixCorr_robust_dcor_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_robust_dcor_matrix_pairwise_cpp, 6},
     {"_matrixCorr_gwet_ac_pair_cpp", (DL_FUNC) &_matrixCorr_gwet_ac_pair_cpp, 6},

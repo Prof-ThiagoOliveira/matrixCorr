@@ -145,16 +145,28 @@ ccc_threshold_triplets_cpp <- function(X, threshold = 0.0, diag = TRUE, block_si
     .Call(`_matrixCorr_ccc_threshold_triplets_cpp`, X, threshold, diag, block_size)
 }
 
-ustat_dcor <- function(x, y) {
-    .Call(`_matrixCorr_ustat_dcor`, x, y)
+dcor_pair_cpp <- function(x, y, squared = FALSE) {
+    .Call(`_matrixCorr_dcor_pair_cpp`, x, y, squared)
 }
 
-ustat_dcor_matrix_cpp <- function(X) {
-    .Call(`_matrixCorr_ustat_dcor_matrix_cpp`, X)
+dcor_matrix_cpp <- function(X, squared = FALSE) {
+    .Call(`_matrixCorr_dcor_matrix_cpp`, X, squared)
 }
 
-ustat_dcor_matrix_pairwise_cpp <- function(X, return_inference = FALSE) {
-    .Call(`_matrixCorr_ustat_dcor_matrix_pairwise_cpp`, X, return_inference)
+dcor_matrix_pairwise_cpp <- function(X, squared = FALSE) {
+    .Call(`_matrixCorr_dcor_matrix_pairwise_cpp`, X, squared)
+}
+
+bcdcor_pair_cpp <- function(x, y) {
+    .Call(`_matrixCorr_bcdcor_pair_cpp`, x, y)
+}
+
+bcdcor_matrix_cpp <- function(X) {
+    .Call(`_matrixCorr_bcdcor_matrix_cpp`, X)
+}
+
+bcdcor_matrix_pairwise_cpp <- function(X, return_inference = FALSE) {
+    .Call(`_matrixCorr_bcdcor_matrix_pairwise_cpp`, X, return_inference)
 }
 
 robust_dcor_matrix_cpp <- function(X, c_const = 4.0, n_threads = 1L) {

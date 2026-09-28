@@ -40,6 +40,7 @@ test_that("output modes are consistent across dense correlation methods", {
     kendall = function(...) kendall_tau(X, na_method = "error", ci = FALSE, ...),
     bicor = function(...) bicor(X, na_method = "error", ci = FALSE, ...),
     dcor = function(...) dcor(X, na_method = "error", p_value = FALSE, ...),
+    bcdcor = function(...) bcdcor(X, na_method = "error", p_value = FALSE, ...),
     pbcor = function(...) pbcor(X, na_method = "error", ci = FALSE, p_value = FALSE, ...),
     wincor = function(...) wincor(X, na_method = "error", ci = FALSE, p_value = FALSE, ...),
     robust_ccc = function(...) robust_ccc(X, na_method = "error", seed = 42L, ...),

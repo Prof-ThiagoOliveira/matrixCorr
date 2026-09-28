@@ -10,6 +10,7 @@ test_that("na_method complete matches manual listwise deletion", {
     spearman_rho = function(z, na_method) spearman_rho(z, na_method = na_method, ci = FALSE),
     kendall_tau = function(z, na_method) kendall_tau(z, na_method = na_method, ci = FALSE),
     dcor = function(z, na_method) dcor(z, na_method = na_method, p_value = FALSE),
+    bcdcor = function(z, na_method) bcdcor(z, na_method = na_method, p_value = FALSE),
     robust_dcor = function(z, na_method) robust_dcor(z, na_method = na_method, p_value = FALSE),
     wincor = function(z, na_method) wincor(z, na_method = na_method, ci = FALSE, p_value = FALSE),
     pbcor = function(z, na_method) pbcor(z, na_method = na_method, ci = FALSE, p_value = FALSE),

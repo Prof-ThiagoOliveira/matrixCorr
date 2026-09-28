@@ -72,7 +72,7 @@ tidy(fit_pearson)
 ```
 
 This pattern extends to other wide-data estimators such as `kendall_tau()`,
-`dcor()`, `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`,
+`dcor()`, `bcdcor()`, `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()`,
 `shrinkage_corr()`, `pcorr()`, `ccc()`, and `icc()`.
 
 ## Agreement and reliability workflow

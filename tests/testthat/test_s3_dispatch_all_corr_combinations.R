@@ -147,22 +147,25 @@ test_that("S3 dispatch works across all core correlation estimators and output c
     }
   }
 
-  for (output in outputs) {
-    out_args <- case_output_args(output)
-    for (p_value in c(FALSE, TRUE)) {
-      case_label <- sprintf("dcor output=%s p_value=%s", output, p_value)
-      obj <- do.call(
-        dcor,
-        c(list(data = X, p_value = p_value), out_args)
-      )
-      assert_s3_dispatch(
-        obj = obj,
-        case_label = case_label,
-        expected_summary_class = "summary.corr_result",
-        expected_output = output,
-        expected_has_ci = FALSE,
-        expected_has_p = p_value
-      )
+  dcor_methods <- list(dcor = dcor, bcdcor = bcdcor)
+  for (nm in names(dcor_methods)) {
+    for (output in outputs) {
+      out_args <- case_output_args(output)
+      for (p_value in c(FALSE, TRUE)) {
+        case_label <- sprintf("%s output=%s p_value=%s", nm, output, p_value)
+        obj <- do.call(
+          dcor_methods[[nm]],
+          c(list(data = X, p_value = p_value), out_args)
+        )
+        assert_s3_dispatch(
+          obj = obj,
+          case_label = case_label,
+          expected_summary_class = "summary.corr_result",
+          expected_output = output,
+          expected_has_ci = FALSE,
+          expected_has_p = p_value
+        )
+      }
     }
   }
 

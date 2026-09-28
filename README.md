@@ -51,7 +51,7 @@ repeated-measures designs.
 | Backend | High-performance C++ backend using `Rcpp` |
 | General correlations | `pearson_corr()`, `spearman_rho()`, `kendall_tau()` |
 | Robust correlations | `bicor()`, `pbcor()`, `wincor()`, `skipped_corr()` |
-| Distance correlation | `dcor()`, `robust_dcor()` |
+| Distance correlation | `dcor()`, `bcdcor()`, `robust_dcor()` |
 | Kernel dependence | `hsic()` for raw biased/unbiased HSIC, normalised kCor-style dependence, kernel bandwidth rules, and permutation p-values |
 | Partial correlation | `pcorr()` |
 | Directed dependence | `xi_corr()` for Chatterjee rank correlation, with directed/asymmetric matrices and m-out-of-n bootstrap confidence intervals |

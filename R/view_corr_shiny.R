@@ -4,7 +4,7 @@
 #' filtering, clustering, and hover inspection. The viewer accepts any
 #' matrixCorr correlation result (for example the outputs from
 #' [pearson_corr()], [spearman_rho()], [kendall_tau()], [bicor()],
-#' [pbcor()], [wincor()], [skipped_corr()], [pcorr()], [dcor()], or
+#' [pbcor()], [wincor()], [skipped_corr()], [pcorr()], [dcor()], [bcdcor()], or
 #' [shrinkage_corr()]), a plain
 #' matrix, or a named list of such objects. When a list is supplied the gadget
 #' offers a picker to switch between results.

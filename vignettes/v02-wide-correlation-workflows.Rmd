@@ -121,8 +121,10 @@ summary(fit_ken_ci)
 ## Distance correlation
 
 Distance correlation addresses a broader target. It is designed to detect
-general dependence rather than only linear or monotone structure. The function
-also supports optional hypothesis testing through `p_value = TRUE`.
+general dependence rather than only linear or monotone structure. `dcor()`
+returns the conventional descriptive distance correlation. The related
+`bcdcor()` function returns the signed U-centred bias-corrected squared
+statistic used for the distance-correlation t-test.
 
 ```{r}
 set.seed(12)
@@ -137,11 +139,11 @@ dcor(dat_nonlin)
 This is a typical situation where Pearson correlation can be close to zero even
 though the variables are clearly dependent.
 
-If a formal inferential summary is needed, p-values can be requested directly.
+If a formal inferential summary is needed, request p-values from `bcdcor()`.
 
 ```{r}
-fit_dcor_p <- dcor(dat_nonlin, p_value = TRUE)
-summary(fit_dcor_p)
+fit_bcdcor_p <- bcdcor(dat_nonlin, p_value = TRUE)
+summary(fit_bcdcor_p)
 ```
 
 ## Missing values

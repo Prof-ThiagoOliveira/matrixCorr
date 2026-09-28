@@ -615,6 +615,7 @@ plot.dgCMatrix <- function(x,
 
   inf <- attr(object, "inference", exact = TRUE)
   if (is.list(inf)) {
+    if (is.matrix(inf$bcdcor)) pairs$bcdcor <- as.numeric(add_from_matrix(inf$bcdcor))
     if (is.matrix(inf$statistic)) pairs$statistic <- as.numeric(add_from_matrix(inf$statistic))
     param_mat <- inf$parameter %||% inf$df
     if (is.matrix(param_mat)) pairs$df <- as.numeric(add_from_matrix(param_mat))
@@ -744,6 +745,7 @@ plot.dgCMatrix <- function(x,
     weighted_kappa = "Weighted Cohen's kappa agreement summary",
     bicor = "Biweight mid-correlation summary",
     dcor = "Distance correlation summary",
+    bcdcor = "Bias-corrected squared distance correlation summary",
     robust_dcor = "Robust distance correlation summary",
     pbcor = "Percentage bend correlation summary",
     wincor = "Winsorized correlation summary",
@@ -969,15 +971,41 @@ plot.dgCMatrix <- function(x,
     }
   }
   p <- ggplot2::ggplot(df, ggplot2::aes(.data$col, .data$row, fill = .data$value)) +
-    ggplot2::geom_tile(color = "white") +
-    ggplot2::scale_fill_gradient2(
+    ggplot2::geom_tile(color = "white")
+
+  estimator_class <- .mc_corr_estimator_class(x)
+  if (identical(estimator_class, "dcor")) {
+    squared <- isTRUE(attr(x, "squared", exact = TRUE))
+    fill_name <- if (squared) "dCor^2" else "dCor"
+    if (identical(title, "Correlation heatmap")) {
+      title <- if (squared) "Squared distance correlation heatmap" else "Distance correlation heatmap"
+    }
+    p <- p + ggplot2::scale_fill_gradient(
+      low = mid_color,
+      high = high_color,
+      limits = c(0, 1),
+      name = fill_name
+    )
+  } else {
+    fill_name <- if (identical(estimator_class, "bcdcor")) {
+      if (identical(title, "Correlation heatmap")) {
+        title <- "Bias-corrected squared distance correlation heatmap"
+      }
+      "bc-dCor^2"
+    } else {
+      "Correlation"
+    }
+    p <- p + ggplot2::scale_fill_gradient2(
       low = low_color,
       high = high_color,
       mid = mid_color,
       midpoint = 0,
-      limits = c(-1, 1),
-      name = "Correlation"
-    ) +
+      limits = if (identical(estimator_class, "bcdcor")) NULL else c(-1, 1),
+      name = fill_name
+    )
+  }
+
+  p <- p +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
       axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
@@ -1007,4 +1035,3 @@ plot.dgCMatrix <- function(x,
   }
   p
 }
-
