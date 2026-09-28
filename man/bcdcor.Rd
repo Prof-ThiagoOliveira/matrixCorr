@@ -160,10 +160,67 @@ samples, \code{bcdcor(x)} is not generally equal to \code{dcor(x)^2}.
 
 \examples{
 \donttest{
-set.seed(1)
-X <- cbind(a = rnorm(100), b = rnorm(100))
+# Bias-corrected versus conventional squared dCor
+set.seed(100)
+n <- 150
+x <- rnorm(n)
+y <- 0.6 * x + sqrt(1 - 0.6^2) * rnorm(n)
+X <- cbind(x = x, y = y)
+
+# These are related but are not the same finite-sample estimator:
+# dcor(..., squared = TRUE) uses the conventional V-statistic,
+# whereas bcdcor() uses U-centering and bias correction.
+dcor(X, squared = TRUE)
 bcdcor(X)
-bcdcor(X, p_value = TRUE)
+
+# Bias-corrected squared dCor can be negative in finite samples,
+# particularly under weak dependence or independence.
+# This is not a negative-dependence estimate.
+set.seed(3)
+x <- rnorm(80)
+y <- rnorm(80)
+X <- cbind(x = x, y = y)
+
+bcdcor(X)
+
+# Bias-corrected dCor t-test
+set.seed(2026)
+n <- 80
+x <- rnorm(n)
+y <- x^2 + rnorm(n, sd = 0.25)
+X <- cbind(x = x, y = y)
+
+fit <- bcdcor(X, p_value = TRUE)
+
+fit
+summary(fit)
+
+inf <- attr(fit, "inference")
+inf$bcdcor
+inf$statistic
+inf$parameter
+inf$p_value
+
+# bcdcor() supports the same missing-data modes as dcor().
+X_miss <- cbind(
+  a = c(1, 2, NA, 4, 5, 6),
+  b = c(2, 3, 4, 5, NA, 7),
+  c = c(6, 5, 4, 3, 2, 1)
+)
+
+bcdcor(X_miss, na_method = "complete")
+bcdcor(X_miss, na_method = "pairwise")
+
+# Edge-list thresholding uses absolute magnitude and preserves signs.
+set.seed(3)
+X <- cbind(x = rnorm(80), y = rnorm(80), z = rnorm(80))
+
+bcdcor(
+  X,
+  output = "edge_list",
+  threshold = 0.001,
+  diag = FALSE
+)
 }
 
 }

@@ -174,16 +174,85 @@ finite samples, \code{bcdcor(x)} is not generally equal to \code{dcor(x)^2}.
 
 \examples{
 \donttest{
+# Conventional distance correlation
 set.seed(42)
 n <- 200
 x <- rnorm(n)
-y <- x^2 + rnorm(n, sd = 0.2)
+y <- 0.7 * x + sqrt(1 - 0.7^2) * rnorm(n)
 X <- cbind(x = x, y = y)
 
+# dcor() returns conventional distance correlation R.
+# squared = TRUE returns conventional R^2.
 dcor(X)
 dcor(X, squared = TRUE)
-bcdcor(X)
-bcdcor(X, p_value = TRUE)
+
+D <- dcor(X)
+D2 <- dcor(X, squared = TRUE)
+
+D2["x", "y"]
+D["x", "y"]^2
+
+# Pearson can be close to zero for this symmetric nonlinear relationship,
+# while distance correlation remains positive.
+set.seed(123)
+n <- 300
+x <- rnorm(n)
+y <- x^2 + rnorm(n, sd = 0.25)
+X <- cbind(x = x, y = y)
+
+cor(x, y)
+dcor(X)
+
+# Pairwise distance-correlation matrix across columns
+if (requireNamespace("MASS", quietly = TRUE)) {
+  set.seed(7)
+  p <- 5
+  n <- 150
+  rho <- 0.6
+  Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
+
+  X <- MASS::mvrnorm(
+    n,
+    mu = rep(0, p),
+    Sigma = Sigma
+  )
+  colnames(X) <- paste0("V", seq_len(p))
+
+  D <- dcor(X)
+  D[1:3, 1:3]
+}
+
+# Backward-compatible inference through dcor()
+fit <- dcor(cbind(x = x, y = y), p_value = TRUE)
+fit
+
+# The displayed matrix contains conventional dCor.
+# The attached t-test is based on the signed bias-corrected statistic.
+inf <- attr(fit, "inference")
+inf$bcdcor
+inf$p_value
+
+# Missing-data modes
+X_miss <- cbind(
+  a = c(1, 2, NA, 4, 5, 6),
+  b = c(2, 3, 4, 5, NA, 7),
+  c = c(6, 5, 4, 3, 2, 1)
+)
+
+dcor(X_miss, na_method = "complete")
+dcor(X_miss, na_method = "pairwise")
+
+# Edge-list output for larger matrices
+set.seed(11)
+X <- matrix(rnorm(500), nrow = 100, ncol = 5)
+colnames(X) <- paste0("V", seq_len(ncol(X)))
+
+dcor(
+  X,
+  output = "edge_list",
+  threshold = 0.2,
+  diag = FALSE
+)
 }
 
 }
