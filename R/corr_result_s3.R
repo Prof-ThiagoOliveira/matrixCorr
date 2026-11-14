@@ -669,7 +669,7 @@ plot.dgCMatrix <- function(x,
   topn_use <- .mc_coalesce(topn, .mc_display_option("summary_topn", 5L))
   topn_use <- .mc_validate_optional_count(topn_use, arg = "topn", allow_null = FALSE)
   top_tbl <- if (nrow(pairs)) {
-    pairs[utils::head(order(abs(pairs$estimate), decreasing = TRUE, na.last = TRUE), topn_use), , drop = FALSE]
+    pairs[utils::head(seq_len(nrow(pairs)), topn_use), , drop = FALSE]
   } else {
     pairs
   }
@@ -1034,4 +1034,417 @@ plot.dgCMatrix <- function(x,
     )
   }
   p
+}
+
+.mc_summary_corr_matrix <- function(object,
+                                    header = "Correlation summary",
+                                    topn = NULL) {
+  m <- as.matrix(object)
+  symmetric <- isTRUE(nrow(m) == ncol(m)) && isTRUE(isSymmetric(unclass(m)))
+  vals <- if (symmetric && nrow(m) > 1L) {
+    m[upper.tri(m, diag = FALSE)]
+  } else {
+    as.vector(m)
+  }
+  vals <- vals[is.finite(vals)]
+  n_pairs <- if (symmetric) {
+    stats::setNames(nrow(m) * (nrow(m) - 1L) / 2L, NULL)
+  } else {
+    stats::setNames(nrow(m) * ncol(m), NULL)
+  }
+
+  out <- list(
+    class = class(object)[1L],
+    method = attr(object, "method"),
+    description = attr(object, "description"),
+    correct = attr(object, "correct"),
+    n_variables = if (symmetric) nrow(m) else NA_integer_,
+    n_pairs = as.integer(n_pairs),
+    n_rows = nrow(m),
+    n_cols = ncol(m),
+    symmetric = symmetric,
+    n_missing = sum(is.na(m)),
+    estimate_min = if (length(vals)) min(vals) else NA_real_,
+    estimate_max = if (length(vals)) max(vals) else NA_real_,
+    threshold_sets = {
+      thr <- attr(object, "thresholds")
+      if (is.list(thr)) length(thr) else NA_integer_
+    },
+    has_ci = .mc_has_ci_payload(object),
+    has_p = .mc_has_p_payload(object)
+  )
+  extremes <- .mc_pair_extremes(object, digits = 4)
+  out$most_negative <- extremes$most_negative
+  out$most_positive <- extremes$most_positive
+
+  diag_attr <- attr(object, "diagnostics")
+  if (is.list(diag_attr)) {
+    selector <- if (symmetric && nrow(m) > 1L) upper.tri(m, diag = FALSE) else matrix(TRUE, nrow(m), ncol(m))
+    pair_pick <- function(x, transform = identity, default = NA_integer_) {
+      if (!is.matrix(x) || !identical(dim(x), dim(m))) return(default)
+      vals <- transform(x[selector])
+      vals <- vals[!is.na(vals)]
+      vals <- vals[is.finite(vals)]
+      if (!length(vals)) return(default)
+      vals
+    }
+
+    zero_vals <- pair_pick(diag_attr$zero_cells)
+    ncomp_vals <- pair_pick(diag_attr$n_complete)
+    skipped_n_vals <- pair_pick(diag_attr$skipped_n, default = integer())
+    skipped_prop_vals <- pair_pick(diag_attr$skipped_prop, default = numeric())
+    boundary_vals <- pair_pick(diag_attr$boundary, as.logical, NA)
+    near_vals <- pair_pick(diag_attr$near_boundary, as.logical, NA)
+    corrected_vals <- pair_pick(diag_attr$corrected, as.logical, NA)
+    conv_vals <- pair_pick(diag_attr$converged, as.logical, NA)
+
+    out$zero_cell_pairs <- if (is.atomic(zero_vals) && length(zero_vals)) sum(zero_vals > 0, na.rm = TRUE) else NA_integer_
+    out$boundary_pairs <- if (is.atomic(boundary_vals) && length(boundary_vals)) sum(boundary_vals, na.rm = TRUE) else NA_integer_
+    out$near_boundary_pairs <- if (is.atomic(near_vals) && length(near_vals)) sum(near_vals, na.rm = TRUE) else NA_integer_
+    out$corrected_pairs <- if (is.atomic(corrected_vals) && length(corrected_vals)) sum(corrected_vals, na.rm = TRUE) else NA_integer_
+    out$converged_pairs <- if (is.atomic(conv_vals) && length(conv_vals)) sum(conv_vals, na.rm = TRUE) else NA_integer_
+    out$n_complete_min <- if (is.atomic(ncomp_vals) && length(ncomp_vals)) min(ncomp_vals, na.rm = TRUE) else NA_integer_
+    out$n_complete_max <- if (is.atomic(ncomp_vals) && length(ncomp_vals)) max(ncomp_vals, na.rm = TRUE) else NA_integer_
+    out$skipped_n_min <- if (is.atomic(skipped_n_vals) && length(skipped_n_vals)) min(skipped_n_vals, na.rm = TRUE) else NA_integer_
+    out$skipped_n_max <- if (is.atomic(skipped_n_vals) && length(skipped_n_vals)) max(skipped_n_vals, na.rm = TRUE) else NA_integer_
+    out$skipped_prop_min <- if (is.atomic(skipped_prop_vals) && length(skipped_prop_vals)) min(skipped_prop_vals, na.rm = TRUE) else NA_real_
+    out$skipped_prop_max <- if (is.atomic(skipped_prop_vals) && length(skipped_prop_vals)) max(skipped_prop_vals, na.rm = TRUE) else NA_real_
+      out$optimizer_tol <- if (is.null(diag_attr$optimizer_tol)) NA_real_ else diag_attr$optimizer_tol
+    } else {
+    out$zero_cell_pairs <- NA_integer_
+    out$boundary_pairs <- NA_integer_
+    out$near_boundary_pairs <- NA_integer_
+    out$corrected_pairs <- NA_integer_
+    out$converged_pairs <- NA_integer_
+    out$n_complete_min <- NA_integer_
+    out$n_complete_max <- NA_integer_
+    out$skipped_n_min <- NA_integer_
+    out$skipped_n_max <- NA_integer_
+    out$skipped_prop_min <- NA_real_
+    out$skipped_prop_max <- NA_real_
+      out$optimizer_tol <- NA_real_
+    }
+
+  ci_attr <- attr(object, "ci", exact = TRUE)
+  out$ci_conf_level <- NA_real_
+  out$ci_method <- NA_character_
+  out$ci_width_min <- NA_real_
+  out$ci_width_max <- NA_real_
+  out$ci_cross_zero <- NA_integer_
+  if (is.list(ci_attr) &&
+      is.matrix(ci_attr$lwr.ci) &&
+      is.matrix(ci_attr$upr.ci) &&
+      identical(dim(ci_attr$lwr.ci), dim(m)) &&
+      identical(dim(ci_attr$upr.ci), dim(m))) {
+    selector <- if (symmetric && nrow(m) > 1L) upper.tri(m, diag = FALSE) else matrix(TRUE, nrow(m), ncol(m))
+    lwr_vals <- ci_attr$lwr.ci[selector]
+    upr_vals <- ci_attr$upr.ci[selector]
+    keep_ci <- is.finite(lwr_vals) & is.finite(upr_vals)
+    out$ci_conf_level <- suppressWarnings(as.numeric(ci_attr$conf.level %||% attr(object, "conf.level", exact = TRUE)))
+    out$ci_method <- as.character(ci_attr$ci.method %||% attr(object, "ci.method", exact = TRUE) %||% NA_character_)
+    if (any(keep_ci)) {
+      widths <- upr_vals[keep_ci] - lwr_vals[keep_ci]
+      out$ci_width_min <- min(widths)
+      out$ci_width_max <- max(widths)
+      out$ci_cross_zero <- sum(lwr_vals[keep_ci] <= 0 & upr_vals[keep_ci] >= 0, na.rm = TRUE)
+    }
+  }
+
+  out$header <- header
+  out$top_results <- .mc_summary_top_pairs(
+    object,
+    digits = 4,
+    topn = .mc_coalesce(topn, .mc_display_option("summary_topn", 5L))
+  )
+  out <- .mc_finalize_summary_list(
+    out,
+    class_name = if (identical(header, "Latent correlation summary")) {
+      "summary.latent_corr"
+    } else {
+      "summary.matrixCorr"
+    }
+  )
+  if (identical(class(out)[1L], "summary.matrixCorr")) {
+    class(out) <- c("summary.matrixCorr", "summary.corr_matrix")
+  } else {
+    class(out) <- c("summary.latent_corr", "summary.matrixCorr", "summary.corr_matrix")
+  }
+  out
+}
+
+#' Correlation overview abstraction
+#' @keywords internal
+#' @noRd
+.mc_corr_overview <- function(x) {
+  dm <- .mc_corr_dim(x)
+  edges <- .mc_corr_pairs(x, diag = TRUE)
+  method <- attr(x, "method", exact = TRUE) %||% .mc_corr_estimator_class(x)
+  output <- attr(x, "output", exact = TRUE) %||% "matrix"
+  thr <- attr(x, "threshold", exact = TRUE) %||% 0
+  use_diag <- attr(x, "diag", exact = TRUE) %||% TRUE
+  symmetric <- isTRUE(attr(x, "corr_symmetric", exact = TRUE))
+  pair_edges <- if (isTRUE(symmetric)) {
+    if (nrow(edges)) edges[edges$row != edges$col, , drop = FALSE] else edges
+  } else {
+    edges
+  }
+  has_ci <- !is.null(attr(x, "ci", exact = TRUE))
+  inf_attr <- attr(x, "inference", exact = TRUE)
+  has_p <- is.list(inf_attr) && is.matrix(inf_attr$p_value)
+  conf.level <- attr(x, "conf.level", exact = TRUE) %||%
+    (attr(x, "ci", exact = TRUE)$conf.level %||% NA_real_)
+  ci_method <- attr(x, "ci", exact = TRUE)$ci.method %||%
+    attr(x, "ci.method", exact = TRUE) %||%
+    NA_character_
+  inference_method <- if (is.list(inf_attr) && is.character(inf_attr$method) &&
+                          length(inf_attr$method) == 1L) {
+    inf_attr$method
+  } else {
+    NA_character_
+  }
+
+  matrix_output <- identical(output, "matrix") || inherits(x, "corr_matrix")
+  use_matrix_overview <- isTRUE(matrix_output)
+  selector <- NULL
+  if (isTRUE(use_matrix_overview)) {
+    m <- .mc_corr_as_dense_matrix(x)
+    selector <- if (symmetric && dm[[1L]] == dm[[2L]]) {
+      upper.tri(m, diag = FALSE)
+    } else {
+      matrix(TRUE, nrow = dm[[1L]], ncol = dm[[2L]])
+    }
+    vals <- if (is.matrix(m) && identical(dim(m), dm)) {
+      as.numeric(m[selector])
+    } else {
+      numeric()
+    }
+    n_missing <- if (is.matrix(m)) sum(is.na(m)) else NA_integer_
+  } else {
+    vals <- as.numeric(edges$value)
+    if (symmetric && dm[[1L]] == dm[[2L]] && nrow(edges)) {
+      vals <- vals[as.character(edges$row) != as.character(edges$col)]
+    }
+    n_missing <- sum(is.na(edges$value))
+  }
+  vals <- vals[is.finite(vals)]
+  pick_range <- function(mat) {
+    if (!is.matrix(mat) || !identical(dim(mat), dm)) {
+      return(c(NA_real_, NA_real_))
+    }
+    idx <- selector
+    if (is.null(idx)) {
+      idx <- if (symmetric && dm[[1L]] == dm[[2L]]) {
+        upper.tri(mat, diag = FALSE)
+      } else {
+        matrix(TRUE, nrow = dm[[1L]], ncol = dm[[2L]])
+      }
+    }
+    vv <- as.numeric(mat[idx])
+    vv <- vv[is.finite(vv)]
+    if (!length(vv)) {
+      return(c(NA_real_, NA_real_))
+    }
+    c(min(vv), max(vv))
+  }
+  diag_attr <- attr(x, "diagnostics", exact = TRUE)
+  skipped_n <- if (is.list(diag_attr)) pick_range(diag_attr$skipped_n) else c(NA_real_, NA_real_)
+  skipped_prop <- if (is.list(diag_attr)) pick_range(diag_attr$skipped_prop) else c(NA_real_, NA_real_)
+  threshold_sets <- {
+    thr <- attr(x, "thresholds", exact = TRUE)
+    if (is.list(thr)) length(thr) else NA_integer_
+  }
+  thr_num <- if (is.list(thr)) numeric() else suppressWarnings(as.numeric(thr))
+  if (!length(thr_num) || !is.finite(thr_num[[1L]])) {
+    thr_num <- 0
+  } else {
+    thr_num <- thr_num[[1L]]
+  }
+  conf_num <- suppressWarnings(as.numeric(conf.level))
+  if (!length(conf_num) || !is.finite(conf_num[[1L]])) {
+    conf_num <- NA_real_
+  } else {
+    conf_num <- conf_num[[1L]]
+  }
+  if (length(ci_method) != 1L || is.list(ci_method)) {
+    ci_method <- NA_character_
+  }
+  if (length(inference_method) != 1L || is.list(inference_method)) {
+    inference_method <- NA_character_
+  }
+
+  list(
+    class = .mc_corr_estimator_class(x),
+    method = method,
+    output = output,
+    threshold = thr_num,
+    diag = isTRUE(use_diag),
+    n_variables = if (symmetric) as.integer(dm[[1L]]) else NA_integer_,
+    n_rows = as.integer(dm[[1L]]),
+    n_cols = as.integer(dm[[2L]]),
+    n_pairs = nrow(pair_edges),
+    n_pairs_retained = nrow(pair_edges),
+    symmetric = symmetric,
+    n_missing = n_missing,
+    threshold_sets = threshold_sets,
+    estimate_min = if (length(vals)) min(vals) else NA_real_,
+    estimate_max = if (length(vals)) max(vals) else NA_real_,
+    has_ci = has_ci,
+    has_p = has_p,
+    conf.level = conf_num,
+    ci_method = ci_method,
+    inference_method = inference_method,
+    skipped_n_min = skipped_n[[1L]],
+    skipped_n_max = skipped_n[[2L]],
+    skipped_prop_min = skipped_prop[[1L]],
+    skipped_prop_max = skipped_prop[[2L]]
+  )
+}
+
+.mc_round_finite <- function(x, digits) {
+  x <- as.numeric(x)
+  if (is.null(digits)) {
+    return(x)
+  }
+  out <- rep(NA_real_, length(x))
+  keep <- is.finite(x)
+  out[keep] <- round(x[keep], digits)
+  out
+}
+
+.mc_pairwise_matrix_summary <- function(object,
+                                        class_name,
+                                        digits,
+                                        ci_digits = NULL,
+                                        p_digits = NULL,
+                                        show_ci = NULL,
+                                        ci_attr = .mc_ci_attr(object),
+                                        inference_attr = .mc_inference_attr(object),
+                                        diagnostics_attr = attr(object, "diagnostics", exact = TRUE),
+                                        include_n_complete = TRUE,
+                                        include_ci = TRUE,
+                                        include_p = TRUE,
+                                        extra_columns = NULL,
+                                        extra_attrs = list(),
+                                        overview = NULL) {
+  est <- as.matrix(object)
+  nr <- nrow(est)
+  nc <- ncol(est)
+  rn <- rownames(est)
+  cn <- colnames(est)
+  if (is.null(rn)) rn <- as.character(seq_len(nr))
+  if (is.null(cn)) cn <- as.character(seq_len(nc))
+
+  n_pairs <- nr * (nc - 1L) / 2L
+  var1 <- character(n_pairs)
+  var2 <- character(n_pairs)
+  estimate <- numeric(n_pairs)
+
+  has_n_complete <- isTRUE(include_n_complete) &&
+    is.list(diagnostics_attr) &&
+    is.matrix(diagnostics_attr$n_complete)
+  n_complete <- if (has_n_complete) integer(n_pairs) else NULL
+
+  show_ci <- if (is.null(show_ci)) "yes" else show_ci
+  has_ci <- isTRUE(include_ci) &&
+    identical(show_ci, "yes") &&
+    is.list(ci_attr)
+  lwr <- if (has_ci) numeric(n_pairs) else NULL
+  upr <- if (has_ci) numeric(n_pairs) else NULL
+
+  extra_columns <- extra_columns %||% list()
+  extra_values <- vector("list", length(extra_columns))
+  names(extra_values) <- names(extra_columns)
+  if (length(extra_columns)) {
+    for (nm in names(extra_columns)) {
+      spec <- extra_columns[[nm]]
+      type <- spec$type %||% "numeric"
+      extra_values[[nm]] <- switch(
+        type,
+        integer = integer(n_pairs),
+        logical = logical(n_pairs),
+        character = character(n_pairs),
+        numeric(n_pairs)
+      )
+    }
+  }
+
+  k <- 0L
+  for (i in seq_len(nr - 1L)) {
+    for (j in (i + 1L):nc) {
+      k <- k + 1L
+      var1[[k]] <- rn[[i]]
+      var2[[k]] <- cn[[j]]
+      estimate[[k]] <- round(est[i, j], digits)
+      if (!is.null(n_complete)) {
+        n_complete[[k]] <- as.integer(diagnostics_attr$n_complete[i, j])
+      }
+      if (has_ci) {
+        lwr[[k]] <- if (!is.null(ci_attr$lwr.ci) && is.finite(ci_attr$lwr.ci[i, j])) {
+          round(ci_attr$lwr.ci[i, j], ci_digits)
+        } else {
+          NA_real_
+        }
+        upr[[k]] <- if (!is.null(ci_attr$upr.ci) && is.finite(ci_attr$upr.ci[i, j])) {
+          round(ci_attr$upr.ci[i, j], ci_digits)
+        } else {
+          NA_real_
+        }
+      }
+      if (length(extra_columns)) {
+        for (nm in names(extra_columns)) {
+          spec <- extra_columns[[nm]]
+          mat <- spec$matrix
+          value <- if (is.matrix(mat)) {
+            mat[i, j]
+          } else if (is.function(spec$value)) {
+            spec$value(i, j)
+          } else {
+            NA
+          }
+          type <- spec$type %||% "numeric"
+          extra_values[[nm]][[k]] <- switch(
+            type,
+            integer = as.integer(value),
+            logical = isTRUE(value),
+            character = as.character(value),
+            .mc_round_finite(value, if ("digits" %in% names(spec)) spec$digits else digits)
+          )
+        }
+      }
+    }
+  }
+
+  df <- data.frame(
+    var1 = var1,
+    var2 = var2,
+    estimate = as.numeric(estimate),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  if (!is.null(n_complete)) df$n_complete <- as.integer(n_complete)
+  if (!is.null(lwr)) df$lwr <- as.numeric(lwr)
+  if (!is.null(upr)) df$upr <- as.numeric(upr)
+  if (length(extra_values)) {
+    for (nm in names(extra_values)) {
+      df[[nm]] <- extra_values[[nm]]
+    }
+  }
+  rownames(df) <- NULL
+
+  out <- .mc_finalize_summary_df(df, class_name = class_name)
+  attr(out, "overview") <- overview %||% .mc_summary_corr_matrix(object)
+  attr(out, "has_ci") <- has_ci
+  if (!is.null(include_p)) {
+    attr(out, "has_p") <- isTRUE(include_p)
+  }
+  attr(out, "conf.level") <- if (is.null(ci_attr)) NA_real_ else ci_attr$conf.level
+  attr(out, "digits") <- digits
+  if (!is.null(ci_digits)) attr(out, "ci_digits") <- ci_digits
+  if (!is.null(p_digits)) attr(out, "p_digits") <- p_digits
+  if (length(extra_attrs)) {
+    for (nm in names(extra_attrs)) {
+      attr(out, nm) <- extra_attrs[[nm]]
+    }
+  }
+  out
 }

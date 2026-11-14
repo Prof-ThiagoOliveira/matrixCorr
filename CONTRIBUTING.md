@@ -39,3 +39,16 @@ Please keep pull requests focused; open a new issue for any large redesigns.
 
 By contributing, you agree that your code will be released under the
 package's GPL (>= 3) license.
+
+## Internal result infrastructure
+
+`R/corr_output.R` owns output validation, construction, conversion, and
+pair extraction. `R/corr_shared.R` orchestrates shared estimator output
+and inference attachment. `R/corr_result_s3.R` owns representation
+methods and summaries. `R/display_utils.R` owns presentation.
+`R/accessors.R` owns accessors.
+
+`.mc_robust_corr_pairwise_payload` shares only PB and Winsor payload
+assembly, with statistical inference kept separate and pair and RNG
+order unchanged. Specialised estimators and S4 Matrix support stay
+distinct, as do summary inference and tidy inference.
