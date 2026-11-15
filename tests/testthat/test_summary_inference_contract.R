@@ -229,10 +229,7 @@ test_that("a stored robust p-value payload is copied into the summary without re
 })
 
 test_that("empty non-Pearson summaries keep baseline attribute order", {
-  ref <- readRDS(
-    "/tmp/matrixcorr-corrections-4pafpj4s/baseline-capture.rds"
-  )[["shrinkage_corr/sparse/FALSE"]]$summary$value
-  expected_attr_order <- head(names(attributes(ref)), 3L)
+  expected_attr_order <- c("names", "row.names", "class")
 
   X <- cbind(A = 1:4, B = 4:1)
   for (output in c("edge_list", "sparse")) {
