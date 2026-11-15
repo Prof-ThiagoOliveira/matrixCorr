@@ -34,71 +34,6 @@
   sum(ax * ay) / sqrt(den_x * den_y)
 }
 
-.mc_pbcor_matrix_exact <- function(X, beta = 0.2) {
-  n <- nrow(X)
-  p <- ncol(X)
-  if (p < 2L) {
-    abort_bad_arg("X", message = "must contain at least two numeric columns.")
-  }
-  scores <- matrix(0, nrow = n, ncol = p)
-  valid <- rep(FALSE, p)
-
-  for (j in seq_len(p)) {
-    a <- .mc_pbcor_scores(X[, j], beta = beta)
-    if (!anyNA(a)) {
-      ss <- sum(a^2)
-      if (is.finite(ss) && ss > 0) {
-        scores[, j] <- a
-        valid[j] <- TRUE
-      }
-    }
-  }
-
-  ss <- colSums(scores^2)
-  out <- as.matrix(crossprod(scores))
-  denom <- sqrt(outer(ss, ss))
-  out <- as.matrix(out / denom)
-  out <- pmin(1, pmax(-1, out))
-  out <- matrix(out, nrow = p, ncol = p, dimnames = list(colnames(X), colnames(X)))
-
-  if (any(!valid)) {
-    bad <- which(!valid)
-    out[bad, ] <- NA_real_
-    out[, bad] <- NA_real_
-  }
-  diag(out) <- 1
-  out
-}
-
-.mc_pbcor_matrix_pairwise_exact <- function(X, beta = 0.2, min_n = 5L) {
-  p <- ncol(X)
-  if (p < 2L) {
-    abort_bad_arg("X", message = "must contain at least two numeric columns.")
-  }
-  out <- matrix(NA_real_, nrow = p, ncol = p)
-  dimnames(out) <- list(colnames(X), colnames(X))
-
-  finite_n <- colSums(is.finite(X))
-  diag(out) <- 1
-
-  for (j in seq_len(p - 1L)) {
-    for (k in seq.int(j + 1L, p)) {
-      ok <- is.finite(X[, j]) & is.finite(X[, k])
-      if (sum(ok) < min_n) next
-      out[j, k] <- .mc_pbcor_pair_exact(X[ok, j], X[ok, k], beta = beta)
-      out[k, j] <- out[j, k]
-    }
-  }
-
-  if (any(finite_n < 2L)) {
-    bad <- which(finite_n < 2L)
-    out[bad, ] <- NA_real_
-    out[, bad] <- NA_real_
-    diag(out) <- 1
-  }
-  out
-}
-
 .mc_pbcor_pair_inference <- function(x,
                                      y,
                                      beta = 0.2,
@@ -161,92 +96,17 @@
                                        conf_level = 0.95,
                                        n_boot = 500L,
                                        seed = NULL) {
-  est <- as.matrix(est)
-  p <- ncol(est)
-  dn <- dimnames(est)
-  n_complete <- .mc_corr_n_complete(X)
-  dimnames(n_complete) <- dn
-
-  ci_lwr <- ci_upr <- NULL
-  if (isTRUE(ci)) {
-    ci_lwr <- matrix(NA_real_, p, p, dimnames = dn)
-    ci_upr <- matrix(NA_real_, p, p, dimnames = dn)
-    diag(ci_lwr) <- 1
-    diag(ci_upr) <- 1
-  }
-
-  stat_mat <- p_mat <- df_mat <- NULL
-  if (isTRUE(p_value)) {
-    stat_mat <- matrix(NA_real_, p, p, dimnames = dn)
-    p_mat <- matrix(NA_real_, p, p, dimnames = dn)
-    df_mat <- matrix(NA_real_, p, p, dimnames = dn)
-    diag(stat_mat) <- Inf
-    diag(p_mat) <- 0
-  }
-
-  pair_id <- 0L
-  for (i in seq_len(p - 1L)) {
-    for (j in seq.int(i + 1L, p)) {
-      pair_id <- pair_id + 1L
-      ok <- is.finite(X[, i]) & is.finite(X[, j])
-      n_ij <- sum(ok)
-      n_complete[i, j] <- n_complete[j, i] <- n_ij
-      if (n_ij < 5L) {
-        next
-      }
-
-      info <- .mc_pbcor_pair_inference(
-        X[ok, i],
-        X[ok, j],
-        beta = beta,
-        ci = ci,
-        p_value = p_value,
-        conf_level = conf_level,
-        n_boot = n_boot,
-        seed = .mc_seed_offset(seed, pair_id - 1L)
-      )
-
-      if (isTRUE(ci)) {
-        ci_lwr[i, j] <- ci_lwr[j, i] <- info$lwr
-        ci_upr[i, j] <- ci_upr[j, i] <- info$upr
-      }
-      if (isTRUE(p_value)) {
-        stat_mat[i, j] <- stat_mat[j, i] <- info$statistic
-        p_mat[i, j] <- p_mat[j, i] <- info$p_value
-        df_mat[i, j] <- df_mat[j, i] <- info$parameter
-      }
-    }
-  }
-
-  diagnostics <- list(n_complete = n_complete)
-  ci_attr <- NULL
-  if (isTRUE(ci)) {
-    ci_attr <- list(
-      est = unclass(est),
-      lwr.ci = ci_lwr,
-      upr.ci = ci_upr,
-      conf.level = conf_level,
-      ci.method = "percentile_bootstrap"
-    )
-  }
-
-  inference_attr <- NULL
-  if (isTRUE(p_value)) {
-    inference_attr <- list(
-      method = "percentage_bend_t_test",
-      estimate = unclass(est),
-      statistic = stat_mat,
-      p_value = p_mat,
-      parameter = df_mat,
-      n_obs = n_complete,
-      alternative = "two.sided"
-    )
-  }
-
-  list(
-    diagnostics = diagnostics,
-    ci = ci_attr,
-    inference = inference_attr
+  .mc_robust_corr_pairwise_payload(
+    X,
+    est,
+    beta,
+    ci = ci,
+    p_value = p_value,
+    conf_level = conf_level,
+    n_boot = n_boot,
+    seed = seed,
+    pair_inference = .mc_pbcor_pair_inference,
+    method = "percentage_bend_t_test"
   )
 }
 

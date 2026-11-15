@@ -8,6 +8,10 @@
 \alias{estimate.summary.corr_result}
 \alias{estimate.summary.matrixCorr}
 \alias{coef.corr_result}
+\alias{estimate.sparseMatrix}
+\alias{coef.sparseMatrix}
+\alias{tidy.sparseMatrix}
+\alias{confint.sparseMatrix}
 \alias{ci.corr_result}
 \alias{ci.default}
 \alias{ci.ba}
@@ -90,6 +94,14 @@ ci(x, ...)
 \method{estimate}{summary.matrixCorr}(x, ...)
 
 \method{coef}{corr_result}(object, ...)
+
+\method{estimate}{sparseMatrix}(x, ...)
+
+\method{coef}{sparseMatrix}(object, ...)
+
+\method{tidy}{sparseMatrix}(x, diag = FALSE, triangle = c("upper", "lower", "full"), ...)
+
+\method{confint}{sparseMatrix}(object, parm, level = NULL, ...)
 
 \method{ci}{corr_result}(x, ...)
 
@@ -231,13 +243,21 @@ ci(x, ...)
 \item{...}{Additional arguments passed to methods.}
 
 \item{diag}{Logical; include diagonal entries for matrix-style results.
-Default is \code{FALSE}.}
+Default is \code{FALSE}. For sparse and edge-list results this can only
+retain a diagonal the object actually stored. A result built with
+\code{diag = FALSE} has no diagonal entry to recover.}
 
 \item{triangle}{For matrix-style correlation results, which triangle to
 return from \code{tidy()}: \code{"upper"} (default), \code{"lower"}, or
-\code{"full"}. The default avoids duplicate pairs for symmetric matrices;
-directed matrices use all off-diagonal entries unless \code{triangle} is
-supplied explicitly.}
+\code{"full"}. The default avoids duplicate pairs for symmetric matrices.
+Directed matrices use every stored off-diagonal entry (\code{"full"})
+unless \code{triangle} is supplied explicitly. \code{"lower"},
+\code{"upper"}, and \code{"full"} on a symmetric sparse result repeat a
+stored off-diagonal entry at the swapped index when that opposite index
+was not stored. A lower-triangle \code{dsCMatrix} therefore still supplies
+the upper triangle.
+Entries the sparse object never stored are omitted, including implicit
+zeros left out by thresholding.}
 
 \item{parm}{Ignored; included for compatibility with \code{stats::confint()}.}
 
@@ -247,18 +267,42 @@ stored level, recompute the original object with the desired level.}
 }
 \value{
 \code{estimate()} returns the primary estimate in its natural shape: a
-matrix-like result returns a matrix, an edge-list result returns a data frame,
-and a scalar result returns a numeric value.
+dense matrix-like result returns a plain numeric matrix, an edge-list
+result returns a data frame, and a scalar result returns a numeric value.
+A matrixCorr sparse result returns the original S4 \code{Matrix} object
+unchanged, including its class and stored entries. An ordinary \code{Matrix}
+object without matrixCorr sparse metadata keeps the previous default method.
 
 \code{tidy()} returns a data frame with columns such as \code{item1},
 \code{item2}, \code{estimate}, \code{lwr}, \code{upr}, diagnostics, and
-inferential quantities when available.
+inferential quantities when those payloads are already stored. Sparse
+results contribute only explicit stored entries, including stored zeros.
+Implicit structural zeros are not emitted. An empty sparse selection keeps
+zero-row \code{item1}, \code{item2}, and \code{estimate} columns. It adds
+zero-row \code{lwr} and \code{upr} only when both stored bound matrices have
+the original dimensions. A single bound, or a bound matrix of another
+shape, does not advertise an interval. A thin edge list reads stored
+coordinates and does not allocate the estimate matrix. A denser edge list
+reuses the existing dense path when that cost is preferable. Stored
+inference payloads retain their representation. An empty edge
+result has no confidence limits, so \code{confint()} reports that none are
+stored. When a payload matrix is
+present, \code{tidy()} may also append \code{p_value_adjusted},
+\code{reject}, \code{skipped_n}, and \code{skipped_prop}. Biweight
+mid-correlation may append stored \code{Z} as \code{z_statistic}, and a
+stored \code{bcdcor} matrix may be appended under that name. These columns
+are copied from the object. They are not recomputed, and an all-missing
+column is dropped. \code{confint()} reads those stored limits and does not
+build a new interval when the requested level differs or no interval was
+stored.
 
 \code{confint()} returns a data frame containing confidence limits when they
 are available.
 
 \code{ci()} returns the stored confidence-interval payload. It is mainly a
 structured alternative to reading \code{attr(x, "ci")} directly.
+
+\code{coef()} on a matrixCorr sparse result returns that same S4 object.
 }
 \description{
 Lightweight accessors for matrixCorr result objects. These functions do not

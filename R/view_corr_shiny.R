@@ -1093,17 +1093,6 @@ view_corr_shiny <- function(x, title = NULL, default_max_vars = 40L) {
   )
 }
 
-.mc_viewer_footer <- function(logo_src) {
-  if (is.null(logo_src) || !nzchar(logo_src)) {
-    return(NULL)
-  }
-  shiny::tags$div(
-    class = "mc-viewer-footer",
-    shiny::tags$img(src = logo_src, alt = "matrixCorr logo"),
-    shiny::tags$div(class = "mc-viewer-footer-text", "matrixCorr")
-  )
-}
-
 .mc_logo_path <- function() {
   candidates <- c(
     system.file("app-www", "logo.svg", package = "matrixCorr"),

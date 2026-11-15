@@ -947,3 +947,200 @@ NULL
   diag_attr <- attr(x, "diagnostics", exact = TRUE)
   is.list(diag_attr) && any(c("p_value", "p_value_adjusted") %in% names(diag_attr))
 }
+
+.mc_print_corr_matrix <- function(x,
+                                  header,
+                                  digits = 4,
+                                  n = NULL,
+                                  topn = NULL,
+                                  max_vars = NULL,
+                                  width = NULL,
+                                  show_ci = NULL,
+                                  mat = NULL,
+                                  ...) {
+  legacy <- .mc_extract_legacy_display_args(
+    list(...),
+    n = n,
+    topn = topn,
+    max_vars = max_vars
+  )
+  cfg <- .mc_resolve_display_args(
+    context = "print",
+    n = legacy$n,
+    topn = legacy$topn,
+    max_vars = legacy$max_vars,
+    width = width,
+    show_ci = show_ci
+  )
+
+  m <- as.matrix(.mc_coalesce(mat, x))
+  attributes(m) <- attributes(m)[c("dim", "dimnames")]
+  ci_present <- .mc_has_ci_payload(x)
+  p_present <- .mc_has_p_payload(x)
+
+  cat(header, "\n", sep = "")
+  digest <- c(
+      method = .mc_coalesce(attr(x, "method", exact = TRUE), NA_character_),
+      dimensions = sprintf("%d x %d", nrow(m), ncol(m)),
+      if (ci_present) c(ci = "yes"),
+      if (p_present) c(p_values = "yes")
+    )
+  digest <- digest[!is.na(digest) & nzchar(digest)]
+  .mc_print_named_digest(digest)
+  cat("\n")
+  do.call(
+    .mc_print_preview_matrix,
+    c(
+      list(
+        m = m,
+        digits = digits,
+        n = cfg$n,
+        topn = cfg$topn,
+        max_vars = cfg$max_vars,
+        width = cfg$width,
+        context = "print",
+        full_hint = TRUE,
+        summary_hint = TRUE
+      ),
+      legacy$dots
+    )
+  )
+
+  invisible(x)
+}
+
+.mc_plot_corr_matrix <- function(x, class_name, fill_name, title,
+                                 low_color = "indianred1",
+                                 high_color = "steelblue1",
+                                 mid_color = "white",
+                                 value_text_size = 4,
+                                 show_value = TRUE, ...) {
+  check_inherits(x, class_name)
+  check_bool(show_value, arg = "show_value")
+
+  mat <- as.matrix(x)
+  axis_labels <- NULL
+  if (.mc_axis_names_positional(rownames(mat), colnames(mat))) {
+    n <- nrow(mat)
+    p_n <- ncol(mat)
+    rn <- rownames(mat) %||% as.character(seq_len(n))
+    cn <- colnames(mat) %||% as.character(seq_len(p_n))
+    df <- data.frame(
+      Var1 = factor(rep.int(seq_len(n), p_n), levels = rev(seq_len(n))),
+      Var2 = factor(rep.int(seq_len(p_n), rep.int(n, p_n)), levels = seq_len(p_n)),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    df[[fill_name]] <- as.numeric(mat)
+    axis_labels <- list(row = rev(rn), col = cn)
+  } else {
+    df <- as.data.frame(as.table(mat))
+    colnames(df) <- c("Var1", "Var2", fill_name)
+    df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
+  }
+
+  p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = .data[[fill_name]])) +
+    ggplot2::geom_tile(color = "white") +
+    ggplot2::scale_fill_gradient2(
+      low = low_color,
+      high = high_color,
+      mid = mid_color,
+      midpoint = 0,
+      limits = c(-1, 1),
+      name = fill_name
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      panel.grid = ggplot2::element_blank(),
+      ...
+    ) +
+    ggplot2::coord_fixed() +
+    ggplot2::labs(title = title, x = NULL, y = NULL)
+  p <- .mc_add_positional_axis_scales(p, axis_labels)
+
+  if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
+    p <- p + ggplot2::geom_text(
+      ggplot2::aes(label = sprintf("%.2f", .data[[fill_name]])),
+      size = value_text_size,
+      color = "black"
+    )
+  }
+
+  p
+}
+
+.mc_add_positional_axis_scales <- function(p, axis_labels) {
+  if (is.null(axis_labels)) {
+    return(p)
+  }
+  p +
+    ggplot2::scale_y_discrete(labels = axis_labels$row, drop = FALSE) +
+    ggplot2::scale_x_discrete(labels = axis_labels$col, drop = FALSE)
+}
+
+.mc_plot_ci_df_positional <- function(est_mat, ci, estimate_col) {
+  n <- nrow(est_mat)
+  p <- ncol(est_mat)
+  ii <- as.vector(row(est_mat))
+  jj <- as.vector(col(est_mat))
+  lwr <- as.numeric(ci$lwr.ci)
+  upr <- as.numeric(ci$upr.ci)
+  diag_idx <- ii == jj
+  lwr[diag_idx] <- NA_real_
+  upr[diag_idx] <- NA_real_
+  rn <- rownames(est_mat) %||% as.character(seq_len(n))
+  cn <- colnames(est_mat) %||% as.character(seq_len(p))
+  df <- data.frame(
+    Var1 = factor(ii, levels = rev(seq_len(n))),
+    Var2 = factor(jj, levels = seq_len(p)),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  df[[estimate_col]] <- as.numeric(est_mat)
+  df$lwr <- lwr
+  df$upr <- upr
+  df$ci_label <- ifelse(
+    is.na(df$lwr) | is.na(df$upr),
+    NA_character_,
+    sprintf("[%.3f, %.3f]", df$lwr, df$upr)
+  )
+  df$label <- sprintf("%.2f", df[[estimate_col]])
+  attr(df, "mc_axis_labels") <- list(row = rev(rn), col = cn)
+  df
+}
+
+.mc_plot_ci_df <- function(x, ci, estimate_col) {
+  est_mat <- as.matrix(x)
+  if (.mc_axis_names_positional(rownames(est_mat), colnames(est_mat))) {
+    return(.mc_plot_ci_df_positional(est_mat, ci, estimate_col))
+  }
+  df_est <- as.data.frame(as.table(est_mat))
+  names(df_est) <- c("Var1", "Var2", estimate_col)
+
+  df_lwr <- as.data.frame(as.table(ci$lwr.ci))
+  names(df_lwr)[3] <- "lwr"
+  df_upr <- as.data.frame(as.table(ci$upr.ci))
+  names(df_upr)[3] <- "upr"
+  df <- Reduce(
+    function(a, b) merge(a, b, by = c("Var1", "Var2"), all = TRUE),
+    list(df_est, df_lwr, df_upr)
+  )
+
+  diag_idx <- df$Var1 == df$Var2
+  df$lwr[diag_idx] <- NA_real_
+  df$upr[diag_idx] <- NA_real_
+  df$ci_label <- ifelse(
+    is.na(df$lwr) | is.na(df$upr),
+    NA_character_,
+    sprintf("[%.3f, %.3f]", df$lwr, df$upr)
+  )
+
+  lev_row <- unique(df_est$Var1)
+  lev_col <- unique(df_est$Var2)
+  df$Var1 <- factor(df$Var1, levels = rev(lev_row))
+  df$Var2 <- factor(df$Var2, levels = lev_col)
+  df$label <- sprintf("%.2f", df[[estimate_col]])
+
+  df
+}

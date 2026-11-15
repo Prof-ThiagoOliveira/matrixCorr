@@ -75,7 +75,7 @@ reference_pairwise_summary <- function(object,
   df <- do.call(rbind.data.frame, rows)
   rownames(df) <- NULL
   for (nm in intersect(c("estimate", "lwr", "upr", "statistic", "df",
-                        "fisher_z", "p_value", "p_value_adjusted",
+                        "z_statistic", "p_value", "p_value_adjusted",
                         "skipped_prop"), names(df))) {
     df[[nm]] <- as.numeric(df[[nm]])
   }
@@ -128,7 +128,7 @@ test_that("shared pairwise summaries preserve estimator-specific data frames", {
   bic_extra <- function(i, j, inf, diagnostics) {
     list(
       statistic = if (is.finite(inf$statistic[i, j])) round(inf$statistic[i, j], 4) else NA_real_,
-      fisher_z = if (is.finite(inf$Z[i, j])) round(inf$Z[i, j], 4) else NA_real_,
+      z_statistic = if (is.finite(inf$Z[i, j])) round(inf$Z[i, j], 4) else NA_real_,
       p_value = if (is.finite(inf$p_value[i, j])) round(inf$p_value[i, j], 4) else NA_real_
     )
   }

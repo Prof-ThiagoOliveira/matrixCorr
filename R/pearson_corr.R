@@ -348,33 +348,7 @@ plot.pearson_corr <-
     ))
   }
 
-  est_mat <- as.matrix(x)
-  df_est <- as.data.frame(as.table(est_mat))
-  names(df_est) <- c("Var1", "Var2", "pearson")
-
-  df_lwr <- as.data.frame(as.table(ci$lwr.ci))
-  names(df_lwr)[3] <- "lwr"
-  df_upr <- as.data.frame(as.table(ci$upr.ci))
-  names(df_upr)[3] <- "upr"
-  df <- Reduce(
-    function(a, b) merge(a, b, by = c("Var1", "Var2"), all = TRUE),
-    list(df_est, df_lwr, df_upr)
-  )
-
-  diag_idx <- df$Var1 == df$Var2
-  df$lwr[diag_idx] <- NA_real_
-  df$upr[diag_idx] <- NA_real_
-  df$ci_label <- ifelse(
-    is.na(df$lwr) | is.na(df$upr),
-    NA_character_,
-    sprintf("[%.3f, %.3f]", df$lwr, df$upr)
-  )
-
-  lev_row <- unique(df_est$Var1)
-  lev_col <- unique(df_est$Var2)
-  df$Var1 <- factor(df$Var1, levels = rev(lev_row))
-  df$Var2 <- factor(df$Var2, levels = lev_col)
-  df$label <- sprintf("%.2f", df$pearson)
+  df <- .mc_plot_ci_df(x, ci, estimate_col = "pearson")
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = Var2, y = Var1, fill = .data$pearson)) +
     ggplot2::geom_tile(color = "white") +
@@ -394,6 +368,7 @@ plot.pearson_corr <-
     ) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
+  p <- .mc_add_positional_axis_scales(p, attr(df, "mc_axis_labels", exact = TRUE))
 
   if (isTRUE(show_value)) {
     p <- p + ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size, color = "black")

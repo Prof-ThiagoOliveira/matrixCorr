@@ -25,8 +25,8 @@ bicor_matrix_weighted_pairwise_cpp <- function(X, w, c_const = 9.0, maxPOutliers
     .Call(`_matrixCorr_bicor_matrix_weighted_pairwise_cpp`, X, w, c_const, maxPOutliers, pearson_fallback, min_n, n_threads)
 }
 
-bland_altman_cpp <- function(group1, group2, loa_multiplier = 1.96, mode = 1L, conf_level = 0.95, n_threads = 1L, include_legacy_payload = TRUE) {
-    .Call(`_matrixCorr_bland_altman_cpp`, group1, group2, loa_multiplier, mode, conf_level, n_threads, include_legacy_payload)
+bland_altman_cpp <- function(group1, group2, loa_multiplier = 1.96, mode = 1L, conf_level = 0.95, n_threads = 1L) {
+    .Call(`_matrixCorr_bland_altman_cpp`, group1, group2, loa_multiplier, mode, conf_level, n_threads)
 }
 
 ba_openmp_threads <- function() {
@@ -51,10 +51,6 @@ ccc_glmm_poisson_prepare_blocks_cpp <- function(y, subject, method_code, n_subje
 
 ccc_glmm_poisson_ghq_nll_blocks_cpp <- function(par, y1, y2, n1, n2, log_factorial, include_subject_method, gh_nodes, gh_weights) {
     .Call(`_matrixCorr_ccc_glmm_poisson_ghq_nll_blocks_cpp`, par, y1, y2, n1, n2, log_factorial, include_subject_method, gh_nodes, gh_weights)
-}
-
-ccc_glmm_poisson_ghq_nll_cpp <- function(par, y, subject, method_code, n_subjects, include_subject_method, gh_nodes, gh_weights) {
-    .Call(`_matrixCorr_ccc_glmm_poisson_ghq_nll_cpp`, par, y, subject, method_code, n_subjects, include_subject_method, gh_nodes, gh_weights)
 }
 
 cccUst_rcpp <- function(y_vec, met_vec, time_vec, subj_vec, nmet0, nmet1, ntime, ns, Dmat, delta, cl) {

@@ -2878,40 +2878,6 @@ summary.ccc_rm_reml <- function(object,
   )
 }
 
-.print_ccc_rm_reml_summary_blocks <- function(x, ...) {
-  extra_cols <- grep("^sigma2_extra", names(x), value = TRUE)
-
-  sections <- list(
-    list(
-      title = "Concordance estimates",
-      cols = c("item1", "item2", "estimate", "lwr", "upr", "n_subjects", "n_obs", "SB", "se_ccc")
-    ),
-    list(
-      title = "Variance components",
-      cols = c("sigma2_subject", "sigma2_subject_method", "sigma2_subject_time",
-               "sigma2_error", extra_cols)
-    ),
-    list(
-      title = "AR(1) diagnostics",
-      cols = c("ar1_rho", "ar1_rho_lag1", "ar1_rho_mom", "ar1_pairs",
-               "ar1_pval", "use_ar1", "ar1_recommend")
-    )
-  )
-
-  printed <- 0L
-  for (section in sections) {
-    cols <- unique(section$cols[section$cols %in% names(x)])
-    if (!length(cols)) next
-
-    if (printed > 0L) cat("\n")
-    cat(section$title, "\n\n", sep = "")
-    print.data.frame(x[cols], row.names = FALSE, right = FALSE, ...)
-    printed <- printed + 1L
-  }
-
-  invisible(NULL)
-}
-
 #' @rdname summary.ccc_rm_reml
 #' @method print summary.ccc_rm_reml
 #' @param x An object of class \code{"summary.ccc_rm_reml"}.

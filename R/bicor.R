@@ -445,7 +445,7 @@ bicor <- function(
   ci_attr <- NULL
   inference_attr <- NULL
   if (isTRUE(ci)) {
-    n_complete <- .mc_bicor_n_complete(numeric_data)
+    n_complete <- .mc_corr_n_complete(numeric_data)
     diagnostics <- list(n_complete = .mc_set_matrix_dimnames(n_complete, colnames_data))
     inference_attr <- .mc_bicor_large_sample_inference(
       est = res,
@@ -484,14 +484,6 @@ bicor <- function(
     threshold = output_cfg$threshold,
     diag = output_cfg$diag
   )
-}
-
-.mc_bicor_n_complete <- function(x) {
-  x <- as.matrix(x)
-  fin <- is.finite(x)
-  n_complete <- crossprod(unclass(fin))
-  storage.mode(n_complete) <- "integer"
-  n_complete
 }
 
 .mc_bicor_large_sample_inference <- function(est, n_complete) {
@@ -605,7 +597,7 @@ bicor <- function(
     extra_columns = if (isTRUE(include_p)) {
       list(
         statistic = list(matrix = inf$statistic, digits = digits),
-        fisher_z = list(matrix = inf$Z, digits = digits),
+        z_statistic = list(matrix = inf$Z, digits = digits),
         p_value = list(matrix = inf$p_value, digits = p_digits)
       )
     },
@@ -725,10 +717,23 @@ plot.bicor <- function(
     mat <- mat[ord, ord, drop = FALSE]
   }
 
-  # Prepare long format with indices for triangle filtering
-  rn <- rownames(mat); cn <- colnames(mat)
-  if (is.null(rn)) rn <- seq_len(nrow(mat)) else rn <- as.character(rn)
-  if (is.null(cn)) cn <- seq_len(ncol(mat)) else cn <- as.character(cn)
+  # Prepare long format with indices for triangle filtering.
+  # Duplicate names are replaced by positional keys before as.table(), the CI
+  # merge, and factor reordering so those steps keep one cell per position.
+  rn_display <- rownames(mat)
+  cn_display <- colnames(mat)
+  ambiguous <- .mc_axis_names_positional(rn_display, cn_display)
+  if (ambiguous) {
+    if (is.null(rn_display)) rn_display <- as.character(seq_len(nrow(mat))) else rn_display <- as.character(rn_display)
+    if (is.null(cn_display)) cn_display <- as.character(seq_len(ncol(mat))) else cn_display <- as.character(cn_display)
+    rn <- as.character(seq_len(nrow(mat)))
+    cn <- as.character(seq_len(ncol(mat)))
+  } else {
+    rn <- rn_display
+    cn <- cn_display
+    if (is.null(rn)) rn <- seq_len(nrow(mat)) else rn <- as.character(rn)
+    if (is.null(cn)) cn <- seq_len(ncol(mat)) else cn <- as.character(cn)
+  }
   dimnames(mat) <- list(rn, cn)
 
   idx_r <- rep(rn, each = length(cn))
@@ -804,6 +809,11 @@ plot.bicor <- function(
     ) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
+  if (ambiguous) {
+    p <- p +
+      ggplot2::scale_y_discrete(labels = rev(rn_display), drop = FALSE) +
+      ggplot2::scale_x_discrete(labels = cn_display, drop = FALSE)
+  }
 
   if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
     p <- p + ggplot2::geom_text(

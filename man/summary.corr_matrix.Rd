@@ -22,3 +22,25 @@ A standardized summary data frame with class
 \description{
 Representation-first summary for dense correlation outputs.
 }
+\details{
+Pearson summaries without a stored inference payload report
+\code{fisher_z = atanh(estimate)}, with non-finite transforms stored as \code{NA}.
+For each pair whose finite complete-case count is greater than 3, they also
+report the Fisher normal approximation for independent bivariate normal
+samples, \code{statistic = fisher_z / (1 / sqrt(n_complete - 3))}, and a
+two-sided normal p-value. That approximation is not an exact \emph{t} test.
+Pairs with \code{n_complete <= 3} leave the statistic and p-value missing, and
+one such pair does not suppress inference for other eligible pairs.
+A confidence-interval request does not by itself supply p-values.
+
+For every other estimator, the summary retrieves statistic, degrees of
+freedom, and p-values only from inference the estimator already stored. It
+does not calculate a test from the coefficient. The Fisher transform is not
+a universal inference column. Biweight midcorrelation keeps its stored
+Student-\emph{t}-like statistic and exposes the stored standardized transform as
+\code{z_statistic}.
+
+When the object already stores the matrices, the summary appends
+\code{p_value_adjusted}, \code{reject}, \code{skipped_n}, and \code{skipped_prop} after the
+existing columns. Those values are copied. They are not recomputed.
+}

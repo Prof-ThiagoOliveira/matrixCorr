@@ -221,8 +221,7 @@ ba <- function(group1,
     loa_multiplier = loa_multiplier,
     mode = mode,
     conf_level = conf_level,
-    n_threads = n_threads,
-    include_legacy_payload = FALSE
+    n_threads = n_threads
   )
   ba_out <- structure(
     list(

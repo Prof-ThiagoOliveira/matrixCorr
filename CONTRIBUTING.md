@@ -39,3 +39,29 @@ Please keep pull requests focused; open a new issue for any large redesigns.
 
 By contributing, you agree that your code will be released under the
 package's GPL (>= 3) license.
+
+## Internal result infrastructure
+
+`R/corr_output.R` owns output validation, construction, conversion, and
+pair extraction. `R/corr_shared.R` orchestrates shared estimator output
+and inference attachment. `R/corr_result_s3.R` owns representation
+methods and summaries. `R/display_utils.R` owns presentation.
+`R/accessors.R` owns accessors.
+
+`.mc_robust_corr_pairwise_payload` shares only PB and Winsor payload
+assembly, with statistical inference kept separate and pair and RNG
+order unchanged. Specialised estimators and S4 Matrix support stay
+distinct, as do summary inference and tidy inference.
+
+Native coordinates are authoritative. Duplicate-named edges carry a
+row-keyed `corr_pair_pos` map. Unambiguous legacy labels can still resolve
+positions, and an old ambiguous edge list without that map fails clearly.
+Original display labels are preserved; missing or blank labels are rendered
+from positions. Sparse symmetric storage may contain either triangle. Thin edge
+lists select native coordinates and avoid allocating the estimate matrix.
+Denser edge lists reuse the existing dense path when that cost is preferable.
+Stored inference payloads retain their representation.
+`tidy()` asks `.mc_extract_pair_matrix` for each selected pair. That
+reader uses the selected cell and, for a symmetric tidy result, the
+opposite cell only when the selected cell is missing. Summary lookup
+does not mirror. Neither path completes a dense payload matrix.

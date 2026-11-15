@@ -22,3 +22,10 @@ A standardized summary data frame with class
 \description{
 Representation-first summary for sparse correlation outputs.
 }
+\details{
+See \code{\link[=summary.corr_matrix]{summary.corr_matrix()}} for which inference columns are retrieved from
+stored results, which Pearson-only Fisher normal approximation is
+calculated when no inference payload was stored, and which stored
+adjusted-p, rejection, and skipped-correlation diagnostic columns are
+appended when those matrices are already present.
+}

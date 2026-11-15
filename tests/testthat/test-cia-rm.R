@@ -651,32 +651,90 @@ test_that("cia_rm overall constrained estimator truncates negative subject-metho
   expect_true(fit_bnd$overall.common.upr.ci <= 1)
 })
 
-test_that("cia_rm delta gradient matches an independent finite-difference check", {
+test_that("cia_rm delta intervals match an independent analytic moment gradient", {
   dat <- make_cia_rm_dat2()
-  prep <- matrixCorr:::.mc_cia_rm_prepare(dat, "y", "id", "method", "time")
-  cube <- matrixCorr:::.mc_cia_rm_cube(prep)
-  D <- matrixCorr:::.mc_cia_rm_pair_diff_matrix(cube, 1L, 2L)
-  stats <- matrixCorr:::.mc_cia_rm_pair_moment_stats(D)
-  m <- c(stats$d, as.vector(stats$M))
-
-  grad_pkg <- matrixCorr:::.mc_cia_rm_num_grad(
-    function(mm) matrixCorr:::.mc_cia_rm_pair_est_from_moments(mm, K = stats$K, n = stats$n)[[1L]],
-    m
-  )
-
-  grad_ref <- numeric(length(m))
-  for (idx in seq_along(m)) {
-    h <- 1e-7 * max(1, abs(m[[idx]]))
-    plus <- m
-    minus <- m
-    plus[[idx]] <- plus[[idx]] + h
-    minus[[idx]] <- minus[[idx]] - h
-    grad_ref[[idx]] <-
-      (matrixCorr:::.mc_cia_rm_pair_est_from_moments(plus, K = stats$K, n = stats$n)[[1L]] -
-         matrixCorr:::.mc_cia_rm_pair_est_from_moments(minus, K = stats$K, n = stats$n)[[1L]]) / (2 * h)
+  ids <- levels(dat$id)
+  times <- levels(dat$time)
+  n <- length(ids)
+  K <- length(times)
+  D <- matrix(NA_real_, n, K)
+  for (s in seq_along(ids)) {
+    for (k in seq_along(times)) {
+      ya <- dat$y[dat$id == ids[[s]] & dat$method == "A" & dat$time == times[[k]]]
+      yb <- dat$y[dat$id == ids[[s]] & dat$method == "B" & dat$time == times[[k]]]
+      D[s, k] <- ya - yb
+    }
   }
 
-  expect_equal(grad_pkg, grad_ref, tolerance = 1e-6)
+  d <- colMeans(D)
+  M <- crossprod(D) / n
+  c_n <- n / (n - 1)
+  Cmat <- c_n * (M - tcrossprod(d))
+  trC <- sum(diag(Cmat))
+  A <- (K * trC - sum(Cmat)) / (K * (K - 1))
+  Bk <- d^2 + trC / K
+  psi <- A / Bk
+
+  dA_dd <- -2 * c_n * (K * d - sum(d)) / (K * (K - 1))
+  dA_dM <- c_n * (K * diag(K) - 1) / (K * (K - 1))
+  grads <- matrix(NA_real_, K, K + K * K)
+  for (k in seq_len(K)) {
+    dBk_dd <- -2 * c_n * d / K
+    dBk_dd[[k]] <- dBk_dd[[k]] + 2 * d[[k]]
+    dBk_dM <- diag(c_n / K, K, K)
+    grads[k, ] <- c(
+      (dA_dd * Bk[[k]] - A * dBk_dd) / Bk[[k]]^2,
+      as.vector((dA_dM * Bk[[k]] - A * dBk_dM) / Bk[[k]]^2)
+    )
+  }
+
+  H <- cbind(
+    D,
+    t(vapply(seq_len(n), function(s) as.vector(tcrossprod(D[s, ])), numeric(K * K)))
+  )
+  cov_mean <- stats::cov(H) / n
+  se <- sqrt(diag(grads %*% cov_mean %*% t(grads)))
+  zcrit <- stats::qnorm(0.975)
+  lwr <- psi - zcrit * se
+  upr <- psi + zcrit * se
+
+  fit <- cia_rm(
+    dat,
+    response = "y",
+    subject = "id",
+    method = "method",
+    time = "time",
+    ci = TRUE,
+    inference = "delta",
+    estimator = "mom_unconstrained",
+    conf_level = 0.95
+  )
+  # Public limits use a central difference with step 1e-6. The analytic
+  # gradient agrees with that same step to about 1e-7, and the resulting
+  # standard errors and Wald limits stay within 1e-6.
+  expect_equal(as.numeric(fit$se["A", "B", ]), se, tolerance = 1e-6)
+  expect_equal(as.numeric(fit$lwr.ci["A", "B", ]), lwr, tolerance = 1e-6)
+  expect_equal(as.numeric(fit$upr.ci["A", "B", ]), upr, tolerance = 1e-6)
+
+  m <- c(d, as.vector(M))
+  psi_of <- function(mm) {
+    dd <- mm[seq_len(K)]
+    MM <- matrix(mm[K + seq_len(K * K)], K, K)
+    CC <- c_n * (MM - tcrossprod(dd))
+    AA <- (K * sum(diag(CC)) - sum(CC)) / (K * (K - 1))
+    BB <- dd^2 + sum(diag(CC)) / K
+    AA / BB
+  }
+  fd <- matrix(NA_real_, K, length(m))
+  for (j in seq_along(m)) {
+    h <- 1e-6 * max(1, abs(m[[j]]))
+    plus <- m
+    minus <- m
+    plus[[j]] <- plus[[j]] + h
+    minus[[j]] <- minus[[j]] - h
+    fd[, j] <- (psi_of(plus) - psi_of(minus)) / (2 * h)
+  }
+  expect_equal(grads, fd, tolerance = 1e-7)
 })
 
 test_that("cia_rm returns common delta intervals when homogeneous is requested", {
