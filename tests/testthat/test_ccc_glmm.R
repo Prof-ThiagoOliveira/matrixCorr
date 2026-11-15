@@ -294,15 +294,25 @@ test_that("ccc_glmm ci = FALSE remains lean", {
 })
 
 test_that("ccc_glmm delta CI handles unavailable covariance safely", {
-  ci <- .mc_delta_ci(
-    estimate = 0.5,
-    f = function(theta) theta[[1L]],
-    theta = 0,
-    vcov_theta = NULL
+  estimates <- c(
+    rho_ccc = 0.5,
+    rho_ccc_inter = 0.4,
+    rho_ccc_intra_method1 = 0.3,
+    rho_ccc_intra_method2 = 0.2
   )
-  expect_true(is.na(ci$se))
-  expect_true(is.na(ci$lwr.ci))
-  expect_true(is.na(ci$upr.ci))
+  f <- function(theta) estimates
+  theta <- c(0, 0, 0)
+  for (vcov_theta in list(NULL, matrix(c(1, NA, NA, 1), 2L, 2L), matrix(Inf, 3L, 3L))) {
+    ci <- .mc_delta_ci_vec(
+      estimates = estimates,
+      f = f,
+      theta = theta,
+      vcov_theta = vcov_theta
+    )
+    expect_true(all(is.na(ci$se)))
+    expect_true(all(is.na(ci$lwr.ci)))
+    expect_true(all(is.na(ci$upr.ci)))
+  }
 })
 
 test_that("ccc_glmm inter and intra CIs are metric-specific", {

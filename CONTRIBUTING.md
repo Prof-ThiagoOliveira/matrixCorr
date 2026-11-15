@@ -52,3 +52,16 @@ methods and summaries. `R/display_utils.R` owns presentation.
 assembly, with statistical inference kept separate and pair and RNG
 order unchanged. Specialised estimators and S4 Matrix support stay
 distinct, as do summary inference and tidy inference.
+
+Native coordinates are authoritative. Duplicate-named edges carry a
+row-keyed `corr_pair_pos` map. Unambiguous legacy labels can still resolve
+positions, and an old ambiguous edge list without that map fails clearly.
+Original display labels are preserved; missing or blank labels are rendered
+from positions. Sparse symmetric storage may contain either triangle. Thin edge
+lists select native coordinates and avoid allocating the estimate matrix.
+Denser edge lists reuse the existing dense path when that cost is preferable.
+Stored inference payloads retain their representation.
+`tidy()` asks `.mc_extract_pair_matrix` for each selected pair. That
+reader uses the selected cell and, for a symmetric tidy result, the
+opposite cell only when the selected cell is missing. Summary lookup
+does not mirror. Neither path completes a dense payload matrix.

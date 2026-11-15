@@ -1019,9 +1019,25 @@ NULL
   check_bool(show_value, arg = "show_value")
 
   mat <- as.matrix(x)
-  df <- as.data.frame(as.table(mat))
-  colnames(df) <- c("Var1", "Var2", fill_name)
-  df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
+  axis_labels <- NULL
+  if (.mc_axis_names_positional(rownames(mat), colnames(mat))) {
+    n <- nrow(mat)
+    p_n <- ncol(mat)
+    rn <- rownames(mat) %||% as.character(seq_len(n))
+    cn <- colnames(mat) %||% as.character(seq_len(p_n))
+    df <- data.frame(
+      Var1 = factor(rep.int(seq_len(n), p_n), levels = rev(seq_len(n))),
+      Var2 = factor(rep.int(seq_len(p_n), rep.int(n, p_n)), levels = seq_len(p_n)),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    df[[fill_name]] <- as.numeric(mat)
+    axis_labels <- list(row = rev(rn), col = cn)
+  } else {
+    df <- as.data.frame(as.table(mat))
+    colnames(df) <- c("Var1", "Var2", fill_name)
+    df$Var1 <- factor(df$Var1, levels = rev(unique(df$Var1)))
+  }
 
   p <- ggplot2::ggplot(df, ggplot2::aes(Var2, Var1, fill = .data[[fill_name]])) +
     ggplot2::geom_tile(color = "white") +
@@ -1041,6 +1057,7 @@ NULL
     ) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
+  p <- .mc_add_positional_axis_scales(p, axis_labels)
 
   if (isTRUE(show_value) && !is.null(value_text_size) && is.finite(value_text_size)) {
     p <- p + ggplot2::geom_text(
@@ -1053,8 +1070,51 @@ NULL
   p
 }
 
+.mc_add_positional_axis_scales <- function(p, axis_labels) {
+  if (is.null(axis_labels)) {
+    return(p)
+  }
+  p +
+    ggplot2::scale_y_discrete(labels = axis_labels$row, drop = FALSE) +
+    ggplot2::scale_x_discrete(labels = axis_labels$col, drop = FALSE)
+}
+
+.mc_plot_ci_df_positional <- function(est_mat, ci, estimate_col) {
+  n <- nrow(est_mat)
+  p <- ncol(est_mat)
+  ii <- as.vector(row(est_mat))
+  jj <- as.vector(col(est_mat))
+  lwr <- as.numeric(ci$lwr.ci)
+  upr <- as.numeric(ci$upr.ci)
+  diag_idx <- ii == jj
+  lwr[diag_idx] <- NA_real_
+  upr[diag_idx] <- NA_real_
+  rn <- rownames(est_mat) %||% as.character(seq_len(n))
+  cn <- colnames(est_mat) %||% as.character(seq_len(p))
+  df <- data.frame(
+    Var1 = factor(ii, levels = rev(seq_len(n))),
+    Var2 = factor(jj, levels = seq_len(p)),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  df[[estimate_col]] <- as.numeric(est_mat)
+  df$lwr <- lwr
+  df$upr <- upr
+  df$ci_label <- ifelse(
+    is.na(df$lwr) | is.na(df$upr),
+    NA_character_,
+    sprintf("[%.3f, %.3f]", df$lwr, df$upr)
+  )
+  df$label <- sprintf("%.2f", df[[estimate_col]])
+  attr(df, "mc_axis_labels") <- list(row = rev(rn), col = cn)
+  df
+}
+
 .mc_plot_ci_df <- function(x, ci, estimate_col) {
   est_mat <- as.matrix(x)
+  if (.mc_axis_names_positional(rownames(est_mat), colnames(est_mat))) {
+    return(.mc_plot_ci_df_positional(est_mat, ci, estimate_col))
+  }
   df_est <- as.data.frame(as.table(est_mat))
   names(df_est) <- c("Var1", "Var2", estimate_col)
 

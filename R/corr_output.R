@@ -271,14 +271,32 @@
                                    symmetric = NULL,
                                    package_name = "matrixCorr",
                                    extra_attrs = list()) {
+  pos <- attr(df, "corr_pair_pos", exact = TRUE)
+  if (!is.null(pos) && !is.null(rownames(pos)) && !is.null(rownames(df))) {
+    idx <- match(rownames(df), rownames(pos))
+    if (anyNA(idx) || length(idx) != nrow(df)) {
+      abort_internal("positional pair mapping does not align with edge rows.")
+    }
+    pos <- pos[idx, , drop = FALSE]
+  }
   out <- data.frame(df, stringsAsFactors = FALSE, check.names = FALSE)
+  native_i <- NULL
+  native_j <- NULL
+  native_rn <- NULL
+  native_cn <- NULL
   if (!all(c("row", "col", "value") %in% names(out)) &&
       all(c("i", "j", "x") %in% names(out))) {
     dn <- source_dimnames
-    ii <- as.integer(out$i)
-    jj <- as.integer(out$j)
+    loc <- .mc_validated_native_positions(out$i, out$j, source_dim)
+    ii <- loc$i
+    jj <- loc$j
     rn <- if (is.list(dn) && length(dn) == 2L) dn[[1L]] else NULL
     cn <- if (is.list(dn) && length(dn) == 2L) dn[[2L]] else NULL
+    native_i <- ii
+    native_j <- jj
+    native_rn <- rn
+    native_cn <- cn
+    pos <- NULL
     out <- data.frame(
       row = if (is.null(rn)) as.character(ii) else rn[ii],
       col = if (is.null(cn)) as.character(jj) else cn[jj],
@@ -307,7 +325,17 @@
   attr(out, "corr_dim") <- as.integer(source_dim %||% c(NA_integer_, NA_integer_))
   attr(out, "corr_dimnames") <- source_dimnames
   attr(out, "corr_symmetric") <- if (is.null(symmetric)) NA else isTRUE(symmetric)
-  .mc_set_attrs(out, extra_attrs)
+  out <- .mc_set_attrs(out, extra_attrs)
+  if (!is.null(native_i)) {
+    out <- .mc_stamp_pair_pos(out, native_i, native_j, native_rn, native_cn)
+  } else if (!is.null(pos)) {
+    if (!is.matrix(pos) || nrow(pos) != nrow(out) || !all(c("i", "j") %in% colnames(pos))) {
+      abort_internal("positional pair mapping does not match the edge list.")
+    }
+    rownames(pos) <- rownames(out)
+    attr(out, "corr_pair_pos") <- pos
+  }
+  out
 }
 
 #' Convert C++ triplets to sparse matrix
@@ -348,6 +376,149 @@
   out
 }
 
+#' Duplicate names on either axis cannot be recovered by label matching.
+#' A single missing or blank label remains matchable and is not ambiguous.
+#' @keywords internal
+#' @noRd
+.mc_axis_names_ambiguous <- function(row_names, col_names) {
+  (is.character(row_names) && anyDuplicated(row_names) > 0L) ||
+    (is.character(col_names) && anyDuplicated(col_names) > 0L)
+}
+
+#' Positional plot keys when labels are duplicated, missing, or blank
+#' @keywords internal
+#' @noRd
+.mc_axis_names_positional <- function(row_names, col_names) {
+  needs <- function(nm) {
+    is.character(nm) && (
+      anyDuplicated(nm) > 0L || anyNA(nm) || any(!nzchar(nm))
+    )
+  }
+  needs(row_names) || needs(col_names)
+}
+
+#' Continuous-by-discrete estimators pair different variables on each axis
+#' @keywords internal
+#' @noRd
+.mc_cross_axis_estimator <- function(x) {
+  cls <- attr(x, "corr_estimator_class", exact = TRUE) %||% .mc_corr_estimator_class(x)
+  cls[[1L]] %in% c("biserial_corr", "polyserial_corr")
+}
+
+#' Square result whose axes are the same variables, including directed squares.
+#' Named-alike biserial and polyserial squares stay cross-axis results.
+#' @keywords internal
+#' @noRd
+.mc_same_axis_square <- function(x) {
+  if (.mc_cross_axis_estimator(x)) {
+    return(FALSE)
+  }
+  dm <- .mc_corr_dim(x)
+  if (length(dm) != 2L || !isTRUE(dm[[1L]] == dm[[2L]])) {
+    return(FALSE)
+  }
+  if (isTRUE(attr(x, "corr_symmetric", exact = TRUE))) {
+    return(TRUE)
+  }
+  dn <- .mc_corr_dimnames(x)
+  identical(dn[[1L]], dn[[2L]]) || (is.null(dn[[1L]]) && is.null(dn[[2L]]))
+}
+
+#' Attach positions only when duplicate names make labels ambiguous
+#' @keywords internal
+#' @noRd
+.mc_stamp_pair_pos <- function(df, i, j, row_names, col_names) {
+  if (!nrow(df) || !.mc_axis_names_ambiguous(row_names, col_names)) {
+    return(df)
+  }
+  if (length(i) != nrow(df) || length(j) != nrow(df)) {
+    abort_internal("positional pair mapping does not match the edge list.")
+  }
+  pos <- cbind(i = as.integer(i), j = as.integer(j))
+  rownames(pos) <- as.character(seq_len(nrow(df)))
+  rownames(df) <- rownames(pos)
+  attr(df, "corr_pair_pos") <- pos
+  df
+}
+
+.mc_abort_ambiguous_pairs <- function() {
+  cli::cli_abort(
+    c(
+      "Duplicate variable names have no positional pair mapping.",
+      "i" = "Pair identity cannot be recovered by matching labels.",
+      "i" = "Rebuild the edge list from the correlation result."
+    ),
+    class = c("matrixCorr_ambiguous_pairs", "matrixCorr_error")
+  )
+}
+
+.mc_abort_stale_pair_pos <- function() {
+  cli::cli_abort(
+    "Stored positional pair mapping does not cover these rows or no longer matches their labels and dimensions.",
+    class = c("matrixCorr_stale_pair_pos", "matrixCorr_error")
+  )
+}
+
+#' Whole positions inside source dimensions, before any truncation
+#' @keywords internal
+#' @noRd
+.mc_validated_native_positions <- function(i, j, dm) {
+  whole <- function(v) {
+    is.numeric(v) && all(is.finite(v)) && all(v == trunc(v))
+  }
+  dm <- as.integer(dm)
+  if (!whole(i) || !whole(j) || length(dm) != 2L || any(!is.finite(dm))) {
+    .mc_abort_stale_pair_pos()
+  }
+  ii <- as.integer(i)
+  jj <- as.integer(j)
+  if (any(ii < 1L | ii > dm[[1L]] | jj < 1L | jj > dm[[2L]])) {
+    .mc_abort_stale_pair_pos()
+  }
+  list(i = ii, j = jj)
+}
+
+#' Validate a row-name keyed position matrix against the current edge rows
+#' @keywords internal
+#' @noRd
+.mc_validated_pair_pos <- function(pos, df, dm, dn) {
+  if (!is.matrix(pos) || !all(c("i", "j") %in% colnames(pos)) || is.null(rownames(pos))) {
+    .mc_abort_stale_pair_pos()
+  }
+  pos_keys <- rownames(pos)
+  if (anyNA(pos_keys) || anyDuplicated(pos_keys) > 0L) {
+    .mc_abort_stale_pair_pos()
+  }
+  keys <- rownames(df)
+  if (is.null(keys) || anyNA(keys) || anyDuplicated(keys) > 0L || anyNA(match(keys, pos_keys))) {
+    .mc_abort_stale_pair_pos()
+  }
+  ii_raw <- pos[keys, "i"]
+  jj_raw <- pos[keys, "j"]
+  whole <- function(v) {
+    is.numeric(v) && all(is.finite(v)) && all(v == trunc(v))
+  }
+  if (!whole(ii_raw) || !whole(jj_raw)) {
+    .mc_abort_stale_pair_pos()
+  }
+  ii <- as.integer(ii_raw)
+  jj <- as.integer(jj_raw)
+  if (length(dm) != 2L || any(!is.finite(dm)) ||
+      anyNA(ii) || anyNA(jj) ||
+      any(ii < 1L | ii > dm[[1L]] | jj < 1L | jj > dm[[2L]])) {
+    .mc_abort_stale_pair_pos()
+  }
+  rn <- dn[[1L]]
+  cn <- dn[[2L]]
+  if (!is.null(rn) && !identical(as.character(rn[ii]), as.character(df$row))) {
+    .mc_abort_stale_pair_pos()
+  }
+  if (!is.null(cn) && !identical(as.character(cn[jj]), as.character(df$col))) {
+    .mc_abort_stale_pair_pos()
+  }
+  list(i = ii, j = jj)
+}
+
 #' Convert C++ triplets to public edge-list payload
 #' @keywords internal
 #' @noRd
@@ -365,13 +536,14 @@
     cn <- dimnames[[2L]]
   }
 
-  data.frame(
+  df <- data.frame(
     row = if (is.null(rn)) as.character(ii) else rn[ii],
     col = if (is.null(cn)) as.character(jj) else cn[jj],
     value = as.numeric(triplets$x),
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+  .mc_stamp_pair_pos(df, ii, jj, rn, cn)
 }
 
 #' Build sparse/edge output directly from retained triplets
@@ -451,22 +623,22 @@
 #' Convert a symmetric matrix to an upper-triangle edge frame
 #' @keywords internal
 #' @noRd
-.mc_matrix_to_edge_list <- function(mat,
-                                    threshold = 0,
-                                    diag = TRUE,
-                                    symmetric = NULL) {
+.mc_matrix_selected_entries <- function(mat, threshold = 0, diag = TRUE, symmetric = NULL) {
   check_matrix_dims(mat, arg = "mat")
   check_scalar_numeric(threshold, arg = "threshold", lower = 0, closed_lower = TRUE)
   check_bool(diag, arg = "diag")
 
+  empty <- list(
+    i = integer(),
+    j = integer(),
+    value = numeric(),
+    row = character(),
+    col = character(),
+    row_names = rownames(mat),
+    col_names = colnames(mat)
+  )
   if (nrow(mat) == 0L || ncol(mat) == 0L) {
-    return(data.frame(
-      row = character(),
-      col = character(),
-      value = numeric(),
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    ))
+    return(empty)
   }
 
   same_dimnames <- isTRUE(identical(rownames(mat), colnames(mat))) ||
@@ -489,23 +661,45 @@
       idx[cbind(d, d)] <- FALSE
     }
   }
-  i <- row(mat)[idx]
-  j <- col(mat)[idx]
+  ij <- which(idx, arr.ind = TRUE)
   vals <- mat[idx]
   keep <- is.finite(vals) & (abs(vals) >= as.numeric(threshold))
-
+  if (!any(keep)) {
+    return(empty)
+  }
+  i <- ij[keep, 1L]
+  j <- ij[keep, 2L]
   rn <- rownames(mat)
   cn <- colnames(mat)
-  row_out <- if (is.null(rn)) as.character(i[keep]) else rn[i[keep]]
-  col_out <- if (is.null(cn)) as.character(j[keep]) else cn[j[keep]]
-
-  data.frame(
-    row = row_out,
-    col = col_out,
+  list(
+    i = i,
+    j = j,
     value = as.numeric(vals[keep]),
+    row = if (is.null(rn)) as.character(i) else rn[i],
+    col = if (is.null(cn)) as.character(j) else cn[j],
+    row_names = rn,
+    col_names = cn
+  )
+}
+
+.mc_matrix_to_edge_list <- function(mat,
+                                    threshold = 0,
+                                    diag = TRUE,
+                                    symmetric = NULL) {
+  entries <- .mc_matrix_selected_entries(
+    mat,
+    threshold = threshold,
+    diag = diag,
+    symmetric = symmetric
+  )
+  df <- data.frame(
+    row = entries$row,
+    col = entries$col,
+    value = entries$value,
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+  .mc_stamp_pair_pos(df, entries$i, entries$j, entries$row_names, entries$col_names)
 }
 
 #' Convert a symmetric matrix to thresholded sparse matrix
@@ -728,6 +922,9 @@
   if (is.list(dn) && length(dn) == 2L) {
     return(dn)
   }
+  if (inherits(x, "corr_edge_list")) {
+    return(list(NULL, NULL))
+  }
   dimnames(x)
 }
 
@@ -746,8 +943,9 @@
     }
     if (all(c("i", "j", "x") %in% names(out))) {
       dn <- .mc_corr_dimnames(x)
-      ii <- as.integer(out$i)
-      jj <- as.integer(out$j)
+      loc <- .mc_validated_native_positions(out$i, out$j, .mc_corr_dim(x))
+      ii <- loc$i
+      jj <- loc$j
       vv <- as.numeric(out$x)
       row_lab <- if (is.null(dn[[1L]])) as.character(ii) else dn[[1L]][ii]
       col_lab <- if (is.null(dn[[2L]])) as.character(jj) else dn[[2L]][jj]
@@ -804,19 +1002,17 @@
   }
   dn <- .mc_corr_dimnames(x)
   mat <- matrix(NA_real_, nrow = dm[[1L]], ncol = dm[[2L]], dimnames = dn)
-  edf <- .mc_corr_as_edge_df(x)
+  edf <- .mc_edge_indexed_pairs(x)
   if (!nrow(edf)) {
     return(mat)
   }
-
-  rmap <- dn[[1L]]
-  cmap <- dn[[2L]]
-  ii <- if (is.null(rmap)) as.integer(edf$row) else match(edf$row, rmap)
-  jj <- if (is.null(cmap)) as.integer(edf$col) else match(edf$col, cmap)
-  keep <- is.finite(ii) & is.finite(jj)
-  ii <- ii[keep]
-  jj <- jj[keep]
+  keep <- is.finite(edf$i) & is.finite(edf$j)
+  ii <- as.integer(edf$i[keep])
+  jj <- as.integer(edf$j[keep])
   vv <- as.numeric(edf$value[keep])
+  if (!length(ii)) {
+    return(mat)
+  }
   mat[cbind(ii, jj)] <- vv
 
   symmetric <- isTRUE(attr(x, "corr_symmetric", exact = TRUE))
@@ -826,14 +1022,127 @@
   mat
 }
 
+#' Edge rows with validated source positions
+#' @keywords internal
+#' @noRd
+.mc_edge_indexed_pairs <- function(x) {
+  if (!all(c("row", "col", "value") %in% names(x)) &&
+      all(c("i", "j", "x") %in% names(x))) {
+    dm <- .mc_corr_dim(x)
+    dn <- .mc_corr_dimnames(x)
+    loc <- .mc_validated_native_positions(x$i, x$j, dm)
+    ii <- loc$i
+    jj <- loc$j
+    df <- data.frame(
+      row = if (is.null(dn[[1L]])) as.character(ii) else as.character(dn[[1L]][ii]),
+      col = if (is.null(dn[[2L]])) as.character(jj) else as.character(dn[[2L]][jj]),
+      value = as.numeric(x$x),
+      i = ii,
+      j = jj,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    return(df)
+  }
+  if (!all(c("row", "col", "value") %in% names(x))) {
+    df <- .mc_corr_as_edge_df(x)
+  } else {
+    df <- data.frame(
+      row = as.character(x$row),
+      col = as.character(x$col),
+      value = as.numeric(x$value),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  }
+  dm <- .mc_corr_dim(x)
+  dn <- .mc_corr_dimnames(x)
+  if (!nrow(df)) {
+    df$i <- integer()
+    df$j <- integer()
+    return(df)
+  }
+  if (!.mc_axis_names_ambiguous(dn[[1L]], dn[[2L]])) {
+    ii <- if (is.null(dn[[1L]])) suppressWarnings(as.integer(df$row)) else match(df$row, dn[[1L]])
+    jj <- if (is.null(dn[[2L]])) suppressWarnings(as.integer(df$col)) else match(df$col, dn[[2L]])
+    df$i <- as.integer(ii)
+    df$j <- as.integer(jj)
+    return(df)
+  }
+  pos <- attr(x, "corr_pair_pos", exact = TRUE)
+  if (is.null(pos)) {
+    .mc_abort_ambiguous_pairs()
+  }
+  rownames(df) <- rownames(x)
+  loc <- .mc_validated_pair_pos(pos, df, dm, dn)
+  df$i <- loc$i
+  df$j <- loc$j
+  df
+}
+
+#' Indexed pairs for matrix, sparse, and edge results
+#' @keywords internal
+#' @noRd
+.mc_resolve_indexed_pairs <- function(x) {
+  if (inherits(x, "corr_edge_list")) {
+    return(.mc_edge_indexed_pairs(x))
+  }
+  if (identical(attr(x, "output", exact = TRUE), "sparse") || inherits(x, "sparseMatrix")) {
+    sx <- Matrix::summary(x)
+    ii <- as.integer(sx$i)
+    jj <- as.integer(sx$j)
+    dn <- .mc_corr_dimnames(x)
+    return(data.frame(
+      row = if (is.null(dn[[1L]])) as.character(ii) else as.character(dn[[1L]][ii]),
+      col = if (is.null(dn[[2L]])) as.character(jj) else as.character(dn[[2L]][jj]),
+      value = as.numeric(sx$x),
+      i = ii,
+      j = jj,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    ))
+  }
+  output <- attr(x, "output", exact = TRUE) %||% "matrix"
+  .mc_matrix_edge_frame(
+    as.matrix(x),
+    threshold = if (identical(output, "matrix")) 0 else (attr(x, "threshold", exact = TRUE) %||% 0),
+    diag = if (identical(output, "matrix")) TRUE else (attr(x, "diag", exact = TRUE) %||% TRUE),
+    symmetric = attr(x, "corr_symmetric", exact = TRUE)
+  )
+}
+
+#' Matrix entries in edge order, retaining positions
+#' @keywords internal
+#' @noRd
+.mc_matrix_edge_frame <- function(mat, threshold = 0, diag = TRUE, symmetric = NULL) {
+  entries <- .mc_matrix_selected_entries(
+    mat,
+    threshold = threshold,
+    diag = diag,
+    symmetric = symmetric
+  )
+  data.frame(
+    row = entries$row,
+    col = entries$col,
+    value = entries$value,
+    i = as.integer(entries$i),
+    j = as.integer(entries$j),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+}
+
 #' Correlation pairs abstraction
 #' @keywords internal
 #' @noRd
-.mc_corr_pairs <- function(x, diag = FALSE) {
+.mc_corr_pairs <- function(x, diag = FALSE, indexed_pairs = NULL) {
   check_bool(diag, arg = "diag")
-  out <- .mc_corr_as_edge_df(x)
-  if (!isTRUE(diag) && nrow(out)) {
-    out <- out[out$row != out$col, , drop = FALSE]
+  out <- if (is.null(indexed_pairs)) .mc_resolve_indexed_pairs(x) else indexed_pairs
+  if (!isTRUE(diag) && nrow(out) && .mc_same_axis_square(x)) {
+    keep <- out$i != out$j
+    if (!isTRUE(all(keep))) {
+      out <- out[keep, , drop = FALSE]
+    }
   }
   rownames(out) <- NULL
   out

@@ -266,34 +266,3 @@ double ccc_glmm_poisson_ghq_nll_blocks_cpp(
     gh_weights
   );
 }
-
-// [[Rcpp::export]]
-double ccc_glmm_poisson_ghq_nll_cpp(
-    Rcpp::NumericVector par,
-    Rcpp::NumericVector y,
-    Rcpp::IntegerVector subject,
-    Rcpp::IntegerVector method_code,
-    int n_subjects,
-    bool include_subject_method,
-    Rcpp::NumericVector gh_nodes,
-    Rcpp::NumericVector gh_weights
-) {
-  const int n = y.size();
-  const int expected_par = include_subject_method ? 4 : 3;
-  if (par.size() != expected_par || subject.size() != n || method_code.size() != n) {
-    Rcpp::stop("Invalid Poisson GLMM likelihood inputs.");
-  }
-  if (n_subjects < 1) {
-    Rcpp::stop("n_subjects must be positive.");
-  }
-
-  const std::vector<SubjectPoissonBlock> blocks =
-      aggregate_subject_blocks(y, subject, method_code, n_subjects);
-  return ccc_glmm_poisson_ghq_nll_blocks_impl(
-    par,
-    blocks,
-    include_subject_method,
-    gh_nodes,
-    gh_weights
-  );
-}

@@ -33,8 +33,13 @@
     return(NULL)
   }
 
-  span <- .Machine$integer.max - 1L
-  out <- ((as.integer(seed) - 1L + as.integer(offset)) %% span) + 1L
+  span <- .Machine$integer.max - 1
+  # Reduce each term before adding. The sum of the two residues stays below
+  # two spans, so that addition and the final remainder stay exact in double
+  # precision whenever both truncated terms are exactly representable integers.
+  seed_mod <- (trunc(as.numeric(seed)) - 1) %% span
+  offset_mod <- trunc(as.numeric(offset)) %% span
+  out <- ((seed_mod + offset_mod) %% span) + 1
   as.integer(out)
 }
 
@@ -86,10 +91,10 @@
     diag(p_mat) <- 0
   }
 
-  pair_id <- 0L
+  pair_id <- 0
   for (i in seq_len(p - 1L)) {
     for (j in seq.int(i + 1L, p)) {
-      pair_id <- pair_id + 1L
+      pair_id <- pair_id + 1
       ok <- is.finite(X[, i]) & is.finite(X[, j])
       n_ij <- sum(ok)
       n_complete[i, j] <- n_complete[j, i] <- n_ij

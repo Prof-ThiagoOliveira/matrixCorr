@@ -334,6 +334,7 @@ plot.spearman_rho <-
       ) +
       ggplot2::coord_fixed() +
       ggplot2::labs(title = title, x = NULL, y = NULL)
+  p <- .mc_add_positional_axis_scales(p, attr(df, "mc_axis_labels", exact = TRUE))
 
     if (isTRUE(show_value)) {
       p <- p + ggplot2::geom_text(ggplot2::aes(label = label), size = value_text_size, color = "black")

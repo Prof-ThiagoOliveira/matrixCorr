@@ -164,28 +164,8 @@
                                                   symmetric = TRUE,
                                                   package_name = "matrixCorr",
                                                   extra_attrs = list()) {
-  ii <- as.integer(triplets$i)
-  jj <- as.integer(triplets$j)
-  vv <- as.numeric(triplets$x)
-
-  rn <- NULL
-  cn <- NULL
-  if (is.list(source_dimnames) && length(source_dimnames) == 2L) {
-    rn <- source_dimnames[[1L]]
-    cn <- source_dimnames[[2L]]
-  }
-
-  row_out <- if (is.null(rn)) as.character(ii) else rn[ii]
-  col_out <- if (is.null(cn)) as.character(jj) else cn[jj]
-
   out <- .mc_new_corr_edge_list(
-    df = data.frame(
-      row = row_out,
-      col = col_out,
-      value = vv,
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    ),
+    df = .mc_triplets_to_edge_list(triplets, dimnames = source_dimnames),
     estimator_class = estimator_class,
     method = method,
     description = description,

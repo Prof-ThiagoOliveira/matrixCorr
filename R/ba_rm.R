@@ -1351,30 +1351,6 @@ summary.ba_repeated_matrix <- function(object,
   df
 }
 
-.print_ba_summary_blocks <- function(x, ...) {
-  .mc_print_sectioned_table(
-    x,
-    sections = list(
-      list(
-        title = "Agreement estimates",
-        cols = c("method1", "method2", "n_obs", "bias", "sd_loa",
-                 "loa_low", "loa_up", "width", "slope")
-      ),
-      list(
-        title = "Confidence intervals",
-        cols = c("bias_lwr", "bias_upr", "lo_lwr", "lo_upr", "up_lwr", "up_upr")
-      ),
-      list(
-        title = "Model details",
-        cols = c("sigma2_subject", "sigma2_resid",
-                 "residual_model", "ar1_rho", "ar1_estimated")
-      )
-    ),
-    header = NULL,
-    ...
-  )
-}
-
 
 #' @method print summary.ba_repeated
 #' @export

@@ -7,6 +7,28 @@
 #' @param show_ci One of `"yes"` or `"no"`.
 #' @param ... Unused.
 #'
+#' @details
+#' Pearson summaries without a stored inference payload report
+#' `fisher_z = atanh(estimate)`, with non-finite transforms stored as `NA`.
+#' For each pair whose finite complete-case count is greater than 3, they also
+#' report the Fisher normal approximation for independent bivariate normal
+#' samples, `statistic = fisher_z / (1 / sqrt(n_complete - 3))`, and a
+#' two-sided normal p-value. That approximation is not an exact *t* test.
+#' Pairs with `n_complete <= 3` leave the statistic and p-value missing, and
+#' one such pair does not suppress inference for other eligible pairs.
+#' A confidence-interval request does not by itself supply p-values.
+#'
+#' For every other estimator, the summary retrieves statistic, degrees of
+#' freedom, and p-values only from inference the estimator already stored. It
+#' does not calculate a test from the coefficient. The Fisher transform is not
+#' a universal inference column. Biweight midcorrelation keeps its stored
+#' Student-*t*-like statistic and exposes the stored standardized transform as
+#' `z_statistic`.
+#'
+#' When the object already stores the matrices, the summary appends
+#' `p_value_adjusted`, `reject`, `skipped_n`, and `skipped_prop` after the
+#' existing columns. Those values are copied. They are not recomputed.
+#'
 #' @return A standardized summary data frame with class
 #'   `c("summary.corr_result", "data.frame")` (plus compatibility classes).
 #' @method summary corr_matrix
@@ -29,6 +51,13 @@ summary.corr_matrix <- function(object, topn = NULL, show_ci = NULL, ...) {
 #' @param show_ci One of `"yes"` or `"no"`.
 #' @param ... Unused.
 #'
+#' @details
+#' See [summary.corr_matrix()] for which inference columns are retrieved from
+#' stored results, which Pearson-only Fisher normal approximation is
+#' calculated when no inference payload was stored, and which stored
+#' adjusted-p, rejection, and skipped-correlation diagnostic columns are
+#' appended when those matrices are already present.
+#'
 #' @return A standardized summary data frame with class
 #'   `c("summary.corr_result", "data.frame")` (plus compatibility classes).
 #' @method summary corr_sparse
@@ -50,6 +79,13 @@ summary.corr_sparse <- function(object, topn = NULL, show_ci = NULL, ...) {
 #' @param topn Optional number of head/tail rows when preview is truncated.
 #' @param show_ci One of `"yes"` or `"no"`.
 #' @param ... Unused.
+#'
+#' @details
+#' See [summary.corr_matrix()] for which inference columns are retrieved from
+#' stored results, which Pearson-only Fisher normal approximation is
+#' calculated when no inference payload was stored, and which stored
+#' adjusted-p, rejection, and skipped-correlation diagnostic columns are
+#' appended when those matrices are already present.
 #'
 #' @return A standardized summary data frame with class
 #'   `c("summary.corr_result", "data.frame")` (plus compatibility classes).
@@ -334,7 +370,7 @@ print.summary.corr_result <- function(x,
   }
 
   always_drop <- c(
-    "lwr", "upr", "fisher_z", "statistic", "df", "se",
+    "lwr", "upr", "fisher_z", "z_statistic", "statistic", "df", "se",
     "bootstrap_reps", "skipped_n", "skipped_prop"
   )
   if (identical(show_ci, "no")) {
@@ -550,7 +586,8 @@ plot.dgCMatrix <- function(x,
     arg = "show_ci",
     default = .mc_display_option("summary_show_ci", "yes")
   )
-  raw_pairs <- .mc_corr_pairs(object, diag = FALSE)
+  all_pairs <- .mc_corr_pairs(object, diag = TRUE)
+  raw_pairs <- .mc_corr_pairs(object, diag = FALSE, indexed_pairs = all_pairs)
   estimator_class <- attr(object, "corr_estimator_class", exact = TRUE) %||%
     .mc_corr_estimator_class(object)
   estimator_class <- if (is.character(estimator_class) &&
@@ -570,25 +607,16 @@ plot.dgCMatrix <- function(x,
   )
 
   dm <- .mc_corr_dim(object)
-  dn <- .mc_corr_dimnames(object)
-  rn <- dn[[1L]]
-  cn <- dn[[2L]]
-  ii <- if (is.null(rn)) suppressWarnings(as.integer(pairs$item1)) else match(pairs$item1, rn)
-  jj <- if (is.null(cn)) suppressWarnings(as.integer(pairs$item2)) else match(pairs$item2, cn)
+  ii <- as.integer(raw_pairs$i)
+  jj <- as.integer(raw_pairs$j)
   idx_ok <- is.finite(ii) & is.finite(jj)
-
-  add_from_matrix <- function(mat) {
-    if (!is.matrix(mat) || length(dm) != 2L || !identical(dim(mat), dm) || !nrow(pairs)) {
-      return(rep(NA_real_, nrow(pairs)))
-    }
-    out <- rep(NA_real_, nrow(pairs))
-    out[idx_ok] <- mat[cbind(ii[idx_ok], jj[idx_ok])]
-    out
-  }
+  idx <- list(i = ii, j = jj, ok = idx_ok)
 
   diag_attr <- attr(object, "diagnostics", exact = TRUE)
   if (is.list(diag_attr) && is.matrix(diag_attr$n_complete)) {
-    pairs$n_complete <- as.integer(round(add_from_matrix(diag_attr$n_complete)))
+    pairs$n_complete <- as.integer(round(.mc_extract_pair_matrix(
+      diag_attr$n_complete, idx, dm, symmetric = FALSE
+    )))
   }
   if (identical(estimator_class, "chatterjee_xi") && is.list(diag_attr)) {
     if (is.matrix(diag_attr$ci_method)) {
@@ -597,53 +625,93 @@ plot.dgCMatrix <- function(x,
       pairs$ci_method <- method_vals
     }
     if (is.matrix(diag_attr$m)) {
-      pairs$m <- as.integer(round(add_from_matrix(diag_attr$m)))
+      pairs$m <- as.integer(round(.mc_extract_pair_matrix(
+        diag_attr$m, idx, dm, symmetric = FALSE
+      )))
     }
     if (is.matrix(diag_attr$se)) {
-      pairs$se <- as.numeric(add_from_matrix(diag_attr$se))
+      pairs$se <- as.numeric(.mc_extract_pair_matrix(
+        diag_attr$se, idx, dm, symmetric = FALSE
+      ))
     }
     if (!is.null(diag_attr$bootstrap_reps)) {
-      pairs$bootstrap_reps <- as.integer(diag_attr$bootstrap_reps[[1L]])
+      pairs$bootstrap_reps <- rep(as.integer(diag_attr$bootstrap_reps[[1L]]), nrow(pairs))
     }
   }
 
   ci_attr <- attr(object, "ci", exact = TRUE)
   if (is.list(ci_attr)) {
-    if (is.matrix(ci_attr$lwr.ci)) pairs$lwr <- as.numeric(add_from_matrix(ci_attr$lwr.ci))
-    if (is.matrix(ci_attr$upr.ci)) pairs$upr <- as.numeric(add_from_matrix(ci_attr$upr.ci))
+    if (is.matrix(ci_attr$lwr.ci)) {
+      pairs$lwr <- as.numeric(.mc_extract_pair_matrix(ci_attr$lwr.ci, idx, dm, symmetric = FALSE))
+    }
+    if (is.matrix(ci_attr$upr.ci)) {
+      pairs$upr <- as.numeric(.mc_extract_pair_matrix(ci_attr$upr.ci, idx, dm, symmetric = FALSE))
+    }
   }
 
   inf <- attr(object, "inference", exact = TRUE)
   if (is.list(inf)) {
-    if (is.matrix(inf$bcdcor)) pairs$bcdcor <- as.numeric(add_from_matrix(inf$bcdcor))
-    if (is.matrix(inf$statistic)) pairs$statistic <- as.numeric(add_from_matrix(inf$statistic))
+    if (is.matrix(inf$bcdcor)) {
+      pairs$bcdcor <- as.numeric(.mc_extract_pair_matrix(inf$bcdcor, idx, dm, symmetric = FALSE))
+    }
+    if (is.matrix(inf$statistic)) {
+      pairs$statistic <- as.numeric(.mc_extract_pair_matrix(inf$statistic, idx, dm, symmetric = FALSE))
+    }
     param_mat <- inf$parameter %||% inf$df
-    if (is.matrix(param_mat)) pairs$df <- as.numeric(add_from_matrix(param_mat))
-    if (is.matrix(inf$p_value)) pairs$p_value <- as.numeric(add_from_matrix(inf$p_value))
-  } else {
-    needs_fallback <- estimator_class %in% c(
-      "bicor", "pearson_corr", "spearman_rho",
-      "kendall_matrix", "pbcor", "wincor", "skipped_corr",
-      "partial_corr_matrix"
-    )
-    if (isTRUE(needs_fallback)) {
-      # Backward-compatible fallback for CI-only summaries that historically
-      # exposed Fisher-z and p-value columns.
-      z <- suppressWarnings(atanh(pairs$estimate))
-      z[!is.finite(z)] <- NA_real_
-      pairs$fisher_z <- z
-      if ("n_complete" %in% names(pairs) && all(is.finite(pairs$n_complete))) {
-        se <- 1 / sqrt(pmax(1, as.numeric(pairs$n_complete) - 3))
-        pairs$statistic <- z / se
-        pairs$p_value <- 2 * stats::pnorm(abs(pairs$statistic), lower.tail = FALSE)
+    if (is.matrix(param_mat)) {
+      pairs$df <- as.numeric(.mc_extract_pair_matrix(param_mat, idx, dm, symmetric = FALSE))
+    }
+    if (is.matrix(inf$p_value)) {
+      pairs$p_value <- as.numeric(.mc_extract_pair_matrix(inf$p_value, idx, dm, symmetric = FALSE))
+    }
+    if (identical(estimator_class, "bicor") && is.matrix(inf$Z)) {
+      pairs$z_statistic <- as.numeric(.mc_extract_pair_matrix(inf$Z, idx, dm, symmetric = FALSE))
+    }
+  } else if (identical(estimator_class, "pearson_corr")) {
+    z <- suppressWarnings(atanh(pairs$estimate))
+    z[!is.finite(z)] <- NA_real_
+    pairs$fisher_z <- z
+    if ("n_complete" %in% names(pairs) && nrow(pairs)) {
+      n <- as.numeric(pairs$n_complete)
+      eligible <- is.finite(n) & n > 3
+      if (any(eligible)) {
+        pairs$statistic <- rep(NA_real_, nrow(pairs))
+        pairs$p_value <- rep(NA_real_, nrow(pairs))
+        se <- 1 / sqrt(n[eligible] - 3)
+        pairs$statistic[eligible] <- z[eligible] / se
+        pairs$p_value[eligible] <- 2 * stats::pnorm(
+          abs(pairs$statistic[eligible]),
+          lower.tail = FALSE
+        )
       }
     }
   }
 
-  if (!"fisher_z" %in% names(pairs)) {
+  if (identical(estimator_class, "pearson_corr") && !"fisher_z" %in% names(pairs)) {
     z <- suppressWarnings(atanh(pairs$estimate))
     z[!is.finite(z)] <- NA_real_
     pairs$fisher_z <- z
+  }
+
+  if (is.list(inf) && is.matrix(inf$p_value_adjusted)) {
+    pairs$p_value_adjusted <- as.numeric(.mc_extract_pair_matrix(
+      inf$p_value_adjusted, idx, dm, symmetric = FALSE
+    ))
+  }
+  if (is.list(inf) && is.matrix(inf$reject)) {
+    pairs$reject <- .mc_extract_pair_matrix(
+      inf$reject, idx, dm, logical = TRUE, symmetric = FALSE
+    )
+  }
+  if (is.list(diag_attr) && is.matrix(diag_attr$skipped_n)) {
+    pairs$skipped_n <- as.integer(round(.mc_extract_pair_matrix(
+      diag_attr$skipped_n, idx, dm, symmetric = FALSE
+    )))
+  }
+  if (is.list(diag_attr) && is.matrix(diag_attr$skipped_prop)) {
+    pairs$skipped_prop <- as.numeric(.mc_extract_pair_matrix(
+      diag_attr$skipped_prop, idx, dm, symmetric = FALSE
+    ))
   }
 
   if (nrow(pairs)) {
@@ -651,7 +719,7 @@ plot.dgCMatrix <- function(x,
   }
   rownames(pairs) <- NULL
 
-  overview <- .mc_corr_overview(object)
+  overview <- .mc_corr_overview(object, indexed_pairs = all_pairs)
   summary_classes <- c(
     "summary.corr_result",
     output_class,
@@ -664,6 +732,7 @@ plot.dgCMatrix <- function(x,
     "summary.matrixCorr",
     "data.frame"
   )
+  attr(pairs, "class") <- NULL
   class(pairs) <- unique(summary_classes)
 
   topn_use <- .mc_coalesce(topn, .mc_display_option("summary_topn", 5L))
@@ -865,10 +934,50 @@ plot.dgCMatrix <- function(x,
 
 #' @keywords internal
 #' @noRd
+.mc_plot_grid_ci <- function(ci_attr, dm, ii, jj) {
+  n <- length(ii)
+  lwr <- rep(NA_real_, n)
+  upr <- rep(NA_real_, n)
+  has_ci <- is.list(ci_attr) &&
+    is.matrix(ci_attr$lwr.ci) &&
+    is.matrix(ci_attr$upr.ci) &&
+    identical(dim(ci_attr$lwr.ci), dm) &&
+    identical(dim(ci_attr$upr.ci), dm)
+  if (isTRUE(has_ci) && n) {
+    ok <- is.finite(ii) & is.finite(jj) &
+      ii >= 1L & ii <= dm[[1L]] &
+      jj >= 1L & jj <= dm[[2L]]
+    if (any(ok)) {
+      lwr[ok] <- ci_attr$lwr.ci[cbind(ii[ok], jj[ok])]
+      upr[ok] <- ci_attr$upr.ci[cbind(ii[ok], jj[ok])]
+    }
+  }
+  list(lwr = as.numeric(lwr), upr = as.numeric(upr))
+}
+
+.mc_plot_grid_mirror <- function(edf, off, row, col, i = NULL, j = NULL) {
+  if (!any(off)) {
+    return(edf)
+  }
+  mirror <- edf[off, , drop = FALSE]
+  if (!is.null(i)) {
+    mirror$i <- i
+    mirror$j <- j
+  }
+  mirror$row <- row
+  mirror$col <- col
+  rbind(edf, mirror)
+}
+
 .mc_corr_plot_grid <- function(x) {
   dm <- .mc_corr_dim(x)
   dn <- .mc_corr_dimnames(x)
-  edf <- .mc_corr_as_edge_df(x)
+  ambiguous <- .mc_axis_names_positional(dn[[1L]], dn[[2L]])
+  if (ambiguous) {
+    edf <- .mc_resolve_indexed_pairs(x)
+  } else {
+    edf <- .mc_corr_as_edge_df(x)
+  }
   if (!nrow(edf)) {
     return(data.frame(
       row = character(),
@@ -880,47 +989,51 @@ plot.dgCMatrix <- function(x,
       check.names = FALSE
     ))
   }
-  edf$row <- as.character(edf$row)
-  edf$col <- as.character(edf$col)
-  edf$value <- as.numeric(edf$value)
-
-  ci_attr <- attr(x, "ci", exact = TRUE)
-  has_ci <- is.list(ci_attr) &&
-    is.matrix(ci_attr$lwr.ci) &&
-    is.matrix(ci_attr$upr.ci) &&
-    identical(dim(ci_attr$lwr.ci), dm) &&
-    identical(dim(ci_attr$upr.ci), dm)
-  if (isTRUE(has_ci)) {
+  if (ambiguous) {
+    ii <- edf$i
+    jj <- edf$j
+  } else {
+    edf$row <- as.character(edf$row)
+    edf$col <- as.character(edf$col)
+    edf$value <- as.numeric(edf$value)
     ii <- if (!is.null(dn[[1L]])) match(edf$row, dn[[1L]]) else suppressWarnings(as.integer(edf$row))
     jj <- if (!is.null(dn[[2L]])) match(edf$col, dn[[2L]]) else suppressWarnings(as.integer(edf$col))
-    ok <- is.finite(ii) & is.finite(jj) &
-      ii >= 1L & ii <= dm[[1L]] &
-      jj >= 1L & jj <= dm[[2L]]
-    lwr <- rep(NA_real_, nrow(edf))
-    upr <- rep(NA_real_, nrow(edf))
-    if (any(ok)) {
-      lwr[ok] <- ci_attr$lwr.ci[cbind(ii[ok], jj[ok])]
-      upr[ok] <- ci_attr$upr.ci[cbind(ii[ok], jj[ok])]
-    }
-    edf$lwr <- as.numeric(lwr)
-    edf$upr <- as.numeric(upr)
-  } else {
-    edf$lwr <- NA_real_
-    edf$upr <- NA_real_
   }
+  bounds <- .mc_plot_grid_ci(attr(x, "ci", exact = TRUE), dm, ii, jj)
+  edf$lwr <- bounds$lwr
+  edf$upr <- bounds$upr
 
-  symm <- isTRUE(attr(x, "corr_symmetric", exact = TRUE))
-  if (symm) {
-    off <- edf$row != edf$col
-    if (any(off)) {
-      mirror <- edf[off, , drop = FALSE]
-      mirror$row <- edf$col[off]
-      mirror$col <- edf$row[off]
-      edf <- rbind(
+  if (isTRUE(attr(x, "corr_symmetric", exact = TRUE))) {
+    if (ambiguous) {
+      off <- edf$i != edf$j
+      edf <- .mc_plot_grid_mirror(
         edf,
-        mirror
+        off,
+        row = if (is.null(dn[[1L]])) as.character(edf$j[off]) else dn[[1L]][edf$j[off]],
+        col = if (is.null(dn[[2L]])) as.character(edf$i[off]) else dn[[2L]][edf$i[off]],
+        i = edf$j[off],
+        j = edf$i[off]
+      )
+    } else {
+      off <- edf$row != edf$col
+      edf <- .mc_plot_grid_mirror(
+        edf,
+        off,
+        row = edf$col[off],
+        col = edf$row[off]
       )
     }
+  }
+
+  if (ambiguous) {
+    edf$row <- factor(edf$i, levels = rev(seq_len(dm[[1L]])))
+    edf$col <- factor(edf$j, levels = seq_len(dm[[2L]]))
+    out <- edf[, c("row", "col", "value", "lwr", "upr"), drop = FALSE]
+    attr(out, "mc_axis_labels") <- list(
+      row = rev(dn[[1L]] %||% as.character(seq_len(dm[[1L]]))),
+      col = dn[[2L]] %||% as.character(seq_len(dm[[2L]]))
+    )
+    return(out)
   }
 
   if (!is.null(dn[[1L]])) {
@@ -957,10 +1070,12 @@ plot.dgCMatrix <- function(x,
   }
   check_bool(show_value, arg = "show_value")
   df <- .mc_corr_plot_grid(x)
+  axis_labels <- attr(df, "mc_axis_labels", exact = TRUE)
   if (!"ci_label" %in% names(df)) {
     has_ci_cols <- all(c("lwr", "upr") %in% names(df))
     if (isTRUE(has_ci_cols)) {
-      same_cell <- as.character(df$row) == as.character(df$col)
+      same_cell <- .mc_same_axis_square(x) &
+        (as.character(df$row) == as.character(df$col))
       df$ci_label <- ifelse(
         is.finite(df$lwr) & is.finite(df$upr) & !same_cell,
         sprintf("[%.3f, %.3f]", df$lwr, df$upr),
@@ -1014,6 +1129,7 @@ plot.dgCMatrix <- function(x,
     ) +
     ggplot2::coord_fixed() +
     ggplot2::labs(title = title, x = NULL, y = NULL)
+  p <- .mc_add_positional_axis_scales(p, axis_labels)
 
   if (isTRUE(show_value) && is.finite(value_text_size) && !is.null(value_text_size)) {
     p <- p + ggplot2::geom_text(
@@ -1175,18 +1291,21 @@ plot.dgCMatrix <- function(x,
 #' Correlation overview abstraction
 #' @keywords internal
 #' @noRd
-.mc_corr_overview <- function(x) {
+.mc_corr_overview <- function(x, indexed_pairs = NULL) {
   dm <- .mc_corr_dim(x)
-  edges <- .mc_corr_pairs(x, diag = TRUE)
+  edges <- if (is.null(indexed_pairs)) .mc_corr_pairs(x, diag = TRUE) else indexed_pairs
   method <- attr(x, "method", exact = TRUE) %||% .mc_corr_estimator_class(x)
   output <- attr(x, "output", exact = TRUE) %||% "matrix"
   thr <- attr(x, "threshold", exact = TRUE) %||% 0
   use_diag <- attr(x, "diag", exact = TRUE) %||% TRUE
   symmetric <- isTRUE(attr(x, "corr_symmetric", exact = TRUE))
-  pair_edges <- if (isTRUE(symmetric)) {
-    if (nrow(edges)) edges[edges$row != edges$col, , drop = FALSE] else edges
+  pair_count <- if (!isTRUE(symmetric)) {
+    nrow(edges)
+  } else if (!nrow(edges)) {
+    0L
   } else {
-    edges
+    keep <- edges$i != edges$j
+    if (!anyNA(keep)) sum(keep) else nrow(edges[keep, , drop = FALSE])
   }
   has_ci <- !is.null(attr(x, "ci", exact = TRUE))
   inf_attr <- attr(x, "inference", exact = TRUE)
@@ -1222,11 +1341,14 @@ plot.dgCMatrix <- function(x,
   } else {
     vals <- as.numeric(edges$value)
     if (symmetric && dm[[1L]] == dm[[2L]] && nrow(edges)) {
-      vals <- vals[as.character(edges$row) != as.character(edges$col)]
+      vals <- vals[edges$i != edges$j]
     }
     n_missing <- sum(is.na(edges$value))
   }
   vals <- vals[is.finite(vals)]
+  # Source-wide diagnostic range: strict upper triangle when the result is
+  # marked symmetric and square, otherwise the full rectangle. The range does
+  # not follow the retained edge or threshold filter.
   pick_range <- function(mat) {
     if (!is.matrix(mat) || !identical(dim(mat), dm)) {
       return(c(NA_real_, NA_real_))
@@ -1250,8 +1372,8 @@ plot.dgCMatrix <- function(x,
   skipped_n <- if (is.list(diag_attr)) pick_range(diag_attr$skipped_n) else c(NA_real_, NA_real_)
   skipped_prop <- if (is.list(diag_attr)) pick_range(diag_attr$skipped_prop) else c(NA_real_, NA_real_)
   threshold_sets <- {
-    thr <- attr(x, "thresholds", exact = TRUE)
-    if (is.list(thr)) length(thr) else NA_integer_
+    threshold_sets_attr <- attr(x, "thresholds", exact = TRUE)
+    if (is.list(threshold_sets_attr)) length(threshold_sets_attr) else NA_integer_
   }
   thr_num <- if (is.list(thr)) numeric() else suppressWarnings(as.numeric(thr))
   if (!length(thr_num) || !is.finite(thr_num[[1L]])) {
@@ -1281,8 +1403,8 @@ plot.dgCMatrix <- function(x,
     n_variables = if (symmetric) as.integer(dm[[1L]]) else NA_integer_,
     n_rows = as.integer(dm[[1L]]),
     n_cols = as.integer(dm[[2L]]),
-    n_pairs = nrow(pair_edges),
-    n_pairs_retained = nrow(pair_edges),
+    n_pairs = pair_count,
+    n_pairs_retained = pair_count,
     symmetric = symmetric,
     n_missing = n_missing,
     threshold_sets = threshold_sets,

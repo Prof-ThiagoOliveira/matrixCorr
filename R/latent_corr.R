@@ -376,14 +376,6 @@
   fit
 }
 
-.mc_diag_discrete <- function(code) {
-  keep <- !is.na(code)
-  if (sum(keep) < 2L || length(unique(code[keep])) < 2L) {
-    return(NA_real_)
-  }
-  1
-}
-
 .mc_pair_complete <- function(x, y, check_na) {
   if (check_na) {
     return(list(x = x, y = y))
@@ -588,22 +580,6 @@
   }
 }
 
-.mc_pair_tetrachoric <- function(x, y, correct, check_na,
-                                 tau_x = NULL, tau_y = NULL,
-                                 global = TRUE) {
-  pair <- .mc_pair_complete(x, y, check_na)
-  if (length(pair$x) < 2L) {
-    return(NA_real_)
-  }
-  .mc_tetrachoric_from_pair(
-    pair$x, pair$y,
-    correct = correct,
-    tau_x = tau_x,
-    tau_y = tau_y,
-    global = global
-  )
-}
-
 .mc_tetrachoric_from_pair <- function(x_pair, y_pair, correct,
                                       tau_x = NULL, tau_y = NULL,
                                       global = TRUE) {
@@ -620,23 +596,6 @@
   )
 }
 
-.mc_pair_polychoric <- function(x, y, n_x, n_y, correct, check_na,
-                                tau_x = NULL, tau_y = NULL,
-                                global = identical(n_x, n_y)) {
-  pair <- .mc_pair_complete(x, y, check_na)
-  if (length(pair$x) < 2L) {
-    return(NA_real_)
-  }
-  .mc_polychoric_from_pair(
-    pair$x, pair$y,
-    n_x = n_x,
-    n_y = n_y,
-    correct = correct,
-    tau_x = tau_x,
-    tau_y = tau_y,
-    global = global
-  )
-}
 
 .mc_polychoric_from_pair <- function(x_pair, y_pair, n_x, n_y, correct,
                                      tau_x = NULL, tau_y = NULL,

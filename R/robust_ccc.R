@@ -383,7 +383,7 @@ robust_ccc <- function(data,
   p <- ncol(X)
   out <- matrix(NA_real_, nrow = p, ncol = p, dimnames = list(colnames(X), colnames(X)))
 
-  pair_id <- 0L
+  pair_id <- 0
   if (p > 1L) {
     for (i in seq_len(p - 1L)) {
       for (j in seq.int(i + 1L, p)) {
@@ -402,7 +402,7 @@ robust_ccc <- function(data,
           )
           out[i, j] <- out[j, i] <- value
         }
-        pair_id <- pair_id + 1L
+        pair_id <- pair_id + 1
       }
     }
   }
@@ -445,7 +445,7 @@ robust_ccc <- function(data,
   diag(ci_upr)[valid_diagonal] <- 1
   diag(n_boot_success)[valid_diagonal] <- as.integer(n_boot)
 
-  pair_id <- 0L
+  pair_id <- 0
   if (p > 1L) {
     for (i in seq_len(p - 1L)) {
       for (j in seq.int(i + 1L, p)) {
@@ -476,7 +476,7 @@ robust_ccc <- function(data,
           ci_upr[i, j] <- ci_upr[j, i] <- limits[[2L]]
           n_boot_success[i, j] <- n_boot_success[j, i] <- success
         }
-        pair_id <- pair_id + 1L
+        pair_id <- pair_id + 1
       }
     }
   }

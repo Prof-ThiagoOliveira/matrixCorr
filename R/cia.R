@@ -602,27 +602,6 @@ cia <- function(data,
   inference
 }
 
-.mc_cia_subject_within_msd <- function(x) {
-  n <- length(x)
-  if (n < 2L) {
-    return(NA_real_)
-  }
-  d2 <- outer(x, x, FUN = "-")^2
-  mean(d2[upper.tri(d2)])
-}
-
-.mc_cia_subject_between_msd <- function(x, y) {
-  if (!length(x) || !length(y)) {
-    return(NA_real_)
-  }
-  mean(outer(x, y, FUN = "-")^2)
-}
-
-.mc_cia_subject_values <- function(prep, subject_idx, method_idx) {
-  vals <- prep$by_subject_method[[subject_idx]][[as.character(method_idx)]]
-  if (is.null(vals)) numeric(0) else as.numeric(vals)
-}
-
 .mc_cia_overall_arrays <- function(prep, n_threads = 1L) {
   raw <- tryCatch(
     cia_overall_balanced_cpp(
@@ -1418,14 +1397,8 @@ summary.cia <- function(object,
   }
   corr_obj <- .mc_cia_as_corr_result(object)
   out <- summary.corr_matrix(corr_obj, ...)
-  if ("fisher_z" %in% names(out)) {
-    out$fisher_z <- NULL
-  }
   out <- .mc_cia_summary_add_pairwise_fields(out, corr_obj)
   top_tbl <- attr(out, "top_results", exact = TRUE)
-  if (is.data.frame(top_tbl) && "fisher_z" %in% names(top_tbl)) {
-    top_tbl$fisher_z <- NULL
-  }
   if (is.data.frame(top_tbl)) {
     top_tbl <- .mc_cia_summary_add_pairwise_fields(top_tbl, corr_obj)
     attr(out, "top_results") <- top_tbl

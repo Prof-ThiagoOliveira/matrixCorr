@@ -24,8 +24,7 @@ List bland_altman_cpp(NumericVector group1,
                       double loa_multiplier = 1.96,
                       int    mode       = 1,
                       double conf_level = 0.95,
-                      int n_threads = 1,
-                      bool include_legacy_payload = true) {
+                      int n_threads = 1) {
   if (group1.size() != group2.size())
     stop("Error in bland.altman.stats: groups differ in length.");
   if (loa_multiplier <= 0.0)
@@ -99,28 +98,6 @@ List bland_altman_cpp(NumericVector group1,
     _["upper.limit.ci.lower"] = upper + t1 * se_limit,
     _["upper.limit.ci.upper"] = upper + t2 * se_limit
   );
-
-  if (include_legacy_payload) {
-    DataFrame groups = DataFrame::create(
-      _["group1"] = wrap(g1),
-      _["group2"] = wrap(g2),
-      _["stringsAsFactors"] = false
-    );
-
-    return List::create(
-      _["means"]         = means,
-      _["diffs"]         = diffs,
-      _["groups"]        = groups,
-      _["based.on"]      = n,
-      _["lower.limit"]   = lower,
-      _["mean.diffs"]    = mean_diffs,
-      _["upper.limit"]   = upper,
-      _["lines"]         = lines,
-      _["CI.lines"]      = CI_lines,
-      _["loa_multiplier"] = loa_multiplier,
-      _["critical.diff"] = critical
-    );
-  }
 
   return List::create(
     _["means"]         = means,

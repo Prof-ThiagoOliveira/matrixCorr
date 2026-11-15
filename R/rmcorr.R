@@ -715,10 +715,10 @@ rmcorr_weighted <- function(data = NULL, response, subject, ...) {
     diag(out_high) <- diag_values
   }
 
-  pair_id <- 0L
+  pair_id <- 0
   for (j in seq_len(p - 1L)) {
     for (k in seq.int(j + 1L, p)) {
-      pair_id <- pair_id + 1L
+      pair_id <- pair_id + 1
       dat <- .mc_rmcorr_pair_data(response_mat[, c(j, k), drop = FALSE], subject)
       ci_vals <- .mc_rmcorr_bootstrap_ci_from_pair_data(
         dat = dat,
