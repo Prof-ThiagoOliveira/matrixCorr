@@ -132,23 +132,24 @@
 #' ci(pr_ci)
 #' confint(pr_ci)
 #'
-#' ## Compare the sample estimate to the truth
-#' Rhat <- cor(X)
-#' # estimated
-#' round(Rhat[1:4, 1:4], 2)
-#' # true
-#' round(Sigma[1:4, 1:4], 2)
-#' off <- upper.tri(Sigma, diag = FALSE)
-#' # MAE on off-diagonals
-#' mean(abs(Rhat[off] - Sigma[off]))
+#' ## Compare pearson_corr() with base R and the population correlations
+#' Rhat <- estimate(pr)
+#' Rbase <- stats::cor(X)
+#' # Count each variable pair once. The diagonal is always one.
+#' off <- upper.tri(Sigma)
+#' mae <- mean(abs(Rhat[off] - Sigma[off]))
+#' # Both methods give the same sample estimates to numerical precision.
+#' # Their errors relative to Sigma reflect sampling variation.
+#' round(c(pearson_vs_cor = mean(abs(Rhat[off] - Rbase[off])),
+#'         pearson_vs_Sigma = mae,
+#'         cor_vs_Sigma = mean(abs(Rbase[off] - Sigma[off]))), 6)
 #'
-#' ## Larger n reduces sampling error
+#' # Repeat with a larger sample from the same population.
 #' n2 <- 2000
 #' X2 <- matrix(rnorm(n2 * p), n2, p) %*% L
-#' Rhat2 <- cor(X2)
-#' off <- upper.tri(Sigma, diag = FALSE)
-#' ## mean absolute error (MAE) of the off-diagonal correlations
-#' mean(abs(Rhat2[off] - Sigma[off]))
+#' Rhat2 <- estimate(pearson_corr(X2))
+#' # Smaller mean absolute error indicates closer agreement with Sigma.
+#' c(n300 = mae, n2000 = mean(abs(Rhat2[off] - Sigma[off])))
 #'
 #' # Interactive viewing (requires shiny)
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
