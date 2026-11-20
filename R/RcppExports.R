@@ -233,6 +233,10 @@ krippendorff_alpha_core_cpp <- function(counts, delta2, method_code = 1L, return
     .Call(`_matrixCorr_krippendorff_alpha_core_cpp`, counts, delta2, method_code, return_matrices, n_threads)
 }
 
+lancaster_matrix_cpp <- function(X, rank_based, ci, p_value, conf_level, n_boot, n_perm, seed, n_threads, conservative) {
+    .Call(`_matrixCorr_lancaster_matrix_cpp`, X, rank_based, ci, p_value, conf_level, n_boot, n_perm, seed, n_threads, conservative)
+}
+
 multirater_kappa_counts_cpp <- function(counts, method_code = 1L, by_category = FALSE, inference_code = 0L, conf_level = 0.95, n_threads = 1L) {
     .Call(`_matrixCorr_multirater_kappa_counts_cpp`, counts, method_code, by_category, inference_code, conf_level, n_threads)
 }

@@ -914,6 +914,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// lancaster_matrix_cpp
+Rcpp::List lancaster_matrix_cpp(Rcpp::NumericMatrix X, bool rank_based, bool ci, bool p_value, double conf_level, int n_boot, int n_perm, int seed, int n_threads, bool conservative);
+RcppExport SEXP _matrixCorr_lancaster_matrix_cpp(SEXP XSEXP, SEXP rank_basedSEXP, SEXP ciSEXP, SEXP p_valueSEXP, SEXP conf_levelSEXP, SEXP n_bootSEXP, SEXP n_permSEXP, SEXP seedSEXP, SEXP n_threadsSEXP, SEXP conservativeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< bool >::type rank_based(rank_basedSEXP);
+    Rcpp::traits::input_parameter< bool >::type ci(ciSEXP);
+    Rcpp::traits::input_parameter< bool >::type p_value(p_valueSEXP);
+    Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
+    Rcpp::traits::input_parameter< int >::type n_boot(n_bootSEXP);
+    Rcpp::traits::input_parameter< int >::type n_perm(n_permSEXP);
+    Rcpp::traits::input_parameter< int >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    Rcpp::traits::input_parameter< bool >::type conservative(conservativeSEXP);
+    rcpp_result_gen = Rcpp::wrap(lancaster_matrix_cpp(X, rank_based, ci, p_value, conf_level, n_boot, n_perm, seed, n_threads, conservative));
+    return rcpp_result_gen;
+END_RCPP
+}
 // multirater_kappa_counts_cpp
 Rcpp::List multirater_kappa_counts_cpp(Rcpp::IntegerMatrix counts, int method_code, bool by_category, int inference_code, double conf_level, int n_threads);
 RcppExport SEXP _matrixCorr_multirater_kappa_counts_cpp(SEXP countsSEXP, SEXP method_codeSEXP, SEXP by_categorySEXP, SEXP inference_codeSEXP, SEXP conf_levelSEXP, SEXP n_threadsSEXP) {
@@ -1545,6 +1565,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_matrixCorr_kendall_tau2_from_mat_cpp", (DL_FUNC) &_matrixCorr_kendall_tau2_from_mat_cpp, 1},
     {"_matrixCorr_kendall_matrix_pairwise_cpp", (DL_FUNC) &_matrixCorr_kendall_matrix_pairwise_cpp, 4},
     {"_matrixCorr_krippendorff_alpha_core_cpp", (DL_FUNC) &_matrixCorr_krippendorff_alpha_core_cpp, 5},
+    {"_matrixCorr_lancaster_matrix_cpp", (DL_FUNC) &_matrixCorr_lancaster_matrix_cpp, 10},
     {"_matrixCorr_multirater_kappa_counts_cpp", (DL_FUNC) &_matrixCorr_multirater_kappa_counts_cpp, 6},
     {"_matrixCorr_multirater_kappa_ratings_cpp", (DL_FUNC) &_matrixCorr_multirater_kappa_ratings_cpp, 10},
     {"_matrixCorr_partial_correlation_cpp", (DL_FUNC) &_matrixCorr_partial_correlation_cpp, 5},
