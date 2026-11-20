@@ -529,6 +529,14 @@ averaging operates when translating variance components into CCC summaries.
 }
 
 \examples{
+# Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+flow <- utils::read.csv(path)
+# Estimate concordance across meters with a mixed model.
+fit <- ccc_rm_reml(flow, response = "flow", subject = "subject",
+                   method = "meter", time = "reading")
+tidy(fit)
+
 # ====================================================================
 # 1) Subject x METHOD variance present, no time
 #     y_{i,m} = mu + b_m + u_i + w_{i,m} + e_{i,m}

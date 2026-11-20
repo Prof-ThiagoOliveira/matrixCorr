@@ -254,10 +254,9 @@ matrix costs \eqn{O(n p^2)} with \eqn{O(p^2)} output storage. When
 pair.
 }
 \examples{
-set.seed(11)
-X <- matrix(rnorm(180 * 4), ncol = 4)
-X[sample(length(X), 6)] <- X[sample(length(X), 6)] - 12
-
+# Do hotter stars tend to be brighter in the Cygnus OB1 star cluster?
+# The giant stars have a different temperature-luminosity pattern.
+X <- robustbase::starsCYG
 R <- wincor(X, tr = 0.2)
 print(R, digits = 2)
 summary(R)

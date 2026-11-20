@@ -177,45 +177,13 @@ Bootstrap confidence intervals use non-parametric subject-level resampling
 (subjects are resampled as blocks, not rows).
 }
 \examples{
-set.seed(2026)
-n_subjects <- 20
-n_rep <- 4
-subject <- rep(seq_len(n_subjects), each = n_rep)
-subj_eff_x <- rnorm(n_subjects, sd = 1.5)
-subj_eff_y <- rnorm(n_subjects, sd = 2.0)
-within_signal <- rnorm(n_subjects * n_rep)
+# How closely does circumference track age within the same orange tree?
+fit <- rmcorr(datasets::Orange, response = c("age", "circumference"),
+              subject = "Tree", keep_data = TRUE)
+tidy(fit)
+confint(fit)
+plot(fit)
 
-dat <- data.frame(
-  subject = subject,
-  x = subj_eff_x[subject] + within_signal + rnorm(n_subjects * n_rep, sd = 0.2),
-  y = subj_eff_y[subject] + 0.8 * within_signal + rnorm(n_subjects * n_rep, sd = 0.3),
-  z = subj_eff_y[subject] - 0.4 * within_signal + rnorm(n_subjects * n_rep, sd = 0.4)
-)
-
-fit_xy <- rmcorr(dat, response = c("x", "y"), subject = "subject", keep_data = TRUE)
-print(fit_xy)
-summary(fit_xy)
-estimate(fit_xy)
-tidy(fit_xy)
-ci(fit_xy)
-confint(fit_xy)
-plot(fit_xy)
-
-fit_mat <- rmcorr(dat, response = c("x", "y", "z"), subject = "subject")
-print(fit_mat, digits = 3)
-summary(fit_mat)
-tidy(fit_mat)
-plot(fit_mat)
-
-if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
-  fit_mat_view <- rmcorr(
-    dat,
-    response = c("x", "y", "z"),
-    subject = "subject",
-    keep_data = TRUE
-  )
-  view_rmcorr_shiny(fit_mat_view)
-}
 }
 \references{
 Bakdash, J. Z., & Marusich, L. R. (2017). Repeated Measures Correlation.

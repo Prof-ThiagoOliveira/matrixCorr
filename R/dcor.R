@@ -76,27 +76,12 @@
 #' @seealso [bcdcor()], [robust_dcor()]
 #'
 #' @examples
-#' \donttest{
-#' # Conventional distance correlation
-#' set.seed(42)
-#' n <- 200
-#' x <- rnorm(n)
-#' y <- 0.7 * x + sqrt(1 - 0.7^2) * rnorm(n)
-#' X <- cbind(x = x, y = y)
-#'
-#' # dcor() returns conventional distance correlation R.
-#' # squared = TRUE returns conventional R^2.
+#' # Is eruption duration associated with waiting time to the next eruption?
+#' X <- datasets::faithful
 #' dcor(X)
 #' dcor(X, squared = TRUE)
 #'
-#' D <- dcor(X)
-#' D2 <- dcor(X, squared = TRUE)
-#'
-#' D2["x", "y"]
-#' D["x", "y"]^2
-#'
-#' # Pearson can be close to zero for this symmetric nonlinear relationship,
-#' # while distance correlation remains positive.
+#' \donttest{
 #' set.seed(123)
 #' n <- 300
 #' x <- rnorm(n)
@@ -332,23 +317,12 @@ dcor <- function(data,
 #' @seealso [dcor()], [robust_dcor()]
 #'
 #' @examples
-#' \donttest{
-#' # Bias-corrected versus conventional squared dCor
-#' set.seed(100)
-#' n <- 150
-#' x <- rnorm(n)
-#' y <- 0.6 * x + sqrt(1 - 0.6^2) * rnorm(n)
-#' X <- cbind(x = x, y = y)
-#'
-#' # These are related but are not the same finite-sample estimator:
-#' # dcor(..., squared = TRUE) uses the conventional V-statistic,
-#' # whereas bcdcor() uses U-centering and bias correction.
+#' # Is eruption duration associated with waiting time to the next eruption?
+#' X <- datasets::faithful
 #' dcor(X, squared = TRUE)
 #' bcdcor(X)
 #'
-#' # Bias-corrected squared dCor can be negative in finite samples,
-#' # particularly under weak dependence or independence.
-#' # This is not a negative-dependence estimate.
+#' \donttest{
 #' set.seed(3)
 #' x <- rnorm(80)
 #' y <- rnorm(80)

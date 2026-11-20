@@ -108,24 +108,9 @@
 #' \emph{Journal of the Royal Statistical Society: Series B}, 80(1), 5-31.
 #'
 #' @examples
-#' set.seed(1)
-#' x <- rnorm(200)
-#' y <- rnorm(200)
-#' H0 <- hsic(cbind(x = x, y = y))
-#' H0
-#'
-#' set.seed(2)
-#' x <- rnorm(200)
-#' y <- x^2 + rnorm(200, sd = 0.1)
-#' H1 <- hsic(cbind(x = x, y = y))
-#' H1
-#'
-#' set.seed(3)
-#' X <- cbind(a = rnorm(80), b = rnorm(80), c = rnorm(80))
-#' H_perm <- hsic(X, p_value = TRUE, B = 19, seed = 1)
-#' summary(H_perm)
-#' estimate(H_perm)
-#' tidy(H_perm)
+#' # Does stopping distance depend on speed in the car stopping trials?
+#' fit <- hsic(datasets::cars, p_value = TRUE, B = 99, seed = 1)
+#' tidy(fit)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export

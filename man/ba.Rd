@@ -263,28 +263,16 @@ probability that two estimated quantities or curves agree within a
 user-specified practical tolerance.
 }
 \examples{
-set.seed(1)
-x <- rnorm(100, 100, 10)
-y <- x + rnorm(100, 0, 8)
-fit_ba <- ba(x, y)
-print(fit_ba)
-estimate(fit_ba)
-tidy(fit_ba)
-confint(fit_ba)
-plot(fit_ba)
-
-# Pairwise Bland-Altman across 3 methods
-set.seed(7)
-wide3 <- data.frame(
-  ref = rnorm(80, 100, 8),
-  m2  = rnorm(80, 101, 8),
-  m3  = rnorm(80,  99, 9)
-)
-fit_ba3 <- ba(wide3)
-print(fit_ba3)
-summary(fit_ba3)
-tidy(fit_ba3)
-plot(fit_ba3)
+# Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+flow <- utils::read.csv(path)
+# Compare meters on the first reading for each of the 17 people.
+first <- subset(flow, reading == 1)
+meters <- unclass(stats::xtabs(flow ~ subject + meter, data = first))
+# Bias and limits of agreement are in litres per minute.
+fit <- ba(meters)
+tidy(fit)
+plot(fit)
 
 }
 \references{

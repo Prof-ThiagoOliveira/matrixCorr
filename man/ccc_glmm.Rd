@@ -174,28 +174,12 @@ moment CCC and should not be expected to produce negative values.
 }
 }
 \examples{
-# Example 1: overall agreement for two Poisson count methods.
-# Here the methods have similar means, so rho_ccc is mainly driven by
-# between-subject count heterogeneity versus Poisson residual noise.
-set.seed(1)
-df1 <- expand.grid(
-  subject = factor(seq_len(12)),
-  method = factor(c("A", "B")),
-  replicate = factor(seq_len(2))
-)
-subject_eff <- rnorm(12, 0, 0.5)
-df1$eta <- 1.1 + subject_eff[as.integer(df1$subject)]
-df1$y <- rpois(nrow(df1), exp(df1$eta))
-\donttest{
-fit1 <- ccc_glmm(df1, "y", "subject", "method", replicate = "replicate",
-ci = TRUE)
-fit1
-summary(fit1)
-estimate(fit1)
+# At SISMEC (Ancona, 2011), raters estimated the number of dots in pictures.
+# Compare the counts from two raters across three presentations of each picture.
+path <- system.file("extdata", "point-counts.csv", package = "matrixCorr")
+counts <- utils::read.csv(path)
+fit1 <- ccc_glmm(counts, "score", "item", "rater", replicate = "repl")
 tidy(fit1)
-ci(fit1)
-confint(fit1)
-}
 
 # Example 2: method bias lowers total agreement.
 # This tests whether a systematic method shift is reflected in rho_ccc

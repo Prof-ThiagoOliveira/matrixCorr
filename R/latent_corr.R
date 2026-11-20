@@ -916,22 +916,10 @@
 #' Olsson, U. (1979). Maximum likelihood estimation of the polychoric
 #' correlation coefficient. \emph{Psychometrika}, 44(4), 443-460.
 #'
-#' @examplesIf requireNamespace("mnormt", quietly = TRUE)
-#' set.seed(123)
-#' n <- 1000
-#' Sigma <- matrix(c(
-#'   1.00, 0.55, 0.35,
-#'   0.55, 1.00, 0.45,
-#'   0.35, 0.45, 1.00
-#' ), 3, 3, byrow = TRUE)
-#'
-#' Z <- mnormt::rmnorm(n = n, mean = rep(0, 3), varcov = Sigma)
-#' X <- data.frame(
-#'   item1 = Z[, 1] > stats::qnorm(0.70),
-#'   item2 = Z[, 2] > stats::qnorm(0.60),
-#'   item3 = Z[, 3] > stats::qnorm(0.50)
-#' )
-#'
+#' @examples
+#' # Illustrative binary indicators for days with above-median pollution and heat.
+#' weather <- stats::na.omit(datasets::airquality[c("Ozone", "Solar.R", "Temp")])
+#' X <- as.data.frame(lapply(weather, function(v) v > stats::median(v)))
 #' tc <- tetrachoric(X)
 #' print(tc, digits = 3)
 #' summary(tc)
@@ -948,9 +936,6 @@
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 #'   view_corr_shiny(tc)
 #' }
-#'
-#' # latent Pearson correlations used to generate the binary items
-#' round(stats::cor(Z), 2)
 #'
 #' @author Thiago de Paula Oliveira
 #' @export
@@ -1559,34 +1544,12 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #' Olsson, U. (1979). Maximum likelihood estimation of the polychoric
 #' correlation coefficient. \emph{Psychometrika}, 44(4), 443-460.
 #'
-#' @examplesIf requireNamespace("mnormt", quietly = TRUE)
-#' set.seed(124)
-#' n <- 1200
-#' Sigma <- matrix(c(
-#'   1.00, 0.60, 0.40,
-#'   0.60, 1.00, 0.50,
-#'   0.40, 0.50, 1.00
-#' ), 3, 3, byrow = TRUE)
-#'
-#' Z <- mnormt::rmnorm(n = n, mean = rep(0, 3), varcov = Sigma)
-#' Y <- data.frame(
-#'   y1 = ordered(cut(
-#'     Z[, 1],
-#'     breaks = c(-Inf, -0.7, 0.4, Inf),
-#'     labels = c("low", "mid", "high")
-#'   )),
-#'   y2 = ordered(cut(
-#'     Z[, 2],
-#'     breaks = c(-Inf, -1.0, -0.1, 0.8, Inf),
-#'     labels = c("1", "2", "3", "4")
-#'   )),
-#'   y3 = ordered(cut(
-#'     Z[, 3],
-#'     breaks = c(-Inf, -0.4, 0.2, 1.1, Inf),
-#'     labels = c("A", "B", "C", "D")
-#'   ))
-#' )
-#'
+#' @examples
+#' # Treat the observed daily measurements as ordered low, middle and high groups.
+#' weather <- stats::na.omit(datasets::airquality[c("Ozone", "Solar.R", "Temp")])
+#' thirds <- function(v) cut(v, stats::quantile(v, (0:3) / 3),
+#'                           include.lowest = TRUE, ordered_result = TRUE)
+#' Y <- as.data.frame(lapply(weather, thirds))
 #' pc <- polychoric(Y)
 #' print(pc, digits = 3)
 #' summary(pc)
@@ -1603,8 +1566,6 @@ print.summary.tetrachoric_corr <- function(x, digits = NULL, n = NULL,
 #'   view_corr_shiny(pc)
 #' }
 #'
-#' # latent Pearson correlations used to generate the ordinal variables
-#' round(stats::cor(Z), 2)
 #' @author Thiago de Paula Oliveira
 #' @export
 polychoric <- function(data,
@@ -2205,31 +2166,12 @@ print.summary.polychoric_corr <- function(x, digits = NULL, n = NULL,
 #' @param ... Deprecated compatibility aliases. The legacy \code{check_na}
 #'   argument is still accepted temporarily.
 #'
-#' @examplesIf requireNamespace("mnormt", quietly = TRUE)
-#' set.seed(125)
-#' n <- 1000
-#' Sigma <- matrix(c(
-#'   1.00, 0.30, 0.55, 0.20,
-#'   0.30, 1.00, 0.25, 0.50,
-#'   0.55, 0.25, 1.00, 0.40,
-#'   0.20, 0.50, 0.40, 1.00
-#' ), 4, 4, byrow = TRUE)
-#'
-#' Z <- mnormt::rmnorm(n = n, mean = rep(0, 4), varcov = Sigma)
-#' X <- data.frame(x1 = Z[, 1], x2 = Z[, 2])
-#' Y <- data.frame(
-#'   y1 = ordered(cut(
-#'     Z[, 3],
-#'     breaks = c(-Inf, -0.5, 0.7, Inf),
-#'     labels = c("low", "mid", "high")
-#'   )),
-#'   y2 = ordered(cut(
-#'     Z[, 4],
-#'     breaks = c(-Inf, -1.0, 0.0, 1.0, Inf),
-#'     labels = c("1", "2", "3", "4")
-#'   ))
-#' )
-#'
+#' @examples
+#' # Relate wind and temperature to ordered categories of observed ozone.
+#' weather <- stats::na.omit(datasets::airquality[c("Wind", "Temp", "Ozone")])
+#' X <- weather[c("Wind", "Temp")]
+#' Y <- data.frame(ozone_band = cut(weather$Ozone, c(-Inf, 20, 50, Inf),
+#'                                  ordered_result = TRUE))
 #' ps <- polyserial(X, Y)
 #' print(ps, digits = 3)
 #' summary(ps)
@@ -2239,6 +2181,7 @@ print.summary.polychoric_corr <- function(x, digits = NULL, n = NULL,
 #' ci(ps_ci)
 #' confint(ps_ci)
 #' plot(ps)
+#'
 #' @author Thiago de Paula Oliveira
 #' @export
 polyserial <- function(data,
@@ -2623,23 +2566,11 @@ print.summary.polyserial_corr <- function(x, digits = NULL, n = NULL,
 #' @param ... Deprecated compatibility aliases. The legacy \code{check_na}
 #'   argument is still accepted temporarily.
 #'
-#' @examplesIf requireNamespace("mnormt", quietly = TRUE)
-#' set.seed(126)
-#' n <- 1000
-#' Sigma <- matrix(c(
-#'   1.00, 0.35, 0.50, 0.25,
-#'   0.35, 1.00, 0.30, 0.55,
-#'   0.50, 0.30, 1.00, 0.40,
-#'   0.25, 0.55, 0.40, 1.00
-#' ), 4, 4, byrow = TRUE)
-#'
-#' Z <- mnormt::rmnorm(n = n, mean = rep(0, 4), varcov = Sigma)
-#' X <- data.frame(x1 = Z[, 1], x2 = Z[, 2])
-#' Y <- data.frame(
-#'   g1 = Z[, 3] > stats::qnorm(0.65),
-#'   g2 = Z[, 4] > stats::qnorm(0.55)
-#' )
-#'
+#' @examples
+#' # Estimate latent associations if ozone is recorded only as above/below 50 ppb.
+#' weather <- stats::na.omit(datasets::airquality[c("Wind", "Temp", "Ozone")])
+#' X <- weather[c("Wind", "Temp")]
+#' Y <- data.frame(ozone_above_50 = weather$Ozone > 50)
 #' bs <- biserial(X, Y, ci = TRUE, p_value = TRUE)
 #' print(bs, digits = 3)
 #' summary(bs)
@@ -2648,6 +2579,7 @@ print.summary.polyserial_corr <- function(x, digits = NULL, n = NULL,
 #' ci(bs)
 #' confint(bs)
 #' plot(bs)
+#'
 #' @author Thiago de Paula Oliveira
 #' @export
 biserial <- function(data,

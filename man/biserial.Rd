@@ -193,23 +193,10 @@ columns and \code{y} has \eqn{p_y} binary columns, the matrix path computes
 output matrix.
 }
 \examples{
-\dontshow{if (requireNamespace("mnormt", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-set.seed(126)
-n <- 1000
-Sigma <- matrix(c(
-  1.00, 0.35, 0.50, 0.25,
-  0.35, 1.00, 0.30, 0.55,
-  0.50, 0.30, 1.00, 0.40,
-  0.25, 0.55, 0.40, 1.00
-), 4, 4, byrow = TRUE)
-
-Z <- mnormt::rmnorm(n = n, mean = rep(0, 4), varcov = Sigma)
-X <- data.frame(x1 = Z[, 1], x2 = Z[, 2])
-Y <- data.frame(
-  g1 = Z[, 3] > stats::qnorm(0.65),
-  g2 = Z[, 4] > stats::qnorm(0.55)
-)
-
+# Estimate latent associations if ozone is recorded only as above/below 50 ppb.
+weather <- stats::na.omit(datasets::airquality[c("Wind", "Temp", "Ozone")])
+X <- weather[c("Wind", "Temp")]
+Y <- data.frame(ozone_above_50 = weather$Ozone > 50)
 bs <- biserial(X, Y, ci = TRUE, p_value = TRUE)
 print(bs, digits = 3)
 summary(bs)
@@ -218,7 +205,7 @@ tidy(bs)
 ci(bs)
 confint(bs)
 plot(bs)
-\dontshow{\}) # examplesIf}
+
 }
 \references{
 Olsson, U., Drasgow, F., & Dorans, N. J. (1982). The polyserial

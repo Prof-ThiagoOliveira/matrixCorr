@@ -238,22 +238,9 @@ one-dimensional optimisation with negligible memory overhead beyond the
 output matrix.
 }
 \examples{
-\dontshow{if (requireNamespace("mnormt", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-set.seed(123)
-n <- 1000
-Sigma <- matrix(c(
-  1.00, 0.55, 0.35,
-  0.55, 1.00, 0.45,
-  0.35, 0.45, 1.00
-), 3, 3, byrow = TRUE)
-
-Z <- mnormt::rmnorm(n = n, mean = rep(0, 3), varcov = Sigma)
-X <- data.frame(
-  item1 = Z[, 1] > stats::qnorm(0.70),
-  item2 = Z[, 2] > stats::qnorm(0.60),
-  item3 = Z[, 3] > stats::qnorm(0.50)
-)
-
+# Illustrative binary indicators for days with above-median pollution and heat.
+weather <- stats::na.omit(datasets::airquality[c("Ozone", "Solar.R", "Temp")])
+X <- as.data.frame(lapply(weather, function(v) v > stats::median(v)))
 tc <- tetrachoric(X)
 print(tc, digits = 3)
 summary(tc)
@@ -271,9 +258,6 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
   view_corr_shiny(tc)
 }
 
-# latent Pearson correlations used to generate the binary items
-round(stats::cor(Z), 2)
-\dontshow{\}) # examplesIf}
 }
 \references{
 Pearson, K. (1900). Mathematical contributions to the theory of evolution.

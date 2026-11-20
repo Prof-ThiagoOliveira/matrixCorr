@@ -75,16 +75,16 @@
 #'   Phipson B, Smyth GK (2010). Permutation P-values should never be zero.
 #'   \doi{10.2202/1544-6115.1585}.
 #' @examples
-#' # Two sensors record deviations from a target. For each reading of A,
-#' # sensor B records the same magnitude once in each direction.
-#' a <- rep(c(-3, -2, -1, 1, 2, 3), each = 2)
-#' readings <- cbind(A = a, B = a * rep(c(-1, 1), 6))
-#' fit <- lancaster_corr(readings, method = "moment")
+#' # Across 30 departments, compare favourable response rates for overall
+#' # rating and the survey item "Too critical". Are unusually large deviations
+#' # from the respective means associated, even when the linear trend is weak?
+#' survey <- datasets::attitude[c("rating", "critical")]
+#' fit <- lancaster_corr(survey, method = "moment")
 #' d <- attr(fit, "diagnostics")
-#' round(c(pearson = estimate(pearson_corr(readings))["A", "B"],
-#'         squared = d$quadratic["A", "B"],
-#'         lancaster = estimate(fit)["A", "B"]), 3)
-#' # Pearson is 0. The squared deviations agree exactly, giving Lancaster 1.
+#' round(c(pearson = estimate(pearson_corr(survey))["rating", "critical"],
+#'         squared = d$quadratic["rating", "critical"],
+#'         lancaster = estimate(fit)["rating", "critical"]), 3)
+#' # The squared component (0.598) exceeds the absolute Pearson value (0.156).
 #'
 #' # Which tree measurement is more closely associated with timber volume?
 #' # Compare trunk diameter (called Girth in the trees data) and height.
@@ -101,6 +101,8 @@
 #' # The rank-based estimates therefore agree on both measurement scales.
 #' log_timber <- transform(timber, Volume = log(Volume))
 #' all.equal(estimate(rank_fit), estimate(lancaster_corr(log_timber)))
+#'
+#' @author Thiago de Paula Oliveira
 #' @export
 lancaster_corr <- function(data, method = c("rank", "moment"),
                            na_method = c("error", "pairwise", "complete"),

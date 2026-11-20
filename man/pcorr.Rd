@@ -325,6 +325,11 @@ increased geometrically up to a small cap, at which point the routine
 signals an error.
 }
 \examples{
+# How much of the height-volume association remains after adjusting for girth?
+timber <- datasets::trees
+c(marginal = estimate(pearson_corr(timber))["Height", "Volume"],
+  partial = estimate(pcorr(timber))["Height", "Volume"])
+
 ## Structured MVN with known partial correlations
 set.seed(42)
 p <- 12; n <- 1000

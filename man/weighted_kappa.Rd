@@ -156,15 +156,11 @@ truncated to \eqn{[-1, 1]} in the returned result. Use \code{\link[=cohen_kappa]
 unordered nominal categories where all disagreements are equally serious.
 }
 \examples{
-raters <- data.frame(
-  r1 = ordered(c("low", "low", "mid", "high", "high"),
-               levels = c("low", "mid", "high")),
-  r2 = ordered(c("low", "mid", "mid", "high", "high"),
-               levels = c("low", "mid", "high")),
-  r3 = ordered(c("low", "low", "high", "high", "mid"),
-               levels = c("low", "mid", "high"))
-)
-
+# Randall (1989): nine judges scored the same eight wines for bitterness.
+# Rows are bottles. Columns are judges. Categories run from 1 to 5.
+path <- system.file("extdata", "wine-ratings.csv", package = "matrixCorr")
+raters <- utils::read.csv(path, row.names = 1)
+raters[] <- lapply(raters, ordered, levels = 1:5)
 wk <- weighted_kappa(raters)
 print(wk)
 summary(wk)
@@ -172,8 +168,8 @@ estimate(wk)
 tidy(wk)
 plot(wk)
 
-x <- raters$r1
-y <- raters$r2
+x <- raters$judge1
+y <- raters$judge2
 weighted_kappa(x, y, weights = "linear")
 
 }

@@ -370,66 +370,13 @@
 #' }
 #'
 #' @examples
-#' # -------- Simulate repeated-measures data --------
-#' set.seed(1)
-#'
-#' # design (no AR)
-#' # subjects
-#' S   <- 30L
-#' # replicates per subject
-#' Tm  <- 15L
-#' subj <- rep(seq_len(S), each = Tm)
-#' time <- rep(seq_len(Tm), times = S)
-#'
-#' # subject signal centered at 0 so BA "bias" won't be driven by the mean level
-#' mu_s  <- rnorm(S, mean = 0, sd = 8)
-#' # constant within subject across replicates
-#' true  <- mu_s[subj]
-#'
-#' # common noise (no AR, i.i.d.)
-#' sd_e <- 2
-#' e0   <- rnorm(length(true), 0, sd_e)
-#'
-#' # --- Methods ---
-#' # M1: signal + noise
-#' y1 <- true + e0
-#'
-#' # M2: same precision as M1; here identical so M3 can be
-#' #     almost perfectly the inverse of both M1 and M2
-#' y2 <- y1 + rnorm(length(true), 0, 0.01)
-#'
-#' # M3: perfect inverse of M1 and M2
-#' y3 <- -y1   # = -(true + e0)
-#'
-#' # M4: unrelated to all others (pure noise, different scale)
-#' y4 <- rnorm(length(true), 3, 6)
-#'
-#' data <- rbind(
-#'   data.frame(y = y1, subject = subj, method = "M1", time = time),
-#'   data.frame(y = y2, subject = subj, method = "M2", time = time),
-#'   data.frame(y = y3, subject = subj, method = "M3", time = time),
-#'   data.frame(y = y4, subject = subj, method = "M4", time = time)
-#' )
-#' data$method <- factor(data$method, levels = c("M1","M2","M3","M4"))
-#'
-#' # quick sanity checks
-#' with(data, {
-#'   Y <- split(y, method)
-#'   round(cor(cbind(M1 = Y$M1, M2 = Y$M2, M3 = Y$M3, M4 = Y$M4)), 3)
-#' })
-#'
-#' # Run BA (no AR)
-#' ba4 <- ba_rm(
-#'   data = data,
-#'   response = "y", subject = "subject", method = "method", time = "time",
-#'   loa_multiplier = 1.96, conf_level = 0.95,
-#'   include_slope = FALSE, use_ar1 = FALSE
-#' )
-#' summary(ba4)
-#' estimate(ba4)
-#' tidy(ba4)
-#' confint(ba4)
-#' plot(ba4)
+#' # Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+#' path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+#' flow <- utils::read.csv(path)
+#' # Estimate bias and limits of agreement using both readings.
+#' fit <- ba_rm(flow, response = "flow", subject = "subject",
+#'              method = "meter", time = "reading")
+#' tidy(fit)
 #'
 #' # -------- Simulate repeated-measures with AR(1) data --------
 #' set.seed(123)

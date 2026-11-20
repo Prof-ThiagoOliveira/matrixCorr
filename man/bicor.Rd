@@ -336,13 +336,14 @@ output is symmetric and PSD. As with Pearson, affine equivariance does not hold
 for the associated biweight midcovariance.
 }
 \examples{
-set.seed(1)
-X <- matrix(rnorm(2000 * 40), 2000, 40)
+# Do hotter stars tend to be brighter in the Cygnus OB1 star cluster?
+# The giant stars have a different temperature-luminosity pattern.
+X <- robustbase::starsCYG
 R <- bicor(X, c_const = 9, max_p_outliers = 1,
                        pearson_fallback = "hybrid")
 print(attr(R, "method"))
 summary(R)
-R_ci <- bicor(X[, 1:5], ci = TRUE)
+R_ci <- bicor(X, ci = TRUE)
 summary(R_ci)
 estimate(R_ci)
 tidy(R_ci)

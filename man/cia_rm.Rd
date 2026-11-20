@@ -286,37 +286,13 @@ subject-method-time cell. It therefore targets the balanced repeated-measures
 ANOVA setting from the cited paper and returns an error otherwise.
 }
 \examples{
-# Example 1
-set.seed(1)
-dat_rater <- expand.grid(
-  id = factor(sprintf("s\%02d", 1:8)),
-  method = factor(c("Device_A", "Device_B")),
-  time = factor(c("Rater_1", "Rater_2", "Rater_3")),
-  KEEP.OUT.ATTRS = FALSE
-)
-subj_eff <- rnorm(nlevels(dat_rater$id), sd = 1)[dat_rater$id]
-method_shift <- c(Device_A = 0, Device_B = 0.25)[dat_rater$method]
-rater_shift <- c(Rater_1 = 0, Rater_2 = 0.15, Rater_3 = -0.10)[dat_rater$time]
-interaction_shift <- ifelse(
-  dat_rater$method == "Device_B" & dat_rater$time == "Rater_3",
-  0.12, 0
-)
-dat_rater$y <- subj_eff + method_shift + rater_shift +
-  interaction_shift + rnorm(nrow(dat_rater), sd = 0.25)
-
-fit_rater <- cia_rm(
-  dat_rater,
-  response = "y",
-  subject = "id",
-  method = "method",
-  time = "time",
-  homogeneous = TRUE
-)
-print(fit_rater)
-summary(fit_rater)
-estimate(fit_rater)
-tidy(fit_rater)
-plot(fit_rater)
+# Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+flow <- utils::read.csv(path)
+# Compare disagreement between meters with variation across readings.
+fit <- cia_rm(flow, response = "flow", subject = "subject",
+              method = "meter", time = "reading")
+tidy(fit)
 
 # Example 2
 set.seed(2)

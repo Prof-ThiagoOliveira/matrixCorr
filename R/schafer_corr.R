@@ -62,6 +62,9 @@
 #' \emph{Statistical Applications in Genetics and Molecular Biology}, 4(1).
 #'
 #' @examples
+#' # Shrink correlations among seven survey percentages from 30 departments.
+#' estimate(shrinkage_corr(datasets::attitude))
+#'
 #' ## Multivariate normal with AR(1) dependence (Toeplitz correlation)
 #' set.seed(1)
 #' n <- 80; p <- 40; rho <- 0.6

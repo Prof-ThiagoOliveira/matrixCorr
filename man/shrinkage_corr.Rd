@@ -207,6 +207,9 @@ No missing values are permitted. Columns with fewer than two observations
 or zero variance are flagged as \code{NA} (row/column).
 }
 \examples{
+# Shrink correlations among seven survey percentages from 30 departments.
+estimate(shrinkage_corr(datasets::attitude))
+
 ## Multivariate normal with AR(1) dependence (Toeplitz correlation)
 set.seed(1)
 n <- 80; p <- 40; rho <- 0.6

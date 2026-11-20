@@ -238,34 +238,11 @@ single scalar parameter \eqn{\rho}, so the main cost is repeated evaluation
 of bivariate normal rectangle probabilities.
 }
 \examples{
-\dontshow{if (requireNamespace("mnormt", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-set.seed(124)
-n <- 1200
-Sigma <- matrix(c(
-  1.00, 0.60, 0.40,
-  0.60, 1.00, 0.50,
-  0.40, 0.50, 1.00
-), 3, 3, byrow = TRUE)
-
-Z <- mnormt::rmnorm(n = n, mean = rep(0, 3), varcov = Sigma)
-Y <- data.frame(
-  y1 = ordered(cut(
-    Z[, 1],
-    breaks = c(-Inf, -0.7, 0.4, Inf),
-    labels = c("low", "mid", "high")
-  )),
-  y2 = ordered(cut(
-    Z[, 2],
-    breaks = c(-Inf, -1.0, -0.1, 0.8, Inf),
-    labels = c("1", "2", "3", "4")
-  )),
-  y3 = ordered(cut(
-    Z[, 3],
-    breaks = c(-Inf, -0.4, 0.2, 1.1, Inf),
-    labels = c("A", "B", "C", "D")
-  ))
-)
-
+# Treat the observed daily measurements as ordered low, middle and high groups.
+weather <- stats::na.omit(datasets::airquality[c("Ozone", "Solar.R", "Temp")])
+thirds <- function(v) cut(v, stats::quantile(v, (0:3) / 3),
+                          include.lowest = TRUE, ordered_result = TRUE)
+Y <- as.data.frame(lapply(weather, thirds))
 pc <- polychoric(Y)
 print(pc, digits = 3)
 summary(pc)
@@ -282,9 +259,6 @@ if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
   view_corr_shiny(pc)
 }
 
-# latent Pearson correlations used to generate the ordinal variables
-round(stats::cor(Z), 2)
-\dontshow{\}) # examplesIf}
 }
 \references{
 Olsson, U. (1979). Maximum likelihood estimation of the polychoric

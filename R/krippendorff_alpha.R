@@ -138,14 +138,11 @@
 #' [gwet_ac()] for AC1/AC2 agreement coefficients.
 #'
 #' @examples
-#' raters <- data.frame(
-#'   r1 = c("A", "A", "B", "B", "C", "A"),
-#'   r2 = c("A", "B", "B", "B", "C", "A"),
-#'   r3 = c("A", "A", "B", "C", "C", "A"),
-#'   stringsAsFactors = FALSE
-#' )
-#'
-#' fit <- krippendorff_alpha(raters, level = "nominal", na_method = "available")
+#' # Randall (1989): nine judges scored the same eight wines for bitterness.
+#' # Rows are bottles. Columns are judges. Categories run from 1 to 5.
+#' path <- system.file("extdata", "wine-ratings.csv", package = "matrixCorr")
+#' raters <- utils::read.csv(path, row.names = 1)
+#' fit <- krippendorff_alpha(raters, level = "ordinal", na_method = "available")
 #' print(fit)
 #' summary(fit)
 #' estimate(fit)

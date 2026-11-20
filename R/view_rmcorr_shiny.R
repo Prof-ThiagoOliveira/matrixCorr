@@ -24,28 +24,9 @@
 #'
 #' @examples
 #' if (interactive()) {
-#'   set.seed(2026)
-#'   n_subjects <- 20
-#'   n_rep <- 4
-#'   subject <- rep(seq_len(n_subjects), each = n_rep)
-#'   subj_eff_x <- rnorm(n_subjects, sd = 1.5)
-#'   subj_eff_y <- rnorm(n_subjects, sd = 2.0)
-#'   within_signal <- rnorm(n_subjects * n_rep)
-#'
-#'   dat <- data.frame(
-#'     subject = subject,
-#'     x = subj_eff_x[subject] + within_signal + rnorm(n_subjects * n_rep, sd = 0.2),
-#'     y = subj_eff_y[subject] + 0.8 * within_signal + rnorm(n_subjects * n_rep, sd = 0.3),
-#'     z = subj_eff_y[subject] - 0.4 * within_signal + rnorm(n_subjects * n_rep, sd = 0.4)
-#'   )
-#'
-#'   fit_mat <- rmcorr(
-#'     dat,
-#'     response = c("x", "y", "z"),
-#'     subject = "subject",
-#'     keep_data = TRUE
-#'   )
-#'   view_rmcorr_shiny(fit_mat)
+#'   fit <- rmcorr(datasets::Orange, response = c("age", "circumference"),
+#'                 subject = "Tree", keep_data = TRUE)
+#'   view_rmcorr_shiny(fit)
 #' }
 #'
 #' @export

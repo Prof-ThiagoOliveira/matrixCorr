@@ -128,13 +128,10 @@
 #' [weighted_kappa()] for two-rater ordered-category agreement.
 #'
 #' @examples
-#' raters <- data.frame(
-#'   r1 = c("A", "A", "B", "C", "A", "B"),
-#'   r2 = c("A", "B", "B", "C", "A", "B"),
-#'   r3 = c("A", "A", "B", "B", "A", "C"),
-#'   stringsAsFactors = FALSE
-#' )
-#'
+#' # Randall (1989): nine judges scored the same eight wines for bitterness.
+#' # Rows are bottles. Columns are judges. Categories run from 1 to 5.
+#' path <- system.file("extdata", "wine-ratings.csv", package = "matrixCorr")
+#' raters <- utils::read.csv(path, row.names = 1)
 #' fit <- multirater_kappa(raters)
 #' print(fit)
 #' summary(fit)

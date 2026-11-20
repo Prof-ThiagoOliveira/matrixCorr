@@ -119,20 +119,10 @@
 #' @seealso [dcor()], [bcdcor()], [wincor()], [pbcor()], [skipped_corr()]
 #'
 #' @examples
-#' ## Non-linear dependence: both estimators detect association.
-#' set.seed(1)
-#' n <- 200
-#' x <- rnorm(n)
-#' y <- x^2 + rnorm(n, sd = 0.2)
-#'
-#' X <- cbind(x = x, y = y)
-#'
-#' classical <- dcor(X)
-#' robust <- robust_dcor(X)
-#' round(c(
-#'   dcor = classical["x", "y"],
-#'   robust_dcor = robust["x", "y"]
-#' ), 3)
+#' # Do hotter stars tend to be brighter in the Cygnus OB1 star cluster?
+#' # The giant stars have a different temperature-luminosity pattern.
+#' X <- robustbase::starsCYG
+#' c(classical = estimate(dcor(X))[1, 2], robust = estimate(robust_dcor(X))[1, 2])
 #'
 #' ## One diagonal outlier can inflate classical dCor more than robust dCor.
 #' set.seed(45)

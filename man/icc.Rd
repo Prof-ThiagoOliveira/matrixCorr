@@ -263,15 +263,13 @@ F-based ANOVA formulas corresponding to the selected coefficient. For
 six standard rows.
 }
 \examples{
-set.seed(123)
-n <- 40
-subj <- rnorm(n, sd = 1)
-dat <- data.frame(
-  m1 = subj + rnorm(n, sd = 0.3),
-  m2 = 0.2 + subj + rnorm(n, sd = 0.4),
-  m3 = -0.1 + subj + rnorm(n, sd = 0.5)
-)
-
+# Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+flow <- utils::read.csv(path)
+# Compare meters on the first reading for each of the 17 people.
+first <- subset(flow, reading == 1)
+meters <- unclass(stats::xtabs(flow ~ subject + meter, data = first))
+dat <- meters
 fit_icc <- icc(dat,
   model = "twoway_random",
   type = "agreement",

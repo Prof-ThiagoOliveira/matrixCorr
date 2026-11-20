@@ -61,6 +61,15 @@
 #' 59(3), 371-380. doi:10.1080/00401706.2016.1214180.
 #'
 #' @examples
+#' # In the birth-weight study, how similar are the two fitted probabilities
+#' # of low birth weight for smokers and nonsmokers at the same maternal weight?
+#' # Five percentage points is an illustrative tolerance.
+#' if (requireNamespace("MASS", quietly = TRUE)) {
+#'   risks <- prob_agree(MASS::birthwt, response = "low", predictor = "lwt",
+#'                       group = "smoke", delta = 0.05)
+#'   plot(risks)
+#' }
+#'
 #' # Stevens and Anderson-Cook's probability of agreement evaluates whether
 #' # two related populations have reliability curves that are similar enough
 #' # to be treated as practically homogeneous. At each age, the agreement

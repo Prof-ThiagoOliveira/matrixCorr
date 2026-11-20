@@ -165,18 +165,12 @@
 #' [weighted_kappa()] for weighted Cohen-type agreement.
 #'
 #' @examples
-#' x <- c("A", "A", "B", "B", "A", "C")
-#' y <- c("A", "B", "B", "B", "A", "C")
-#' gwet_ac(x, y)
-#' gwet_ac(x, y, weights = "quadratic", levels = c("A", "B", "C"))
-#'
-#' raters <- data.frame(
-#'   r1 = c("A", "A", "B", "C", "A", "B"),
-#'   r2 = c("A", "B", "B", "C", "A", "B"),
-#'   r3 = c("A", "A", "B", "B", "A", "C"),
-#'   stringsAsFactors = FALSE
-#' )
-#'
+#' # Randall (1989): nine judges scored the same eight wines for bitterness.
+#' # Rows are bottles. Columns are judges. Categories run from 1 to 5.
+#' path <- system.file("extdata", "wine-ratings.csv", package = "matrixCorr")
+#' raters <- utils::read.csv(path, row.names = 1)
+#' # AC2 gives partial credit for nearby bitterness categories.
+#' gwet_ac(raters$judge1, raters$judge2, weights = "quadratic", levels = 1:5)
 #' fit_pw <- gwet_ac(raters)
 #' fit_panel <- gwet_ac(raters, input = "ratings")
 #' print(fit_pw)

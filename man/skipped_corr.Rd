@@ -309,11 +309,9 @@ estimated critical p-value. The calibrated H1 procedure from Wilcox,
 Rousselet, and Pernet (2018) is not currently implemented.
 }
 \examples{
-set.seed(12)
-X <- matrix(rnorm(160 * 4), ncol = 4)
-X[1, 1] <- 9
-X[1, 2] <- -8
-
+# Do hotter stars tend to be brighter in the Cygnus OB1 star cluster?
+# The giant stars have a different temperature-luminosity pattern.
+X <- robustbase::starsCYG
 R <- skipped_corr(X, method = "pearson")
 print(R, digits = 2)
 summary(R)

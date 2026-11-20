@@ -148,48 +148,14 @@ via linear mixed models.
 }
 }
 \examples{
-set.seed(123)
-df <- expand.grid(subject = 1:10,
-                  time = 1:2,
-                  method = c("A", "B", "C"))
-df$y <- rnorm(nrow(df), mean = match(df$method, c("A", "B", "C")), sd = 1)
+# Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+flow <- utils::read.csv(path)
+# Estimate concordance across meters using both readings.
+fit <- ccc_rm_ustat(flow, response = "flow", subject = "subject",
+                    method = "meter", time = "reading", ci = TRUE)
+tidy(fit)
 
-# CCC matrix (no CIs)
-ccc1 <- ccc_rm_ustat(df, response = "y", subject = "subject",
-                            method = "method", time = "time")
-print(ccc1)
-summary(ccc1)
-plot(ccc1)
-
-# With confidence intervals
-ccc2 <- ccc_rm_ustat(df, response = "y", subject = "subject",
-                            method = "method", time = "time", ci = TRUE)
-print(ccc2)
-summary(ccc2)
-estimate(ccc2)
-tidy(ccc2)
-ci(ccc2)
-confint(ccc2)
-plot(ccc2)
-
-# Interactive viewing (requires shiny)
-if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
-  view_corr_shiny(ccc2)
-}
-
-#------------------------------------------------------------------------
-# Choosing delta based on distance sensitivity
-#------------------------------------------------------------------------
-# Standard quadratic RM-CCC distance: (X - Y)' D (X - Y)
-ccc_rm_ustat(df, response = "y", subject = "subject",
-             method = "method", time = "time", delta = 1)
-
-# Fourth-power loss when D is diagonal: emphasises large disagreements
-ccc_rm_ustat(df, response = "y", subject = "subject",
-             method = "method", time = "time", delta = 2)
-# Binary disagreement indicator before aggregation
-ccc_rm_ustat(df, response = "y", subject = "subject",
-             method = "method", time = "time", delta = 0)
 }
 \references{
 Lin L (1989). A concordance correlation coefficient to evaluate reproducibility.

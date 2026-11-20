@@ -1,0 +1,5 @@
+# Sources for the worked examples
+
+* `peak-flow.csv` contains Table 1 of Bland and Altman (1986), *Statistical methods for assessing agreement between two methods of clinical measurement*. Each of 17 people provided two peak expiratory flow readings with each meter. Flow is measured in litres per minute. [Authors' data table](https://www-users.york.ac.uk/~mb55/meas/repeated.htm)
+* `wine-ratings.csv` contains the five-category version of the bitterness scores in Randall (1989), *The analysis of sensory data by generalised linear model*. Rows identify bottles and columns identify judges. Ratings group the original scores into 20-point bands. The values match the bottle-by-judge table in the R dataset `ordinal::wine`.
+* `point-counts.csv` contains the observations for raters 123 and 1234 from the SISMEC method-comparison course in Ancona on 28 September 2011, distributed as the R dataset `MethComp::Ancona`. Each rater estimated the number of points in ten pictures on three presentations. The picture identifier is its actual point count, and `score` is the rater's estimate.

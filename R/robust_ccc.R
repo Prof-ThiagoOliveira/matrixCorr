@@ -139,14 +139,13 @@
 #' @seealso [robustbase::covMcd()], [ccc()], [pbcor()], [wincor()]
 #'
 #' @examples
-#' # Three measurement methods with an approximately normal core
-#' set.seed(42)
-#' x <- rnorm(40)
-#' measurements <- cbind(
-#'   reference = x,
-#'   method_a = x + rnorm(40, sd = 0.2),
-#'   method_b = 0.4 + 1.2 * x + rnorm(40, sd = 0.3)
-#' )
+#' # Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+#' path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+#' flow <- utils::read.csv(path)
+#' # Compare meters on the first reading for each of the 17 people.
+#' first <- subset(flow, reading == 1)
+#' meters <- unclass(stats::xtabs(flow ~ subject + meter, data = first))
+#' measurements <- meters
 #' fit <- robust_ccc(measurements, seed = 42)
 #' print(fit)
 #' summary(fit)
@@ -157,11 +156,11 @@
 #'
 #' # Compare classical and robust CCC before and after discordant contamination
 #' contaminated <- measurements
-#' contaminated[1, "reference"] <- 9
-#' contaminated[1, "method_a"] <- -8
+#' contaminated[1, "Mini"] <- 900
+#' contaminated[1, "Wright"] <- 80
 #' fit_contaminated <- robust_ccc(contaminated, seed = 42)
 #' rbind(
-#'   clean = c(
+#'   observed = c(
 #'     classical = estimate(ccc(measurements))[1, 2],
 #'     robust = estimate(fit)[1, 2]
 #'   ),
@@ -179,15 +178,6 @@
 #' fit_more <- robust_ccc(contaminated, mcd_nsamp = 1000L, seed = 42)
 #' attr(fit_more, "mcd_nsamp")
 #' attr(fit_more, "mcd_estimate")
-#'
-#' # Global complete rows versus the finite overlap for each pair
-#' incomplete <- measurements
-#' incomplete[1, "reference"] <- NA
-#' incomplete[2, "method_a"] <- Inf
-#' fit_complete <- robust_ccc(incomplete, na_method = "complete", seed = 42)
-#' fit_pairwise <- robust_ccc(incomplete, na_method = "pairwise", seed = 42)
-#' estimate(fit_complete)
-#' estimate(fit_pairwise)
 #'
 #' # Thresholded outputs retain entries with absolute CCC at least 0.9
 #' # Every MCD pair is still fitted before output conversion

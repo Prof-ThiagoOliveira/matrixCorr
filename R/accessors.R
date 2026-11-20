@@ -68,7 +68,8 @@
 #' \code{coef()} on a matrixCorr sparse result returns that same S4 object.
 #'
 #' @examples
-#' X <- cbind(a = 1:10, b = 1:10 + rnorm(10), c = rnorm(10))
+#' # Uncertainty in associations among black cherry tree measurements.
+#' X <- datasets::trees
 #' fit <- pearson_corr(X, ci = TRUE)
 #'
 #' estimate(fit)

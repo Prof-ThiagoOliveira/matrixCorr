@@ -225,25 +225,24 @@ quantities or curves differ by no more than a user-specified practical
 tolerance.
 }
 \examples{
-# Example with multivariate normal data
-Sigma <- matrix(c(1, 0.5, 0.3,
-                  0.5, 1, 0.4,
-                  0.3, 0.4, 1), nrow = 3)
-mu <- c(0, 0, 0)
-set.seed(123)
-mat_mvn <- MASS::mvrnorm(n = 100, mu = mu, Sigma = Sigma)
-result_mvn <- ccc(mat_mvn, ci = TRUE)
-print(result_mvn)
-summary(result_mvn)
-estimate(result_mvn)
-tidy(result_mvn)
-ci(result_mvn)
-confint(result_mvn)
-plot(result_mvn)
+# Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+flow <- utils::read.csv(path)
+# Compare meters on the first reading for each of the 17 people.
+first <- subset(flow, reading == 1)
+meters <- unclass(stats::xtabs(flow ~ subject + meter, data = first))
+fit <- ccc(meters, ci = TRUE)
+print(fit)
+summary(fit)
+estimate(fit)
+tidy(fit)
+ci(fit)
+confint(fit)
+plot(fit)
 
 # Interactive viewing (requires shiny)
 if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
-  view_corr_shiny(result_mvn)
+  view_corr_shiny(fit)
 }
 
 }

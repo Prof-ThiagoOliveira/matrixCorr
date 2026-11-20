@@ -159,23 +159,12 @@ samples, \code{bcdcor(x)} is not generally equal to \code{dcor(x)^2}.
 }
 
 \examples{
-\donttest{
-# Bias-corrected versus conventional squared dCor
-set.seed(100)
-n <- 150
-x <- rnorm(n)
-y <- 0.6 * x + sqrt(1 - 0.6^2) * rnorm(n)
-X <- cbind(x = x, y = y)
-
-# These are related but are not the same finite-sample estimator:
-# dcor(..., squared = TRUE) uses the conventional V-statistic,
-# whereas bcdcor() uses U-centering and bias correction.
+# Is eruption duration associated with waiting time to the next eruption?
+X <- datasets::faithful
 dcor(X, squared = TRUE)
 bcdcor(X)
 
-# Bias-corrected squared dCor can be negative in finite samples,
-# particularly under weak dependence or independence.
-# This is not a negative-dependence estimate.
+\donttest{
 set.seed(3)
 x <- rnorm(80)
 y <- rnorm(80)

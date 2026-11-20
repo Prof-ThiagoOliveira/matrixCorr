@@ -293,6 +293,9 @@ missing-data evaluation and bootstrap confidence intervals recompute on the
 relevant complete-case samples and are correspondingly more expensive.
 }
 \examples{
+# Does knowing eruption duration help predict waiting time to the next eruption?
+with(datasets::faithful, xi_corr(eruptions, waiting, tie_method = "first"))
+
 ## Example 1: independence versus functional dependence
 ## Chatterjee's xi targets whether Y is determined by X.
 set.seed(1)

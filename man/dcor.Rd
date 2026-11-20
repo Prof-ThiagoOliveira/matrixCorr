@@ -173,27 +173,12 @@ finite samples, \code{bcdcor(x)} is not generally equal to \code{dcor(x)^2}.
 }
 
 \examples{
-\donttest{
-# Conventional distance correlation
-set.seed(42)
-n <- 200
-x <- rnorm(n)
-y <- 0.7 * x + sqrt(1 - 0.7^2) * rnorm(n)
-X <- cbind(x = x, y = y)
-
-# dcor() returns conventional distance correlation R.
-# squared = TRUE returns conventional R^2.
+# Is eruption duration associated with waiting time to the next eruption?
+X <- datasets::faithful
 dcor(X)
 dcor(X, squared = TRUE)
 
-D <- dcor(X)
-D2 <- dcor(X, squared = TRUE)
-
-D2["x", "y"]
-D["x", "y"]^2
-
-# Pearson can be close to zero for this symmetric nonlinear relationship,
-# while distance correlation remains positive.
+\donttest{
 set.seed(123)
 n <- 300
 x <- rnorm(n)

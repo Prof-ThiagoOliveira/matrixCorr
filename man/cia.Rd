@@ -293,50 +293,13 @@ Missing rows in the required columns are removed before estimation and the
 counts are recorded in \code{attr(x, "diagnostics")}.
 }
 \examples{
-set.seed(1)
-subjects <- sprintf("s\%02d", 1:30)
-methods <- c("A", "B", "C")
-replicates <- sprintf("r\%02d", 1:20)
-dat <- expand.grid(
-  subject = subjects,
-  method = methods,
-  replicate = replicates,
-  KEEP.OUT.ATTRS = FALSE,
-  stringsAsFactors = FALSE
-)
-subject_effect <- stats::rnorm(length(subjects), sd = 3)
-method_shift <- c(A = 0, B = 0.15, C = -0.10)
-method_sd <- c(A = 0.45, B = 0.45, C = 0.30)
-dat$value <- subject_effect[match(dat$subject, subjects)] +
-  method_shift[dat$method] +
-  stats::rnorm(nrow(dat), sd = method_sd[dat$method])
-
-fit_overall <- cia(
-  dat,
-  response = "value",
-  subject = "subject",
-  method = "method",
-  replicate = "replicate",
-  scope = "overall"
-)
-print(fit_overall)
-summary(fit_overall)
-estimate(fit_overall)
-tidy(fit_overall)
-plot(fit_overall)
-
-fit_pairwise <- cia(
-  dat,
-  response = "value",
-  subject = "subject",
-  method = "method",
-  replicate = "replicate",
-  scope = "pairwise"
-)
-print(fit_pairwise)
-summary(fit_pairwise)
-tidy(fit_pairwise)
-plot(fit_pairwise)
+# Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+flow <- utils::read.csv(path)
+# Compare the two meters with the variation between repeats on each meter.
+fit <- cia(flow, response = "flow", subject = "subject", method = "meter",
+           replicate = "reading", scope = "pairwise")
+tidy(fit)
 
 }
 \references{

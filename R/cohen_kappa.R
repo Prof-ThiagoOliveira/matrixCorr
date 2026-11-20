@@ -109,15 +109,12 @@
 #' panel-level nominal agreement among three or more raters.
 #'
 #' @examples
-#' x <- factor(c("A", "A", "B", "B", "A", "B"))
-#' y <- factor(c("A", "B", "B", "B", "A", "A"))
-#' cohen_kappa(x, y)
-#'
-#' raters <- data.frame(
-#'   r1 = factor(c("low", "low", "high", "high", "mid")),
-#'   r2 = factor(c("low", "mid", "high", "high", "mid")),
-#'   r3 = c("low", "low", "high", "mid", "mid")
-#' )
+#' # Randall (1989): nine judges scored the same eight wines for bitterness.
+#' # Rows are bottles. Columns are judges. Categories run from 1 to 5.
+#' path <- system.file("extdata", "wine-ratings.csv", package = "matrixCorr")
+#' raters <- utils::read.csv(path, row.names = 1)
+#' # Exact category agreement for the first two judges.
+#' cohen_kappa(raters$judge1, raters$judge2)
 #' ck <- cohen_kappa(raters)
 #' print(ck)
 #' summary(ck)

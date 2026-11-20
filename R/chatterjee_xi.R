@@ -225,6 +225,9 @@
 #' Chatterjee's Correlation.
 #'
 #' @examples
+#' # Does knowing eruption duration help predict waiting time to the next eruption?
+#' with(datasets::faithful, xi_corr(eruptions, waiting, tie_method = "first"))
+#'
 #' ## Example 1: independence versus functional dependence
 #' ## Chatterjee's xi targets whether Y is determined by X.
 #' set.seed(1)

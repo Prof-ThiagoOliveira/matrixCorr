@@ -136,19 +136,9 @@
 #' Journal, 16(4), 487-492.
 #'
 #' @examples
-#' ## Monotone transformation invariance (Spearman is rank-based)
-#' set.seed(123)
-#' n <- 400; p <- 6; rho <- 0.6
-#' Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
-#' L <- chol(Sigma)
-#' X <- matrix(rnorm(n * p), n, p) %*% L
-#' colnames(X) <- paste0("V", seq_len(p))
-#'
-#' X_mono <- X
-#' X_mono[, 1] <- exp(X_mono[, 1])
-#' X_mono[, 2] <- log1p(exp(X_mono[, 2]))
-#' X_mono[, 3] <- X_mono[, 3]^3
-#'
+#' # Does ranking black cherry trees give the same association on a log scale?
+#' X <- datasets::trees
+#' X_mono <- transform(X, Volume = log(Volume))
 #' sp_X <- spearman_rho(X)
 #' sp_m <- spearman_rho(X_mono)
 #' summary(sp_X)
@@ -165,11 +155,8 @@
 #' confint(sp_ci)
 #'
 #' ## Ties handled via mid-ranks
-#' tied <- cbind(
-#'   a = rep(1:5, each = 20),
-#'   b = rep(5:1, each = 20) + rnorm(100, sd = 0.1),
-#'   c = as.numeric(gl(10, 10))
-#' )
+#' # Several cars have the same recorded speed.
+#' tied <- datasets::cars
 #' sp_tied <- spearman_rho(tied, ci = TRUE)
 #' print(sp_tied, digits = 2, show_ci = "yes")
 #'
@@ -177,6 +164,7 @@
 #' if (interactive() && requireNamespace("shiny", quietly = TRUE)) {
 #'   view_corr_shiny(sp_X)
 #' }
+#'
 #' @useDynLib matrixCorr, .registration = TRUE
 #' @importFrom Rcpp evalCpp
 #' @seealso \code{\link{print.spearman_rho}}, \code{\link{plot.spearman_rho}}

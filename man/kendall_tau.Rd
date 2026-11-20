@@ -248,8 +248,8 @@ with fewer than two usable observations are excluded. Confidence intervals
 are not available in the two-vector interface.
 }
 \examples{
-# Basic usage with a matrix
-mat <- cbind(a = rnorm(100), b = rnorm(100), c = rnorm(100))
+# Concordance of the ordering of trees by girth, height and volume.
+mat <- datasets::trees
 kt <- kendall_tau(mat)
 print(kt)
 summary(kt)
@@ -265,15 +265,10 @@ ci(kt_ci)
 confint(kt_ci)
 
 # Two-vector mode (scalar path)
-x <- rnorm(1000); y <- 0.5 * x + rnorm(1000)
-kendall_tau(x, y)
+with(datasets::cars, kendall_tau(speed, dist))
 
-# Including ties
-tied_df <- data.frame(
-  v1 = rep(1:5, each = 20),
-  v2 = rep(5:1, each = 20),
-  v3 = rnorm(100)
-)
+# Cars tested at the same speed contribute tied ranks.
+tied_df <- datasets::cars
 kt_tied <- kendall_tau(tied_df, ci = TRUE, ci_method = "fieller")
 print(kt_tied, show_ci = "yes")
 

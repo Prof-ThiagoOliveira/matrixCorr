@@ -189,31 +189,11 @@ columns and \code{y} has \eqn{p_y} ordinal columns, the matrix path computes
 \eqn{p_x p_y} separate one-parameter likelihood optimisations.
 }
 \examples{
-\dontshow{if (requireNamespace("mnormt", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-set.seed(125)
-n <- 1000
-Sigma <- matrix(c(
-  1.00, 0.30, 0.55, 0.20,
-  0.30, 1.00, 0.25, 0.50,
-  0.55, 0.25, 1.00, 0.40,
-  0.20, 0.50, 0.40, 1.00
-), 4, 4, byrow = TRUE)
-
-Z <- mnormt::rmnorm(n = n, mean = rep(0, 4), varcov = Sigma)
-X <- data.frame(x1 = Z[, 1], x2 = Z[, 2])
-Y <- data.frame(
-  y1 = ordered(cut(
-    Z[, 3],
-    breaks = c(-Inf, -0.5, 0.7, Inf),
-    labels = c("low", "mid", "high")
-  )),
-  y2 = ordered(cut(
-    Z[, 4],
-    breaks = c(-Inf, -1.0, 0.0, 1.0, Inf),
-    labels = c("1", "2", "3", "4")
-  ))
-)
-
+# Relate wind and temperature to ordered categories of observed ozone.
+weather <- stats::na.omit(datasets::airquality[c("Wind", "Temp", "Ozone")])
+X <- weather[c("Wind", "Temp")]
+Y <- data.frame(ozone_band = cut(weather$Ozone, c(-Inf, 20, 50, Inf),
+                                 ordered_result = TRUE))
 ps <- polyserial(X, Y)
 print(ps, digits = 3)
 summary(ps)
@@ -223,7 +203,7 @@ ps_ci <- polyserial(X, Y, ci = TRUE)
 ci(ps_ci)
 confint(ps_ci)
 plot(ps)
-\dontshow{\}) # examplesIf}
+
 }
 \references{
 Olsson, U., Drasgow, F., & Dorans, N. J. (1982). The polyserial

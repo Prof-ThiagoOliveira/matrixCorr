@@ -136,15 +136,13 @@
 #' correlation coefficients. Psychological Methods, 1(1), 30-46.
 #'
 #' @examples
-#' set.seed(123)
-#' n <- 40
-#' subj <- rnorm(n, sd = 1)
-#' dat <- data.frame(
-#'   m1 = subj + rnorm(n, sd = 0.3),
-#'   m2 = 0.2 + subj + rnorm(n, sd = 0.4),
-#'   m3 = -0.1 + subj + rnorm(n, sd = 0.5)
-#' )
-#'
+#' # Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+#' path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+#' flow <- utils::read.csv(path)
+#' # Compare meters on the first reading for each of the 17 people.
+#' first <- subset(flow, reading == 1)
+#' meters <- unclass(stats::xtabs(flow ~ subject + meter, data = first))
+#' dat <- meters
 #' fit_icc <- icc(dat,
 #'   model = "twoway_random",
 #'   type = "agreement",
@@ -1069,33 +1067,13 @@ print.summary.icc_overall <- function(x,
 #' correlation coefficients. Psychological Methods, 1(1), 30-46.
 #'
 #' @examples
-#' set.seed(321)
-#' n_id <- 20
-#' n_time <- 3
-#' id <- factor(rep(seq_len(n_id), each = 2 * n_time))
-#' method <- factor(rep(rep(c("A", "B"), each = n_time), times = n_id))
-#' time <- factor(rep(seq_len(n_time), times = 2 * n_id))
-#'
-#' subj <- rnorm(n_id, sd = 1)[as.integer(id)]
-#' subj_method <- rnorm(n_id * 2, sd = 0.25)
-#' sm <- subj_method[(as.integer(id) - 1L) * 2L + as.integer(method)]
-#' y <- subj + sm + 0.3 * (method == "B") + rnorm(length(id), sd = 0.35)
-#'
-#' dat_rm <- data.frame(y = y, id = id, method = method, time = time)
-#'
-#' fit_icc_rm <- icc_rm_reml(
-#'   dat_rm,
-#'   response = "y",
-#'   subject = "id",
-#'   method = "method",
-#'   time = "time",
-#'   type = "consistency",
-#'   ci = TRUE
-#' )
-#' print(fit_icc_rm)
-#' summary(fit_icc_rm)
-#' confint(fit_icc_rm)
-#' tidy(fit_icc_rm)
+#' # Bland and Altman (1986): two peak-flow readings per meter per person (L/min).
+#' path <- system.file("extdata", "peak-flow.csv", package = "matrixCorr")
+#' flow <- utils::read.csv(path)
+#' # Estimate absolute agreement across meters using both readings.
+#' fit <- icc_rm_reml(flow, response = "flow", subject = "subject",
+#'                    method = "meter", time = "reading", type = "agreement")
+#' tidy(fit)
 #'
 #' @export
 icc_rm_reml <- function(data, response, subject,

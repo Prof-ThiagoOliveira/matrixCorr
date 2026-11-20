@@ -312,10 +312,9 @@
 #' @seealso [wincor()], [skipped_corr()], [bicor()]
 #'
 #' @examples
-#' set.seed(10)
-#' X <- matrix(rnorm(150 * 4), ncol = 4)
-#' X[sample(length(X), 8)] <- X[sample(length(X), 8)] + 10
-#'
+#' # Do hotter stars tend to be brighter in the Cygnus OB1 star cluster?
+#' # The giant stars have a different temperature-luminosity pattern.
+#' X <- robustbase::starsCYG
 #' R <- pbcor(X)
 #' print(R, digits = 2)
 #' summary(R)

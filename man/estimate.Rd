@@ -311,7 +311,8 @@ estimate matrix, confidence intervals, or a pairwise data frame without
 reading attributes directly.
 }
 \examples{
-X <- cbind(a = 1:10, b = 1:10 + rnorm(10), c = rnorm(10))
+# Uncertainty in associations among black cherry tree measurements.
+X <- datasets::trees
 fit <- pearson_corr(X, ci = TRUE)
 
 estimate(fit)

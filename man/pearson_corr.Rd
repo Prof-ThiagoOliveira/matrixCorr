@@ -227,6 +227,9 @@ correlations, it also avoids the non-positive-semidefinite matrices that can
 arise from pairwise deletion.
 }
 \examples{
+# How closely does timber volume increase with trunk diameter on the original scales?
+estimate(pearson_corr(datasets::trees))["Girth", "Volume"]
+
 ## MVN with AR(1) correlation
 set.seed(123)
 p <- 6; n <- 300; rho <- 0.5
