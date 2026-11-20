@@ -161,3 +161,47 @@ test_that("corr_result heatmaps show CI labels when ci=TRUE for all output modes
   expect_gte(count_text_layers(gp_sparse), 2L)
   expect_gte(count_text_layers(gp_edge), 2L)
 })
+
+test_that("dense operators and replacement discard fitted inference", {
+  fit <- pearson_corr(iris[, 1:4], ci = TRUE)
+  plain <- estimate(fit)
+  expect_identical(fit * 0, plain * 0)
+  expect_identical(1 - fit, 1 - plain)
+  expect_identical(-fit, -plain)
+  expect_identical(fit + fit, plain + plain)
+  expect_identical(fit > 0, plain > 0)
+  expect_identical(!fit, !plain)
+  expect_identical(abs(fit), abs(plain))
+  expect_identical(round(fit, 2), round(plain, 2))
+  expect_identical(signif(fit), signif(plain))
+
+  edited <- fit
+  edited[] <- fit
+  expect_identical(edited, plain)
+  edited <- fit
+  edited[[1, 2]] <- 0
+  plain[[1, 2]] <- 0
+  expect_identical(edited, plain)
+
+  edited <- fit
+  edited[, 2] <- 0
+  plain <- estimate(fit)
+  plain[, 2] <- 0
+  expect_identical(edited, plain)
+  edited <- fit
+  edited["Sepal.Length", ] <- 0
+  plain <- estimate(fit)
+  plain["Sepal.Length", ] <- 0
+  expect_identical(edited, plain)
+  edited <- fit
+  edited[1] <- 0
+  plain <- estimate(fit)
+  plain[1] <- 0
+  expect_identical(edited, plain)
+  edited <- fit
+  edited[upper.tri(edited)] <- NA_real_
+  plain <- estimate(fit)
+  plain[upper.tri(plain)] <- NA_real_
+  expect_identical(edited, plain)
+  expect_false(is.null(ci(fit)))
+})

@@ -23,6 +23,11 @@ A standardized summary data frame with class
 Representation-first summary for dense correlation outputs.
 }
 \details{
+Arithmetic, comparisons, logical operators, \code{Math} functions such as
+\code{abs()} and \code{round()}, and indexed replacement operate on the estimates
+and return the usual base R result. Stored inference applies to the
+original estimates. Use \code{estimate(object)} for numeric calculations.
+
 Pearson summaries without a stored inference payload report
 \code{fisher_z = atanh(estimate)}, with non-finite transforms stored as \code{NA}.
 For each pair whose finite complete-case count is greater than 3, they also

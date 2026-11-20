@@ -8,6 +8,11 @@
 #' @param ... Unused.
 #'
 #' @details
+#' Arithmetic, comparisons, logical operators, `Math` functions such as
+#' `abs()` and `round()`, and indexed replacement operate on the estimates
+#' and return the usual base R result. Stored inference applies to the
+#' original estimates. Use `estimate(object)` for numeric calculations.
+#'
 #' Pearson summaries without a stored inference payload report
 #' `fisher_z = atanh(estimate)`, with non-finite transforms stored as `NA`.
 #' For each pair whose finite complete-case count is greater than 3, they also
@@ -42,6 +47,31 @@ summary.corr_matrix <- function(object, topn = NULL, show_ci = NULL, ...) {
   )
 }
 
+#' @export
+Ops.corr_matrix <- function(e1, e2) {
+  op <- .Primitive(.Generic)
+  if (inherits(e1, "corr_matrix")) e1 <- .mc_plain_numeric_matrix(e1)
+  if (missing(e2)) return(op(e1))
+  if (inherits(e2, "corr_matrix")) e2 <- .mc_plain_numeric_matrix(e2)
+  op(e1, e2)
+}
+
+#' @export
+Math.corr_matrix <- function(x, ...) {
+  op <- get(.Generic, envir = baseenv(), inherits = FALSE)
+  op(.mc_plain_numeric_matrix(x), ...)
+}
+
+#' @export
+`[<-.corr_matrix` <- function(x, ..., value) {
+  `[<-`(.mc_plain_numeric_matrix(x), ..., value = value)
+}
+
+#' @export
+`[[<-.corr_matrix` <- function(x, ..., value) {
+  `[[<-`(.mc_plain_numeric_matrix(x), ..., value = value)
+}
+
 #' S3 Summary for Sparse Correlation Results
 #'
 #' Representation-first summary for sparse correlation outputs.
@@ -52,6 +82,10 @@ summary.corr_matrix <- function(object, topn = NULL, show_ci = NULL, ...) {
 #' @param ... Unused.
 #'
 #' @details
+#' Use `base::summary(object)` for the statistical summary regardless of
+#' whether Matrix is attached. `Matrix::summary(object)` reports the stored
+#' sparse entries as row indices, column indices and values.
+#'
 #' See [summary.corr_matrix()] for which inference columns are retrieved from
 #' stored results, which Pearson-only Fisher normal approximation is
 #' calculated when no inference payload was stored, and which stored

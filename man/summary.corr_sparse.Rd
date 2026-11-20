@@ -23,6 +23,10 @@ A standardized summary data frame with class
 Representation-first summary for sparse correlation outputs.
 }
 \details{
+Use \code{base::summary(object)} for the statistical summary regardless of
+whether Matrix is attached. \code{Matrix::summary(object)} reports the stored
+sparse entries as row indices, column indices and values.
+
 See \code{\link[=summary.corr_matrix]{summary.corr_matrix()}} for which inference columns are retrieved from
 stored results, which Pearson-only Fisher normal approximation is
 calculated when no inference payload was stored, and which stored
