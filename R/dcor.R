@@ -1,16 +1,23 @@
 #' @title Pairwise Distance Correlation (dCor)
 #'
 #' @description
-#' Computes conventional pairwise distance correlation for numeric columns using
-#' a high-performance C++ backend. Distance correlation is a nonnegative sample
+#' Computes pairwise distance correlation for numeric columns using
+#' a high-performance C++ backend. Population distance correlation is a nonnegative
 #' measure of dependence that can capture nonlinear and nonmonotonic
 #' relationships. By default, `dcor()` returns the conventional sample distance
 #' correlation \eqn{R_n}; set `squared = TRUE` to return \eqn{R_n^2}.
 #'
 #' @param data A numeric matrix or a data frame with at least two numeric
 #' columns. All non-numeric columns are dropped. Columns must be numeric.
-#' @param squared Logical; if `FALSE` (default), return \eqn{R_n}. If `TRUE`,
-#'   return conventional squared distance correlation \eqn{R_n^2}.
+#' @param squared Logical; if `FALSE` (default), return the correlation-scale estimate. If `TRUE`,
+#'   return the squared-scale result described below.
+#' @param estimator One of `v` (conventional, default), `u` (U-centred), or
+#'   `improved` (bootstrap-weighted U/V combination).
+#' @param B Number of smoothed bootstrap replicates per pair for `improved`
+#'   (at least two). Use `set.seed()` for reproducibility.
+#' @param bandwidth Positive smoothing bandwidth in observation units, either
+#'   shared or one per retained numeric column. By default, `stats::bw.nrd0`
+#'   is applied to each margin on the rows used for that pair.
 #' @param na_method Character scalar controlling missing-data handling.
 #'   \code{"error"} rejects missing, \code{NaN}, and infinite values.
 #'   \code{"pairwise"} recomputes each association on its own pairwise
@@ -19,7 +26,7 @@
 #' @param p_value Logical (default \code{FALSE}). Compatibility option. If
 #'   \code{TRUE}, attach the Székely-Rizzo t-test metadata computed from the
 #'   signed bias-corrected statistic returned by `bcdcor()`, not from the
-#'   conventional \eqn{R_n} values in the main matrix.
+#'   estimates in the main matrix.
 #' @param n_threads Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 #'   \code{getOption("matrixCorr.threads", 1L)}.
 #' @param output Output representation for the computed estimates:
@@ -32,8 +39,9 @@
 #' @param ... Compatibility arguments, including deprecated `check_na`.
 #'
 #' @return A symmetric correlation result where the \code{(i, j)} entry is
-#' conventional distance correlation \eqn{R_n}, or \eqn{R_n^2} when
-#' `squared = TRUE`. When `p_value = TRUE`, the `inference` attribute contains
+#' the selected estimate. The `estimator` attribute identifies the method.
+#' For improved estimates, `attr(result, "diagnostics")$lambda`
+#' gives the weight on U for each pair (NA where no weight was fitted). When `p_value = TRUE`, the `inference` attribute contains
 #' `bcdcor`, `statistic`, `parameter`, and `p_value`; the t-test uses the
 #' signed U-centred statistic in `inference$bcdcor`.
 #'
@@ -48,14 +56,29 @@
 #' conventional squared distance correlation is
 #' \deqn{R_n^2(x,y)=
 #' \frac{V_n^2(x,y)}{\sqrt{V_n^2(x,x)V_n^2(y,y)}}.}
-#' `dcor()` returns \eqn{R_n=\sqrt{R_n^2}} unless `squared = TRUE`.
+#' By default, `dcor()` returns \eqn{R_n=\sqrt{R_n^2}} unless `squared = TRUE`.
+#'
+#' For `estimator = "u"`, the squared-scale estimate is the signed ratio
+#' returned by `bcdcor()`. On the correlation scale we use its signed square
+#' root, following the software convention used in the authors' simulations.
+#' Unbiasedness applies to squared distance covariance before normalization.
+#'
+#' For `estimator = "improved"`, Algorithm 1 of Monroy-Castillo et al. (2025)
+#' resamples paired rows with replacement and adds independent Gaussian noise
+#' to each margin. Bootstrap biases use the observed V estimate as reference.
+#' We use sample variances and covariances (divisor B - 1) in equation (8)
+#' and constrain the weight on U to the unit interval. When bootstrap
+#' moments are undefined the estimate is NA. When the criterion is flat we
+#' use V. The combination can be negative. With `squared = TRUE` we return
+#' the ordinary square of the fitted combination. This argument changes the
+#' reporting scale only for the improved estimator.
 #'
 #' Under the required finite first-moment conditions, population distance
 #' correlation is zero if and only if the variables are independent. This
 #' population property should not be read as a sample-level test by itself.
 #'
 #' @section Difference between `dcor()` and `bcdcor()`:
-#' `dcor()` returns conventional nonnegative distance correlation \eqn{R_n}.
+#' By default, `dcor()` returns conventional nonnegative distance correlation \eqn{R_n}.
 #' `dcor(squared = TRUE)` returns conventional \eqn{R_n^2}. `bcdcor()` returns
 #' a U-centred bias-corrected squared distance-correlation statistic that may be
 #' negative in finite samples and is used by the bias-corrected dCor t-test. In
@@ -73,6 +96,9 @@
 #' The distance correlation t-test of independence.
 #' \emph{Journal of Multivariate Analysis}, 117, 193-213.
 #'
+#' Monroy-Castillo, B. E., Jácome, M. A., & Cao, R. (2025). Improved distance
+#' correlation estimation. Applied Intelligence, 55, 263. \doi{10.1007/s10489-024-05940-x}.
+#'
 #' @seealso [bcdcor()], [robust_dcor()]
 #'
 #' @examples
@@ -80,6 +106,7 @@
 #' X <- datasets::faithful
 #' dcor(X)
 #' dcor(X, squared = TRUE)
+#' dcor(X, estimator = "u")
 #'
 #' \donttest{
 #' set.seed(123)
@@ -154,14 +181,18 @@ dcor <- function(data,
                  output = c("matrix", "sparse", "edge_list"),
                  threshold = 0,
                  diag = TRUE,
-                 ...) {
+                 ...,
+                 estimator = c("v", "u", "improved"),
+                 B = 1000L,
+                 bandwidth = NULL) {
+  estimator <- match.arg(estimator)
   check_bool(squared, arg = "squared")
   output_cfg <- .mc_prepare_corr_output(
     output = output,
     threshold = threshold,
     diag = diag
   )
-  if (...length() == 0L && missing(na_method) && isFALSE(p_value)) {
+  if (estimator == "v" && ...length() == 0L && missing(na_method) && isFALSE(p_value)) {
     input <- .mc_prepare_corr_input(
       data,
       na_cfg = list(na_method = "error", check_na = TRUE),
@@ -178,7 +209,7 @@ dcor <- function(data,
           output_cfg = output_cfg,
           dimnames = input$dimnames,
           symmetric = TRUE,
-          extra_attrs = list(squared = squared)
+          extra_attrs = list(squared = squared, estimator = estimator)
         )
       }
     ))
@@ -202,24 +233,61 @@ dcor <- function(data,
   .mc_with_omp_threads(
     n_threads,
     {
-      if (identical(na_cfg$na_method, "pairwise")) {
-        pairwise <- dcor_matrix_pairwise_cpp(
-          input$data,
-          squared = squared
-        )
-        dcor_matrix <- pairwise$est
-        diagnostics <- list(
-          n_complete = .mc_set_matrix_dimnames(unclass(pairwise$n_complete), input$colnames)
-        )
-      } else {
-        dcor_matrix <- dcor_matrix_cpp(input$data, squared = squared)
+      pairwise <- identical(na_cfg$na_method, "pairwise")
+      if (estimator != "v" || p_value) {
+        if (pairwise || p_value) {
+          bc_pairwise <- bcdcor_matrix_pairwise_cpp(input$data, return_inference = p_value)
+          u2 <- if (p_value) bc_pairwise$estimate else bc_pairwise$est
+        } else {
+          u2 <- bcdcor_matrix_cpp(input$data)
+        }
+      }
+      if (estimator != "u") {
+        v_squared <- estimator == "v" && squared
+        if (pairwise) {
+          v_pair <- dcor_matrix_pairwise_cpp(input$data, squared = v_squared)
+          dcor_matrix <- v_pair$est
+        } else {
+          dcor_matrix <- dcor_matrix_cpp(input$data, squared = v_squared)
+        }
+      }
+      if (pairwise) {
+        counts <- if (estimator == "v") v_pair$n_complete else bc_pairwise$n_complete
+        diagnostics <- list(n_complete = .mc_set_matrix_dimnames(counts, input$colnames))
+      }
+      if (estimator == "u") {
+        dcor_matrix <- if (squared) u2 else sign(u2) * sqrt(abs(u2))
+      }
+      if (estimator == "improved") {
+        B <- check_scalar_int_pos(B, arg = "B")
+        if (B < 2L) cli::cli_abort("{.arg B} must be at least two.")
+        p <- ncol(input$data)
+        if (!is.null(bandwidth) && (!is.numeric(bandwidth) ||
+            !length(bandwidth) %in% c(1L, p) || any(!is.finite(bandwidth) | bandwidth <= 0))) {
+          cli::cli_abort("{.arg bandwidth} must be positive and finite, shared or one per column.")
+        }
+        if (!is.null(bandwidth)) bandwidth <- rep_len(bandwidth, p)
+        lambda <- matrix(NA_real_, p, p, dimnames = input$dimnames)
+        for (j in seq.int(2L, p)) {
+          for (i in seq_len(j - 1L)) {
+            v <- dcor_matrix[i, j]
+            u <- sign(u2[i, j]) * sqrt(abs(u2[i, j]))
+            value <- NA_real_
+            if (is.finite(v) && is.finite(u)) {
+              keep <- is.finite(input$data[, i]) & is.finite(input$data[, j])
+              weight <- .mc_dcor_weight(input$data[keep, i], input$data[keep, j],
+                                        v, B, bandwidth[c(i, j)])
+              lambda[i, j] <- lambda[j, i] <- weight
+              value <- weight * u + (1 - weight) * v
+            }
+            dcor_matrix[i, j] <- dcor_matrix[j, i] <- value
+          }
+        }
+        diagnostics$lambda <- lambda
+        if (squared) dcor_matrix <- dcor_matrix^2
       }
 
       if (isTRUE(p_value)) {
-        bc_pairwise <- bcdcor_matrix_pairwise_cpp(
-          input$data,
-          return_inference = TRUE
-        )
         diagnostics <- .mc_merge_diagnostics(
           diagnostics,
           list(n_complete = .mc_set_matrix_dimnames(unclass(bc_pairwise$n_complete), input$colnames))
@@ -238,13 +306,13 @@ dcor <- function(data,
         mat = dcor_matrix,
         class_name = "dcor",
         method = "distance_correlation",
-        description = .mc_dcor_description(squared),
+        description = .mc_dcor_description(squared, estimator),
         output_cfg = output_cfg,
         diagnostics = .mc_merge_diagnostics(diagnostics, input$diagnostics),
         dimnames = input$dimnames,
         symmetric = TRUE,
         extra_attrs = c(
-          list(squared = squared),
+          list(squared = squared, estimator = estimator),
           if (!is.null(inference_attr)) list(inference = inference_attr)
         )
       )
@@ -252,7 +320,33 @@ dcor <- function(data,
   )
 }
 
-.mc_dcor_description <- function(squared = FALSE) {
+.mc_dcor_weight <- function(x, y, v, B, bandwidth) {
+  if (is.null(bandwidth)) bandwidth <- c(stats::bw.nrd0(x), stats::bw.nrd0(y))
+  n <- length(x)
+  u_boot <- v_boot <- numeric(B)
+  for (b in seq_len(B)) {
+    rows <- sample.int(n, n, replace = TRUE)
+    xb <- x[rows] + bandwidth[1L] * stats::rnorm(n)
+    yb <- y[rows] + bandwidth[2L] * stats::rnorm(n)
+    u2 <- bcdcor_pair_cpp(xb, yb)
+    u_boot[b] <- sign(u2) * sqrt(abs(u2))
+    v_boot[b] <- dcor_pair_cpp(xb, yb)
+  }
+  if (any(!is.finite(u_boot)) || any(!is.finite(v_boot))) return(NA_real_)
+  # Equation (8), collecting differences before estimating the moments.
+  delta <- v_boot - u_boot
+  bias_diff <- mean(delta)
+  denominator <- stats::var(delta) + bias_diff^2
+  if (denominator == 0) return(0)
+  numerator <- stats::cov(v_boot, delta) + (mean(v_boot) - v) * bias_diff
+  max(0, min(1, numerator / denominator))
+}
+
+.mc_dcor_description <- function(squared = FALSE, estimator = "v") {
+  if (estimator != "v") {
+    scale <- if (squared) "squared distance correlation" else "distance correlation"
+    return(sprintf("Pairwise %s matrix (%s estimator)", scale, estimator))
+  }
   if (isTRUE(squared)) {
     "Pairwise squared distance correlation matrix"
   } else {
@@ -304,7 +398,7 @@ dcor <- function(data,
 #' freedom. The signed statistic is not clipped before inference.
 #'
 #' @section Difference between `dcor()` and `bcdcor()`:
-#' `dcor()` returns conventional nonnegative distance correlation \eqn{R_n}.
+#' By default, `dcor()` returns conventional nonnegative distance correlation \eqn{R_n}.
 #' `dcor(squared = TRUE)` returns conventional \eqn{R_n^2}. `bcdcor()` returns
 #' the U-centred bias-corrected squared statistic used by the t-test. In finite
 #' samples, `bcdcor(x)` is not generally equal to `dcor(x)^2`.

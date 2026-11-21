@@ -405,3 +405,47 @@ test_that("bcdcor output modes preserve signed threshold semantics", {
   expect_true(any(edges$value < 0))
   expect_true(all(abs(edges$value) >= 0.001))
 })
+
+test_that("dcor combines signed roots on the correlation scale using Algorithm 1", {
+  set.seed(7)
+  X <- cbind(x = rnorm(12), y = rnorm(12))
+  X[2, 2] <- NA_real_
+  x <- X[-2, 1]
+  y <- X[-2, 2]
+  v <- local_v_dcor(x, y)
+  signed_root <- function(z) sign(z) * sqrt(abs(z))
+  u <- signed_root(local_bcdcor(x, y))
+  B <- 40L
+  set.seed(129)
+  boot <- replicate(B, {
+    rows <- sample.int(length(x), replace = TRUE)
+    xb <- x[rows] + 0.1 * rnorm(length(x))
+    yb <- y[rows] + 0.3 * rnorm(length(y))
+    c(signed_root(local_bcdcor(xb, yb)), local_v_dcor(xb, yb))
+  })
+  ub <- boot[1, ]
+  vb <- boot[2, ]
+  bu <- mean(ub) - v
+  bv <- mean(vb) - v
+  weight <- (var(vb) - cov(ub, vb) + bv * (bv - bu)) /
+    (var(ub) + var(vb) - 2 * cov(ub, vb) + (bu - bv)^2)
+  expect_lt(u, 0)
+  expect_gt(weight, 0)
+  expect_lt(weight, 1)
+  fit <- function(...) {
+    set.seed(129)
+    dcor(X, na_method = "pairwise", estimator = "improved",
+         B = B, bandwidth = c(0.1, 0.3), ...)
+  }
+  value <- weight * u + (1 - weight) * v
+  expect_equal(fit()[1, 2], value)
+  expect_equal(attr(fit(), "diagnostics")$lambda[1, 2], weight)
+  expect_equal(fit(squared = TRUE)[1, 2], value^2)
+  expect_equal(attr(fit(p_value = TRUE), "inference")$bcdcor[1, 2], local_bcdcor(x, y))
+  for (mode in c("matrix", "edge_list", "sparse")) {
+    expect_identical(attr(fit(output = mode), "estimator"), "improved")
+  }
+  expect_equal(dcor(cbind(x, y), estimator = "u")[1, 2], u)
+  expect_equal(dcor(cbind(x, y), estimator = "u", squared = TRUE)[1, 2], local_bcdcor(x, y))
+  expect_identical(attr(dcor(cbind(x, y)), "estimator"), "v")
+})

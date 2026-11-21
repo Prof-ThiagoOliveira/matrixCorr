@@ -1130,12 +1130,20 @@ plot.dgCMatrix <- function(x,
     if (identical(title, "Correlation heatmap")) {
       title <- if (squared) "Squared distance correlation heatmap" else "Distance correlation heatmap"
     }
-    p <- p + ggplot2::scale_fill_gradient(
-      low = mid_color,
-      high = high_color,
-      limits = c(0, 1),
-      name = fill_name
-    )
+    estimator <- attr(x, "estimator", exact = TRUE)
+    if (identical(estimator, "u") || (identical(estimator, "improved") && !squared)) {
+      p <- p + ggplot2::scale_fill_gradient2(
+        low = low_color, mid = mid_color, high = high_color,
+        midpoint = 0, limits = c(-1, 1), name = fill_name
+      )
+    } else {
+      p <- p + ggplot2::scale_fill_gradient(
+        low = mid_color,
+        high = high_color,
+        limits = c(0, 1),
+        name = fill_name
+      )
+    }
   } else {
     fill_name <- if (identical(estimator_class, "bcdcor")) {
       if (identical(title, "Correlation heatmap")) {

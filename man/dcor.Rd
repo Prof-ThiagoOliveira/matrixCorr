@@ -17,7 +17,10 @@ dcor(
   output = c("matrix", "sparse", "edge_list"),
   threshold = 0,
   diag = TRUE,
-  ...
+  ...,
+  estimator = c("v", "u", "improved"),
+  B = 1000L,
+  bandwidth = NULL
 )
 
 \method{print}{dcor}(
@@ -66,8 +69,8 @@ dcor(
 \item{data}{A numeric matrix or a data frame with at least two numeric
 columns. All non-numeric columns are dropped. Columns must be numeric.}
 
-\item{squared}{Logical; if \code{FALSE} (default), return \eqn{R_n}. If \code{TRUE},
-return conventional squared distance correlation \eqn{R_n^2}.}
+\item{squared}{Logical; if \code{FALSE} (default), return the correlation-scale estimate. If \code{TRUE},
+return the squared-scale result described below.}
 
 \item{na_method}{Character scalar controlling missing-data handling.
 \code{"error"} rejects missing, \code{NaN}, and infinite values.
@@ -78,7 +81,7 @@ across the retained numeric columns.}
 \item{p_value}{Logical (default \code{FALSE}). Compatibility option. If
 \code{TRUE}, attach the Székely-Rizzo t-test metadata computed from the
 signed bias-corrected statistic returned by \code{bcdcor()}, not from the
-conventional \eqn{R_n} values in the main matrix.}
+estimates in the main matrix.}
 
 \item{n_threads}{Integer \eqn{\geq 1}. Number of OpenMP threads. Defaults to
 \code{getOption("matrixCorr.threads", 1L)}.}
@@ -95,6 +98,16 @@ keep entries with \code{abs(value) >= threshold}. Must be \code{0} when
 
 \item{...}{Additional arguments passed to \code{ggplot2::theme()} or other
 \code{ggplot2} layers.}
+
+\item{estimator}{One of \code{v} (conventional, default), \code{u} (U-centred), or
+\code{improved} (bootstrap-weighted U/V combination).}
+
+\item{B}{Number of smoothed bootstrap replicates per pair for \code{improved}
+(at least two). Use \code{set.seed()} for reproducibility.}
+
+\item{bandwidth}{Positive smoothing bandwidth in observation units, either
+shared or one per retained numeric column. By default, \code{stats::bw.nrd0}
+is applied to each margin on the rows used for that pair.}
 
 \item{x}{An object of class \code{summary.dcor}.}
 
@@ -126,8 +139,9 @@ on the heatmap tiles.}
 }
 \value{
 A symmetric correlation result where the \code{(i, j)} entry is
-conventional distance correlation \eqn{R_n}, or \eqn{R_n^2} when
-\code{squared = TRUE}. When \code{p_value = TRUE}, the \code{inference} attribute contains
+the selected estimate. The \code{estimator} attribute identifies the method.
+For improved estimates, \code{attr(result, "diagnostics")$lambda}
+gives the weight on U for each pair (NA where no weight was fitted). When \code{p_value = TRUE}, the \code{inference} attribute contains
 \code{bcdcor}, \code{statistic}, \code{parameter}, and \code{p_value}; the t-test uses the
 signed U-centred statistic in \code{inference$bcdcor}.
 
@@ -136,8 +150,8 @@ Invisibly returns \code{x}.
 A \code{ggplot} object representing the heatmap.
 }
 \description{
-Computes conventional pairwise distance correlation for numeric columns using
-a high-performance C++ backend. Distance correlation is a nonnegative sample
+Computes pairwise distance correlation for numeric columns using
+a high-performance C++ backend. Population distance correlation is a nonnegative
 measure of dependence that can capture nonlinear and nonmonotonic
 relationships. By default, \code{dcor()} returns the conventional sample distance
 correlation \eqn{R_n}; set \code{squared = TRUE} to return \eqn{R_n^2}.
@@ -153,7 +167,22 @@ with \eqn{V_n^2(x,x)} and \eqn{V_n^2(y,y)} defined analogously. The
 conventional squared distance correlation is
 \deqn{R_n^2(x,y)=
 \frac{V_n^2(x,y)}{\sqrt{V_n^2(x,x)V_n^2(y,y)}}.}
-\code{dcor()} returns \eqn{R_n=\sqrt{R_n^2}} unless \code{squared = TRUE}.
+By default, \code{dcor()} returns \eqn{R_n=\sqrt{R_n^2}} unless \code{squared = TRUE}.
+
+For \code{estimator = "u"}, the squared-scale estimate is the signed ratio
+returned by \code{bcdcor()}. On the correlation scale we use its signed square
+root, following the software convention used in the authors' simulations.
+Unbiasedness applies to squared distance covariance before normalization.
+
+For \code{estimator = "improved"}, Algorithm 1 of Monroy-Castillo et al. (2025)
+resamples paired rows with replacement and adds independent Gaussian noise
+to each margin. Bootstrap biases use the observed V estimate as reference.
+We use sample variances and covariances (divisor B - 1) in equation (8)
+and constrain the weight on U to the unit interval. When bootstrap
+moments are undefined the estimate is NA. When the criterion is flat we
+use V. The combination can be negative. With \code{squared = TRUE} we return
+the ordinary square of the fitted combination. This argument changes the
+reporting scale only for the improved estimator.
 
 Under the required finite first-moment conditions, population distance
 correlation is zero if and only if the variables are independent. This
@@ -165,7 +194,7 @@ Requires \eqn{n \ge 4}. Columns with zero distance variance yield
 }
 \section{Difference between \code{dcor()} and \code{bcdcor()}}{
 
-\code{dcor()} returns conventional nonnegative distance correlation \eqn{R_n}.
+By default, \code{dcor()} returns conventional nonnegative distance correlation \eqn{R_n}.
 \code{dcor(squared = TRUE)} returns conventional \eqn{R_n^2}. \code{bcdcor()} returns
 a U-centred bias-corrected squared distance-correlation statistic that may be
 negative in finite samples and is used by the bias-corrected dCor t-test. In
@@ -177,6 +206,7 @@ finite samples, \code{bcdcor(x)} is not generally equal to \code{dcor(x)^2}.
 X <- datasets::faithful
 dcor(X)
 dcor(X, squared = TRUE)
+dcor(X, estimator = "u")
 
 \donttest{
 set.seed(123)
@@ -249,6 +279,9 @@ Measuring and testing dependence by correlation of distances.
 Szekely, G. J., & Rizzo, M. L. (2013).
 The distance correlation t-test of independence.
 \emph{Journal of Multivariate Analysis}, 117, 193-213.
+
+Monroy-Castillo, B. E., Jácome, M. A., & Cao, R. (2025). Improved distance
+correlation estimation. Applied Intelligence, 55, 263. \doi{10.1007/s10489-024-05940-x}.
 }
 \seealso{
 \code{\link[=bcdcor]{bcdcor()}}, \code{\link[=robust_dcor]{robust_dcor()}}

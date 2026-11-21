@@ -152,7 +152,7 @@ freedom. The signed statistic is not clipped before inference.
 }
 \section{Difference between \code{dcor()} and \code{bcdcor()}}{
 
-\code{dcor()} returns conventional nonnegative distance correlation \eqn{R_n}.
+By default, \code{dcor()} returns conventional nonnegative distance correlation \eqn{R_n}.
 \code{dcor(squared = TRUE)} returns conventional \eqn{R_n^2}. \code{bcdcor()} returns
 the U-centred bias-corrected squared statistic used by the t-test. In finite
 samples, \code{bcdcor(x)} is not generally equal to \code{dcor(x)^2}.
